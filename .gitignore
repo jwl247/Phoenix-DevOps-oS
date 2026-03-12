@@ -1,0 +1,24 @@
+# Keys — never commit
+keys/
+*.hash
+*.id
+.phoenix_key
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Kali import — source files, not part of the repo
+_kali_import/
+
+# Build artifacts
+/tmp/
+*.log
+
+# OS
+desktop.ini
+.DS_Store

@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "python",
+    "-m",
+    "phoenix_bridge",
+    "-f",
+    "{connection_file}"
+  ],
+  "display_name": "Phoenix Bridge",
+  "language": "phoenix",
+  "interrupt_mode": "signal",
+  "metadata": {
+    "debugger": false,
+    "slot": 1,
+    "slot_type": "c_sideload",
+    "role": "bridge",
+    "owner": "Phoenix-DevOps-oS"
+  }
+}
