@@ -22,19 +22,22 @@
 #    usys sync <name> <dest>          — sync to destination
 #    usys clone <name> <dest>         — clone with full history
 #    usys search <query>              — search registry
+#    usys install <pkg> [--mgr]       — install via system pkg mgr + register
 #    usys version                     — show usys version
 # ============================================================
 
 set -euo pipefail
 
 # ── Version ───────────────────────────────────────────────────
-USYS_VERSION="0.1.0"
+USYS_VERSION="0.2.0"
 
 # ── Paths ─────────────────────────────────────────────────────
 USYS_HOME="${USYS_HOME:-$HOME/.usys}"
 USYS_DB="$USYS_HOME/usys.db"
 USYS_BIN="$USYS_HOME/bin"
 USYS_VERSIONS="$USYS_HOME/versions"
+USYS_INTAKE="${USYS_INTAKE:-$(dirname "$0")/intake.sh}"
+POOL_ROOT="${POOL_ROOT:-/mnt/clonepool}"
 USYS_LOG="$USYS_HOME/log"
 
 # ── Colors ────────────────────────────────────────────────────
@@ -317,6 +320,13 @@ SQL
 
     # Create callable wrapper
     make_callable "$name" "$store_path" "$filetype"
+
+    # ── Auto-intake: sidecar + QRs, silent ───────────────────
+    if [[ -f "$USYS_INTAKE" ]]; then
+        local pool_path="$POOL_ROOT/$(basename "$(dirname "$src")")"
+        bash "$USYS_INTAKE" "$src" "$pool_path" "white" "$desc" \
+            > /dev/null 2>&1 || true
+    fi
 
     echo
     ok "Registered: ${BOLD}$name${RESET}"
@@ -697,6 +707,186 @@ cmd_search() {
     echo
 }
 
+# ── usys install <package> [--pip|--npm|--cargo|--apt|...] ───
+cmd_install() {
+    local pkg="${1:-}"
+    local force_mgr="${2:-}"
+
+    [[ -z "$pkg" ]] && die "Usage: usys install <package> [--apt|--pip|--npm|--cargo|--pacman|--dnf]"
+
+    require_sqlite
+    init_db 2>/dev/null || true
+
+    # ── Detect package manager ─────────────────────────────
+    local mgr=""
+
+    if [[ -n "$force_mgr" ]]; then
+        mgr="${force_mgr/--/}"
+    else
+        # Auto-detect — first match wins
+        if   command -v apt-get  &>/dev/null; then mgr="apt"
+        elif command -v pacman   &>/dev/null; then mgr="pacman"
+        elif command -v dnf      &>/dev/null; then mgr="dnf"
+        elif command -v yum      &>/dev/null; then mgr="yum"
+        elif command -v brew     &>/dev/null; then mgr="brew"
+        elif command -v pip3     &>/dev/null; then mgr="pip"
+        elif command -v pip      &>/dev/null; then mgr="pip"
+        elif command -v npm      &>/dev/null; then mgr="npm"
+        elif command -v cargo    &>/dev/null; then mgr="cargo"
+        else
+            die "No supported package manager found. Install one of: apt, pacman, dnf, brew, pip, npm, cargo"
+        fi
+    fi
+
+    info "Package manager : $mgr"
+    info "Installing      : $pkg"
+    echo
+
+    # ── Run install ────────────────────────────────────────
+    case "$mgr" in
+        apt)
+            sudo apt-get install -y "$pkg" || die "apt install failed: $pkg"
+            ;;
+        pacman)
+            sudo pacman -S --noconfirm "$pkg" || die "pacman install failed: $pkg"
+            ;;
+        dnf)
+            sudo dnf install -y "$pkg" || die "dnf install failed: $pkg"
+            ;;
+        yum)
+            sudo yum install -y "$pkg" || die "yum install failed: $pkg"
+            ;;
+        brew)
+            brew install "$pkg" || die "brew install failed: $pkg"
+            ;;
+        pip)
+            local pip_bin
+            pip_bin=$(command -v pip3 || command -v pip)
+            "$pip_bin" install --user "$pkg" || die "pip install failed: $pkg"
+            ;;
+        npm)
+            npm install -g "$pkg" || die "npm install failed: $pkg"
+            ;;
+        cargo)
+            cargo install "$pkg" || die "cargo install failed: $pkg"
+            ;;
+        *)
+            die "Unknown package manager: $mgr"
+            ;;
+    esac
+
+    echo
+    ok "Installed: $pkg  (via $mgr)"
+
+    # ── Find the installed binary ──────────────────────────
+    local bin_path=""
+    bin_path=$(command -v "$pkg" 2>/dev/null || true)
+
+    # pip/npm/cargo installs may land in non-PATH dirs — check common spots
+    if [[ -z "$bin_path" ]]; then
+        local candidates=(
+            "$HOME/.local/bin/$pkg"
+            "$HOME/.cargo/bin/$pkg"
+            "$(npm bin -g 2>/dev/null)/$pkg"
+            "/usr/bin/$pkg"
+            "/usr/local/bin/$pkg"
+        )
+        for c in "${candidates[@]}"; do
+            [[ -f "$c" ]] && { bin_path="$c"; break; }
+        done
+    fi
+
+    # ── Register in usys DB if binary found ───────────────
+    if [[ -n "$bin_path" ]]; then
+        local exists
+        exists=$(db "SELECT COUNT(*) FROM packages WHERE name='$pkg';")
+
+        if [[ "$exists" -gt 0 ]]; then
+            # Already registered — swap to new binary
+            local old_ver version hash size store_path
+            old_ver=$(db "SELECT current_ver FROM packages WHERE name='$pkg';")
+            version=$(next_version "$pkg")
+            hash=$(file_hash "$bin_path")
+            size=$(wc -c < "$bin_path")
+            local pkg_ver_dir="$USYS_VERSIONS/$pkg"
+            mkdir -p "$pkg_ver_dir"
+            store_path="$pkg_ver_dir/${version}_$pkg"
+            cp "$bin_path" "$store_path"
+            chmod +x "$store_path"
+
+            db << SQL
+INSERT INTO versions (package, version, store_path, hash, size, note)
+VALUES ('$pkg', '$version', '$store_path', '$hash', $size, 'install via $mgr');
+
+UPDATE packages
+SET current_ver='$version', source_path='$bin_path', updated=datetime('now')
+WHERE name='$pkg';
+
+INSERT INTO swaplog (package, from_ver, to_ver, action, note)
+VALUES ('$pkg', '$old_ver', '$version', 'install', 'reinstalled via $mgr');
+SQL
+            make_callable "$pkg" "$store_path" "binary"
+            ok "Updated registry: $pkg  ($old_ver → $version)"
+        else
+            # Fresh register
+            local version hash size store_path filetype
+            version=$(next_version "$pkg")
+            hash=$(file_hash "$bin_path")
+            size=$(wc -c < "$bin_path")
+            filetype=$(detect_type "$bin_path")
+            local pkg_ver_dir="$USYS_VERSIONS/$pkg"
+            mkdir -p "$pkg_ver_dir"
+            store_path="$pkg_ver_dir/${version}_$pkg"
+            cp "$bin_path" "$store_path"
+            chmod +x "$store_path"
+
+            db << SQL
+INSERT INTO packages (name, current_ver, source_path, bin_path, filetype, description)
+VALUES ('$pkg', '$version', '$bin_path', '$USYS_BIN/$pkg', '$filetype', 'installed via $mgr');
+
+INSERT INTO versions (package, version, store_path, hash, size, note)
+VALUES ('$pkg', '$version', '$store_path', '$hash', $size, 'install via $mgr');
+
+INSERT INTO swaplog (package, from_ver, to_ver, action, note)
+VALUES ('$pkg', NULL, '$version', 'install', 'initial install via $mgr');
+SQL
+            make_callable "$pkg" "$store_path" "$filetype"
+            ok "Registered : $pkg  ($version)"
+            info "Callable   : usys call $pkg  or just: $pkg"
+        fi
+
+        # Silent auto-intake into clone pool
+        if [[ -f "$USYS_INTAKE" ]]; then
+            bash "$USYS_INTAKE" "$bin_path" "$POOL_ROOT/system" "white" \
+                "installed via $mgr" > /dev/null 2>&1 || true
+        fi
+    else
+        warn "Binary not found in PATH after install — skipping usys registration"
+        warn "If it installed to a custom location, register manually:"
+        warn "  usys register <path-to-binary> $pkg"
+    fi
+
+    echo
+}
+
+# ── usys intake <file> <pool_path> [state] [desc] ────────────
+cmd_intake() {
+    [[ -f "$USYS_INTAKE" ]] || die "intake.sh not found at $USYS_INTAKE"
+    bash "$USYS_INTAKE" "$@"
+}
+
+# ── usys deprecate <name> ─────────────────────────────────────
+cmd_deprecate() {
+    [[ -f "$USYS_INTAKE" ]] || die "intake.sh not found at $USYS_INTAKE"
+    bash "$USYS_INTAKE" deprecate "$@"
+}
+
+# ── usys hotswap-check ────────────────────────────────────────
+cmd_hotswap_check() {
+    [[ -f "$USYS_INTAKE" ]] || die "intake.sh not found at $USYS_INTAKE"
+    bash "$USYS_INTAKE" hotswap-check
+}
+
 # ── usys version ─────────────────────────────────────────────
 cmd_version() {
     echo "usys $USYS_VERSION — UnitedSys universal hotswap registry"
@@ -721,9 +911,13 @@ case "$CMD" in
     remove|rm)  check_sudo; cmd_remove "$@" ;;
     where)      cmd_where "$@" ;;
     sync)       cmd_sync "$@" ;;
-    clone)      cmd_clone "$@" ;;
-    search)     cmd_search "$@" ;;
-    version|-v) cmd_version ;;
+    clone)         cmd_clone "$@" ;;
+    search)        cmd_search "$@" ;;
+    version|-v)    cmd_version ;;
+    install)       check_sudo; cmd_install "$@" ;;
+    intake)        check_sudo; cmd_intake "$@" ;;
+    deprecate)     check_sudo; cmd_deprecate "$@" ;;
+    hotswap-check) cmd_hotswap_check ;;
 
     ""|help|--help|-h)
         echo
@@ -744,6 +938,12 @@ case "$CMD" in
         echo "    usys clone <name> <dest>           clone with history"
         echo "    usys search <query>                search registry"
         echo "    usys version                       show version"
+        echo "    usys install <pkg> [--mgr]         install + auto-register"
+        echo
+        echo -e "  ${CYAN}Clone Pool:${RESET}"
+        echo "    usys intake <file> <pool> [state]  intake into clone pool"
+        echo "    usys deprecate <name>              mark grey, queue hotswap"
+        echo "    usys hotswap-check                 scan deprecated files"
         echo
         echo -e "  ${CYAN}Examples:${RESET}"
         echo "    usys register ./intake.sh intake"
