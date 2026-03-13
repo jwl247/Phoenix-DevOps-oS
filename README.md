@@ -51,17 +51,24 @@ Overflow rule: if a slot hits 100 in-flight packets, the conductor steps to the 
 ## Sixteen Rings — Four Sectors
 
 ```
-SECTOR 4 — System Core         SECTOR 3 — Output / systemd corridor
-  Ring  1  VECTOR  (physics)     Ring  5  renderer / display / audio
-  Ring  2  NOSQL   (network)     Ring  6  network I/O / sync
-  Ring  3  RELAT.  (user/econ)   Ring  7  UI state / HUD
-  Ring  4  TSERIES (AI)          Ring  8  event log / replay store
+SECTOR 4 — System Core / Storage      SECTOR 3 — Egress / State Change
+  Ring  1  VECTOR  (physics)            Ring  5  egress renderer
+  Ring  2  NOSQL   (network)            Ring  6  egress network
+  Ring  3  RELAT.  (user/econ)          Ring  7  egress UI
+  Ring  4  TSERIES (AI)                 Ring  8  egress log
+  Drive-bound. Freewheeling             State change + output translation.
+  holds custody.                        2x load (output + post stage).
+                                        Overflow → sector 2 (whole task).
 
-SECTOR 2 — Session             SECTOR 1 — Bridge / Platform
-  Ring  9  matchmaking           Ring 13  save / checkpoint
-  Ring 10  comms / spy intercept Ring 14  replay / audit
-  Ring 11  alliance / diplomacy  Ring 15  OS integration (Windows)
-  Ring 12  victory monitor       Ring 16  cross-platform bridge (Linux)
+SECTOR 2 — PCS / Design / Office      SECTOR 1 — Bridge / Interrupt
+  Ring  9  pcs creation                 Ring 13  interrupt intake
+  Ring 10  rendering design             Ring 14  interrupt intake
+  Ring 11  phoenix office               Ring 15  interrupt intake
+  Ring 12  overflow                     Ring 16  interrupt intake
+  PCS born here. Rendering design.      Input direct from interrupter.
+  Phoenix Office lives here.            Jumps WSL → Windows land.
+  Catches whole-task overflow
+  from sector 3.
 ```
 
 ---

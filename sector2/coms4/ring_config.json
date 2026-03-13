@@ -1,0 +1,30 @@
+{
+    "sector": 2,
+    "ring": 12,
+    "coms": "coms4",
+    "role": "pcs_creation",
+    "mode": "generative",
+    "drive_binding": false,
+    "freewheeling_uuid": "c26ce972-f131-479d-9581-f941ea2603c1",
+    "quadralingual": true,
+    "responsibilities": [
+        "pcs_creation",
+        "rendering_design",
+        "overflow",
+        "phoenix_office"
+    ],
+    "intake": {
+        "type": "task",
+        "scope": "whole_task",
+        "source_sector": 3,
+        "overflow": true
+    },
+    "propcoms": {
+        "symlinked": true,
+        "clone_authority": true,
+        "clone_scope": [
+            "partial",
+            "whole_ring"
+        ]
+    }
+}

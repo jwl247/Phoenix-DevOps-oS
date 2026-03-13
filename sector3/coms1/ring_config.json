@@ -1,0 +1,28 @@
+{
+    "sector": 3,
+    "ring": 5,
+    "coms": "coms1",
+    "role": "egress_renderer",
+    "mode": "state_change",
+    "drive_binding": false,
+    "freewheeling_uuid": "2376f903-d126-4ae4-aef6-e25152a0f33b",
+    "quadralingual": true,
+    "cpt_load_factor": 2,
+    "translation": "output",
+    "overflow": {
+        "target_sector": 2,
+        "trigger": "overload",
+        "type": "task",
+        "scope": "whole_task"
+    },
+    "propcoms": {
+        "symlinked": true,
+        "clone_authority": true,
+        "clone_scope": ["partial", "whole_ring"]
+    },
+    "upstream": {
+        "sector": 4,
+        "slot_affinity": 0,
+        "family": ["physics", "system"]
+    }
+}

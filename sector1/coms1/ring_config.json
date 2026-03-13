@@ -1,0 +1,23 @@
+{
+    "sector": 1,
+    "ring": 13,
+    "coms": "coms1",
+    "role": "bridge",
+    "mode": "interrupt",
+    "drive_binding": false,
+    "freewheeling_uuid": "bc0289f2-3e75-4893-99c3-288cc88e5669",
+    "quadralingual": true,
+    "input": {
+        "source": "interrupter",
+        "direct": true
+    },
+    "bridge": {
+        "from": "wsl",
+        "to": "windows"
+    },
+    "propcoms": {
+        "symlinked": true,
+        "clone_authority": true,
+        "clone_scope": ["partial", "whole_ring"]
+    }
+}

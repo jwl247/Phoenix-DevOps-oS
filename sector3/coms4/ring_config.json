@@ -1,0 +1,28 @@
+{
+    "sector": 3,
+    "ring": 8,
+    "coms": "coms4",
+    "role": "egress_log",
+    "mode": "state_change",
+    "drive_binding": false,
+    "freewheeling_uuid": "d73a5950-1560-4883-a0dc-ade69c85d814",
+    "quadralingual": true,
+    "cpt_load_factor": 2,
+    "translation": "output",
+    "overflow": {
+        "target_sector": 2,
+        "trigger": "overload",
+        "type": "task",
+        "scope": "whole_task"
+    },
+    "propcoms": {
+        "symlinked": true,
+        "clone_authority": true,
+        "clone_scope": ["partial", "whole_ring"]
+    },
+    "upstream": {
+        "sector": 4,
+        "slot_affinity": 3,
+        "family": ["ai"]
+    }
+}
