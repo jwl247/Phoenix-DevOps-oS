@@ -60,15 +60,16 @@ SECTOR 4 — System Core / Storage      SECTOR 3 — Egress / State Change
   holds custody.                        2x load (output + post stage).
                                         Overflow → sector 2 (whole task).
 
-SECTOR 2 — PCS / Design / Office      SECTOR 1 — Bridge / Interrupt
+SECTOR 2 — PCS / Design / Office      SECTOR 1 — Bridge / Authority
   Ring  9  pcs creation                 Ring 13  interrupt intake
   Ring 10  rendering design             Ring 14  interrupt intake
   Ring 11  phoenix office               Ring 15  interrupt intake
   Ring 12  overflow                     Ring 16  interrupt intake
   PCS born here. Rendering design.      Input direct from interrupter.
-  Phoenix Office lives here.            Jumps WSL → Windows land.
-  Catches whole-task overflow
-  from sector 3.
+  Phoenix Office lives here.            Bridges WSL ↔ Windows 10 Pro.
+  Catches whole-task overflow           Phoenix is the authority.
+  from sector 3.                        Distros are input, not law.
+                                        Phoenix dictates what distros know.
 ```
 
 ---

@@ -7,13 +7,20 @@
     "drive_binding": false,
     "freewheeling_uuid": "2868fc3c-6052-453c-bb2b-e9433864bd63",
     "quadralingual": true,
+    "authority": "phoenix",
+    "bridge": {
+        "sides": ["wsl", "windows"],
+        "direction": "bidirectional",
+        "model": "phoenix_dictates"
+    },
+    "distros": {
+        "role": "input",
+        "authority": false,
+        "phoenix_controls": "what_distros_know"
+    },
     "input": {
         "source": "interrupter",
         "direct": true
-    },
-    "bridge": {
-        "from": "wsl",
-        "to": "windows"
     },
     "propcoms": {
         "symlinked": true,
