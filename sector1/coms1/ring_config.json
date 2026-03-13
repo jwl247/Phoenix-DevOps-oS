@@ -9,7 +9,10 @@
     "quadralingual": true,
     "authority": "phoenix",
     "bridge": {
-        "sides": ["wsl", "windows"],
+        "sides": [
+            "wsl",
+            "windows"
+        ],
         "direction": "bidirectional",
         "model": "phoenix_dictates"
     },
@@ -25,6 +28,16 @@
     "propcoms": {
         "symlinked": true,
         "clone_authority": true,
-        "clone_scope": ["partial", "whole_ring"]
+        "clone_scope": [
+            "partial",
+            "whole_ring"
+        ]
+    },
+    "franken": {
+        "role": "kernel",
+        "instance": "one",
+        "lead": true,
+        "clone_sync": "built_in",
+        "symlinked": true
     }
 }

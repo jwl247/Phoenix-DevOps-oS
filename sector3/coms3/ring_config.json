@@ -18,11 +18,23 @@
     "propcoms": {
         "symlinked": true,
         "clone_authority": true,
-        "clone_scope": ["partial", "whole_ring"]
+        "clone_scope": [
+            "partial",
+            "whole_ring"
+        ]
     },
     "upstream": {
         "sector": 4,
         "slot_affinity": 2,
-        "family": ["user"]
+        "family": [
+            "user"
+        ]
+    },
+    "franken": {
+        "role": "kernel",
+        "instance": "one",
+        "lead": true,
+        "clone_sync": "built_in",
+        "symlinked": true
     }
 }

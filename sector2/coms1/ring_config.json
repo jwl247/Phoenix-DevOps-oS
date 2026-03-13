@@ -26,5 +26,12 @@
             "partial",
             "whole_ring"
         ]
+    },
+    "franken": {
+        "role": "kernel",
+        "instance": "one",
+        "lead": true,
+        "clone_sync": "built_in",
+        "symlinked": true
     }
 }
