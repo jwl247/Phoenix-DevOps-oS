@@ -1,0 +1,35 @@
+gen_wrapper() {
+    local name="$1"
+    mkdir -p "$USYS_HOME/bin" || die "cannot create $USYS_HOME/bin"
+
+    cat >"$USYS_HOME/bin/$name" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+USYS_HOME="${USYS_HOME:-$HOME/.usys}"
+USYS_DB="$USYS_HOME/usys.db"
+
+name="$(basename "$0")"
+
+if [[ ! -f "$USYS_DB" ]]; then
+    echo "[usys] DB not found: $USYS_DB" >&2
+    exit 1
+fi
+
+store_path="$(sqlite3 "$USYS_DB" "
+    SELECT v.store_path
+    FROM packages p
+    JOIN versions v ON v.package = p.name AND v.version = p.current_ver
+    WHERE p.name = '$name';
+")"
+
+if [[ -z "\$store_path" ]]; then
+    echo "[usys] No active version for package: $name" >&2
+    exit 1
+fi
+
+exec "\$store_path" "\$@"
+EOF
+
+    chmod +x "$USYS_HOME/bin/$name" || die "cannot chmod wrapper for $name"
+}

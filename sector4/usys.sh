@@ -6,8 +6,9 @@
 #  GPL v3 — use it, share it, build on it
 #  https://github.com/jwl247/unitedsys
 #
-#  Zero dependencies beyond bash + sqlite3
-#  No sudo required — lives entirely in ~/.usys/
+#  Standalone — no external scripts required
+#  Core deps : bash + sqlite3
+#  Clone pool: + qrencode + python3  (optional — auto-detected)
 #
 #  Commands:
 #    usys init                        — first time setup
@@ -23,20 +24,24 @@
 #    usys clone <name> <dest>         — clone with full history
 #    usys search <query>              — search registry
 #    usys install <pkg> [--mgr]       — install via system pkg mgr + register
+#    usys intake <file> <pool> [state] [desc]  — intake into clone pool
+#    usys deprecate <name>            — mark grey, queue hotswap
+#    usys hotswap-check               — scan deprecated files
 #    usys version                     — show usys version
 # ============================================================
 
 set -euo pipefail
 
 # ── Version ───────────────────────────────────────────────────
-USYS_VERSION="0.2.0"
+USYS_VERSION="0.3.0"
 
 # ── Paths ─────────────────────────────────────────────────────
 USYS_HOME="${USYS_HOME:-$HOME/.usys}"
 USYS_DB="$USYS_HOME/usys.db"
 USYS_BIN="$USYS_HOME/bin"
 USYS_VERSIONS="$USYS_HOME/versions"
-USYS_INTAKE="${USYS_INTAKE:-$(dirname "$0")/intake.sh}"
+USYS_ROOT="/mnt/d/usys"
+CLONEPOOL_ROOT="/mnt/d/clonepool"
 POOL_ROOT="${POOL_ROOT:-/mnt/clonepool}"
 USYS_LOG="$USYS_HOME/log"
 
@@ -64,7 +69,6 @@ check_sudo() {
         echo "     not your user index. Most operations"
         echo "     do not require sudo."
         echo -e "${RESET}"
-        # Only prompt if running interactively
         if [[ -t 0 ]]; then
             read -rp "  Continue as root? [y/N] " confirm
             [[ "$confirm" =~ ^[Yy]$ ]] || exit 0
@@ -208,6 +212,271 @@ WRAPPER
 
     chmod +x "$wrapper"
 }
+# ── Kernel wrapper generator ──────────────────────────────────
+make_kernel_wrapper() {
+    ...
+}
+
+# ── Jupyter kernel.json installer ─────────────────────────────
+install_kernel_json() {
+    ...
+}
+status() {
+    echo "UnitedSys Status"
+    echo "----------------"
+    echo "USYS_ROOT:        $USYS_ROOT"
+    echo "CLONEPOOL_ROOT:   $CLONEPOOL_ROOT"
+    echo
+
+    echo "Paths:"
+    [ -d "$USYS_ROOT" ] && echo "  ✔ $USYS_ROOT exists" || echo "  ✘ $USYS_ROOT missing"
+    [ -d "$CLONEPOOL_ROOT" ] && echo "  ✔ $CLONEPOOL_ROOT exists" || echo "  ✘ $CLONEPOOL_ROOT missing"
+    [ -f "$USYS_ROOT/registry/registry.json" ] && echo "  ✔ registry.json present" || echo "  ✘ registry.json missing"
+    echo
+
+    echo "Dispatcher:"
+    which_usys=$(which usys)
+    echo "  Using: $which_usys"
+    if [ "$which_usys" = "/usr/local/bin/usys" ]; then
+        echo "  ✔ Global dispatcher active"
+    else
+        echo "  ✘ Not using global dispatcher"
+    fi
+    echo
+
+    echo "Working Directory:"
+    echo "  $(pwd)"
+    echo
+
+    echo "Status complete."
+}
+
+
+# ============================================================
+#  INTAKE PIPELINE — clone pool, QR codes, sidecars
+#  Deps: qrencode + python3  (auto-checked before use)
+# ============================================================
+
+# ── Require intake deps ───────────────────────────────────────
+require_intake_deps() {
+    command -v qrencode &>/dev/null || \
+        die "qrencode not found — apt install qrencode"
+    command -v python3  &>/dev/null || \
+        die "python3 not found"
+}
+
+# ── Check intake deps silently (returns 0/1) ─────────────────
+have_intake_deps() {
+    command -v qrencode &>/dev/null && command -v python3 &>/dev/null
+}
+
+# ── Filename → hex ───────────────────────────────────────────
+to_hex() {
+    printf '%s' "$1" | xxd -p | tr -d '\n'
+}
+
+# ── Clone pool depth → tier (1-4) ────────────────────────────
+detect_tier() {
+    local path="$1"
+    local rel="${path#$POOL_ROOT}"
+    rel="${rel#/}"
+    [[ -z "$rel" ]] && echo 1 && return
+    local depth
+    depth=$(echo "$rel" | tr -cd '/' | wc -c)
+    local tier=$(( depth + 1 ))
+    [[ $tier -gt 4 ]] && tier=4
+    echo "$tier"
+}
+
+# ── Tier + index → location color ────────────────────────────
+tier_color() {
+    local tier="$1" idx="$2"
+    case "$tier" in
+        1) case "$idx" in 0) echo "FF0000";; 1) echo "0000FF";; *) echo "FFFF00";; esac ;;
+        2) case "$idx" in 0) echo "00CC00";; 1) echo "FF8800";; *) echo "8800CC";; esac ;;
+        3) case "$idx" in 0) echo "00CCCC";; 1) echo "CC00CC";; *) echo "88CC00";; esac ;;
+        4) case "$idx" in 0) echo "884400";; 1) echo "FF88AA";; 2) echo "008888";; *) echo "000088";; esac ;;
+        *) echo "FF0000" ;;
+    esac
+}
+
+# ── State → QR fg/bg colors ──────────────────────────────────
+state_colors() {
+    case "$1" in
+        white) echo "000000 FFFFFF" ;;
+        black) echo "FFFFFF 000000" ;;
+        grey)  echo "444444 AAAAAA" ;;
+        *)     echo "000000 FFFFFF" ;;
+    esac
+}
+
+# ── Generate QR PNG ──────────────────────────────────────────
+gen_qr() {
+    local content="$1" out="$2" fg="$3" bg="$4"
+    qrencode \
+        --foreground="$fg" \
+        --background="$bg" \
+        --size=6 --margin=2 --level=M \
+        --type=PNG --output="$out" \
+        "$content"
+}
+
+# ── Sidecar JSON ─────────────────────────────────────────────
+write_sidecar() {
+    local out="$1"
+    python3 - <<PYEOF
+import json, time
+
+s = {
+    "usys_intake":    "1.0",
+    "hex_name":       "$2",
+    "original_name":  "$3",
+    "state":          "$4",
+    "version":        "$5",
+    "size_bytes":     $6,
+    "description":    "$7",
+    "clone_pool": {
+        "path":       "$8",
+        "tier":       $9,
+        "tier_color": "#${10}",
+        "max_depth":  4
+    },
+    "qr": {
+        "header": {
+            "path":    "$11",
+            "role":    "state",
+            "state":   "$4"
+        },
+        "footer": {
+            "path":    "$12",
+            "role":    "location",
+            "tier":    $9,
+            "color":   "#${10}"
+        }
+    },
+    "auto_hotswap":   "$4" == "grey",
+    "registered_at":  time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    "clone_history":  []
+}
+
+with open("$out", "w") as f:
+    json.dump(s, f, indent=2)
+PYEOF
+}
+
+# ── Append to clone history in sidecar ───────────────────────
+append_history() {
+    local sidecar="$1" version="$2" src="$3"
+    python3 - <<PYEOF
+import json, time
+with open("$sidecar") as f:
+    s = json.load(f)
+s["clone_history"].append({
+    "version": "$version",
+    "source":  "$src",
+    "at":      time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+})
+s["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+with open("$sidecar", "w") as f:
+    json.dump(s, f, indent=2)
+PYEOF
+}
+
+# ── Register/update pool entry in usys DB ────────────────────
+_pool_register() {
+    local name="$1" hex="$2" src="$3" state="$4"
+    local pool="$5" ver="$6" size="$7" sidecar="$8"
+
+    local exists
+    exists=$(db "SELECT COUNT(*) FROM packages WHERE name='$name';")
+
+    if [[ "$exists" -gt 0 ]]; then
+        db << SQL
+INSERT INTO versions (package, version, store_path, hash, size, note)
+VALUES ('$name', '$ver', '$pool/$hex', '', $size, 'intake state=$state');
+
+UPDATE packages
+SET current_ver='$ver', source_path='$src',
+    updated=datetime('now'),
+    tags='sidecar=$sidecar',
+    description='state=$state'
+WHERE name='$name';
+
+INSERT INTO swaplog (package, from_ver, to_ver, action, note)
+VALUES ('$name',
+    (SELECT current_ver FROM packages WHERE name='$name'),
+    '$ver', 'intake', 'state=$state');
+SQL
+    else
+        db << SQL
+INSERT INTO packages (name, current_ver, source_path, bin_path, filetype, tags, description)
+VALUES ('$name', '$ver', '$src', '$USYS_BIN/$name', 'intake', 'sidecar=$sidecar', 'state=$state');
+
+INSERT INTO versions (package, version, store_path, hash, size, note)
+VALUES ('$name', '$ver', '$pool/$hex', '', $size, 'intake: initial');
+
+INSERT INTO swaplog (package, from_ver, to_ver, action, note)
+VALUES ('$name', NULL, '$ver', 'intake', 'initial state=$state');
+SQL
+    fi
+}
+
+# ── Internal intake pipeline (used by register/install) ──────
+_run_intake() {
+    local src="${1:-}" pool="${2:-}" state="${3:-white}" desc="${4:-}"
+
+    [[ -z "$src"  ]] && return 1
+    [[ -z "$pool" ]] && return 1
+    [[ -f "$src"  ]] || return 1
+
+    src="$(realpath "$src")"
+
+    local fname size tier tier_idx color ver hex name
+    fname="$(basename "$src")"
+    size="$(wc -c < "$src")"
+    hex="$(to_hex "$fname")"
+    name="${fname%.*}"
+    ver="$(next_version "$name")"
+
+    mkdir -p "$pool"
+    tier="$(detect_tier "$pool")"
+    tier_idx=$(( $(printf '%s' "$pool" | cksum | awk '{print $1}') % 3 ))
+    color="$(tier_color "$tier" "$tier_idx")"
+
+    local pkg_dir="$pool/$hex"
+    mkdir -p "$pkg_dir"
+
+    local stored="$pkg_dir/${ver}_${fname}"
+    local sidecar="$pkg_dir/${hex}.sidecar.json"
+    local qr_hdr="$pkg_dir/${hex}_header.png"
+    local qr_ftr="$pkg_dir/${hex}_footer.png"
+    local qr_sheet="$pkg_dir/${hex}_sheet.png"
+
+    cp "$src" "$stored"
+    chmod +x "$stored" 2>/dev/null || true
+
+    write_sidecar "$sidecar" \
+        "$hex" "$fname" "$state" "$ver" "$size" "$desc" \
+        "$pool" "$tier" "$color" "$qr_hdr" "$qr_ftr"
+
+    local colors fg bg
+    colors="$(state_colors "$state")"
+    fg="$(echo "$colors" | awk '{print $1}')"
+    bg="$(echo "$colors" | awk '{print $2}')"
+
+    gen_qr "{\"hex\":\"$hex\",\"state\":\"$state\",\"ver\":\"$ver\",\"sidecar\":\"$sidecar\"}" \
+        "$qr_hdr" "$fg" "$bg"
+    gen_qr "{\"hex\":\"$hex\",\"pool\":\"$pool\",\"tier\":$tier,\"color\":\"#$color\",\"sidecar\":\"$sidecar\"}" \
+        "$qr_ftr" "$color" "FFFFFF"
+
+    if command -v convert &>/dev/null; then
+        convert -append "$qr_hdr" "$qr_ftr" "$qr_sheet" 2>/dev/null || true
+    fi
+
+    _pool_register "$name" "$hex" "$src" "$state" "$pool" "$ver" "$size" "$sidecar"
+    append_history "$sidecar" "$ver" "$src"
+}
+
 
 # ============================================================
 #  COMMANDS
@@ -231,13 +500,11 @@ cmd_init() {
     init_db
     ok "Database initialized: $USYS_DB"
 
-    # Add to PATH if not already there
     local shell_rc=""
     if [[ -f "$HOME/.bashrc" ]];  then shell_rc="$HOME/.bashrc"; fi
     if [[ -f "$HOME/.zshrc" ]];   then shell_rc="$HOME/.zshrc";  fi
 
     local path_line="export PATH=\"\$HOME/.usys/bin:\$PATH\""
-    local usys_line="alias usys=\"$USYS_BIN/../usys.sh\""
 
     if [[ -n "$shell_rc" ]]; then
         if ! grep -q "\.usys/bin" "$shell_rc" 2>/dev/null; then
@@ -250,11 +517,9 @@ cmd_init() {
         fi
     fi
 
-    # Copy self to usys home
     cp "$0" "$USYS_HOME/usys.sh" 2>/dev/null || true
     chmod +x "$USYS_HOME/usys.sh"
 
-    # Create usys callable for usys itself
     ln -sf "$USYS_HOME/usys.sh" "$USYS_BIN/usys" 2>/dev/null || \
         cp "$USYS_HOME/usys.sh" "$USYS_BIN/usys"
     chmod +x "$USYS_BIN/usys"
@@ -280,7 +545,6 @@ cmd_register() {
     require_sqlite
     init_db 2>/dev/null || true
 
-    # Resolve absolute path
     src="$(realpath "$src")"
 
     local filetype version hash size store_path
@@ -290,14 +554,12 @@ cmd_register() {
     hash=$(file_hash "$src")
     size=$(wc -c < "$src")
 
-    # Store a copy in versions dir
     local pkg_ver_dir="$USYS_VERSIONS/$name"
     mkdir -p "$pkg_ver_dir"
     store_path="$pkg_ver_dir/${version}_$(basename "$src")"
     cp "$src" "$store_path"
     chmod +x "$store_path" 2>/dev/null || true
 
-    # Check if already registered — update or insert
     local exists
     exists=$(db "SELECT COUNT(*) FROM packages WHERE name='$name';")
 
@@ -306,7 +568,6 @@ cmd_register() {
         return 1
     fi
 
-    # Register in DB
     db << SQL
 INSERT INTO packages (name, current_ver, source_path, bin_path, filetype, description)
 VALUES ('$name', '$version', '$src', '$USYS_BIN/$name', '$filetype', '$desc');
@@ -318,14 +579,12 @@ INSERT INTO swaplog (package, from_ver, to_ver, action, note)
 VALUES ('$name', NULL, '$version', 'register', 'initial registration');
 SQL
 
-    # Create callable wrapper
     make_callable "$name" "$store_path" "$filetype"
 
-    # ── Auto-intake: sidecar + QRs, silent ───────────────────
-    if [[ -f "$USYS_INTAKE" ]]; then
+    # Auto-intake into clone pool (silent, skipped if deps absent)
+    if have_intake_deps; then
         local pool_path="$POOL_ROOT/$(basename "$(dirname "$src")")"
-        bash "$USYS_INTAKE" "$src" "$pool_path" "white" "$desc" \
-            > /dev/null 2>&1 || true
+        _run_intake "$src" "$pool_path" "white" "$desc" > /dev/null 2>&1 || true
     fi
 
     echo
@@ -409,7 +668,6 @@ INSERT INTO swaplog (package, from_ver, to_ver, action, note)
 VALUES ('$name', '$old_ver', '$version', 'swap', '$note');
 SQL
 
-    # Regenerate wrapper (points to new version via DB lookup)
     make_callable "$name" "$store_path" "$filetype"
 
     echo
@@ -439,7 +697,6 @@ cmd_rollback() {
     current_ver=$(db "SELECT current_ver FROM packages WHERE name='$name';")
 
     if [[ -z "$target_ver" ]]; then
-        # Roll back to previous version
         target_ver=$(db "
             SELECT version FROM versions
             WHERE package='$name' AND version != '$current_ver'
@@ -639,6 +896,10 @@ cmd_sync() {
 
     ok "Synced: $name → $dest"
 }
+# ── usys install-kernel <name> ────────────────────────────────
+cmd_install_kernel() {
+    ...
+}
 
 # ── usys clone <name> <dest> ──────────────────────────────────
 cmd_clone() {
@@ -654,14 +915,12 @@ cmd_clone() {
     exists=$(db "SELECT COUNT(*) FROM packages WHERE name='$name';")
     [[ "$exists" -eq 0 ]] && die "'$name' not in registry"
 
-    # Clone full version history to destination
     local src_dir="$USYS_VERSIONS/$name"
     local dest_dir="$dest/$name"
 
     mkdir -p "$dest_dir"
     cp -r "$src_dir/." "$dest_dir/"
 
-    # Export DB record for this package
     db << SQL > "$dest_dir/usys_export.sql"
 SELECT '-- UnitedSys export: $name';
 SELECT '-- Generated: ' || datetime('now');
@@ -717,13 +976,11 @@ cmd_install() {
     require_sqlite
     init_db 2>/dev/null || true
 
-    # ── Detect package manager ─────────────────────────────
     local mgr=""
 
     if [[ -n "$force_mgr" ]]; then
         mgr="${force_mgr/--/}"
     else
-        # Auto-detect — first match wins
         if   command -v apt-get  &>/dev/null; then mgr="apt"
         elif command -v pacman   &>/dev/null; then mgr="pacman"
         elif command -v dnf      &>/dev/null; then mgr="dnf"
@@ -742,47 +999,28 @@ cmd_install() {
     info "Installing      : $pkg"
     echo
 
-    # ── Run install ────────────────────────────────────────
     case "$mgr" in
-        apt)
-            sudo apt-get install -y "$pkg" || die "apt install failed: $pkg"
-            ;;
-        pacman)
-            sudo pacman -S --noconfirm "$pkg" || die "pacman install failed: $pkg"
-            ;;
-        dnf)
-            sudo dnf install -y "$pkg" || die "dnf install failed: $pkg"
-            ;;
-        yum)
-            sudo yum install -y "$pkg" || die "yum install failed: $pkg"
-            ;;
-        brew)
-            brew install "$pkg" || die "brew install failed: $pkg"
-            ;;
+        apt)    sudo apt-get install -y "$pkg" || die "apt install failed: $pkg" ;;
+        pacman) sudo pacman -S --noconfirm "$pkg" || die "pacman install failed: $pkg" ;;
+        dnf)    sudo dnf install -y "$pkg" || die "dnf install failed: $pkg" ;;
+        yum)    sudo yum install -y "$pkg" || die "yum install failed: $pkg" ;;
+        brew)   brew install "$pkg" || die "brew install failed: $pkg" ;;
         pip)
             local pip_bin
             pip_bin=$(command -v pip3 || command -v pip)
             "$pip_bin" install --user "$pkg" || die "pip install failed: $pkg"
             ;;
-        npm)
-            npm install -g "$pkg" || die "npm install failed: $pkg"
-            ;;
-        cargo)
-            cargo install "$pkg" || die "cargo install failed: $pkg"
-            ;;
-        *)
-            die "Unknown package manager: $mgr"
-            ;;
+        npm)    npm install -g "$pkg" || die "npm install failed: $pkg" ;;
+        cargo)  cargo install "$pkg" || die "cargo install failed: $pkg" ;;
+        *)      die "Unknown package manager: $mgr" ;;
     esac
 
     echo
     ok "Installed: $pkg  (via $mgr)"
 
-    # ── Find the installed binary ──────────────────────────
     local bin_path=""
     bin_path=$(command -v "$pkg" 2>/dev/null || true)
 
-    # pip/npm/cargo installs may land in non-PATH dirs — check common spots
     if [[ -z "$bin_path" ]]; then
         local candidates=(
             "$HOME/.local/bin/$pkg"
@@ -796,13 +1034,11 @@ cmd_install() {
         done
     fi
 
-    # ── Register in usys DB if binary found ───────────────
     if [[ -n "$bin_path" ]]; then
         local exists
         exists=$(db "SELECT COUNT(*) FROM packages WHERE name='$pkg';")
 
         if [[ "$exists" -gt 0 ]]; then
-            # Already registered — swap to new binary
             local old_ver version hash size store_path
             old_ver=$(db "SELECT current_ver FROM packages WHERE name='$pkg';")
             version=$(next_version "$pkg")
@@ -828,7 +1064,6 @@ SQL
             make_callable "$pkg" "$store_path" "binary"
             ok "Updated registry: $pkg  ($old_ver → $version)"
         else
-            # Fresh register
             local version hash size store_path filetype
             version=$(next_version "$pkg")
             hash=$(file_hash "$bin_path")
@@ -856,8 +1091,8 @@ SQL
         fi
 
         # Silent auto-intake into clone pool
-        if [[ -f "$USYS_INTAKE" ]]; then
-            bash "$USYS_INTAKE" "$bin_path" "$POOL_ROOT/system" "white" \
+        if have_intake_deps; then
+            _run_intake "$bin_path" "$POOL_ROOT/system" "white" \
                 "installed via $mgr" > /dev/null 2>&1 || true
         fi
     else
@@ -871,27 +1106,134 @@ SQL
 
 # ── usys intake <file> <pool_path> [state] [desc] ────────────
 cmd_intake() {
-    [[ -f "$USYS_INTAKE" ]] || die "intake.sh not found at $USYS_INTAKE"
-    bash "$USYS_INTAKE" "$@"
-}
+    local src="${1:-}" pool="${2:-}" state="${3:-white}" desc="${4:-}"
 
-# ── usys deprecate <name> ─────────────────────────────────────
+    [[ -z "$src"  ]] && die "Usage: usys intake <file> <pool_path> [state] [description]"
+    [[ -z "$pool" ]] && die "Usage: usys intake <file> <pool_path> [state] [description]"
+    [[ -f "$src"  ]] || die "File not found: $src"
+    [[ "$state" == "white" || "$state" == "black" || "$state" == "grey" ]] || \
+        die "State must be: white | black | grey"
+
+    require_sqlite
+    require_intake_deps
+
+    src="$(realpath "$src")"
+
+    local fname size tier tier_idx color ver hex name
+    fname="$(basename "$src")"
+    size="$(wc -c < "$src")"
+    hex="$(to_hex "$fname")"
+    name="${fname%.*}"
+    ver="$(next_version "$name")"
+
+    mkdir -p "$pool"
+    tier="$(detect_tier "$pool")"
+    tier_idx=$(( $(printf '%s' "$pool" | cksum | awk '{print $1}') % 3 ))
+    color="$(tier_color "$tier" "$tier_idx")"
+
+    local pkg_dir="$pool/$hex"
+    mkdir -p "$pkg_dir"
+
+    local stored="$pkg_dir/${ver}_${fname}"
+    local sidecar="$pkg_dir/${hex}.sidecar.json"
+    local qr_hdr="$pkg_dir/${hex}_header.png"
+    local qr_ftr="$pkg_dir/${hex}_footer.png"
+    local qr_sheet="$pkg_dir/${hex}_sheet.png"
+
+    echo
+    echo -e "${BOLD}  ── UnitedSys Intake ──${RESET}"
+    echo
+
+    cp "$src" "$stored"
+    chmod +x "$stored" 2>/dev/null || true
+    info "File    : $fname → $stored"
+    info "Hex     : $hex"
+    info "State   : $state"
+    info "Tier    : $tier  (#$color)"
+    info "Version : $ver"
+
+    info "Writing sidecar..."
+    write_sidecar "$sidecar" \
+        "$hex" "$fname" "$state" "$ver" "$size" "$desc" \
+        "$pool" "$tier" "$color" "$qr_hdr" "$qr_ftr"
+
+    info "QR header (state)..."
+    local colors fg bg
+    colors="$(state_colors "$state")"
+    fg="$(echo "$colors" | awk '{print $1}')"
+    bg="$(echo "$colors" | awk '{print $2}')"
+    gen_qr "{\"hex\":\"$hex\",\"state\":\"$state\",\"ver\":\"$ver\",\"sidecar\":\"$sidecar\"}" \
+        "$qr_hdr" "$fg" "$bg"
+
+    info "QR footer (location)..."
+    gen_qr "{\"hex\":\"$hex\",\"pool\":\"$pool\",\"tier\":$tier,\"color\":\"#$color\",\"sidecar\":\"$sidecar\"}" \
+        "$qr_ftr" "$color" "FFFFFF"
+
+    if command -v convert &>/dev/null; then
+        convert -append "$qr_hdr" "$qr_ftr" "$qr_sheet" 2>/dev/null && \
+            ok "Sheet   : $qr_sheet" || true
+    fi
+
+    info "Registering in usys..."
+    _pool_register "$name" "$hex" "$src" "$state" "$pool" "$ver" "$size" "$sidecar"
+    append_history "$sidecar" "$ver" "$src"
+
+    echo
+    ok "Sidecar : $sidecar"
+    ok "Header  : $qr_hdr"
+    ok "Footer  : $qr_ftr"
+    echo
+
+    [[ "$state" == "grey" ]] && \
+        echo -e "${YELLOW}  ⚠  Deprecated — will auto-hotswap when opportunity presents${RESET}" && echo
+}
+status)
+    status
+    ;;
+# ── usys deprecate <name> ────────────────────────────────────
 cmd_deprecate() {
-    [[ -f "$USYS_INTAKE" ]] || die "intake.sh not found at $USYS_INTAKE"
-    bash "$USYS_INTAKE" deprecate "$@"
+    local name="${1:-}"
+    [[ -z "$name" ]] && die "Usage: usys deprecate <name>"
+
+    require_sqlite
+
+    local exists
+    exists=$(db "SELECT COUNT(*) FROM packages WHERE name='$name';")
+    [[ "$exists" -eq 0 ]] && die "'$name' not in registry"
+
+    db << SQL
+UPDATE packages SET description='state=grey', updated=datetime('now') WHERE name='$name';
+INSERT INTO swaplog (package, from_ver, to_ver, action, note)
+VALUES ('$name',
+    (SELECT current_ver FROM packages WHERE name='$name'),
+    (SELECT current_ver FROM packages WHERE name='$name'),
+    'deprecate', 'grey — queued for auto-hotswap');
+SQL
+    warn "'$name' marked grey — will hotswap when opportunity presents"
 }
 
 # ── usys hotswap-check ────────────────────────────────────────
 cmd_hotswap_check() {
-    [[ -f "$USYS_INTAKE" ]] || die "intake.sh not found at $USYS_INTAKE"
-    bash "$USYS_INTAKE" hotswap-check
+    require_sqlite
+    info "Scanning for deprecated files..."
+
+    local greys
+    greys="$(db "SELECT name FROM packages WHERE description LIKE 'state=grey%';" 2>/dev/null || true)"
+
+    [[ -z "$greys" ]] && ok "None pending" && return
+
+    while IFS= read -r pkg; do
+        warn "Deprecated: $pkg — register replacement: usys swap $pkg <newfile>"
+    done <<< "$greys"
 }
+install-kernel) cmd_install_kernel "$@" ;;
 
 # ── usys version ─────────────────────────────────────────────
 cmd_version() {
     echo "usys $USYS_VERSION — UnitedSys universal hotswap registry"
     echo "GPL v3 — https://github.com/jwl247/unitedsys"
 }
+
 
 # ============================================================
 #  DISPATCH
@@ -901,16 +1243,17 @@ CMD="${1:-}"
 shift 2>/dev/null || true
 
 case "$CMD" in
-    init)       cmd_init ;;
-    register)   check_sudo; cmd_register "$@" ;;
-    call)       cmd_call "$@" ;;
-    swap)       check_sudo; cmd_swap "$@" ;;
-    rollback)   check_sudo; cmd_rollback "$@" ;;
-    list|ls)    cmd_list ;;
-    info)       cmd_info "$@" ;;
-    remove|rm)  check_sudo; cmd_remove "$@" ;;
-    where)      cmd_where "$@" ;;
-    sync)       cmd_sync "$@" ;;
+  
+    init)          cmd_init ;;
+    register)      check_sudo; cmd_register "$@" ;;
+    call)          cmd_call "$@" ;;
+    swap)          check_sudo; cmd_swap "$@" ;;
+    rollback)      check_sudo; cmd_rollback "$@" ;;
+    list|ls)       cmd_list ;;
+    info)          cmd_info "$@" ;;
+    remove|rm)     check_sudo; cmd_remove "$@" ;;
+    where)         cmd_where "$@" ;;
+    sync)          cmd_sync "$@" ;;
     clone)         cmd_clone "$@" ;;
     search)        cmd_search "$@" ;;
     version|-v)    cmd_version ;;
@@ -946,17 +1289,15 @@ case "$CMD" in
         echo "    usys hotswap-check                 scan deprecated files"
         echo
         echo -e "  ${CYAN}Examples:${RESET}"
-        echo "    usys register ./intake.sh intake"
-        echo "    usys call intake"
-        echo "    usys swap intake ./intake_v2.sh"
-        echo "    usys rollback intake v1"
-        echo "    usys clone intake /media/jwl247/breach_coms2/backup"
+        echo "    usys register ./deploy.sh deploy"
+        echo "    usys call deploy"
+        echo "    usys swap deploy ./deploy_v2.sh"
+        echo "    usys rollback deploy v1"
+        echo "    usys clone deploy /media/jwl247/breach_coms2/backup"
         echo
         ;;
 
     *)
-        # Try calling it as a registered package name directly
-        # This allows: usys intake  instead of  usys call intake
         if sqlite3 "$USYS_DB" \
            "SELECT COUNT(*) FROM packages WHERE name='$CMD';" \
            2>/dev/null | grep -q "^1$"; then

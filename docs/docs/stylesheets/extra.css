@@ -1,0 +1,40 @@
+/* Sticky A–Z bar + search box styling */
+
+.az-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: #ffffff;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+@media (prefers-color-scheme: dark) {
+  .az-bar {
+    background: #1e1e1e;
+    border-bottom: 1px solid #333;
+  }
+}
+
+.glossary-search {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.75rem 0;
+  flex-wrap: wrap;
+}
+
+.glossary-search input {
+  width: min(520px, 100%);
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #cfcfcf;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.glossary-search .hint {
+  font-size: 0.9rem;
+  opacity: 0.75;
+}
+
+.glossary-hidden { display: none !important; }

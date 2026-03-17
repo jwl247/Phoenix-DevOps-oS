@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-USYS_VERSION="0.1.0"
+USYS_VERSION="0.3.0"
 USYS_HOME="$HOME/.usys"
 USYS_BIN="$USYS_HOME/bin"
 REPO="https://raw.githubusercontent.com/jwl247/unitedsys/main"
@@ -34,7 +34,8 @@ echo "   ╚═════╝ ╚══════╝   ╚═╝   ╚══�
 echo -e "${RESET}"
 echo -e "  UnitedSys v${USYS_VERSION} installer"
 echo -e "  Universal file registration, versioning, hotswap"
-echo -e "  GPL v3  —  zero dependencies  —  no sudo required"
+echo -e "  Standalone — single file, no external scripts"
+echo -e "  GPL v3  —  core deps: bash + sqlite3  —  no sudo required"
 echo
 
 # ── Check sqlite3 ─────────────────────────────────────────────

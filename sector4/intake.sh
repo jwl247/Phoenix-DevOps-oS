@@ -1,3 +1,5 @@
+
+    [[ -f "$USYS_DB" ]] || die "usys not initialized"
 #!/usr/bin/env bash
 # ============================================================
 #  UnitedSys — intake.sh
@@ -321,8 +323,6 @@ cmd_intake() {
 cmd_deprecate() {
     local name="${1:-}"
     [[ -z "$name" ]] && die "Usage: intake.sh deprecate <name>"
-    [[ -f "$USYS_DB" ]] || die "usys not initialized"
-
     sqlite3 "$USYS_DB" <<SQL
 UPDATE packages SET description='state=grey', updated=datetime('now') WHERE name='$name';
 INSERT INTO swaplog (package, from_ver, to_ver, action, note)
