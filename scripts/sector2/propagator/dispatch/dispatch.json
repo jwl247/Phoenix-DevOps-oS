@@ -1,0 +1,14 @@
+{
+  "version": "0.1.0",
+  "targets": {
+    "vault":   {"path": "/media/jwl247/breach_coms2/CLONEPOOL", "active": true},
+    "sql":     {"path": "~/.catalog/catalog.db",                "active": true},
+    "d1":      {"endpoint": "cloudflare_d1",                    "active": true},
+    "frank3":  {"zmq_port": 5555,                               "active": true},
+    "peer":    {"zmq_port": 5560,                               "active": true},
+    "windows": {"via": "translator",                            "active": true}
+  },
+  "com_chain": ["COM4","COM3","COM2","COM1"],
+  "sector2_backup": "/etc/systemd/translator.sh",
+  "sector3_primary": "/etc/systemd/system/translator.sh"
+}

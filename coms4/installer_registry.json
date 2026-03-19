@@ -13,23 +13,21 @@
       "filepath": "integrated_guardian.py",
       "filename": "integrated_guardian.py",
       "type": "Generic",
-      "ports": [
-        0
-      ],
+      "ports": [],
       "paths": [],
       "settings": {},
-      "scanned": "2026-02-26T05:33:54.542723"
+      "scanned": "2026-03-18T03:00:30.563607",
+      "error": "'charmap' codec can't decode byte 0x8f in position 6098: character maps to <undefined>"
     },
     "8cd4d3610d988fac40bc9b37bfe5eff84bbac6bcae2daf8558508886adaeeaec": {
       "filepath": "syncthing_module.py",
       "filename": "syncthing_module.py",
       "type": "Generic",
-      "ports": [
-        22000
-      ],
+      "ports": [],
       "paths": [],
       "settings": {},
-      "scanned": "2026-02-26T05:33:54.545525"
+      "scanned": "2026-03-18T03:00:30.575555",
+      "error": "'charmap' codec can't decode byte 0x90 in position 10: character maps to <undefined>"
     },
     "27903550e73533c9e310585a3fc233a17dd05483a7ad9c44a0af419271fb990f": {
       "filepath": "freewheeling.py",
@@ -37,14 +35,11 @@
       "type": "Generic",
       "ports": [
         128,
-        10,
-        12,
-        15,
-        20
+        10
       ],
       "paths": [],
       "settings": {},
-      "scanned": "2026-02-26T05:33:54.565172"
+      "scanned": "2026-03-18T03:00:30.558402"
     },
     "e4d450d5a6e20f2d0bdef7ee0288b297baca8e847ad74939e16e2f3cacc0697f": {
       "filepath": "quadengine.py",
@@ -55,7 +50,7 @@
       ],
       "paths": [],
       "settings": {},
-      "scanned": "2026-02-26T05:33:54.567174"
+      "scanned": "2026-03-18T03:00:30.572948"
     },
     "4cc24984dc571890ea4f34562c010d8d4e3227ff0a9fa5489419a5bf83d76a9b": {
       "filepath": "propcoms.py",
@@ -64,7 +59,7 @@
       "ports": [],
       "paths": [],
       "settings": {},
-      "scanned": "2026-02-26T05:33:54.597754"
+      "scanned": "2026-03-18T03:00:30.567486"
     },
     "6761d420e440eed92de8aa84c884f07ae8a412eb69137c371dfd49a1ab1cc78d": {
       "filepath": "helix_api.py",
@@ -73,18 +68,17 @@
       "ports": [],
       "paths": [],
       "settings": {},
-      "scanned": "2026-02-26T05:33:54.639713"
+      "scanned": "2026-03-18T03:00:30.561198"
     },
     "e6ea5454280727cb2e30100b49a1b16b1ab041c555dc9762dd8603fd06200f39": {
       "filepath": "franken.py",
       "filename": "franken.py",
       "type": "Generic",
-      "ports": [
-        16
-      ],
+      "ports": [],
       "paths": [],
       "settings": {},
-      "scanned": "2026-02-26T05:33:54.670551"
+      "scanned": "2026-03-18T03:00:30.555930",
+      "error": "'charmap' codec can't decode byte 0x81 in position 20063: character maps to <undefined>"
     },
     "1dba093aa214da4cd5e7bc05f6ce26813b0787c92149b19ca7513e83b9948d06": {
       "filepath": "conductor_sync.py",
@@ -93,7 +87,16 @@
       "ports": [],
       "paths": [],
       "settings": {},
-      "scanned": "2026-02-26T05:33:54.691126"
+      "scanned": "2026-03-18T03:00:30.542186"
+    },
+    "496d904a6e4dc18e5a9efe8a5a8df7b0b0e7c5c7bb10e61015703a8b23b9d999": {
+      "filepath": "propcoms_next.py",
+      "filename": "propcoms_next.py",
+      "type": "Generic",
+      "ports": [],
+      "paths": [],
+      "settings": {},
+      "scanned": "2026-03-18T03:00:30.570275"
     }
   },
   "ports": {
@@ -156,6 +159,27 @@
         "config": "e6ea5454280727cb2e30100b49a1b16b1ab041c555dc9762dd8603fd06200f39",
         "service": "Generic",
         "file": "franken.py"
+      }
+    ],
+    "128": [
+      {
+        "config": "27903550e73533c9e310585a3fc233a17dd05483a7ad9c44a0af419271fb990f",
+        "service": "Generic",
+        "file": "freewheeling.py"
+      }
+    ],
+    "10": [
+      {
+        "config": "27903550e73533c9e310585a3fc233a17dd05483a7ad9c44a0af419271fb990f",
+        "service": "Generic",
+        "file": "freewheeling.py"
+      }
+    ],
+    "20": [
+      {
+        "config": "e4d450d5a6e20f2d0bdef7ee0288b297baca8e847ad74939e16e2f3cacc0697f",
+        "service": "Generic",
+        "file": "quadengine.py"
       }
     ]
   },

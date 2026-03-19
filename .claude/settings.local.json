@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(# helix_baseline.c — benchmark reference alongside the main C kernel\ncp \"C:/Users/jwlef/Downloads/helix_baseline.c\" \\\\\n   \"C:/Users/jwlef/PhoenixDevOps/kernel/c_kernel/helix_baseline.c\"\n\n# helix_vram — virtual RAM manager\ncp \"C:/Users/jwlef/Downloads/helix_vram.py\" \\\\\n   \"C:/Users/jwlef/PhoenixDevOps/kernel/helix_vram.py\"\n\n# helix_complete_stack — take version \\(3\\) as latest\ncp \"C:/Users/jwlef/Downloads/helix_complete_stack \\(3\\).py\" \\\\\n   \"C:/Users/jwlef/PhoenixDevOps/kernel/helix_complete_stack.py\"\n\n# frankenhelix — OG frank bridge\ncp \"C:/Users/jwlef/Downloads/frankenhelix.py\" \\\\\n   \"C:/Users/jwlef/PhoenixDevOps/kernel/frankenhelix.py\"\n\n# frank_helix — Frank3 bridge / RAM daemon\ncp \"C:/Users/jwlef/Downloads/frank_helix.py\" \\\\\n   \"C:/Users/jwlef/PhoenixDevOps/kernel/frank_helix.py\"\n\necho \"=== kernel/ ===\"\nfind \"C:/Users/jwlef/PhoenixDevOps/kernel\" -type f | sorternel that side loadspython)"
+    ]
+  }
+}

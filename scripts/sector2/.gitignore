@@ -1,0 +1,7 @@
+*.pyc
+__pycache__/
+logs/
+db/*.db
+.catalog/
+*.log
+.warm/
