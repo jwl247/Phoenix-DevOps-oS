@@ -1,0 +1,33 @@
+[Unit]
+Description=Phoenix scheduler — calendar, bill reminders, timed events
+Documentation=https://github.com/jwl247/phoenix-devops
+After=phoenix-propagator.service mysql.service
+Requires=phoenix-propagator.service
+PartOf=phoenix-sector2.target
+
+[Service]
+Type=simple
+User=jwl247
+Group=jwl247
+WorkingDirectory=/home/jwl247/projects/phoenix
+ExecStart=/usr/bin/env python3 /home/jwl247/projects/phoenix/sector2/scheduler.py
+Restart=on-failure
+RestartSec=5
+
+Environment=PYTHONUNBUFFERED=1
+Environment=PHOENIX_SECTOR=2
+Environment=PHOENIX_DB_NAME=lifefirst
+Environment=PHOENIX_SCHEDULER_INTERVAL=60
+EnvironmentFile=-/home/jwl247/projects/phoenix/.env
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/jwl247/projects/phoenix /home/jwl247/.catalog
+
+StandardOutput=append:/var/log/phoenix/scheduler.log
+StandardError=append:/var/log/phoenix/scheduler.error.log
+SyslogIdentifier=phoenix-scheduler
+
+[Install]
+WantedBy=phoenix-sector2.target

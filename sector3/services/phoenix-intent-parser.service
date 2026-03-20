@@ -1,0 +1,38 @@
+[Unit]
+Description=Phoenix intent parser — Sector 2 service bus
+Documentation=https://github.com/jwl247/phoenix-devops
+After=network.target phoenix-frank-helix.service phoenix-frankenhelix.service
+Requires=phoenix-frank-helix.service
+PartOf=phoenix-sector2.target
+
+[Service]
+Type=simple
+User=jwl247
+Group=jwl247
+WorkingDirectory=/home/jwl247/projects/phoenix
+ExecStart=/usr/bin/env python3 /home/jwl247/projects/phoenix/sector2/intent_parser.py
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=3
+StartLimitIntervalSec=60
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+Environment=PHOENIX_SECTOR=2
+Environment=PHOENIX_ZMQ_ROUTER=tcp://localhost:5557
+EnvironmentFile=-/home/jwl247/projects/phoenix/.env
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/jwl247/projects/phoenix /home/jwl247/.catalog
+
+# Logging
+StandardOutput=append:/var/log/phoenix/intent-parser.log
+StandardError=append:/var/log/phoenix/intent-parser.error.log
+SyslogIdentifier=phoenix-intent-parser
+
+[Install]
+WantedBy=phoenix-sector2.target

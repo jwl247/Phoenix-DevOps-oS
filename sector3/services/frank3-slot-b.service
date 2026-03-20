@@ -1,0 +1,21 @@
+# frank3-slot-b.service
+# Slot B — failover, fires 15 seconds after boot if slot A missed
+# /etc/systemd/system/frank3-slot-b.service
+
+[Unit]
+Description=Frank3 Kernel Sideload — Slot B (failover)
+After=frank3-slot-a.service
+Wants=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/bin/sleep 15
+ExecStart=/bin/bash -c 'lsmod | grep -q frank3_slot_a || /sbin/modprobe frank3_slot_b'
+ExecStop=/sbin/modprobe -r frank3_slot_b
+Restart=no
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

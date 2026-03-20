@@ -1,0 +1,36 @@
+[Unit]
+Description=Phoenix propagator — dispatch router to SQLite/D1/Frank3/vault
+Documentation=https://github.com/jwl247/phoenix-devops
+After=network.target phoenix-intent-parser.service
+Requires=phoenix-intent-parser.service
+PartOf=phoenix-sector2.target
+
+[Service]
+Type=simple
+User=jwl247
+Group=jwl247
+WorkingDirectory=/home/jwl247/projects/phoenix
+ExecStart=/usr/bin/env python3 /home/jwl247/projects/phoenix/sector2/propagator.py
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=3
+StartLimitIntervalSec=60
+
+Environment=PYTHONUNBUFFERED=1
+Environment=PHOENIX_SECTOR=2
+Environment=PHOENIX_ZMQ_PULL=tcp://localhost:5558
+Environment=PHOENIX_DISPATCH_CONFIG=/home/jwl247/projects/phoenix/config/dispatch.json
+EnvironmentFile=-/home/jwl247/projects/phoenix/.env
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/jwl247/projects/phoenix /home/jwl247/.catalog /media/jwl247/breach_coms2 /media/jwl247/breach_coms3 /media/jwl247/breach_coms4
+
+StandardOutput=append:/var/log/phoenix/propagator.log
+StandardError=append:/var/log/phoenix/propagator.error.log
+SyslogIdentifier=phoenix-propagator
+
+[Install]
+WantedBy=phoenix-sector2.target

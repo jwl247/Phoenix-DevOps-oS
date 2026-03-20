@@ -1,0 +1,40 @@
+[Unit]
+Description=Phoenix doc worker — shade, two-pane document engine
+Documentation=https://github.com/jwl247/phoenix-devops
+After=phoenix-unoserver.service phoenix-propagator.service
+Requires=phoenix-unoserver.service phoenix-propagator.service
+PartOf=phoenix-sector2.target
+
+[Service]
+Type=simple
+User=jwl247
+Group=jwl247
+WorkingDirectory=/home/jwl247/projects/phoenix
+ExecStart=/usr/bin/env python3 /home/jwl247/projects/phoenix/sector2/doc_worker.py
+ExecStop=/usr/bin/env python3 /home/jwl247/projects/phoenix/sector2/doc_worker.py --shutdown
+Restart=on-failure
+RestartSec=5
+
+Environment=PYTHONUNBUFFERED=1
+Environment=PHOENIX_SECTOR=2
+Environment=PHOENIX_UNO_PORT=2003
+Environment=PHOENIX_ZMQ_PUSH=tcp://localhost:5558
+Environment=PHOENIX_HOOK_A=claude_api
+Environment=PHOENIX_HOOK_B=web_search
+Environment=PHOENIX_HOOK_C=auto_suggest
+Environment=PHOENIX_HOOK_D=unoserver
+Environment=PHOENIX_HOOK_E=export_print
+Environment=PHOENIX_HOOK_F=propagator_relay
+EnvironmentFile=-/home/jwl247/projects/phoenix/.env
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/jwl247/projects/phoenix /home/jwl247/.catalog /tmp
+
+StandardOutput=append:/var/log/phoenix/doc-worker.log
+StandardError=append:/var/log/phoenix/doc-worker.error.log
+SyslogIdentifier=phoenix-doc-worker
+
+[Install]
+WantedBy=phoenix-sector2.target

@@ -1,0 +1,20 @@
+[Unit]
+Description=Phoenix auto config installer — Sector 1 bootstrap, runs once
+Documentation=https://github.com/jwl247/phoenix-devops
+DefaultDependencies=no
+Before=phoenix-frankenhelix.service phoenix-frank-helix.service
+ConditionPathExists=!/var/lib/phoenix/auto-config.done
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+ExecStart=/usr/bin/env python3 /home/jwl247/projects/phoenix/sector1/auto_config_installer.py
+ExecStartPost=/bin/touch /var/lib/phoenix/auto-config.done
+
+StandardOutput=append:/var/log/phoenix/auto-config.log
+StandardError=append:/var/log/phoenix/auto-config.error.log
+SyslogIdentifier=phoenix-auto-config
+
+[Install]
+WantedBy=phoenix-sector1.target

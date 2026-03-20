@@ -1,0 +1,31 @@
+[Unit]
+Description=Phoenix unoserver — LibreOffice UNO daemon for doc worker
+Documentation=https://github.com/jwl247/phoenix-devops
+After=phoenix-propagator.service
+Requires=phoenix-propagator.service
+PartOf=phoenix-sector2.target
+
+[Service]
+Type=simple
+User=jwl247
+Group=jwl247
+WorkingDirectory=/home/jwl247/projects/phoenix
+ExecStart=/usr/bin/unoserver --port 2003 --interface localhost
+ExecStop=/usr/bin/unoconvert --kill
+Restart=on-failure
+RestartSec=5
+
+Environment=HOME=/home/jwl247
+Environment=PYTHONUNBUFFERED=1
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/jwl247 /tmp
+
+StandardOutput=append:/var/log/phoenix/unoserver.log
+StandardError=append:/var/log/phoenix/unoserver.error.log
+SyslogIdentifier=phoenix-unoserver
+
+[Install]
+WantedBy=phoenix-sector2.target
