@@ -1,0 +1,32 @@
+[Unit]
+Description=Phoenix frank-helix — RAM pressure daemon, L1/L2/L3 tiers, ZMQ router
+Documentation=https://github.com/jwl247/phoenix-devops
+After=phoenix-frankenhelix.service
+Requires=phoenix-frankenhelix.service
+PartOf=phoenix-sector1.target
+
+[Service]
+Type=simple
+User=jwl247
+Group=jwl247
+WorkingDirectory=/home/jwl247/projects/phoenix
+ExecStart=/usr/bin/env python3 /home/jwl247/projects/phoenix/sector1/frank_helix.py
+Restart=on-failure
+RestartSec=5
+
+Environment=PYTHONUNBUFFERED=1
+Environment=PHOENIX_SECTOR=1
+Environment=PHOENIX_ZMQ_ROUTER_PORT=5557
+Environment=PHOENIX_ZMQ_SIDELOAD_PORT=5557
+EnvironmentFile=-/home/jwl247/projects/phoenix/.env
+
+NoNewPrivileges=true
+PrivateTmp=true
+ReadWritePaths=/home/jwl247/projects/phoenix /tmp
+
+StandardOutput=append:/var/log/phoenix/frank-helix.log
+StandardError=append:/var/log/phoenix/frank-helix.error.log
+SyslogIdentifier=phoenix-frank-helix
+
+[Install]
+WantedBy=phoenix-sector1.target

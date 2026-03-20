@@ -1,0 +1,9 @@
+[Unit]
+Description=Phoenix Sector 2 — services, scheduler, doc worker, Life First suite
+Documentation=https://github.com/jwl247/phoenix-devops
+After=phoenix-sector1.target
+Requires=phoenix-sector1.target
+Wants=phoenix-intent-parser.service phoenix-propagator.service phoenix-mega-security.service phoenix-unoserver.service phoenix-doc-worker.service phoenix-scheduler.service
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.db
+*.db-wal
+*.db-shm
+*.log
+qr/
+*.sidecar.json
+sector1/helix/c_express/*.zip
+sector1/helix/lts/*.zip
+tools/benchmarks/*.zip
+.DS_Store
+Thumbs.db
