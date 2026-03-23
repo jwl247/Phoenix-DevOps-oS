@@ -1,0 +1,28 @@
+Execute the following in exact order. Do not deviate, do not touch any other disks.
+
+PROTECTED: Disk 3 (C:) — DO NOT TOUCH UNDER ANY CIRCUMSTANCES.
+
+TASK: Wipe Disk 0 (NVMe 500GB) and format as single exFAT partition labeled united_sync.
+
+Run in PS7 as Administrator:
+
+Step 1 — Confirm Disk 0 before touching:
+Get-Disk -Number 0 | Select Number, FriendlyName, Size, PartitionStyle | Format-List
+
+Step 2 — Only proceed if Size shows ~500GB NVMe. Then run diskpart:
+diskpart
+
+Step 3 — Inside diskpart run these commands one at a time:
+select disk 0
+clean
+convert gpt
+create partition primary
+format fs=exfat label="united_sync" quick
+assign letter=I
+exit
+
+Step 4 — Verify:
+Get-Volume | Where-Object {$_.DriveLetter -eq 'I'} | Format-Table
+
+Step 5 — Report full output of every step back to me. Make no other changes.
+DO NOT touch Disk 1, Disk 2, Disk 3, Disk 4, or Disk 5.

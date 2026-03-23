@@ -1,0 +1,31 @@
+Execute the following in exact order. Do not deviate, do not touch any other disks.
+
+PROTECTED: Disk 3 (C:) — DO NOT TOUCH UNDER ANY CIRCUMSTANCES.
+
+TASK: Wipe and partition Disk 2 (2TB) into two equal partitions, format both exFAT.
+
+Run in PS7 as Administrator:
+
+Step 1 — Confirm Disk 2 before touching:
+Get-Disk -Number 2 | Select Number, FriendlyName, Size, PartitionStyle | Format-List
+
+Step 2 — Only proceed if Size shows ~2TB. Then run diskpart:
+diskpart
+
+Step 3 — Inside diskpart run these commands one at a time:
+select disk 2
+clean
+convert gpt
+create partition primary size=953674
+format fs=exfat label="cpt2_frank" quick
+assign letter=G
+create partition primary
+format fs=exfat label="cpt3_frank" quick
+assign letter=H
+exit
+
+Step 4 — Verify:
+Get-Volume | Where-Object {$_.DriveLetter -eq 'G' -or $_.DriveLetter -eq 'H'} | Format-Table
+
+Step 5 — Report full output of every step back to me. Make no other changes.
+DO NOT touch Disk 0, Disk 1, Disk 3, or Disk 4.
