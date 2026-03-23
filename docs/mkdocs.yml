@@ -1,5 +1,5 @@
-site_name: Portable Glossary & TOC Book
-site_url: https://example.com  # change if you publish
+site_name: UnitedSys Glossary & Library
+site_url: https://example.com
 
 theme:
   name: mkdocs
@@ -12,10 +12,9 @@ nav:
   - Index: index.md
   - Table of Contents: toc.md
   - Glossary:
-      - A–Z Index: glossary/index.md
+      - A-Z Index: glossary/index.md
       - By Category: glossary/categories.md
 
-# Add small UI tweaks (sticky A–Z bar + search)
 extra_css:
   - stylesheets/extra.css
 
