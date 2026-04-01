@@ -1,7 +1,7 @@
 # Phoenix DevOps OS 🔥
 
 [![Sponsor jwl247](https://img.shields.io/badge/Sponsor%20jwl247-%E2%9D%A4-red?logo=github&style=for-the-badge)](https://github.com/sponsors/jwl247)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0)
 [![Language: Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python)](https://python.org)
 
 > Agnostic. Deterministic. Prefetched. Self-healing. Fast as you please.
@@ -135,8 +135,10 @@ This is a labor of love. It always will be.
 ---
 
 ## License
+## License
 
-agpl v3 
+GNU General Public License v3.0 — free to use, free to build on.
+If you build on Phoenix, your work stays open source too. 
 
 ---
 
