@@ -136,7 +136,7 @@ This is a labor of love. It always will be.
 
 ## License
 
-MIT — free to use, free to build on, free forever.
+agpl v3 
 
 ---
 
