@@ -15,13 +15,7 @@ First sector in the corridor. `auto_config_installer.py` fires on first boot, pr
 | `ai_paging_linux.py` | RAM/swap daemon. Thermal protection 75/80C. LRU eviction. 64MB AI-mode pages. |
 | `phoenix_auth.py` | SHA3-512 + BLAKE2b double hashing across 10 hardware signals. |
 
-## Hardware Context
 
-- ash CPU in PCIe slot
-- 4-stage RAM
-- SATA tap
-- GPU drivers blacklisted
-- Intel i915 display only
 
 ## Systemd Units
 
