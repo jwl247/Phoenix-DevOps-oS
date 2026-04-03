@@ -121,7 +121,7 @@ function global:clone {
 
     $env:PHOENIX_DESTINATION = $Destination
 
-    & $bash --login -i $bashIntake @intakeArgs
+    & $bash $bashIntake @intakeArgs
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  Cloned OK" -ForegroundColor Green
