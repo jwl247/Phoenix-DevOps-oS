@@ -121,6 +121,9 @@ function global:clone {
 
     $env:PHOENIX_DESTINATION = $Destination
 
+    # -- Convert CLONEPOOL_DIR to bash path so JSON sidecar has no Windows backslashes
+    $env:CLONEPOOL_DIR = ConvertTo-GitBashPath $env:CLONEPOOL_DIR
+
     & $bash $bashIntake @intakeArgs
 
     if ($LASTEXITCODE -eq 0) {
