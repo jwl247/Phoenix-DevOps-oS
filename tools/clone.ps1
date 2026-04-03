@@ -4,6 +4,9 @@
 # USys -- United Systems | jwl247
 # Place in: Phoenix-DevOps-oS/tools/clone.ps1
 # Activate: Add '. "$HOME\Phoenix\Phoenix-DevOps-oS\tools\clone.ps1"' to $PROFILE
+#
+# Platform: Windows 10/11 with Git Bash (no WSL required)
+# Git Bash path style: /c/Users/... (NOT /mnt/c/)
 # ============================================================
 
 function global:clone {
@@ -35,6 +38,33 @@ function global:clone {
     }
     $fullPath = $resolved.Path
 
+    # -- Find Git Bash
+    # Prefer explicit Git Bash locations -- no WSL assumption
+    $bashCandidates = @(
+        $env:PHOENIX_BASH,
+        "C:\Program Files\Git\bin\bash.exe",
+        "C:\Program Files (x86)\Git\bin\bash.exe",
+        "$env:ProgramFiles\Git\bin\bash.exe",
+        "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe"
+    ) | Where-Object { $_ -and (Test-Path $_) }
+
+    $bash = $bashCandidates | Select-Object -First 1
+
+    # Fallback: check PATH (but skip wsl.exe / wsl bash)
+    if (-not $bash) {
+        $found = Get-Command bash -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
+        if ($found -and $found -notmatch 'wsl') { $bash = $found }
+    }
+
+    if (-not $bash) {
+        Write-Error @"
+clone: Git Bash not found.
+Install Git for Windows from https://git-scm.com/download/win
+Or set: $env:PHOENIX_BASH = "C:\path\to\bash.exe"
+"@
+        return
+    }
+
     # -- Find intake.sh
     $intakeCandidates = @(
         $env:PHOENIX_INTAKE,
@@ -44,40 +74,35 @@ function global:clone {
     ) | Where-Object { $_ -and (Test-Path $_) }
 
     if (-not $intakeCandidates) {
-        Write-Error "clone: intake.sh not found. Set PHOENIX_INTAKE or clone Phoenix-Package_handler next to Phoenix-DevOps-oS."
+        Write-Error @"
+clone: intake.sh not found.
+Options:
+  1. Set $env:PHOENIX_INTAKE = "C:\path\to\intake.sh"
+  2. Clone Phoenix-Package_handler next to Phoenix-DevOps-oS
+     Expected: $(Join-Path (Split-Path $PSScriptRoot -Parent) 'Phoenix-Package_handler\intake\intake.sh')
+"@
         return
     }
     $intakeSh = $intakeCandidates[0]
-
-    # -- Find bash
-    $bash = (Get-Command bash -ErrorAction SilentlyContinue)?.Source
-    if (-not $bash) {
-        $bash = @(
-            "C:\Program Files\Git\bin\bash.exe",
-            "C:\Program Files (x86)\Git\bin\bash.exe"
-        ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-    }
-    if (-not $bash) {
-        Write-Error "clone: bash not found. Install Git for Windows or enable WSL."
-        return
-    }
 
     # -- Env warnings
     if (-not $env:PHOENIX_AUTH)       { Write-Warning "clone: PHOENIX_AUTH not set -- D1 sync will be skipped" }
     if (-not $env:PHOENIX_WORKER_URL) { Write-Warning "clone: PHOENIX_WORKER_URL not set -- D1 sync will be skipped" }
     if (-not $env:CLONEPOOL_DIR)      { $env:CLONEPOOL_DIR = Join-Path $HOME "Phoenix\clonepool" }
 
-    # -- Convert Windows path to bash path
-    function ConvertTo-BashPath([string]$p) {
+    # -- Convert Windows path to Git Bash path
+    # Git Bash uses /c/Users/... style (NOT /mnt/c/ which is WSL)
+    function ConvertTo-GitBashPath([string]$p) {
         $p = $p -replace '\\', '/'
+        $p = $p -replace '\', '/'
         if ($p -match '^([A-Za-z]):(.*)') {
-            return "/mnt/$($Matches[1].ToLower())$($Matches[2])"
+            return "/$($Matches[1].ToLower())$($Matches[2])"
         }
         return $p
     }
 
-    $bashFile   = ConvertTo-BashPath $fullPath
-    $bashIntake = ConvertTo-BashPath $intakeSh
+    $bashFile   = ConvertTo-GitBashPath $fullPath
+    $bashIntake = ConvertTo-GitBashPath $intakeSh
 
     # -- Build args
     $intakeArgs = @($bashFile)
@@ -89,8 +114,9 @@ function global:clone {
         Write-Host ""
         Write-Host "  [DRY RUN] Phoenix Clone" -ForegroundColor Cyan
         Write-Host "  File      : $fullPath"           -ForegroundColor White
-        Write-Host "  Intake    : $intakeSh"           -ForegroundColor White
         Write-Host "  Bash      : $bash"               -ForegroundColor White
+        Write-Host "  Intake    : $intakeSh"           -ForegroundColor White
+        Write-Host "  Bash file : $bashFile"           -ForegroundColor White
         Write-Host "  Category  : $(if($Category){$Category}else{'(none)'})" -ForegroundColor White
         Write-Host "  Tag       : $(if($Tag){$Tag}else{'(none)'})"        -ForegroundColor White
         Write-Host "  Dest      : $(if($Destination){$Destination}else{'(none)'})" -ForegroundColor White
@@ -105,7 +131,7 @@ function global:clone {
 
     $env:PHOENIX_DESTINATION = $Destination
 
-    & $bash $bashIntake @intakeArgs
+    & $bash --login -i $bashIntake @intakeArgs
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  Cloned OK" -ForegroundColor Green
