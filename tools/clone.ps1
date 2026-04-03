@@ -50,18 +50,14 @@ function global:clone {
 
     $bash = $bashCandidates | Select-Object -First 1
 
-    # Fallback: check PATH (but skip wsl.exe / wsl bash)
+    # Fallback: check PATH but skip wsl
     if (-not $bash) {
         $found = Get-Command bash -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
         if ($found -and $found -notmatch 'wsl') { $bash = $found }
     }
 
     if (-not $bash) {
-        Write-Error @"
-clone: Git Bash not found.
-Install Git for Windows from https://git-scm.com/download/win
-Or set: $env:PHOENIX_BASH = "C:\path\to\bash.exe"
-"@
+        Write-Error "clone: Git Bash not found. Install Git for Windows or set PHOENIX_BASH."
         return
     }
 
@@ -70,17 +66,11 @@ Or set: $env:PHOENIX_BASH = "C:\path\to\bash.exe"
         $env:PHOENIX_INTAKE,
         (Join-Path (Split-Path $PSScriptRoot -Parent) "Phoenix-Package_handler\intake\intake.sh"),
         (Join-Path $HOME "Phoenix\Phoenix-Package_handler\intake\intake.sh"),
-        (Join-Path $PSScriptRoot "..\Phoenix-Package_handler\intake\intake.sh")
+        (Join-Path $PSScriptRoot "..\..\Phoenix-Package_handler\intake\intake.sh")
     ) | Where-Object { $_ -and (Test-Path $_) }
 
     if (-not $intakeCandidates) {
-        Write-Error @"
-clone: intake.sh not found.
-Options:
-  1. Set $env:PHOENIX_INTAKE = "C:\path\to\intake.sh"
-  2. Clone Phoenix-Package_handler next to Phoenix-DevOps-oS
-     Expected: $(Join-Path (Split-Path $PSScriptRoot -Parent) 'Phoenix-Package_handler\intake\intake.sh')
-"@
+        Write-Error "clone: intake.sh not found. Set PHOENIX_INTAKE or clone Phoenix-Package_handler next to Phoenix-DevOps-oS."
         return
     }
     $intakeSh = $intakeCandidates[0]
@@ -92,9 +82,9 @@ Options:
 
     # -- Convert Windows path to Git Bash path
     # Git Bash uses /c/Users/... style (NOT /mnt/c/ which is WSL)
+    # FIX: use [string]::replace() not -replace (avoids regex escape issues with backslash)
     function ConvertTo-GitBashPath([string]$p) {
-        $p = $p -replace '\\', '/'
-        $p = $p -replace '\', '/'
+        $p = $p.Replace('', '/')
         if ($p -match '^([A-Za-z]):(.*)') {
             return "/$($Matches[1].ToLower())$($Matches[2])"
         }
@@ -117,8 +107,9 @@ Options:
         Write-Host "  Bash      : $bash"               -ForegroundColor White
         Write-Host "  Intake    : $intakeSh"           -ForegroundColor White
         Write-Host "  Bash file : $bashFile"           -ForegroundColor White
+        Write-Host "  Bash intk : $bashIntake"         -ForegroundColor White
         Write-Host "  Category  : $(if($Category){$Category}else{'(none)'})" -ForegroundColor White
-        Write-Host "  Tag       : $(if($Tag){$Tag}else{'(none)'})"        -ForegroundColor White
+        Write-Host "  Tag       : $(if($Tag){$Tag}else{'(none)'})"           -ForegroundColor White
         Write-Host "  Dest      : $(if($Destination){$Destination}else{'(none)'})" -ForegroundColor White
         Write-Host "  Clonepool : $env:CLONEPOOL_DIR"  -ForegroundColor White
         Write-Host ""
