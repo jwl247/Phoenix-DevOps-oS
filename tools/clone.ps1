@@ -39,7 +39,6 @@ function global:clone {
     $fullPath = $resolved.Path
 
     # -- Find Git Bash
-    # Prefer explicit Git Bash locations -- no WSL assumption
     $bashCandidates = @(
         $env:PHOENIX_BASH,
         "C:\Program Files\Git\bin\bash.exe",
@@ -50,7 +49,6 @@ function global:clone {
 
     $bash = $bashCandidates | Select-Object -First 1
 
-    # Fallback: check PATH but skip wsl
     if (-not $bash) {
         $found = Get-Command bash -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
         if ($found -and $found -notmatch 'wsl') { $bash = $found }
@@ -81,10 +79,11 @@ function global:clone {
     if (-not $env:CLONEPOOL_DIR)      { $env:CLONEPOOL_DIR = Join-Path $HOME "Phoenix\clonepool" }
 
     # -- Convert Windows path to Git Bash path
-    # Git Bash uses /c/Users/... style (NOT /mnt/c/ which is WSL)
-    # FIX: use [string]::replace() not -replace (avoids regex escape issues with backslash)
+    # Uses [char]92 (backslash) to avoid any editor/encoding issues
+    # Git Bash: C:Usersoo -> /c/Users/foo
     function ConvertTo-GitBashPath([string]$p) {
-        $p = $p.Replace('', '/')
+        $bsChar = [char]92
+        $p = $p.Replace($bsChar, [char]47)
         if ($p -match '^([A-Za-z]):(.*)') {
             return "/$($Matches[1].ToLower())$($Matches[2])"
         }
@@ -97,7 +96,7 @@ function global:clone {
     # -- Build args
     $intakeArgs = @($bashFile)
     if ($Category) { $intakeArgs += $Category }
-    if ($Tag)      { $intakeArgs += "`"$Tag`"" }
+    if ($Tag)      { $intakeArgs += [char]34 + $Tag + [char]34 }
 
     # -- Dry run
     if ($DryRun) {
