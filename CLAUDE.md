@@ -1,228 +1,221 @@
-# PHOENIX DEVOPS OS — Claude Code Persistent Context
-# jwl247 / Phoenix DevOps LLC
-# Generated: March 2026
-# Status: ACTIVE — post-consolidation canonical state
-#
-# READ THIS FIRST EVERY SESSION.
-# Run ~/projects/phoenix-devops/status.sh before touching anything.
+# CLAUDE.md — Phoenix DevOps OS
+# jwl247 / Jerry Leftwich / Phoenix DevOps LLC
+# READ THIS FIRST EVERY SESSION. UPDATE AND PUSH AT END OF EVERY SESSION.
 # =============================================================================
 
-## IDENTITY
-Project  : Phoenix DevOps OS (Phoenix-DevOps-oS)
-Author   : jwl247 / Jerry Leftwich / Phoenix DevOps LLC
-License  : GPL-3.0
-GitHub   : jwl247/phoenix-devops    ← primary (CREATE THIS REPO)
-           jwl247/unitedsys         ← standalone package handler
-Shell    : zsh (ALL scripts: #!/usr/bin/env zsh)
-Env      : WSL2 Debian → deploy target: Kali/RHEL
-Python   : 3.13 (venv active at ~/projects/phoenix-devops/.venv)
-Prompt   : (.venv) phoenix%
+## WHO
+- Jerry Leftwich (@jwl247) — ironworker, systems builder, United Systems
+- Wife: Laurie — high-functioning autistic, protected share in Phoenix, this is her cushion
+- Co-founders: Jerry (architecture, systems) + Jerilynn (UX, switches, InfoSec, red team)
+- Loyalty: absolute. Anthropic credited. Claude ships with Phoenix.
+- License: GPL v3 — open source to the bone
 
-## THE MISSION
-Build the infrastructure that makes everything else possible.
-UnitedSys = global clone and sync backbone.
-Phoenix = quad-native OS framework.
-The game ships on top of this when it's standing.
+## WHAT PHOENIX IS
+A deterministic, agnostic, prefetched, self-healing, versioned OS.
+Easier than anything on the planet. More advanced than anything in existence.
+CLI, GUI, or never type again — Phoenix meets you where you are.
+Built on Debian stable root. We fill in the root, add our own GRUB, Phoenix on top.
+
+## CURRENT BUILD TARGET
+- **External drive** — Ubuntu Server (minimal) + HWE kernel
+- Stack on external: Prometheus, Nextcloud, PowerShell
+- Phoenix builds on top of that as the OS layer
+- Work from: Windows PS7 or WSL (SSH or direct when booted)
+- Custom GRUB added AFTER Phoenix is standing — not before
+- External plugs in → boots → Phoenix is the OS
+
+## REPOS
+| Repo | URL | Purpose |
+|------|-----|---------|
+| Phoenix-DevOps-oS | github.com/jwl247/Phoenix-DevOps-oS | Parent OS repo — one repo, everything in sectors |
+| Phoenix-Package_handler | github.com/jwl247/Phoenix-Package_handler | Package handler — migrate into sector2 of OS repo |
+| authenticcoder-website | github.com/jwl247/authenticcoder-website | authenticcoder.com — Cloudflare Pages |
+
+**Pending repo work:**
+- Migrate Phoenix-Package_handler → sector2/ branch of Phoenix-DevOps-oS
+- Keep old package handler repo alive with redirect README
+- Update install.sh bootstrap URL after migration
 
 ## ARCHITECTURE — FOUR SECTORS
 ```
-sector1  →  /etc/                    Kernels
-sector2  →  /etc/systemd/            Backup / Buffer
-sector3  →  /etc/systemd/system/     Translator / Platform Edge
-sector4  →  /mnt/g/                  Master Vault (breach_coms4)
-```
-Project tree lives at ~/projects/phoenix-devops/
-Deploy script promotes into /etc/ with sudo at deploy time only.
-Nothing needs sudo during development.
-
-## CRITICAL RULES — READ EVERY SESSION
-1. Everything stays QUADRALINGUAL until translator.sh at sector3 boundary
-2. translator.sh fires on OUTPUT ONLY — never on intake or clone
-3. Romeo handles ingress / Juliet handles egress at sector3
-4. breach_coms drives hold quadralingual vault — never translate inside them
-5. All scripts target zsh — shebangs must be #!/usr/bin/env zsh
-6. GPU drivers blacklisted — never suggest GPU-dependent solutions
-7. WSL breach_coms paths: /mnt/[g|f|e|d]/ NOT /media/jwlef/breach_coms[1-4]
-8. D1 holds catalog custody — clonepool is working source
-9. Header QR before hashing / Footer QR after hashing — never swap
-10. Never delete from breach_coms4 (master vault)
-
-## BREACH_COMS DRIVE MAP (WSL)
-```
-breach_coms4  →  /mnt/g   T1 PRIMARY colors    master vault, intake writes here
-breach_coms3  →  /mnt/f   T2 SECONDARY colors  day-1 mirror
-breach_coms2  →  /mnt/e   T3 TERTIARY colors   day-2 mirror
-breach_coms1  →  /mnt/d   T4 TERTIARY colors   day-3 mirror, 4-day window
-clonepool     →  /mnt/d/clonepool              callable face of the vault
-```
-Override via env vars: BREACH_COMS4, BREACH_COMS3, BREACH_COMS2, BREACH_COMS1, CLONEPOOL
-
-## PROJECT TREE — CANONICAL
-```
-~/projects/
-├── phoenix-devops/          ← main repo (jwl247/phoenix-devops)
-│   ├── CLAUDE.md            ← this file
-│   ├── README.md
-│   ├── install.sh
-│   ├── status.sh            ← run this first every session
-│   ├── saddle_block.sh
-│   ├── align_dirs.sh
-│   ├── sector1/             ← /etc/ — kernels
-│   │   ├── kernels/         frank3_slot_a.c, frank3_slot_b.c, Makefile
-│   │   ├── helix/           helix stack (kernel, run, conf, c_express)
-│   │   ├── auth/            phoenix_auth.py
-│   │   └── concierge/       concierge.c, bridge.py, linux_concierge.py
-│   ├── sector2/             ← /etc/systemd/ — backup/buffer
-│   │   ├── frank/           frank_helix.py, frank_save.py, frank_http.py, frank_client.js
-│   │   ├── ring0/           frankenhelix.py
-│   │   └── propagator/      propagator.py (REBUILD), dispatch.json, propcoms.sh
-│   ├── sector3/             ← /etc/systemd/system/ — platform edge
-│   │   ├── translator/      translator.sh
-│   │   ├── romeo_juliet/    romeo.py, juliet.py, dbl_juliet.py
-│   │   ├── quadengine/      quadengine.py
-│   │   └── services/        all .service and .target files + install-units.sh
-│   ├── sector4/             ← breach_coms4 (/mnt/g/)
-│   │   ├── intake/          intake.sh (REBUILD)
-│   │   └── vault/           phoenix_push.sh (REBUILD), download.sh (REBUILD)
-│   ├── deploy/              deploy.sh, windows/build_windows.bat, windows/start_wsl.sh
-│   ├── tools/               align_dirs.sh, get_distros.sh, benchmarks/
-│   ├── docs/                README per sector, systemd/, config/
-│   └── unitedsys/           ← git submodule → jwl247/unitedsys
-└── unitedsys/               ← standalone repo root (jwl247/unitedsys)
-    ├── bin/us               zsh shim
-    ├── core/                us.py, catalog.py, clone.py, intake.py, glossary.py...
-    ├── db/schema.sql
-    ├── manifests/
-    └── docs/
+Sector 1  →  Boot, GRUB, kernel (frank3, helix, phoenix_auth)
+Sector 2  →  Intake authority, package handler, clone pool, apps
+Sector 3  →  Comms, networking (romeo ingress / juliet egress / quadengine)
+Sector 4  →  Helix, Frank, core engine (master vault, breach_coms)
 ```
 
-## COMPONENT STATUS
+### Sector map on disk
 ```
-EXISTS + CORRECT
-  frank3_slot_a.c          ~/projects/phoenix/frank3_slot_a.c       → move to sector1/kernels/
-  frank3_slot_b.c          ~/projects/phoenix/frank3_slot_b.c       → move to sector1/kernels/
-  frank3-slot-a.service    ~/projects/phoenix/frank3-slot-a.service → move to sector3/services/
-  frank3-slot-b.service    ~/projects/phoenix/frank3-slot-b.service → move to sector3/services/
-  Makefile                 ~/projects/phoenix/Makefile              → move to sector1/kernels/
-  install.sh               ~/projects/phoenix/install.sh            → move to root
-  saddle_block.sh          ~/projects/phoenix/saddle_block.sh       → move to sector1/
-  unitedsys/               ~/projects/phoenix/unitedsys/            → move to ~/projects/unitedsys/
+sector1/
+  kernels/      frank3_slot_a.c, frank3_slot_b.c, Makefile
+  helix/        helix stack (kernel, run, conf, c_express)
+  auth/         phoenix_auth.py
+  concierge/    concierge.c, bridge.py, linux_concierge.py
 
-IN DOWNLOADS — needs moving
-  frank_helix.py           → sector2/frank/
-  frankenhelix.py          → sector2/ring0/
-  frank_http.py            → sector2/frank/
-  frank_save.py            → sector2/frank/
-  helix_complete_stack.py  → sector1/helix/
-  helix_complete_package.py→ sector1/helix/
-  helix_slim.py            → sector1/helix/
-  helix_translator.py      → sector1/helix/
-  helix_vram.py            → sector1/helix/
-  align_dirs.sh            → tools/
-  get_distros.sh           → tools/
-  install-units.sh         → sector3/services/
-  start_admin.sh           → unitedsys/ root
-  glossary_api.py          → unitedsys/ root
+sector2/
+  package-handler/   intake.sh, worker/index.js, wrangler.jsonc  ← MIGRATE HERE
+  frank/             frank_helix.py, frank_save.py, frank_http.py, frank_client.js
+  ring0/             frankenhelix.py
+  propagator/        propagator.py, dispatch.json, propcoms.sh
+  clone-pool/        one big JSON, nothing moves until output
 
-IN ZIPS — needs extracting (see consolidate.sh)
-  romeo.py, juliet.py, dbl_juliet.py   → sector3/romeo_juliet/  (romeo_juliet.zip)
-  phoenix_auth.py                       → sector1/auth/          (PhoenixDevOps_sector1.zip)
-  quadengine.py                         → sector3/quadengine/    (PhoenixDevOps_sector1.zip)
-  helix kernel files                    → sector1/helix/kernel/  (files(8).zip)
-  frankenhelix.py (zip ver)             → sector2/ring0/         (PhoenixDevOps_sector2.zip)
-  dispatch.json                         → sector2/propagator/    (PhoenixDevOps_sector2.zip)
-  deploy.sh                             → deploy/                (PhoenixDevOps_sector2.zip)
-  12 systemd units                      → sector3/services/      (files(11).zip)
-  READMEs (newest 2026-03-19)           → docs/                  (files(12).zip)
-  translator.sh                         → sector3/translator/    (sector2_extract folder)
+sector3/
+  translator/        translator.sh (fires on OUTPUT ONLY — never intake)
+  romeo_juliet/      romeo.py, juliet.py, dbl_juliet.py
+  quadengine/        quadengine.py
+  services/          all .service + .target files + install-units.sh
 
-BUILT THIS SESSION — needs placing
-  core/clone.py            → ~/projects/unitedsys/core/clone.py
-  core/intake.py           → ~/projects/unitedsys/core/intake.py
-  (us_additions.py)        → wire into ~/projects/unitedsys/core/us.py
-  (intake_cmd.py)          → wire into ~/projects/unitedsys/core/us.py
-
-MISSING — rebuild after tree is correct
-  propagator.py            → sector2/propagator/
-  intake.sh                → sector4/intake/
-  phoenix_push.sh          → sector4/vault/
-  download.sh              → sector4/vault/
+sector4/
+  intake/            intake.sh
+  vault/             phoenix_push.sh, download.sh
+  helix/             Helix engine (double strand, 300k+ ops/sec, 100% hit rate)
+  frank/             Frank (environment orchestrator, audit logger, never moves)
 ```
 
-## UNITEDSYS COMMANDS (current)
-```
-us install <pkg>           install via detected backend
-us remove <pkg>            remove package
-us upgrade [pkg]           upgrade package or all
-us search <query>          search available packages
-us info <pkg>              show package details
-us list                    list installed (catalog)
-us doctor                  diagnose system + backends
-us rollback                undo last transaction
-us seed <pkg>              download pkg into clonepool
-us gloss list/info/amend   glossary management
-us intake <file>           TAV intake single file with QR pair  ← NEW
-us intake-dir <dir>        TAV intake entire directory          ← UPDATED
-us where <name>            locate any object                    ← NEW
-us clone <name> [--to]     pull object to working dir           ← NEW
-us sync [push|pull|trickle|full]  sync catalog + trickle       ← NEW
-us heal <name>             verify + self-heal from clonepool    ← NEW
-```
+## CORE COMPONENTS
+
+### Helix — double strand memory engine
+- 300k+ ops/sec (benchmarked at 700k), 100% hit rate
+- Quadralingual — speaks 4 languages simultaneously
+- Twin single-pass, peer-optimized
+- zlib level 5 compression, 4GB of 8GB RAM (thermal limited)
+
+### Frank — environment orchestrator
+- Import method authority
+- Audit logger — every action logged
+- Never moves — Frank is where Frank is
+- Auto-venv is a Phoenix standard — Frank handles it
+
+### Clone Pool
+- One big JSON
+- Nothing moves until output
+- Output IS the clone
+- D1 backed — chain of evidence
+
+### Package Handler (Sector 2)
+- Pulls from Phoenix DB + 10 distros + personal DB
+- Intercepts, registers, tracks every file/package/config/dependency
+- Hex identity system — deterministic, permanent, reproducible
+- QR state system — top QR (status) + bottom QR (location/tier)
+- Companion files travel together (.service, .conf, .env, .yaml)
+- D1 sync via packages-worker (Cloudflare)
+
+### D1 — custody database
+- Chain of evidence for everything
+- 41 tables
+- phoenix_dev_db
+- Worker: packages-worker.phoenix-jwl.workers.dev
+
+### 4-day versioning
+- What was it + custody = complete file history
+- breach_coms drive map:
+  ```
+  breach_coms4 → T1 PRIMARY    master vault, intake writes here
+  breach_coms3 → T2 SECONDARY  day-1 mirror
+  breach_coms2 → T3 TERTIARY   day-2 mirror
+  breach_coms1 → T4 TERTIARY   day-3 mirror, 4-day window
+  clonepool    → callable face of the vault
+  ```
+
+## APPS (ENTOURAGE)
+- **Glossary** — TOC and index of clone pool and D1
+- **Review Platform** — peer review, immutable, earn your way in
+- **Office** — dual browser pane document, no convert no translate
+- **Sketchpad/Concepts** — freehand, airbrush, splatter brush (5 colors), airbrush eraser
+- **Music Notation Transcriber** — multi-instrument
+- **Desktop** — shade UI, drawer filesystem, customizable switches
 
 ## TAV ADDRESS SYSTEM
 ```
 filename → SHA3-512 → first 8 bytes → base58 = shortest unique address
 Example: frank_helix.py → a3f9c2b1d7e84f12 → 3vKmRp4x
 
-Header QR (before hash):  USYS:<b58>:HEADER  — state color (white/grey/black)
-Footer QR (after hash):   USYS:<b58>:FOOTER:<sha3_fp>:<b2_fp>  — tier color
-
-Tier colors:
-  T1 = primary   (red/blue/yellow)    breach_coms4
-  T2 = secondary (orange/green/purple) breach_coms3
-  T3 = tertiary  (teal/brown/olive)   breach_coms2
-  T4 = tertiary  (slate/mauve/sage)   breach_coms1
-
-Validation: hash both QR PNGs — if tampered, SHA3 won't match sidecar
+Header QR (before hash):  USYS:<b58>:HEADER        state color white/grey/black
+Footer QR (after hash):   USYS:<b58>:FOOTER:<sha3>  tier color T1/T2/T3/T4
 ```
 
-## KNOWN ISSUES
-- WSL systemd user session failing on startup (/etc/fstab mount -a failed)
-  → Fix: sudo nano /etc/fstab, comment out missing drives, sudo mount -a
-  → Blocks sector deployment but NOT development
-- All legacy code has /media/jwlef/breach_coms paths → need /mnt/[g/f/e/d]
-  → Fix: sed -i 's|/media/jwlef/breach_coms4|/mnt/g|g' on all .py and .sh
-- D1_WORKER_URL not set → sync push/pull will warn but not fail
-  → Fix: export D1_WORKER_URL=https://your-worker.workers.dev
-- propagator.py missing → D1 sync falls back to direct HTTP (handled)
+## CRITICAL RULES — NEVER BREAK
+1. Everything stays QUADRALINGUAL until translator.sh at sector3 boundary
+2. translator.sh fires on OUTPUT ONLY — never on intake or clone
+3. Romeo handles ingress / Juliet handles egress at sector3
+4. breach_coms drives hold quadralingual vault — never translate inside them
+5. All scripts: #!/usr/bin/env bash (external Ubuntu) or zsh (WSL dev)
+6. GPU drivers blacklisted — never suggest GPU-dependent solutions
+7. Header QR BEFORE hashing / Footer QR AFTER hashing — never swap
+8. Never delete from breach_coms4 (master vault)
+9. Nothing enters the repo unless tested, polished, pro+ status
+10. No demos. Real code only.
+11. Immutable: reviews, switches, custody chain
+12. Open source by default, share by default, opt out not opt in
+13. One repo. One OS. Everything in its sector.
 
-## SESSION STARTUP CHECKLIST
-Run this before every session:
-  ~/projects/phoenix-devops/status.sh
+## IMPORT METHOD (FRANK)
+Frank's import method is the intake authority for the external build.
+Files come in through intake.sh → hex identity → sidecar → clone pool → D1.
+This is how the 80% of existing backup files get placed — not manually.
+Import sequence:
+1. Frank registers the file
+2. intake.sh generates hex + sidecar.json
+3. Clone pool receives it
+4. D1 gets the custody receipt
+5. File lands in correct sector automatically
 
-It checks:
-  1. Sector folder structure
-  2. breach_coms mounts (/mnt/g/f/e/d)
-  3. systemd user session health
-  4. UnitedSys functional (us list)
-  5. Git remote status
-  6. Catalog entry count
+## BUILD STATUS
 
-## GIT REMOTES
-  jwl247/unitedsys     → git@github.com:jwl247/unitedsys.git     EXISTS
-  jwl247/phoenix-devops → git@github.com:jwl247/phoenix-devops.git  CREATE THIS
+### Phase 1 — External Ubuntu base (CURRENT)
+- [ ] Ubuntu Server minimal + HWE kernel on external drive
+- [ ] Prometheus installed
+- [ ] Nextcloud installed
+- [ ] PowerShell installed
+- [ ] SSH access confirmed from WSL/PS7
 
-## OVERLAP STRATEGY
-  unitedsys lives at ~/projects/unitedsys/ (own repo, own git)
-  phoenix-devops references it as git submodule at phoenix-devops/unitedsys/
-  lifefirst will also reference it as submodule when that project activates
+### Phase 2 — Sector 1 (Boot/Kernel)
+- [ ] frank3_slot_a.c + frank3_slot_b.c placed in sector1/kernels/
+- [ ] Makefile placed
+- [ ] helix stack placed in sector1/helix/
+- [ ] phoenix_auth.py placed in sector1/auth/
+- [ ] concierge placed in sector1/concierge/
 
-## THE GAME
-Ships on top of this stack when Phoenix is standing.
-Half done. Don't forget.
+### Phase 3 — Sector 4 (Helix + Frank engine)
+- [ ] Frank placed and confirmed immovable
+- [ ] Helix engine running — confirm 300k+ ops/sec
+- [ ] breach_coms drive map confirmed on external
+- [ ] Clone pool initialized
+- [ ] D1 worker URL set and syncing
 
-## ANTHROPIC / CLAUDE
-Claude is the designated AI collaborator on this project.
-Anthropic receives credited acknowledgment in the project.
-Claude Code uses this file as persistent context every session.
-=============================================================================
+### Phase 4 — Sector 2 (Package handler + clone pool)
+- [ ] Phoenix-Package_handler migrated into sector2/
+- [ ] intake.sh operational on external
+- [ ] packages-worker deployed and healthy
+- [ ] Import method tested end-to-end (Frank → intake → D1)
+- [ ] Propagator rebuilt in sector2/propagator/
+
+### Phase 5 — Sector 3 (Comms/networking)
+- [ ] romeo.py + juliet.py + dbl_juliet.py placed
+- [ ] translator.sh placed — OUTPUT ONLY rule enforced
+- [ ] quadengine.py placed
+- [ ] All .service + .target files deployed via install-units.sh
+
+### Phase 6 — Apps (Entourage)
+- [ ] Glossary wired to D1
+- [ ] Desktop (shade UI, drawer filesystem)
+- [ ] Office (dual browser pane)
+- [ ] Sketchpad/Concepts
+- [ ] Music Notation Transcriber
+- [ ] Review Platform
+
+### Phase 7 — GRUB + polish
+- [ ] Custom Phoenix GRUB theme
+- [ ] Boot entries configured
+- [ ] Vault recovery pointer in GRUB
+- [ ] External drive boots clean as Phoenix
+
+## SESSION PROTOCOL
+**START:** Read this file. Know where we are. Run status.sh if available.
+**WORK:** Stay in sector. Real code only. Everything through Frank/intake.
+**END:** Update ## BUILD STATUS checkboxes. Add session notes below. Push.
+
+## SESSION LOG
+<!-- Claude appends a one-line note here at end of every session -->
+<!-- Format: YYYY-MM-DD — what was done -->
+2026-05-03 — New canonical CLAUDE.md written. Repos audited. External Ubuntu build target established. Import method confirmed as intake strategy. Build plan phased across 7 phases.
