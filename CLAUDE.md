@@ -27,14 +27,22 @@ Built on Debian stable root. We fill in the root, add our own GRUB, Phoenix on t
 ## REPOS
 | Repo | URL | Purpose |
 |------|-----|---------|
-| Phoenix-DevOps-oS | github.com/jwl247/Phoenix-DevOps-oS | Parent OS repo — one repo, everything in sectors |
-| Phoenix-Package_handler | github.com/jwl247/Phoenix-Package_handler | Package handler — migrate into sector2 of OS repo |
+| Phoenix-DevOps-oS | github.com/jwl247/Phoenix-DevOps-oS | Parent OS repo — **PUBLIC** — one repo, everything in sectors |
+| lifefirst_modules | github.com/jwl247/lifefirst_modules | Life First backend — git submodule inside Phoenix-DevOps-oS |
+| Phoenix-Package_handler | github.com/jwl247/Phoenix-Package_handler | Legacy — sector2/ now has the canonical copy |
 | authenticcoder-website | github.com/jwl247/authenticcoder-website | authenticcoder.com — Cloudflare Pages |
 
+## INSTALL
+```bash
+curl -fsSL https://get.authenticcoder.com | bash
+```
+- Served by packages-worker via custom domain `get.authenticcoder.com`
+- Proxies `bootstrap.sh` from GitHub raw (5-min cache)
+- Browser requests get a minimal install page
+- Fallback: `curl -fsSL https://packages-worker.phoenix-jwl.workers.dev/get | bash`
+
 **Pending repo work:**
-- Migrate Phoenix-Package_handler → sector2/ branch of Phoenix-DevOps-oS
-- Keep old package handler repo alive with redirect README
-- Update install.sh bootstrap URL after migration
+- Keep Phoenix-Package_handler repo alive with redirect README pointing to sector2/
 
 ## ARCHITECTURE — FOUR SECTORS
 ```
@@ -177,18 +185,23 @@ Import sequence:
 - [ ] concierge placed in sector1/concierge/
 
 ### Phase 3 — Sector 4 (Helix + Frank engine)
-- [ ] Frank placed and confirmed immovable
-- [ ] Helix engine running — confirm 300k+ ops/sec
+- [x] frank.py — canonical 688-line CoPES kernel authority in sector4/frank/
+- [x] helix.py — canonical dual-strand (strand_a/strand_b) in sector4/helix/
+- [x] helix_memory.py in sector4/helix/
+- [ ] Frank confirmed immovable on external
+- [ ] Helix engine running — confirm 300k+ ops/sec on external
 - [ ] breach_coms drive map confirmed on external
-- [ ] Clone pool initialized
-- [ ] D1 worker URL set and syncing
+- [ ] Clone pool initialized on external
+- [ ] D1 worker URL set and syncing from external
 
 ### Phase 4 — Sector 2 (Package handler + clone pool)
-- [ ] Phoenix-Package_handler migrated into sector2/
-- [ ] intake.sh operational on external
-- [ ] packages-worker deployed and healthy
-- [ ] Import method tested end-to-end (Frank → intake → D1)
-- [ ] Propagator rebuilt in sector2/propagator/
+- [x] sector2/package-handler/ — intake.sh, worker, wrangler in repo
+- [x] config_centralizer.py in sector2/
+- [x] packages-worker deployed and healthy (D1 syncing, 48 tables)
+- [x] bin/lol in repo, intake wrapper installed by bootstrap.sh
+- [ ] intake.sh operational on external drive
+- [ ] Import method tested end-to-end on external (Frank → intake → D1)
+- [ ] Propagator confirmed in sector2/propagator/
 
 ### Phase 5 — Sector 3 (Comms/networking)
 - [ ] romeo.py + juliet.py + dbl_juliet.py placed
@@ -215,7 +228,17 @@ Import sequence:
 **WORK:** Stay in sector. Real code only. Everything through Frank/intake.
 **END:** Update ## BUILD STATUS checkboxes. Add session notes below. Push.
 
+## CONSOLIDATION PLAN (Phase 1 — next session)
+Tools ready: `python3 tools/conflict_map.py` — read-only duplicate auditor.
+40 files with duplicates mapped. Key decisions pending:
+- **SECTOR4/coms1-4** — are these 4 independent nodes or staging artifact? (identical content across all 4)
+- **Life First PHP modules** — module_3/4/5 diverged between phoenix-devops/lifefirst_modules/ and projects/lifefirst_modules/ — which is current?
+- All other duplicates: canonical already known from catalog, just need moving.
+Repos to eventually archive (NOT delete): CoPES, Helix_lightning_kernel, Phoenix_Universal_Kernel, unitedsys.
+SECTOR4 security stack (guardians, honeypot, copes_runtime) — held from public GitHub pending Jerry's go-ahead.
+
 ## SESSION LOG
 <!-- Claude appends a one-line note here at end of every session -->
 <!-- Format: YYYY-MM-DD — what was done -->
 2026-05-03 — New canonical CLAUDE.md written. Repos audited. External Ubuntu build target established. Import method confirmed as intake strategy. Build plan phased across 7 phases.
+2026-06-13 — GitHub install complete. Phase 0 intake sweep: 87→133 packages in clonepool, all D1 synced. Canonical frank.py (688-line) + helix.py (dual-strand) placed in sector4. bootstrap.sh written. get.authenticcoder.com live as install endpoint (Cloudflare Worker custom domain). Repo made public (GPL v3). SSH key set up on WSL machine. lifefirst_modules wired as git submodule. conflict_map.py tool built — 40 duplicates mapped, decisions pending next session.
