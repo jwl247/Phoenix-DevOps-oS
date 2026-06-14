@@ -574,9 +574,11 @@ export default {
         });
       }
 
-      // ── Install (GET /get — public, no auth) ─────────────────────────────
+      // ── Install (GET /get or get.authenticcoder.com — public, no auth) ──────
+      // curl -fsSL https://get.authenticcoder.com | bash
       // curl -fsSL https://packages-worker.phoenix-jwl.workers.dev/get | bash
-      if (path === '/get' && req.method === 'GET') {
+      const isInstallDomain = url.hostname === 'get.authenticcoder.com';
+      if ((path === '/get' || isInstallDomain) && req.method === 'GET') {
         const ua = req.headers.get('User-Agent') || '';
         const isBrowser = ua.includes('Mozilla') || ua.includes('Chrome') || ua.includes('Safari');
         const RAW = 'https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/main/bootstrap.sh';
