@@ -17,6 +17,12 @@
       "database_name": "phoenix_dev_db",
       "database_id":   "27958687-4349-47ed-8b6a-dbc4ab29730f"
     }
+  ],
+
+  // ── Custom domain — install endpoint ───────────────────────────────────────
+  // curl -fsSL https://get.authenticcoder.com | bash
+  "routes": [
+    { "pattern": "get.authenticcoder.com", "custom_domain": true }
   ]
 
   // ── Secrets ────────────────────────────────────────────────────────────────
