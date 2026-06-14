@@ -553,6 +553,42 @@ export default {
     try {
 
       // ── Health ──────────────────────────────────────────────────────────────
+      // ── Install domain — must be first (get.authenticcoder.com) ─────────────
+      const isInstallDomain = url.hostname === 'get.authenticcoder.com';
+      if (isInstallDomain && req.method === 'GET') {
+        const ua = req.headers.get('User-Agent') || '';
+        const isBrowser = ua.includes('Mozilla') || ua.includes('Chrome') || ua.includes('Safari');
+        const RAW = 'https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/main/bootstrap.sh';
+        if (isBrowser) {
+          const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>Install Phoenix DevOps OS</title>
+<style>
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf3;max-width:700px;margin:80px auto;padding:0 24px}
+  h1{color:#f78166;font-size:1.8rem;margin-bottom:8px}
+  p{color:#8b949e;margin-bottom:24px;line-height:1.6}
+  pre{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;font-size:1rem;overflow-x:auto}
+  code{color:#79c0ff}
+  a{color:#f78166}
+</style></head><body>
+<h1>Phoenix DevOps OS</h1>
+<p>Agnostic. Deterministic. Prefetched. Self-healing. Open source.<br>
+<a href="https://github.com/jwl247/Phoenix-DevOps-oS">github.com/jwl247/Phoenix-DevOps-oS</a></p>
+<p>Run this on any Debian/Ubuntu machine or WSL2 instance:</p>
+<pre><code>curl -fsSL https://get.authenticcoder.com | bash</code></pre>
+<p style="font-size:.85rem;color:#8b949e">GPL v3 &mdash; Phoenix DevOps LLC &mdash; jwl247</p>
+</body></html>`;
+          return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html;charset=utf-8' } });
+        }
+        try {
+          const upstream = await fetch(RAW, { cf: { cacheTtl: 300 } });
+          if (!upstream.ok) return new Response(`# Phoenix bootstrap unavailable (${upstream.status})\n`, { status: 502, headers: { 'Content-Type': 'text/plain' } });
+          const script = await upstream.text();
+          return new Response(script, { status: 200, headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Cache-Control': 'no-cache' } });
+        } catch (e) {
+          return new Response(`# Phoenix bootstrap fetch failed: ${e.message}\n`, { status: 502, headers: { 'Content-Type': 'text/plain' } });
+        }
+      }
+
       // ── Platform UI (GET /platform or browser request to /)
       if (path === '/platform' || (path === '/' && (req.headers.get('Accept')||'').includes('text/html'))) {
         return new Response(HTML_PLATFORM, { status: 200, headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Access-Control-Allow-Origin': '*' } });
@@ -574,36 +610,10 @@ export default {
         });
       }
 
-      // ── Install (GET /get or get.authenticcoder.com — public, no auth) ──────
-      // curl -fsSL https://get.authenticcoder.com | bash
+      // ── Install fallback (GET /get on worker domain) ──────────────────────
       // curl -fsSL https://packages-worker.phoenix-jwl.workers.dev/get | bash
-      const isInstallDomain = url.hostname === 'get.authenticcoder.com';
-      if ((path === '/get' || isInstallDomain) && req.method === 'GET') {
-        const ua = req.headers.get('User-Agent') || '';
-        const isBrowser = ua.includes('Mozilla') || ua.includes('Chrome') || ua.includes('Safari');
+      if (path === '/get' && req.method === 'GET') {
         const RAW = 'https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/main/bootstrap.sh';
-
-        if (isBrowser) {
-          const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
-<title>Install Phoenix DevOps OS</title>
-<style>
-  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf3;max-width:700px;margin:80px auto;padding:0 24px}
-  h1{color:#f78166;font-size:1.8rem;margin-bottom:8px}
-  p{color:#8b949e;margin-bottom:24px;line-height:1.6}
-  pre{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;font-size:1rem;overflow-x:auto}
-  code{color:#79c0ff}
-  a{color:#f78166}
-</style></head><body>
-<h1>Phoenix DevOps OS</h1>
-<p>Agnostic. Deterministic. Prefetched. Self-healing. Open source.<br>
-<a href="https://github.com/jwl247/Phoenix-DevOps-oS">github.com/jwl247/Phoenix-DevOps-oS</a></p>
-<p>Run this on any Debian/Ubuntu machine or WSL2 instance:</p>
-<pre><code>curl -fsSL https://packages-worker.phoenix-jwl.workers.dev/get | bash</code></pre>
-<p style="font-size:.85rem;color:#8b949e">GPL v3 &mdash; Phoenix DevOps LLC &mdash; jwl247</p>
-</body></html>`;
-          return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html;charset=utf-8' } });
-        }
-
         try {
           const upstream = await fetch(RAW, { cf: { cacheTtl: 300 } });
           if (!upstream.ok) return new Response(`# Phoenix bootstrap unavailable (${upstream.status})\n`, { status: 502, headers: { 'Content-Type': 'text/plain' } });
