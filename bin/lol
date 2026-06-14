@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# =============================================================================
+# lol — Phoenix DevOps OS / COPES
+# One command. File, package, or directory — lol handles it.
+#
+# Usage:
+#   lol file.py.lol              pull file by name  → $PWD
+#   lol file.py.lolHdeWh8aY7bG  pull file by b58   → $PWD (clonepool address)
+#   lol file.py.lolHEX636f6e…   pull file by hex   → $PWD (raw hex)
+#   lol name.lol --pkg           intake-package name
+#   lol ~/src.lol                intake a whole directory
+#   lol name.lol --intake        push file into clonepool
+#
+# Author:  jwl247 / Phoenix DevOps LLC
+# License: GPL v3
+# =============================================================================
+
+set -euo pipefail
+
+CLONEPOOL="${CLONEPOOL_DIR:-${HOME}/Phoenix/clonepool}"
+
+if [[ $# -eq 0 ]]; then
+    echo "  lol <file.lol>               pull from clone pool → here (by name)"
+    echo "  lol <file.lolB58ADDR>        pull from clone pool → here (by b58 address)"
+    echo "  lol <file.lolHEX0abc…>       pull from clone pool → here (by raw hex)"
+    echo "  lol <name.lol> --pkg         intake a package by name"
+    echo "  lol <dir.lol>                intake a whole directory"
+    echo "  lol <file.lol> --intake      push file into clonepool"
+    exit 0
+fi
+
+INPUT="$1"
+
+# ── Detect .lolHEX<addr> or .lolB58<addr> suffix ─────────────────────────────
+# Patterns:
+#   file.py.lol                   → plain name pull
+#   file.py.lolHEX636f6e…         → raw hex address (starts with HEX)
+#   file.py.lolHdeWh8aY7bG        → b58 address (anything after .lol that isn't "HEX")
+
+LOL_ADDR=""
+if [[ "$INPUT" =~ \.lolHEX([0-9a-fA-F]+)$ ]]; then
+    LOL_ADDR="${BASH_REMATCH[1]}"
+    LOL_TYPE="hex"
+    NAME="${INPUT%.lolHEX${LOL_ADDR}}"
+elif [[ "$INPUT" =~ \.lol([A-Za-z0-9]{6,})$ ]]; then
+    LOL_ADDR="${BASH_REMATCH[1]}"
+    LOL_TYPE="b58"
+    NAME="${INPUT%.lol${LOL_ADDR}}"
+else
+    NAME="${INPUT%.lol}"
+    LOL_TYPE="name"
+fi
+
+# ── Package ───────────────────────────────────────────────────────────────────
+if [[ "${2:-}" == "--pkg" ]]; then
+    echo "[lol] intake-package: $NAME"
+    intake-package "$NAME" "${@:3}"
+    exit 0
+fi
+
+# ── Intake (push) ─────────────────────────────────────────────────────────────
+if [[ "${2:-}" == "--intake" ]]; then
+    echo "[lol] intaking: $NAME"
+    intake "$NAME"
+    exit 0
+fi
+
+# ── Directory (auto-detect by name) ──────────────────────────────────────────
+RESOLVED=$(realpath "$NAME" 2>/dev/null || echo "$NAME")
+if [[ -d "$RESOLVED" ]]; then
+    echo "[lol] intake-dir: $RESOLVED"
+    intake "$RESOLVED" "${@:2}"
+    exit 0
+fi
+
+# ── Pull from clonepool by hex address ───────────────────────────────────────
+if [[ "$LOL_TYPE" == "hex" ]]; then
+    POOL_DIR="${CLONEPOOL}/${LOL_ADDR}"
+    if [[ ! -d "$POOL_DIR" ]]; then
+        echo "[lol] MISS — no clonepool entry for hex: $LOL_ADDR"
+        exit 1
+    fi
+    LATEST=$(ls -t "${POOL_DIR}"/v*_* 2>/dev/null | head -1)
+    if [[ -z "$LATEST" ]]; then
+        echo "[lol] MISS — clonepool dir exists but no versioned files: $POOL_DIR"
+        exit 1
+    fi
+    DEST_NAME=$(basename "$LATEST" | sed 's/^v[0-9]*_//')
+    cp "$LATEST" "$(pwd)/${DEST_NAME}"
+    echo "[lol] poof — ${DEST_NAME} is here. (from hex ${LOL_ADDR})"
+    exit 0
+fi
+
+# ── Pull from clonepool by b58 address ───────────────────────────────────────
+if [[ "$LOL_TYPE" == "b58" ]]; then
+    # Search all sidecar files for matching b58
+    SIDECAR=$(grep -rl "\"b58\": \"${LOL_ADDR}\"" "${CLONEPOOL}" 2>/dev/null | head -1)
+    if [[ -z "$SIDECAR" ]]; then
+        echo "[lol] MISS — no clonepool entry with b58: $LOL_ADDR"
+        exit 1
+    fi
+    POOL_DIR=$(dirname "$SIDECAR")
+    LATEST=$(ls -t "${POOL_DIR}"/v*_* 2>/dev/null | head -1)
+    DEST_NAME=$(basename "$LATEST" | sed 's/^v[0-9]*_//')
+    cp "$LATEST" "$(pwd)/${DEST_NAME}"
+    echo "[lol] poof — ${DEST_NAME} is here. (from b58 ${LOL_ADDR})"
+    exit 0
+fi
+
+# ── Pull from clonepool by filename ──────────────────────────────────────────
+echo "[lol] pulling: $NAME"
+intake clone "$NAME"
