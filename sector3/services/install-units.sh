@@ -1,19 +1,31 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env bash
 # Phoenix systemd unit installer
-# Run as root: sudo ./install-units.sh
+# Run as root: sudo ./install-units.sh [--user=<username>]
 # Installs all Phoenix service and target units, enables by sector
 
 set -e
 
 UNIT_DIR="/etc/systemd/system"
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Detect the target user — SUDO_USER if invoked via sudo, else current user
+if [[ -n "${1:-}" && "${1}" == --user=* ]]; then
+    PHOENIX_USER="${1#*=}"
+elif [[ -n "${SUDO_USER:-}" ]]; then
+    PHOENIX_USER="$SUDO_USER"
+else
+    PHOENIX_USER="$(logname 2>/dev/null || id -un)"
+fi
 
 echo "Installing Phoenix systemd units..."
+echo "  Target user: $PHOENIX_USER"
+echo ""
 
 for f in "$SCRIPT_DIR"/*.service "$SCRIPT_DIR"/*.target; do
-    fname="${f:t}"
+    fname="$(basename "$f")"
     echo "  -> $fname"
-    cp "$f" "$UNIT_DIR/$fname"
+    # Template jwl247 → actual user on copy
+    sed "s/jwl247/$PHOENIX_USER/g" "$f" > "$UNIT_DIR/$fname"
     chmod 644 "$UNIT_DIR/$fname"
 done
 
@@ -26,7 +38,6 @@ systemctl enable phoenix-log-setup.service
 echo ""
 echo "Enabling Sector 1 target + units..."
 systemctl enable phoenix-sector1.target
-systemctl enable phoenix-log-setup.service
 systemctl enable phoenix-auto-config.service
 systemctl enable phoenix-frankenhelix.service
 systemctl enable phoenix-frank-helix.service
@@ -61,7 +72,7 @@ systemctl enable frank3-slot-a.service
 systemctl enable frank3-slot-b.service
 
 echo ""
-echo "Done."
+echo "Done. Units installed and enabled for user: $PHOENIX_USER"
 echo ""
 echo "Start order:"
 echo "  sudo systemctl start phoenix-sector1.target"

@@ -101,8 +101,12 @@ if [[ -d "$INSTALL_DIR/.git" ]]; then
   git -C "$INSTALL_DIR" pull --ff-only 2>/dev/null || warn "Pull skipped (local changes present)"
 else
   log "Cloning Phoenix into $INSTALL_DIR …"
-  git clone --recurse-submodules "$REPO_URL" "$INSTALL_DIR"
+  git clone "$REPO_URL" "$INSTALL_DIR"
   ok "Cloned"
+  # Submodules — lifefirst_modules requires auth, skip gracefully if unavailable
+  git -C "$INSTALL_DIR" submodule update --init 2>/dev/null \
+    && ok "Submodules initialized" \
+    || warn "Submodule init skipped (lifefirst_modules requires auth — run manually when ready)"
 fi
 
 # ── Directory structure ───────────────────────────────────────────────────────
@@ -126,8 +130,9 @@ ok "~/Phoenix tree ready"
 # ── Python dependencies ───────────────────────────────────────────────────────
 section "Installing Python dependencies"
 
-pip3 install -q -r "$INSTALL_DIR/requirements.txt" \
-  && ok "numpy installed" \
+pip3 install -q --break-system-packages -r "$INSTALL_DIR/requirements.txt" 2>/dev/null \
+  || pip3 install -q -r "$INSTALL_DIR/requirements.txt" 2>/dev/null \
+  && ok "Dependencies installed" \
   || warn "pip install had issues — check manually"
 
 # ── Auth token ────────────────────────────────────────────────────────────────
