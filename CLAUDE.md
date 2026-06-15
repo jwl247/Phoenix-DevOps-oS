@@ -175,7 +175,7 @@ Import sequence:
 - [ ] Prometheus installed
 - [ ] Nextcloud installed
 - [ ] PowerShell installed
-- [ ] SSH access confirmed from WSL/PS7
+- [x] SSH access confirmed from WSL (key-based, phoenix-lan / phoenix-ext aliases)
 
 ### Phase 2 — Sector 1 (Boot/Kernel)
 - [ ] frank3_slot_a.c + frank3_slot_b.c placed in sector1/kernels/
@@ -207,7 +207,12 @@ Import sequence:
 - [ ] romeo.py + juliet.py + dbl_juliet.py placed
 - [ ] translator.sh placed — OUTPUT ONLY rule enforced
 - [ ] quadengine.py placed
-- [ ] All .service + .target files deployed via install-units.sh
+- [x] All .service + .target files written (18 units, install-units.sh templates username)
+- [x] WireGuard mesh config — all 3 nodes (wg0-windows, wg0-wsl, wg0-phoenix-ext)
+- [x] WireGuard installed on WSL + phoenix-ext; Windows hub active, handshake confirmed
+- [ ] WireGuard on phoenix-ext enabled and handshaking (run: ssh -t phoenix-lan "sudo bash -c '...'")
+- [x] Input Leap KVM config — inputleap-server.conf (Windows LEFT, phoenix-ext RIGHT)
+- [x] SSH bridge — bridge.sh installed, SSH aliases: windows-host / phoenix-ext / phoenix-lan / phx
 
 ### Phase 6 — Apps (Entourage)
 - [ ] Glossary wired to D1
@@ -242,3 +247,4 @@ SECTOR4 security stack (guardians, honeypot, copes_runtime) — held from public
 <!-- Format: YYYY-MM-DD — what was done -->
 2026-05-03 — New canonical CLAUDE.md written. Repos audited. External Ubuntu build target established. Import method confirmed as intake strategy. Build plan phased across 7 phases.
 2026-06-13 — GitHub install complete. Phase 0 intake sweep: 87→133 packages in clonepool, all D1 synced. Canonical frank.py (688-line) + helix.py (dual-strand) placed in sector4. bootstrap.sh written. get.authenticcoder.com live as install endpoint (Cloudflare Worker custom domain). Repo made public (GPL v3). SSH key set up on WSL machine. lifefirst_modules wired as git submodule. conflict_map.py tool built — 40 duplicates mapped, decisions pending next session.
+2026-06-15 — intake.py rebuilt (unitedsys/core/, TAV address system, sidecar + D1 sync). All sector 3/4 systemd units written (18 units). install-units.sh templates username at install time. Self-hosted WireGuard mesh: WSL↔Windows handshake confirmed. bootstrap.sh fixed (pip PEP 668, submodule auth graceful skip). SSH key-based auth to phoenix-ext operational. WireGuard installed on phoenix-ext — pending final enable+handshake. Input Leap KVM config written (upgrade to Synergy Friday). Repo remote switched to SSH. All pushed to GitHub.
