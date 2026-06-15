@@ -1,0 +1,20 @@
+[Unit]
+Description=Phoenix log directory setup — runs once before all Phoenix services
+Documentation=https://github.com/jwl247/Phoenix-DevOps-oS
+DefaultDependencies=no
+Before=phoenix-sector1.target phoenix-sector2.target phoenix-sector3.target phoenix-sector4.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+ExecStart=/bin/mkdir -p /var/log/phoenix
+ExecStart=/bin/chmod 755 /var/log/phoenix
+ExecStart=/bin/chown jwl247:jwl247 /var/log/phoenix
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=phoenix-log-setup
+
+[Install]
+WantedBy=multi-user.target
