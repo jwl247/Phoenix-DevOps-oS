@@ -67,21 +67,18 @@ fi
 # ── 3. WireGuard on WSL ──────────────────────────────────────────────────────
 hdr "WireGuard (WSL side)"
 
-WG_OUT=$(sudo wg show wg0-wsl 2>/dev/null)
-if [[ -n "$WG_OUT" ]]; then
-    HS=$(echo "$WG_OUT" | grep "latest handshake" | sed 's/.*latest handshake: //')
-    HS_SEC=$(echo "$WG_OUT" | grep "latest handshake" | grep -o '[0-9]* second' | awk '{print $1}')
+if ip link show wg0-wsl &>/dev/null; then
+    # Interface exists — try handshake info (needs sudo; skip gracefully if unavailable)
+    HS=$(sudo wg show wg0-wsl 2>/dev/null | grep "latest handshake" | sed 's/.*latest handshake: //')
     if [[ -z "$HS" ]]; then
-        warn "wg0-wsl up but no handshake yet"
-        info "On Windows: open WireGuard app → Activate wg0"
-    elif [[ -n "$HS_SEC" && "$HS_SEC" -lt 180 ]]; then
-        ok "wg0-wsl active — handshake: $HS ago"
+        warn "wg0-wsl up — no handshake yet (run 'sudo wg show wg0-wsl' to check)"
+        info "On Windows: ensure WireGuard app has wg0 activated"
     else
-        warn "wg0-wsl up — handshake: $HS (stale?) — check Windows WireGuard app"
+        ok "wg0-wsl active — handshake: $HS ago"
     fi
 else
     bad "wg0-wsl not running"
-    info "Fix: sudo wg-quick up ~/phoenix-devops/sector3/wireguard/wg0-wsl.conf"
+    info "Fix: sudo wg-quick up /home/jwlef/phoenix-devops/sector3/wireguard/wg0-wsl.conf"
 fi
 
 # ── 4. SSH to phoenix-ext (LAN) ──────────────────────────────────────────────
@@ -127,18 +124,15 @@ hdr "WireGuard on phoenix-ext (10.77.0.3)"
 
 if [[ "$SSH_OK" == "ok" ]]; then
     WG_EXT=$(ssh -o BatchMode=yes phoenix-lan \
-        "sudo -n wg show wg0 2>/dev/null | grep 'latest handshake' || echo NONE" 2>/dev/null || echo "FAIL")
-    if echo "$WG_EXT" | grep -q "latest handshake"; then
-        ok "wg0 active on phoenix-ext — handshake: $(echo "$WG_EXT" | sed 's/.*latest handshake: //')"
-    elif [[ "$WG_EXT" == "NONE" ]]; then
+        "ip link show wg0 2>/dev/null && echo UP || echo DOWN" 2>/dev/null || echo "FAIL")
+    if [[ "$WG_EXT" == *"UP"* ]]; then
+        ok "wg0 interface up on phoenix-ext"
+        info "Run 'ssh -t phoenix-lan sudo wg show' for handshake details"
+    elif [[ "$WG_EXT" == "DOWN" ]]; then
         bad "wg0 not running on phoenix-ext"
-        info "Fix: ssh -t phoenix-lan \"sudo bash -c 'systemctl enable --now wg-quick@wg0'\""
-        info "If /etc/wireguard/wg0.conf missing:"
-        info "  scp ~/phoenix-devops/sector3/wireguard/wg0-phoenix-ext.conf phoenix-lan:/tmp/wg0.conf"
-        info "  ssh -t phoenix-lan \"sudo bash -c 'cp /tmp/wg0.conf /etc/wireguard/wg0.conf && chmod 600 /etc/wireguard/wg0.conf && systemctl enable --now wg-quick@wg0'\""
+        info "Fix: ssh -t phoenix-lan 'sudo bash /tmp/wg_setup.sh'"
     else
-        warn "Couldn't check wg0 on ext (sudo may need password)"
-        info "Run: ssh -t phoenix-lan 'sudo wg show'"
+        warn "Couldn't reach ext to check WireGuard"
     fi
 else
     warn "Skipping (SSH not available)"
