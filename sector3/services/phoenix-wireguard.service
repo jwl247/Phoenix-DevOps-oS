@@ -1,0 +1,20 @@
+[Unit]
+Description=Phoenix WireGuard mesh VPN — private tunnel to all nodes
+Documentation=https://github.com/jwl247/Phoenix-DevOps-oS
+After=network-online.target
+Wants=network-online.target
+Before=phoenix-sector3.target phoenix-inputleap-client.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/wg-quick up /etc/wireguard/wg0.conf
+ExecStop=/usr/bin/wg-quick down /etc/wireguard/wg0.conf
+ExecReload=/bin/bash -c '/usr/bin/wg syncconf wg0 <(/usr/bin/wg-quick strip /etc/wireguard/wg0.conf)'
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=phoenix-wireguard
+
+[Install]
+WantedBy=phoenix-sector3.target
