@@ -13,7 +13,7 @@ Group=jwl247
 # Run on Windows: ipconfig | findstr IPv4
 # Then update: systemctl edit phoenix-inputleap-client
 # and add:  Environment=WINDOWS_HOST_IP=192.168.x.x
-Environment=WINDOWS_HOST_IP=192.168.1.100
+Environment=WINDOWS_HOST_IP=10.77.0.1
 Environment=DISPLAY=:0
 
 ExecStartPre=/bin/sleep 3
