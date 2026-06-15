@@ -8,6 +8,7 @@
   "name": "packages-worker",
   "main": "index.js",
   "compatibility_date": "2025-01-01",
+  "workers_dev": true,
 
   // ── D1 Binding ─────────────────────────────────────────────────────────────
   // PHOENIX_DB → phoenix_dev_db (the backbone — all tables live here)

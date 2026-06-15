@@ -210,9 +210,21 @@ Import sequence:
 - [x] All .service + .target files written (18 units, install-units.sh templates username)
 - [x] WireGuard mesh config — all 3 nodes (wg0-windows, wg0-wsl, wg0-phoenix-ext)
 - [x] WireGuard installed on WSL + phoenix-ext; Windows hub active, handshake confirmed
-- [ ] WireGuard on phoenix-ext enabled and handshaking (run: ssh -t phoenix-lan "sudo bash -c '...'")
+- [x] WireGuard auto-start on WSL (.bashrc) + passwordless sudo in /etc/sudoers.d/phoenix-wg
+- [ ] WireGuard on phoenix-ext enabled and handshaking (run: ssh -t phoenix-lan "sudo wg-quick up wg0")
 - [x] Input Leap KVM config — inputleap-server.conf (Windows LEFT, phoenix-ext RIGHT)
 - [x] SSH bridge — bridge.sh installed, SSH aliases: windows-host / phoenix-ext / phoenix-lan / phx
+
+### Life First — (parallel track, not Entourage)
+- [x] Modules 3-6 updated: credentials from env, model → claude-sonnet-4-6, Ubuntu paths
+- [x] Module 2 (API router): DB + API secret from env, deployment path updated
+- [x] Module 7 (Voice Commander): written — intent detection + Claude fallback handler
+- [x] config.php: shared config (API key, model, getDB from env vars)
+- [x] deploy_lifefirst.sh: one-script deploy to phoenix-ext (Apache2 + MySQL already running)
+- [ ] Run deploy_lifefirst.sh on phoenix-ext (needs Claude API key ready)
+- [ ] Frank bridge: frank_lifefirst.py (sector4/frank/) — dispatch packets to Life First HTTP
+- [ ] /lifefirst routes added to frank_http.py (port 7347)
+- [ ] D1 custody table for Life First interactions
 
 ### Phase 6 — Apps (Entourage)
 - [ ] Glossary wired to D1
@@ -248,3 +260,4 @@ SECTOR4 security stack (guardians, honeypot, copes_runtime) — held from public
 2026-05-03 — New canonical CLAUDE.md written. Repos audited. External Ubuntu build target established. Import method confirmed as intake strategy. Build plan phased across 7 phases.
 2026-06-13 — GitHub install complete. Phase 0 intake sweep: 87→133 packages in clonepool, all D1 synced. Canonical frank.py (688-line) + helix.py (dual-strand) placed in sector4. bootstrap.sh written. get.authenticcoder.com live as install endpoint (Cloudflare Worker custom domain). Repo made public (GPL v3). SSH key set up on WSL machine. lifefirst_modules wired as git submodule. conflict_map.py tool built — 40 duplicates mapped, decisions pending next session.
 2026-06-15 — intake.py rebuilt (unitedsys/core/, TAV address system, sidecar + D1 sync). All sector 3/4 systemd units written (18 units). install-units.sh templates username at install time. Self-hosted WireGuard mesh: WSL↔Windows handshake confirmed. bootstrap.sh fixed (pip PEP 668, submodule auth graceful skip). SSH key-based auth to phoenix-ext operational. WireGuard installed on phoenix-ext — pending final enable+handshake. Input Leap KVM config written (upgrade to Synergy Friday). Repo remote switched to SSH. All pushed to GitHub.
+2026-06-15 (session 2) — Node.js (v24 LTS) + wrangler (4.100.0) installed natively in WSL. packages-worker: fixed install-domain handler (was swallowing /health), added workers_dev:true to wrangler.jsonc. WireGuard auto-start added to .bashrc. Life First: modules 2-7 updated (env-based creds, claude-sonnet-4-6, Ubuntu paths). module_7_voice_ai.php written (intent detection + Claude fallback). config.php shared config written. deploy_lifefirst.sh written for phoenix-ext (Apache2+MySQL already confirmed running). PENDING: wrangler login + deploy, WireGuard sudo passwordless (needs terminal), deploy_lifefirst.sh run on phoenix-ext.

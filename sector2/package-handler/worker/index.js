@@ -552,10 +552,10 @@ export default {
 
     try {
 
-      // ── Health ──────────────────────────────────────────────────────────────
       // ── Install domain — must be first (get.authenticcoder.com) ─────────────
+      // Only intercepts GET / and GET /get — all other paths fall through to normal routing
       const isInstallDomain = url.hostname === 'get.authenticcoder.com';
-      if (isInstallDomain && req.method === 'GET') {
+      if (isInstallDomain && req.method === 'GET' && (path === '/' || path === '/get')) {
         const ua = req.headers.get('User-Agent') || '';
         const isBrowser = ua.includes('Mozilla') || ua.includes('Chrome') || ua.includes('Safari');
         const RAW = 'https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/main/bootstrap.sh';
