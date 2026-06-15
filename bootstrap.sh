@@ -177,6 +177,37 @@ EOF
 chmod 600 "$ENV_FILE"
 ok "~/.phoenix_env written (mode 600)"
 
+# ── SSH bridge key — trust this WSL machine on the external drive ─────────────
+section "SSH bridge key"
+
+BRIDGE_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA5OFIxitkgigHmhIMXAMTpm1UIL8xzRxn6cHyIYOPXO jwl247@phoenix-devops"
+SSH_DIR="$HOME/.ssh"
+AUTH_KEYS="$SSH_DIR/authorized_keys"
+
+mkdir -p "$SSH_DIR" && chmod 700 "$SSH_DIR"
+
+if grep -qF "$BRIDGE_PUBKEY" "$AUTH_KEYS" 2>/dev/null; then
+  ok "Bridge key already in authorized_keys"
+else
+  echo "$BRIDGE_PUBKEY" >> "$AUTH_KEYS"
+  chmod 600 "$AUTH_KEYS"
+  ok "WSL bridge key installed → $AUTH_KEYS"
+fi
+
+# ── Install bridge ────────────────────────────────────────────────────────────
+section "Installing bridge"
+
+BRIDGE_SRC="$INSTALL_DIR/sector3/bridge/bridge.sh"
+BRIDGE_DEST="$PHOENIX_HOME/bin/bridge"
+
+if [[ -f "$BRIDGE_SRC" ]]; then
+  cp "$BRIDGE_SRC" "$BRIDGE_DEST"
+  chmod +x "$BRIDGE_DEST"
+  ok "bridge installed → $BRIDGE_DEST"
+else
+  warn "bridge.sh not found in repo — skipping"
+fi
+
 # ── Install lol ───────────────────────────────────────────────────────────────
 section "Installing lol command"
 
