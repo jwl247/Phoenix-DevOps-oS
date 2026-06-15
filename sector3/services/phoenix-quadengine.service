@@ -1,0 +1,38 @@
+[Unit]
+Description=Phoenix QuadEngine — sector 3 four-language translation engine
+Documentation=https://github.com/jwl247/Phoenix-DevOps-oS
+After=network.target phoenix-romeo.service phoenix-juliet.service
+Requires=network.target phoenix-romeo.service
+PartOf=phoenix-sector3.target
+
+[Service]
+Type=simple
+User=jwl247
+Group=jwl247
+WorkingDirectory=/home/jwl247/projects/phoenix
+ExecStart=/usr/bin/env python3 /home/jwl247/projects/phoenix/sector3/quadengine/quadengine.py
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=3
+StartLimitIntervalSec=60
+
+Environment=PYTHONUNBUFFERED=1
+Environment=PHOENIX_SECTOR=3
+Environment=PHOENIX_QUAD_PULL=tcp://localhost:5560
+Environment=PHOENIX_QUAD_PUSH=tcp://localhost:5561
+Environment=PHOENIX_QUAD_PORT_BASE=5563
+EnvironmentFile=-/home/jwl247/projects/phoenix/.env
+EnvironmentFile=-/home/jwl247/.phoenix_env
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/jwl247/projects/phoenix /home/jwl247/.unitedsys /tmp
+
+StandardOutput=append:/var/log/phoenix/quadengine.log
+StandardError=append:/var/log/phoenix/quadengine.error.log
+SyslogIdentifier=phoenix-quadengine
+
+[Install]
+WantedBy=phoenix-sector3.target

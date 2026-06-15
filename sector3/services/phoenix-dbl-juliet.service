@@ -1,0 +1,37 @@
+[Unit]
+Description=Phoenix Double Juliet — sector 3 dual-egress failover
+Documentation=https://github.com/jwl247/Phoenix-DevOps-oS
+After=network.target phoenix-juliet.service
+Requires=network.target phoenix-juliet.service
+PartOf=phoenix-sector3.target
+
+[Service]
+Type=simple
+User=jwl247
+Group=jwl247
+WorkingDirectory=/home/jwl247/projects/phoenix
+ExecStart=/usr/bin/env python3 /home/jwl247/projects/phoenix/sector3/romeo_juliet/dbl_juliet.py
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=3
+StartLimitIntervalSec=60
+
+Environment=PYTHONUNBUFFERED=1
+Environment=PHOENIX_SECTOR=3
+Environment=PHOENIX_DBL_JULIET_PORT=5562
+Environment=PHOENIX_DBL_JULIET_PRIMARY=tcp://localhost:5561
+EnvironmentFile=-/home/jwl247/projects/phoenix/.env
+EnvironmentFile=-/home/jwl247/.phoenix_env
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/jwl247/projects/phoenix /home/jwl247/.unitedsys /tmp
+
+StandardOutput=append:/var/log/phoenix/dbl-juliet.log
+StandardError=append:/var/log/phoenix/dbl-juliet.error.log
+SyslogIdentifier=phoenix-dbl-juliet
+
+[Install]
+WantedBy=phoenix-sector3.target

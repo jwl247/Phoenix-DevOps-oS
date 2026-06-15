@@ -1,0 +1,38 @@
+[Unit]
+Description=Phoenix Frank — CoPES kernel authority, stationary, sovereign
+Documentation=https://github.com/jwl247/Phoenix-DevOps-oS
+After=phoenix-helix.service phoenix-sector1.target
+Requires=phoenix-helix.service
+PartOf=phoenix-sector4.target
+
+[Service]
+Type=simple
+User=jwl247
+Group=jwl247
+WorkingDirectory=/home/jwl247/projects/phoenix/sector4/frank
+ExecStart=/usr/bin/env python3 /home/jwl247/projects/phoenix/sector4/frank/frank.py
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=3
+StartLimitIntervalSec=120
+
+Environment=PYTHONUNBUFFERED=1
+Environment=PHOENIX_SECTOR=4
+Environment=FRANK_RING=0
+Environment=HELIX_STRAND_A_PORT=5570
+Environment=HELIX_STRAND_B_PORT=5571
+EnvironmentFile=-/home/jwl247/projects/phoenix/.env
+EnvironmentFile=-/home/jwl247/.phoenix_env
+
+# Frank does not move — no PrivateTmp to keep IPC paths stable
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/jwl247/projects/phoenix /home/jwl247/.unitedsys /home/jwl247/.catalog /home/jwl247/Phoenix /tmp
+
+StandardOutput=append:/var/log/phoenix/frank.log
+StandardError=append:/var/log/phoenix/frank.error.log
+SyslogIdentifier=phoenix-frank
+
+[Install]
+WantedBy=phoenix-sector4.target

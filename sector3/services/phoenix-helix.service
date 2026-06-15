@@ -1,0 +1,38 @@
+[Unit]
+Description=Phoenix Helix — dual-strand memory engine, 300k+ ops/sec
+Documentation=https://github.com/jwl247/Phoenix-DevOps-oS
+After=phoenix-sector1.target
+Requires=phoenix-sector1.target
+PartOf=phoenix-sector4.target
+
+[Service]
+Type=simple
+User=jwl247
+Group=jwl247
+WorkingDirectory=/home/jwl247/projects/phoenix/sector4/helix
+ExecStart=/usr/bin/env python3 /home/jwl247/projects/phoenix/sector4/helix/helix.py
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+Environment=PYTHONUNBUFFERED=1
+Environment=PHOENIX_SECTOR=4
+Environment=HELIX_MODE=INTERNAL
+Environment=HELIX_STRAND_A_PORT=5570
+Environment=HELIX_STRAND_B_PORT=5571
+EnvironmentFile=-/home/jwl247/projects/phoenix/.env
+EnvironmentFile=-/home/jwl247/.phoenix_env
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/jwl247/projects/phoenix /home/jwl247/.unitedsys /home/jwl247/Phoenix /tmp
+
+StandardOutput=append:/var/log/phoenix/helix.log
+StandardError=append:/var/log/phoenix/helix.error.log
+SyslogIdentifier=phoenix-helix
+
+[Install]
+WantedBy=phoenix-sector4.target

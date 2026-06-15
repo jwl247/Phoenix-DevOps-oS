@@ -1,0 +1,9 @@
+[Unit]
+Description=Phoenix Sector 4 — Helix engine, Frank CoPES kernel, core vault authority
+Documentation=https://github.com/jwl247/Phoenix-DevOps-oS
+After=phoenix-sector1.target
+Requires=phoenix-sector1.target
+Wants=phoenix-helix.service phoenix-frank.service
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=Phoenix Sector 3 — comms, networking, romeo ingress / juliet egress / quadengine
+Documentation=https://github.com/jwl247/Phoenix-DevOps-oS
+After=phoenix-sector2.target network.target
+Requires=phoenix-sector2.target
+Wants=phoenix-romeo.service phoenix-juliet.service phoenix-dbl-juliet.service phoenix-quadengine.service
+
+[Install]
+WantedBy=multi-user.target
