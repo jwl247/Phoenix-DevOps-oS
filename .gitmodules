@@ -1,3 +1,3 @@
 [submodule "lifefirst_modules"]
 	path = lifefirst_modules
-	url = https://github.com/jwl247/lifefirst_modules
+	url = git@github.com:jwl247/lifefirst_modules
