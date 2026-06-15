@@ -1,0 +1,37 @@
+[Unit]
+Description=Phoenix Input Leap client — shared keyboard/mouse from windows-host
+Documentation=https://github.com/jwl247/Phoenix-DevOps-oS
+After=network.target graphical.target
+Wants=graphical.target
+
+[Service]
+Type=simple
+User=jwl247
+Group=jwl247
+
+# WINDOWS_HOST_IP: set this to your Windows machine's LAN IP
+# Run on Windows: ipconfig | findstr IPv4
+# Then update: systemctl edit phoenix-inputleap-client
+# and add:  Environment=WINDOWS_HOST_IP=192.168.x.x
+Environment=WINDOWS_HOST_IP=192.168.1.100
+Environment=DISPLAY=:0
+
+ExecStartPre=/bin/sleep 3
+ExecStart=/usr/bin/input-leapc \
+    --no-tray \
+    --debug WARNING \
+    --name phoenix-ext \
+    --restart \
+    ${WINDOWS_HOST_IP}
+
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+StandardOutput=append:/var/log/phoenix/inputleap.log
+StandardError=append:/var/log/phoenix/inputleap.error.log
+SyslogIdentifier=phoenix-inputleap
+
+[Install]
+WantedBy=graphical.target
