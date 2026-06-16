@@ -975,27 +975,37 @@ export default {
       if (path === '/review' && req.method === 'POST') {
         if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const body = await req.json();
-        if (!body.hex || !body.name) return err('hex and name required');
+        if (!body.name) return err('name required');
+
+        // General submissions: hex auto-generated if not provided
+        const subType = body.submission_type || 'artifact';
+        const hex = body.hex || Array.from(
+          new Uint8Array(await crypto.subtle.digest('SHA-256',
+            new TextEncoder().encode(body.name + (body.submitter||'') + Date.now())))
+        ).slice(0,8).map(b=>b.toString(16).padStart(2,'0')).join('');
 
         await db.prepare(`
-          INSERT INTO submissions (hex, name, description, category, platform, submitter, artifact_url, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+          INSERT INTO submissions (hex, name, description, category, platform, submitter, artifact_url, status, submission_type, content, tags)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
           ON CONFLICT(hex) DO UPDATE SET
             name = excluded.name,
             description = excluded.description,
             status = 'pending',
             submitted_at = CURRENT_TIMESTAMP
         `).bind(
-          body.hex,
+          hex,
           body.name,
           body.description || '',
           body.category || null,
           body.platform || null,
           body.submitter || 'anonymous',
           body.artifact_url || null,
+          subType,
+          body.content || null,
+          body.tags || null,
         ).run();
 
-        return ok({ ok: true, hex: body.hex, name: body.name, status: 'pending' });
+        return ok({ ok: true, hex, name: body.name, status: 'pending', submission_type: subType });
       }
 
       // POST /review/:hex/vote — cast a vote (approve / reject / abstain) (auth required)
