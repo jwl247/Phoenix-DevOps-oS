@@ -170,14 +170,14 @@ Import sequence:
 
 ## BUILD STATUS
 
-### Phase 1 — External Ubuntu base (CURRENT)
-- [x] Ubuntu Server 24.04 LTS + HWE kernel (6.8.0-124-generic) on phoenix-ext
-- [ ] Prometheus installed (run: ssh phoenix-ext "sudo bash ~/phoenix-devops/deploy/setup_phoenix_ext.sh")
-- [ ] Nextcloud installed (same script)
+### Phase 1 — External Ubuntu base ✅ COMPLETE
+- [x] Ubuntu 24.04 LTS + HWE kernel 6.8.0-124-generic on Dell Inspiron (phoenix-ext)
+- [x] Prometheus healthy — snap version, port 9090, running since Jun 7
+- [x] Nextcloud 33.0.5 — snap installed
 - [x] PowerShell 7.6.2 installed
 - [x] SSH access confirmed from WSL (key-based, phoenix-lan / phoenix-ext aliases)
-- [x] Phoenix kernel OPERATIONAL on phoenix-ext — Frank5 + 20 suits + HelixI/HelixE (668ms boot)
-- [ ] phoenix-kernel.service installed as systemd unit (same setup script)
+- [x] Phoenix kernel OPERATIONAL — Frank5 v5.1.0-alpha, 20 suits, HelixI 7701-7704, HelixE 7805-7808
+- [x] phoenix-kernel.service installed and running as systemd unit (auto-starts on boot)
 
 ### Phase 2 — Sector 1 (Boot/Kernel)
 - [ ] frank3_slot_a.c + frank3_slot_b.c placed in sector1/kernels/
