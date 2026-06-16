@@ -17,12 +17,12 @@ CLI, GUI, or never type again — Phoenix meets you where you are.
 Built on Debian stable root. We fill in the root, add our own GRUB, Phoenix on top.
 
 ## CURRENT BUILD TARGET
-- **External drive** — Ubuntu Server (minimal) + HWE kernel
-- Stack on external: Prometheus, Nextcloud, PowerShell
-- Phoenix builds on top of that as the OS layer
-- Work from: Windows PS7 or WSL (SSH or direct when booted)
+- **phoenix-ext** = Dell Inspiron PC, 192.168.1.133, Ubuntu 24.04 LTS + HWE kernel
+- This IS the Phoenix machine — not a USB drive, a dedicated PC
+- Stack on phoenix-ext: Prometheus, Nextcloud, PowerShell (PS already installed)
+- Phoenix builds on top of the Ubuntu base as the OS layer
+- Work from: Windows PS7 or WSL via SSH (phoenix-ext alias)
 - Custom GRUB added AFTER Phoenix is standing — not before
-- External plugs in → boots → Phoenix is the OS
 
 ## REPOS
 | Repo | URL | Purpose |
