@@ -23,7 +23,7 @@ umount /dev/sdb1 2>/dev/null || true
 umount /dev/sdb2 2>/dev/null || true
 parted /dev/sdb --script mklabel gpt mkpart primary ext4 0% 100%
 sleep 1
-mkfs.ext4 -L breach-coms3 /dev/sdb1
+mkfs.ext4 -F -L breach-coms3 /dev/sdb1
 echo "      sdb → breach-coms3 ready"
 
 # ── Step 2: Relabel sdc1 → breach-coms4 ──────────────────────────────────────
