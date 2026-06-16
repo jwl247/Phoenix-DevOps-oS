@@ -4,3 +4,6 @@
 [submodule "phoenix_universal_kernel"]
 	path = phoenix_universal_kernel
 	url = git@github.com:jwl247/Phoenix_Universal_Kernel.git
+[submodule "helix_lightning_kernel"]
+	path = helix_lightning_kernel
+	url = git@github.com:jwl247/Helix_lightning_kernel.git
