@@ -17,7 +17,7 @@ Environment=PHOENIX_AUDIT=/var/log/phoenix/audit.log
 Environment=PHOENIX_CUSTODY=/var/log/phoenix/custody.jsonl
 Environment=CLONEPOOL_DIR=/breach_coms4/clonepool
 Environment=PHOENIX_WORKER_URL=https://packages-worker.phoenix-jwl.workers.dev
-EnvironmentFile=-/home/PHOENIX_USER/.phoenix.env
+EnvironmentFile=-/home/PHOENIX_USER/.phoenix_env
 ExecStart=/usr/bin/python3 PHOENIX_REPO/phoenix_universal_kernel/main_kernel.py
 Restart=on-failure
 RestartSec=5
