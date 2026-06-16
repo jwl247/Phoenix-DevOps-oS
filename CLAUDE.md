@@ -221,7 +221,9 @@ Import sequence:
 - [x] Module 7 (Voice Commander): written — intent detection + Claude fallback handler
 - [x] config.php: shared config (API key, model, getDB from env vars)
 - [x] deploy_lifefirst.sh: one-script deploy to phoenix-ext (Apache2 + MySQL already running)
-- [ ] Run deploy_lifefirst.sh on phoenix-ext (needs Claude API key ready)
+- [x] Life First LIVE on phoenix-ext — all 5 modules responding, Laurie's user tested
+- [x] ai_interactions table created in MySQL
+- [x] PHP-FPM credential injection via lf_secrets.php (Apache SetEnv workaround)
 - [ ] Frank bridge: frank_lifefirst.py (sector4/frank/) — dispatch packets to Life First HTTP
 - [ ] /lifefirst routes added to frank_http.py (port 7347)
 - [ ] D1 custody table for Life First interactions
@@ -260,4 +262,4 @@ SECTOR4 security stack (guardians, honeypot, copes_runtime) — held from public
 2026-05-03 — New canonical CLAUDE.md written. Repos audited. External Ubuntu build target established. Import method confirmed as intake strategy. Build plan phased across 7 phases.
 2026-06-13 — GitHub install complete. Phase 0 intake sweep: 87→133 packages in clonepool, all D1 synced. Canonical frank.py (688-line) + helix.py (dual-strand) placed in sector4. bootstrap.sh written. get.authenticcoder.com live as install endpoint (Cloudflare Worker custom domain). Repo made public (GPL v3). SSH key set up on WSL machine. lifefirst_modules wired as git submodule. conflict_map.py tool built — 40 duplicates mapped, decisions pending next session.
 2026-06-15 — intake.py rebuilt (unitedsys/core/, TAV address system, sidecar + D1 sync). All sector 3/4 systemd units written (18 units). install-units.sh templates username at install time. Self-hosted WireGuard mesh: WSL↔Windows handshake confirmed. bootstrap.sh fixed (pip PEP 668, submodule auth graceful skip). SSH key-based auth to phoenix-ext operational. WireGuard installed on phoenix-ext — pending final enable+handshake. Input Leap KVM config written (upgrade to Synergy Friday). Repo remote switched to SSH. All pushed to GitHub.
-2026-06-15 (session 2) — Node.js (v24 LTS) + wrangler (4.100.0) installed natively in WSL. packages-worker: fixed install-domain handler (was swallowing /health), added workers_dev:true to wrangler.jsonc. WireGuard auto-start added to .bashrc. Life First: modules 2-7 updated (env-based creds, claude-sonnet-4-6, Ubuntu paths). module_7_voice_ai.php written (intent detection + Claude fallback). config.php shared config written. deploy_lifefirst.sh written for phoenix-ext (Apache2+MySQL already confirmed running). PENDING: wrangler login + deploy, WireGuard sudo passwordless (needs terminal), deploy_lifefirst.sh run on phoenix-ext.
+2026-06-15 (session 2) — Node.js (v24 LTS) + wrangler (4.100.0) installed natively in WSL. packages-worker fixed + redeployed (all 12 status.sh checks green). WireGuard auto-start + passwordless sudo configured. Life First LIVE on phoenix-ext: modules 2-7 deployed, Apache+MySQL+PHP-FPM, Laurie's first response "It's 7:00 PM on Monday, June 15th." LAURIE.md written with full business roadmap. Next: Frank bridge, D1 custody for Life First interactions, rotate Claude API key.
