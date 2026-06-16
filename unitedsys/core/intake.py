@@ -355,12 +355,137 @@ def _report_custody(hex_name, name, action, actor):
         "actor":  actor,
     })
 
-def _report_glossary(hex_name, b58, name, filetype, cat_hex, version, size, pool_dir):
+def extract_description(filepath, filetype):
+    """
+    Pull a real description from the top of the file.
+    Python: module docstring. Shell/JS/C: first comment block.
+    Falls back to filetype tag if nothing useful found.
+    Caps at 200 chars.
+    """
+    try:
+        raw = filepath.read_bytes()[:4096].decode("utf-8", errors="replace")
+    except Exception:
+        return "Intaked: {}".format(filetype)
+
+    lines = raw.splitlines()
+    lang  = filetype.split(":")[-1] if ":" in filetype else filetype
+
+    desc = ""
+
+    if lang == "python":
+        # skip shebang + blank lines, grab first triple-quoted docstring
+        in_doc = False
+        doc_lines = []
+        for line in lines:
+            s = line.strip()
+            if not in_doc:
+                if s.startswith('"""') or s.startswith("'''"):
+                    q = s[:3]
+                    body = s[3:]
+                    if body.endswith(q) and len(body) > 3:
+                        desc = body[:-3].strip()
+                        break
+                    in_doc = True
+                    if body.strip():
+                        doc_lines.append(body.strip())
+                elif s and not s.startswith("#") and not s.startswith("import") and not s.startswith("from"):
+                    break
+            else:
+                if q in s:
+                    doc_lines.append(s[:s.index(q)].strip())
+                    desc = " ".join(doc_lines).strip()
+                    break
+                doc_lines.append(s)
+        if not desc and doc_lines:
+            desc = " ".join(doc_lines).strip()
+
+    elif lang in ("shell", "bash"):
+        # skip shebang, collect consecutive # comment lines
+        comment_lines = []
+        for line in lines:
+            s = line.strip()
+            if s.startswith("#!"):
+                continue
+            if s.startswith("#"):
+                text = s.lstrip("#").strip()
+                if text and not text.startswith("=") and not text.startswith("-"):
+                    comment_lines.append(text)
+            elif s:
+                break
+        desc = " ".join(comment_lines[:3]).strip()
+
+    elif lang in ("javascript", "typescript"):
+        # grab first // block or /* */ block
+        comment_lines = []
+        in_block = False
+        for line in lines:
+            s = line.strip()
+            if not in_block and s.startswith("//"):
+                comment_lines.append(s.lstrip("/").strip())
+            elif not in_block and s.startswith("/*"):
+                in_block = True
+                body = s[2:].strip().lstrip("*").strip()
+                if body:
+                    comment_lines.append(body)
+            elif in_block:
+                if "*/" in s:
+                    body = s[:s.index("*/")].strip().lstrip("*").strip()
+                    if body:
+                        comment_lines.append(body)
+                    break
+                body = s.lstrip("*").strip()
+                if body:
+                    comment_lines.append(body)
+            elif s and not s.startswith("//"):
+                break
+        desc = " ".join(comment_lines[:3]).strip()
+
+    elif lang in ("c", "cpp"):
+        comment_lines = []
+        in_block = False
+        for line in lines:
+            s = line.strip()
+            if not in_block and s.startswith("/*"):
+                in_block = True
+                body = s[2:].strip().lstrip("*").strip()
+                if body:
+                    comment_lines.append(body)
+            elif in_block:
+                if "*/" in s:
+                    body = s[:s.index("*/")].strip().lstrip("*").strip()
+                    if body:
+                        comment_lines.append(body)
+                    break
+                body = s.lstrip("*").strip()
+                if body:
+                    comment_lines.append(body)
+            elif s:
+                break
+        desc = " ".join(comment_lines[:3]).strip()
+
+    else:
+        # generic: first non-empty line that looks like a description
+        for line in lines[:10]:
+            s = line.strip().lstrip("#").lstrip("/").lstrip("*").strip()
+            if s and len(s) > 8:
+                desc = s
+                break
+
+    if not desc:
+        return "Intaked: {}".format(filetype)
+
+    if len(desc) > 200:
+        desc = desc[:197] + "..."
+    return desc
+
+
+def _report_glossary(hex_name, b58, name, filetype, cat_hex, version, size, pool_dir, filepath=None):
+    desc = extract_description(filepath, filetype) if filepath else "Intaked: {}".format(filetype)
     _post_d1("/glossary", {
         "hex":          hex_name,
         "b58":          b58,
         "name":         name,
-        "description":  "Intaked: {}".format(filetype),
+        "description":  desc,
         "category_hex": cat_hex,
         "version":      version,
         "size":         size,
@@ -430,7 +555,7 @@ def intake_file(filepath_str, notes=""):
     # -- D1 ------------------------------------------------------------------
     _report_clonepool(hex_name, b58, orig, version, pool_dir, sidecar_path, size)
     _report_custody(hex_name, orig, "intake", "intake")
-    _report_glossary(hex_name, b58, orig, filetype, cat_hex, version, size, pool_dir)
+    _report_glossary(hex_name, b58, orig, filetype, cat_hex, version, size, pool_dir, filepath=filepath)
 
     # -- Done ----------------------------------------------------------------
     print("[intake:OK]  {} → clonepool {}".format(orig, version))
