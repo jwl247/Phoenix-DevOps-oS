@@ -198,14 +198,14 @@ Import sequence:
 - [x] D1 worker syncing from external — intake.sh test: /clonepool + /custody + /glossary all OK
 - [ ] Helix 300k+ ops/sec benchmark on external (kernel running, benchmark not yet run)
 
-### Phase 4 — Sector 2 (Package handler + clone pool)
+### Phase 4 — Sector 2 (Package handler + clone pool) ✅ COMPLETE
 - [x] sector2/package-handler/ — intake.sh, worker, wrangler in repo
 - [x] config_centralizer.py in sector2/
 - [x] packages-worker deployed and healthy (D1 syncing, 48 tables)
 - [x] bin/lol in repo, intake wrapper installed by bootstrap.sh
-- [ ] intake.sh operational on external drive
-- [ ] Import method tested end-to-end on external (Frank → intake → D1)
-- [ ] Propagator confirmed in sector2/propagator/
+- [x] intake.sh operational on phoenix-ext — tested, D1 receipts confirmed
+- [x] Import method tested end-to-end (intake.sh → clonepool → D1: /clonepool + /custody + /glossary OK)
+- [x] Propagator confirmed in sector2/propagator/ (propagator.py, propcoms.sh, dispatch.json)
 
 ### Phase 5 — Sector 3 (Comms/networking)
 - [ ] romeo.py + juliet.py + dbl_juliet.py placed
@@ -272,4 +272,4 @@ SECTOR4 security stack (guardians, honeypot, copes_runtime) — held from public
 2026-06-15 (session 2) — Node.js (v24 LTS) + wrangler (4.100.0) installed natively in WSL. packages-worker fixed + redeployed (all 12 status.sh checks green). WireGuard auto-start + passwordless sudo configured. Life First LIVE on phoenix-ext: modules 2-7 deployed, Apache+MySQL+PHP-FPM, Laurie's first response "It's 7:00 PM on Monday, June 15th." LAURIE.md written with full business roadmap. Next: Frank bridge, D1 custody for Life First interactions, rotate Claude API key.
 2026-06-16 (session 1) — Full pipeline mapped (PCS→Freewheeling→Cpt_conductor→Propcoms→coms rings→Frank→Helix). Phoenix_Universal_Kernel added as submodule (phoenix_universal_kernel/). Frank×LifeFirst bridge complete: frank_lifefirst.py (sector4/frank/) dispatches Double Helix AI packets through Frank proxy wall → Life First HTTP API → D1 custody. /lifefirst routes added to frank_http.py (port 7347). intake.py updated — description now extracted from file headers automatically (Python docstring, shell comments, JS blocks). Frank×Ollama3 test suite written (test_frank_ollama.py, 26 unit tests pass). Next: wire Frank→Universal Kernel process resolution, dedicated D1 custody table for LF interactions, rotate Claude API key.
 2026-06-16 (session 2) — HLK (Helix_lightning_kernel) added as submodule — full kernel: franken5/helixi/helixe/frank_ring/frank_spawn/process_library. UK main_kernel.py now boots HLK (CoPES substrate). FrankSpawn wired to ProcessLibrary for suit resolution. ProcessLibrary falls back to lol/clonepool when suit not on disk. Import names fixed (helixi/helixe), frank_ring syntax error fixed. Kernel confirmed OPERATIONAL on WSL (668ms boot, 20 suits, 8 channels). Kernel confirmed OPERATIONAL on phoenix-ext (668ms boot). setup_phoenix_ext.sh written — installs Prometheus, Nextcloud, phoenix-kernel.service in one sudo run. HLK repo: make private on GitHub (Settings → Make private). Next: run setup_phoenix_ext.sh on phoenix-ext, Phase 2 sector1 files, breach_coms drive map, clonepool init on external.
-2026-06-16 (session 3) — Phase 2 confirmed complete: all sector1 files verified in repo (frank3 modules, helix stack, concierge, auth, Makefiles, saddle_block). Real frank3 C modules pending disk recovery + intake. Phase 3 complete: breach_coms 4-tier vault live on phoenix-ext (sdc1=T1/492GB, sdb1=T2/1.8TB, sdc2=T3/1.4TB, sda2=T4/internal). PHOENIX_AUTH rotated + stored in ~/.phoenix.env. D1 sync confirmed from phoenix-ext — intake.sh end-to-end test passed (/clonepool + /custody + /glossary). Next: Phase 4 end-to-end import test (Frank → intake → D1 → ProcessLibrary).
+2026-06-16 (session 3) — Phase 2 confirmed complete: all sector1 files verified in repo (frank3 modules, helix stack, concierge, auth, Makefiles, saddle_block). Real frank3 C modules pending disk recovery + intake. Phase 3 complete: breach_coms 4-tier vault live on phoenix-ext (sdc1=T1/492GB, sdb1=T2/1.8TB, sdc2=T3/1.4TB, sda2=T4/internal). PHOENIX_AUTH rotated + stored in ~/.phoenix_env. D1 sync confirmed — intake.sh end-to-end test passed. CLONEPOOL_DIR + PHOENIX_AUTH wired into phoenix-kernel.service via EnvironmentFile. Phase 4 complete: propagator confirmed (propagator.py/propcoms.sh/dispatch.json), vault path + D1 auth wired to env vars. Next: Phase 5 romeo/juliet/translator placement.
