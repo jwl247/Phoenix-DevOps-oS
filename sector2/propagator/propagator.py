@@ -23,7 +23,8 @@ CATALOG_DB    = Path.home() / ".catalog" / "catalog.db"
 LOG_DIR       = Path.home() / ".unitedsys" / "logs"
 LOG_FILE      = LOG_DIR / "propagator.log"
 VERSION       = "0.1.0"
-D1_WORKER_URL = os.environ.get("D1_WORKER_URL", "")
+D1_WORKER_URL  = os.environ.get("D1_WORKER_URL", os.environ.get("PHOENIX_WORKER_URL", ""))
+PHOENIX_AUTH   = os.environ.get("PHOENIX_AUTH", "")
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
@@ -61,7 +62,8 @@ def catalog_log(db, target, signal, status, detail=""):
 
 
 def dispatch_vault(cfg, signal, db):
-    vault_path = Path(cfg.get("path", "/mnt/e/CLONEPOOL")).expanduser()
+    default = os.environ.get("CLONEPOOL_DIR", cfg.get("path", "/mnt/e/CLONEPOOL"))
+    vault_path = Path(default).expanduser()
     try:
         vault_path.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -96,8 +98,11 @@ def dispatch_d1(cfg, signal, db):
         return
     try:
         payload = json.dumps(signal).encode()
+        headers = {"Content-Type": "application/json"}
+        if PHOENIX_AUTH:
+            headers["Authorization"] = f"Bearer {PHOENIX_AUTH}"
         req = urllib.request.Request(D1_WORKER_URL, data=payload,
-            headers={"Content-Type": "application/json"}, method="POST")
+            headers=headers, method="POST")
         with urllib.request.urlopen(req, timeout=10) as resp:
             log.info(f"[d1] pushed -> {resp.status}")
             catalog_log(db, "d1", signal.get("id", "?"), "OK", str(resp.status))
