@@ -237,8 +237,8 @@ Import sequence:
 - [ ] D1 custody table dedicated to Life First interactions (currently uses shared custody table)
 
 ### Phase 6 — Apps (Entourage)
-- [ ] Glossary wired to D1
-- [ ] Desktop (shade UI, drawer filesystem)
+- [x] Glossary wired to D1 — dark cockpit UI, 135 entries, drawer/LED/copy, live at /glossary/
+- [ ] Desktop (shade UI, drawer filesystem) — needs UI/UX collaborator for 3D shell
 - [ ] Office (dual browser pane)
 - [ ] Sketchpad/Concepts
 - [ ] Music Notation Transcriber
