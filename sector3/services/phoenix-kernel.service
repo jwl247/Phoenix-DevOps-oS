@@ -1,0 +1,26 @@
+[Unit]
+Description=Phoenix Kernel — CoPES Substrate (Frank5 + HelixI/HelixE)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=PHOENIX_USER
+WorkingDirectory=PHOENIX_REPO
+Environment=PHOENIX_SECTOR1=PHOENIX_REPO/sector1
+Environment=PHOENIX_SECTOR2=PHOENIX_REPO/sector2
+Environment=PHOENIX_SECTOR3=PHOENIX_REPO/sector3
+Environment=PHOENIX_SECTOR4=PHOENIX_REPO/sector4
+Environment=PHOENIX_SUITS=PHOENIX_REPO
+Environment=PHOENIX_SHM=/tmp/phoenix_shm
+Environment=PHOENIX_AUDIT=/var/log/phoenix/audit.log
+Environment=PHOENIX_CUSTODY=/var/log/phoenix/custody.jsonl
+ExecStart=/usr/bin/python3 PHOENIX_REPO/phoenix_universal_kernel/main_kernel.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=phoenix-kernel
+
+[Install]
+WantedBy=multi-user.target

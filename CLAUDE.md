@@ -171,11 +171,13 @@ Import sequence:
 ## BUILD STATUS
 
 ### Phase 1 — External Ubuntu base (CURRENT)
-- [ ] Ubuntu Server minimal + HWE kernel on external drive
-- [ ] Prometheus installed
-- [ ] Nextcloud installed
-- [ ] PowerShell installed
+- [x] Ubuntu Server 24.04 LTS + HWE kernel (6.8.0-124-generic) on phoenix-ext
+- [ ] Prometheus installed (run: ssh phoenix-ext "sudo bash ~/phoenix-devops/deploy/setup_phoenix_ext.sh")
+- [ ] Nextcloud installed (same script)
+- [x] PowerShell 7.6.2 installed
 - [x] SSH access confirmed from WSL (key-based, phoenix-lan / phoenix-ext aliases)
+- [x] Phoenix kernel OPERATIONAL on phoenix-ext — Frank5 + 20 suits + HelixI/HelixE (668ms boot)
+- [ ] phoenix-kernel.service installed as systemd unit (same setup script)
 
 ### Phase 2 — Sector 1 (Boot/Kernel)
 - [ ] frank3_slot_a.c + frank3_slot_b.c placed in sector1/kernels/
@@ -266,4 +268,5 @@ SECTOR4 security stack (guardians, honeypot, copes_runtime) — held from public
 2026-06-13 — GitHub install complete. Phase 0 intake sweep: 87→133 packages in clonepool, all D1 synced. Canonical frank.py (688-line) + helix.py (dual-strand) placed in sector4. bootstrap.sh written. get.authenticcoder.com live as install endpoint (Cloudflare Worker custom domain). Repo made public (GPL v3). SSH key set up on WSL machine. lifefirst_modules wired as git submodule. conflict_map.py tool built — 40 duplicates mapped, decisions pending next session.
 2026-06-15 — intake.py rebuilt (unitedsys/core/, TAV address system, sidecar + D1 sync). All sector 3/4 systemd units written (18 units). install-units.sh templates username at install time. Self-hosted WireGuard mesh: WSL↔Windows handshake confirmed. bootstrap.sh fixed (pip PEP 668, submodule auth graceful skip). SSH key-based auth to phoenix-ext operational. WireGuard installed on phoenix-ext — pending final enable+handshake. Input Leap KVM config written (upgrade to Synergy Friday). Repo remote switched to SSH. All pushed to GitHub.
 2026-06-15 (session 2) — Node.js (v24 LTS) + wrangler (4.100.0) installed natively in WSL. packages-worker fixed + redeployed (all 12 status.sh checks green). WireGuard auto-start + passwordless sudo configured. Life First LIVE on phoenix-ext: modules 2-7 deployed, Apache+MySQL+PHP-FPM, Laurie's first response "It's 7:00 PM on Monday, June 15th." LAURIE.md written with full business roadmap. Next: Frank bridge, D1 custody for Life First interactions, rotate Claude API key.
-2026-06-16 — Full pipeline mapped (PCS→Freewheeling→Cpt_conductor→Propcoms→coms rings→Frank→Helix). Phoenix_Universal_Kernel added as submodule (phoenix_universal_kernel/). Frank×LifeFirst bridge complete: frank_lifefirst.py (sector4/frank/) dispatches Double Helix AI packets through Frank proxy wall → Life First HTTP API → D1 custody. /lifefirst routes added to frank_http.py (port 7347). intake.py updated — description now extracted from file headers automatically (Python docstring, shell comments, JS blocks). Frank×Ollama3 test suite written (test_frank_ollama.py, 26 unit tests pass). Next: wire Frank→Universal Kernel process resolution, dedicated D1 custody table for LF interactions, rotate Claude API key.
+2026-06-16 (session 1) — Full pipeline mapped (PCS→Freewheeling→Cpt_conductor→Propcoms→coms rings→Frank→Helix). Phoenix_Universal_Kernel added as submodule (phoenix_universal_kernel/). Frank×LifeFirst bridge complete: frank_lifefirst.py (sector4/frank/) dispatches Double Helix AI packets through Frank proxy wall → Life First HTTP API → D1 custody. /lifefirst routes added to frank_http.py (port 7347). intake.py updated — description now extracted from file headers automatically (Python docstring, shell comments, JS blocks). Frank×Ollama3 test suite written (test_frank_ollama.py, 26 unit tests pass). Next: wire Frank→Universal Kernel process resolution, dedicated D1 custody table for LF interactions, rotate Claude API key.
+2026-06-16 (session 2) — HLK (Helix_lightning_kernel) added as submodule — full kernel: franken5/helixi/helixe/frank_ring/frank_spawn/process_library. UK main_kernel.py now boots HLK (CoPES substrate). FrankSpawn wired to ProcessLibrary for suit resolution. ProcessLibrary falls back to lol/clonepool when suit not on disk. Import names fixed (helixi/helixe), frank_ring syntax error fixed. Kernel confirmed OPERATIONAL on WSL (668ms boot, 20 suits, 8 channels). Kernel confirmed OPERATIONAL on phoenix-ext (668ms boot). setup_phoenix_ext.sh written — installs Prometheus, Nextcloud, phoenix-kernel.service in one sudo run. HLK repo: make private on GitHub (Settings → Make private). Next: run setup_phoenix_ext.sh on phoenix-ext, Phase 2 sector1 files, breach_coms drive map, clonepool init on external.
