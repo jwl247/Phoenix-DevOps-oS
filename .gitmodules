@@ -1,3 +1,6 @@
 [submodule "lifefirst_modules"]
 	path = lifefirst_modules
 	url = git@github.com:jwl247/lifefirst_modules
+[submodule "phoenix_universal_kernel"]
+	path = phoenix_universal_kernel
+	url = git@github.com:jwl247/Phoenix_Universal_Kernel.git
