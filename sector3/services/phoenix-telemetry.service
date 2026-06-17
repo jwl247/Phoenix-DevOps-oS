@@ -1,0 +1,22 @@
+[Unit]
+Description=Phoenix Telemetry Server — HUD + Desktop data feed
+After=network.target phoenix-kernel.service
+Wants=phoenix-kernel.service
+
+[Service]
+Type=simple
+User=PHOENIX_USER
+WorkingDirectory=PHOENIX_REPO/sector4/telemetry
+EnvironmentFile=-/home/PHOENIX_USER/.phoenix_env
+Environment=TELEMETRY_PORT=7899
+Environment=CLONEPOOL_DIR=/breach_coms4/clonepool
+Environment=PHOENIX_SHM=/tmp/phoenix_shm
+ExecStart=/usr/bin/python3 PHOENIX_REPO/sector4/telemetry/telemetry_server.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=phoenix-telemetry
+
+[Install]
+WantedBy=multi-user.target

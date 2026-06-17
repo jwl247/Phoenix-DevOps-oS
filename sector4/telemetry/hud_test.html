@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<!-- Phoenix HUD Test Feed — connect to telemetry server and verify data -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Phoenix // HUD Feed Test</title>
+<style>
+:root{--bg:#080b0e;--panel:#0d1117;--border:#1a2535;--accent:#00ff88;--text:#c8d8e8;--muted:#4a5a6a;--red:#ff3344;--amber:#ffaa00;--font:'Courier New',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:12px;padding:16px}
+h1{color:var(--accent);letter-spacing:3px;font-size:13px;margin-bottom:4px}
+.sub{color:var(--muted);letter-spacing:1px;font-size:10px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.panel{background:var(--panel);border:1px solid var(--border);padding:14px}
+.panel h2{color:var(--muted);font-size:10px;letter-spacing:2px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #0d1117}
+.row:last-child{border:none}
+.key{color:var(--muted)}
+.val{color:var(--text)}
+.val.green{color:var(--accent)}
+.val.red{color:var(--red)}
+.val.amber{color:var(--amber)}
+.bar-wrap{height:4px;background:var(--border);margin-top:6px;margin-bottom:10px}
+.bar{height:4px;background:var(--accent);transition:width .5s}
+.bar.hot{background:var(--red)}
+.status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+.dot-green{background:var(--accent);box-shadow:0 0 5px var(--accent)}
+.dot-red{background:var(--red)}
+.dot-amber{background:var(--amber)}
+.channels{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.ch{padding:3px 8px;border:1px solid var(--border);font-size:11px;color:var(--muted)}
+.ch.up{border-color:var(--accent);color:var(--accent)}
+.log{background:#050708;border:1px solid var(--border);padding:10px;height:120px;overflow-y:auto;font-size:11px;color:var(--muted);margin-top:12px}
+.log p{padding:1px 0}
+.conn-bar{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--border);margin-bottom:12px}
+input{background:#050708;border:1px solid var(--border);color:var(--text);padding:5px 10px;font-family:var(--font);font-size:12px;width:260px;outline:none}
+input:focus{border-color:var(--accent)}
+button{background:transparent;border:1px solid var(--accent);color:var(--accent);padding:5px 14px;font-family:var(--font);font-size:11px;cursor:pointer;letter-spacing:1px}
+button:hover{background:var(--accent);color:#000}
+#ts{color:var(--muted);font-size:10px;margin-left:auto}
+</style>
+</head>
+<body>
+<h1>PHOENIX // HUD TELEMETRY FEED</h1>
+<div class="sub">LIVE DATA TEST — connects to telemetry_server.py on port 7899</div>
+
+<div class="conn-bar">
+  <input id="url" value="ws://192.168.1.133:7899" placeholder="ws://phoenix-ext:7899">
+  <button onclick="connect()">CONNECT</button>
+  <span id="conn-status" style="color:var(--red)">DISCONNECTED</span>
+  <span id="ts"></span>
+</div>
+
+<div class="grid">
+
+<div class="panel">
+  <h2>KERNEL — FRANK5 / HELIX</h2>
+  <div class="row"><span class="key">STATUS</span><span class="val" id="k-status">—</span></div>
+  <div class="row"><span class="key">VERSION</span><span class="val" id="k-ver">—</span></div>
+  <div class="row"><span class="key">UPTIME</span><span class="val" id="k-uptime">—</span></div>
+  <div class="row"><span class="key">CHANNELS UP</span><span class="val" id="k-ch">—</span></div>
+  <div style="margin-top:8px;color:var(--muted);font-size:10px;letter-spacing:1px">HELIX-I (INTAKE)</div>
+  <div class="channels" id="helix-i"></div>
+  <div style="margin-top:6px;color:var(--muted);font-size:10px;letter-spacing:1px">HELIX-E (OUTPUT)</div>
+  <div class="channels" id="helix-e"></div>
+</div>
+
+<div class="panel">
+  <h2>SYSTEM</h2>
+  <div class="row"><span class="key">CPU</span><span class="val" id="sys-cpu">—</span></div>
+  <div class="bar-wrap"><div class="bar" id="cpu-bar" style="width:0%"></div></div>
+  <div class="row"><span class="key">RAM</span><span class="val" id="sys-ram">—</span></div>
+  <div class="bar-wrap"><div class="bar" id="ram-bar" style="width:0%"></div></div>
+  <div class="row"><span class="key">DISK /</span><span class="val" id="sys-disk">—</span></div>
+  <div class="bar-wrap"><div class="bar" id="disk-bar" style="width:0%"></div></div>
+</div>
+
+<div class="panel">
+  <h2>BREACH_COMS — 4-TIER VAULT</h2>
+  <div class="row"><span class="key">T1 PRIMARY</span><span class="val" id="t1">—</span></div>
+  <div class="row"><span class="key">T2 SECONDARY</span><span class="val" id="t2">—</span></div>
+  <div class="row"><span class="key">T3 TERTIARY</span><span class="val" id="t3">—</span></div>
+  <div class="row"><span class="key">T4 INTERNAL</span><span class="val" id="t4">—</span></div>
+</div>
+
+<div class="panel">
+  <h2>CLONEPOOL</h2>
+  <div class="row"><span class="key">ENTRIES</span><span class="val green" id="cp-entries">—</span></div>
+  <div class="row"><span class="key">PATH</span><span class="val" id="cp-path" style="font-size:10px">—</span></div>
+  <div class="row"><span class="key">REACHABLE</span><span class="val" id="cp-ok">—</span></div>
+</div>
+
+<div class="panel">
+  <h2>WIREGUARD MESH</h2>
+  <div class="row"><span class="key">PEERS</span><span class="val" id="wg-peers">—</span></div>
+  <div class="row"><span class="key">HANDSHAKES</span><span class="val green" id="wg-hs">—</span></div>
+</div>
+
+<div class="panel">
+  <h2>DRAWERS — FILESYSTEM</h2>
+  <div id="drawers-list"></div>
+</div>
+
+</div>
+
+<div class="log" id="log"><p style="color:var(--muted)">// waiting for connection...</p></div>
+
+<script>
+let ws, ping;
+function log(msg, color) {
+  const l = document.getElementById('log');
+  const p = document.createElement('p');
+  p.style.color = color || '';
+  p.textContent = new Date().toISOString().slice(11,19) + ' ' + msg;
+  l.appendChild(p);
+  l.scrollTop = l.scrollHeight;
+  if (l.children.length > 80) l.removeChild(l.firstChild);
+}
+function connect() {
+  if (ws) ws.close();
+  const url = document.getElementById('url').value;
+  log('connecting to ' + url + '...');
+  ws = new WebSocket(url);
+  ws.onopen = () => {
+    document.getElementById('conn-status').textContent = 'CONNECTED';
+    document.getElementById('conn-status').style.color = 'var(--accent)';
+    log('connected', 'var(--accent)');
+    ping = setInterval(() => ws.readyState === 1 && ws.send(JSON.stringify({op:'ping'})), 10000);
+  };
+  ws.onclose = () => {
+    document.getElementById('conn-status').textContent = 'DISCONNECTED';
+    document.getElementById('conn-status').style.color = 'var(--red)';
+    clearInterval(ping);
+    log('disconnected', 'var(--red)');
+  };
+  ws.onerror = e => log('error: ' + e.message, 'var(--red)');
+  ws.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.op) { log('← op:' + d.op); return; }
+    update(d);
+  };
+}
+function uptime(s) {
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  return (h?h+'h ':'') + (m?m+'m ':'') + sec+'s';
+}
+function bar(id, pct) {
+  const el = document.getElementById(id);
+  el.style.width = pct + '%';
+  el.className = 'bar' + (pct > 80 ? ' hot' : '');
+}
+function update(d) {
+  document.getElementById('ts').textContent = d.ts?.slice(11,19) + ' UTC';
+  // Kernel
+  const k = d.kernel || {};
+  const kst = document.getElementById('k-status');
+  kst.innerHTML = `<span class="status-dot ${k.status==='operational'?'dot-green':'dot-amber'}"></span>${(k.status||'—').toUpperCase()}`;
+  document.getElementById('k-ver').textContent    = k.frank_version || '—';
+  document.getElementById('k-uptime').textContent = uptime(k.uptime_s || 0);
+  document.getElementById('k-ch').textContent     = k.channels_up + '/8';
+  const chi = document.getElementById('helix-i');
+  const che = document.getElementById('helix-e');
+  chi.innerHTML = [7701,7702,7703,7704].map(p=>`<span class="ch ${(k.helix_i||[]).includes(p)?'up':''}">${p}</span>`).join('');
+  che.innerHTML = [7805,7806,7807,7808].map(p=>`<span class="ch ${(k.helix_e||[]).includes(p)?'up':''}">${p}</span>`).join('');
+  // System
+  const s = d.system || {};
+  document.getElementById('sys-cpu').textContent  = (s.cpu_pct||0) + '%';
+  document.getElementById('sys-ram').textContent  = (s.ram_used_gb||0) + ' / ' + (s.ram_total_gb||0) + ' GB';
+  document.getElementById('sys-disk').textContent = (s.disk_pct||0) + '% used — ' + (s.disk_free_gb||0) + ' GB free';
+  bar('cpu-bar', s.cpu_pct||0); bar('ram-bar', s.ram_pct||0); bar('disk-bar', s.disk_pct||0);
+  // breach_coms
+  const bc = d.breach_coms || {};
+  ['t1','t2','t3','t4'].forEach(t => {
+    const el = document.getElementById(t);
+    const tier = bc[t] || {};
+    if (tier.mounted === false) { el.textContent = 'NOT MOUNTED'; el.className='val red'; return; }
+    el.textContent = tier.mounted !== false ? (tier.free_gb||0) + ' GB free (' + (tier.pct||0) + '% used)' : '—';
+    el.className = 'val green';
+  });
+  // Clonepool
+  const cp = d.clonepool || {};
+  document.getElementById('cp-entries').textContent = cp.entries ?? '—';
+  document.getElementById('cp-path').textContent    = cp.path || '—';
+  document.getElementById('cp-ok').textContent      = cp.reachable ? 'YES' : 'NO';
+  document.getElementById('cp-ok').className        = 'val ' + (cp.reachable ? 'green' : 'red');
+  // WireGuard
+  const wg = d.wg || {};
+  document.getElementById('wg-peers').textContent = wg.peers ?? '—';
+  document.getElementById('wg-hs').textContent    = wg.handshakes ?? '—';
+  // Drawers
+  const dr = d.drawers || {};
+  document.getElementById('drawers-list').innerHTML = Object.entries(dr).map(([id,info]) =>
+    `<div class="row"><span class="key">${id}${id==='RUN'?' ⚡':''}</span>` +
+    `<span class="val" style="font-size:10px">${(info.path||'').split('/').pop() || info.path} (${info.count||0})</span></div>`
+  ).join('');
+}
+</script>
+</body>
+</html>
