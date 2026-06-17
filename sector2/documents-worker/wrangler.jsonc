@@ -1,0 +1,46 @@
+{
+  // documents-worker — Phoenix DevOps OS
+  // Document intake, storage, retrieval, conversion, compliance audit
+  // UnitedSys — United Systems | jwl247
+  //
+  // First deploy:
+  //   wrangler r2 bucket create phoenix-docs
+  //   wrangler d1 execute phoenix_dev_db --remote --file=schema.sql
+  //   wrangler secret put PHOENIX_AUTH
+  //   wrangler secret put OWNER_TOKENS   (JSON: {"laurie":"<token>","jwl247":"<token>"})
+  //   wrangler deploy
+  //
+  // Custom domain (optional):
+  //   Add to routes below: { "pattern": "docs.authenticcoder.com", "custom_domain": true }
+  //
+  // Tail logs:  wrangler tail
+  // Local dev:  wrangler dev
+
+  "name": "documents-worker",
+  "main": "index.js",
+  "compatibility_date": "2025-01-01",
+  "workers_dev": true,
+
+  // ── D1 — shared backbone database ─────────────────────────────────────────
+  "d1_databases": [
+    {
+      "binding":       "PHOENIX_DB",
+      "database_name": "phoenix_dev_db",
+      "database_id":   "27958687-4349-47ed-8b6a-dbc4ab29730f"
+    }
+  ],
+
+  // ── R2 — immutable document blob storage ──────────────────────────────────
+  // Create: wrangler r2 bucket create phoenix-docs
+  "r2_buckets": [
+    {
+      "binding":     "DOCS_BUCKET",
+      "bucket_name": "phoenix-docs"
+    }
+  ]
+
+  // ── Secrets (never put values here) ───────────────────────────────────────
+  // PHOENIX_AUTH   — system-level write token (intake, lock, convert)
+  // OWNER_TOKENS   — JSON map: {"laurie":"tok_xxx","jwl247":"tok_yyy"}
+  //                  used for owner-private document access
+}
