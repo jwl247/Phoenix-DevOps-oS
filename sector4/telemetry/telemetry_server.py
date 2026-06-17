@@ -54,12 +54,32 @@ KERNEL_SHM   = Path(os.environ.get("PHOENIX_SHM", "/tmp/phoenix_shm"))
 KERNEL_START = time.time()
 
 # Drawer assignments: key = drawer ID, value = directory path
+# 30 slots — A-Z + D1-D4 + RUN. Assign at runtime via {"op":"assign","drawer":"X","path":"..."}
+_home = str(Path.home())
 DRAWER_ASSIGNMENTS: dict[str, str] = {
-    "A": str(Path.home() / "phoenix-devops"),
-    "B": str(CLONEPOOL),
-    "C": "/var/log/phoenix",
-    "D": str(Path.home() / "Phoenix"),
+    # Pre-assigned Phoenix core dirs
+    "A":   str(Path.home() / "phoenix-devops"),
+    "B":   str(CLONEPOOL),
+    "C":   "/var/log/phoenix",
+    "D":   str(Path.home() / "Phoenix"),
+    "E":   "/breach_coms4",
+    "F":   "/breach_coms3",
+    "G":   "/breach_coms2",
+    "H":   "/breach_coms1",
+    "I":   str(Path.home() / "phoenix-devops/sector1"),
+    "J":   str(Path.home() / "phoenix-devops/sector2"),
+    "K":   str(Path.home() / "phoenix-devops/sector3"),
+    "L":   str(Path.home() / "phoenix-devops/sector4"),
+    "M":   str(Path.home() / "phoenix-devops/sector2/glossary"),
+    "N":   str(Path.home() / "phoenix-devops/sector2/review-platform"),
+    "O":   str(Path.home() / "phoenix-devops/helix_lightning_kernel"),
+    "P":   str(Path.home() / "phoenix-devops/phoenix_universal_kernel"),
     "RUN": "/tmp/phoenix_run",
+    # Open slots — assign via op:assign
+    "Q":  _home, "R":  _home, "S":  _home, "T":  _home,
+    "U":  _home, "V":  _home, "W":  _home, "X":  _home,
+    "Y":  _home, "Z":  _home,
+    "D1": _home, "D2": _home, "D3": _home, "D4": _home,
 }
 
 RUN_ALLOWED  = {".py", ".sh", ".js", ".bash"}
@@ -145,23 +165,26 @@ def collect_wg() -> dict:
         return {"peers": 0, "handshakes": 0, "raw": ""}
 
 def collect_drawers() -> dict:
+    """Broadcast metadata only — count + path, no file listings.
+    Full directory contents load on-demand via {"op":"ls","path":"..."}.
+    Scales to 30+ drawers with no broadcast overhead."""
     out = {}
     for drawer_id, path in DRAWER_ASSIGNMENTS.items():
         p = Path(path)
         if p.exists():
             try:
-                items = sorted(p.iterdir(), key=lambda x: (x.is_file(), x.name.lower()))
+                count = sum(1 for _ in p.iterdir())
                 out[drawer_id] = {
                     "path":    path,
-                    "items":   [{"name": i.name, "type": "dir" if i.is_dir() else "file",
-                                 "size": i.stat().st_size if i.is_file() else None}
-                                for i in items[:50]],
-                    "count":   len(list(p.iterdir())),
+                    "label":   p.name or path,
+                    "count":   count,
+                    "mounted": True,
+                    "run_it":  drawer_id == "RUN",
                 }
             except PermissionError:
-                out[drawer_id] = {"path": path, "items": [], "count": 0, "error": "permission denied"}
+                out[drawer_id] = {"path": path, "label": Path(path).name, "count": 0, "mounted": True, "error": "permission denied"}
         else:
-            out[drawer_id] = {"path": path, "items": [], "count": 0, "mounted": False}
+            out[drawer_id] = {"path": path, "label": Path(path).name, "count": 0, "mounted": False, "run_it": drawer_id == "RUN"}
     return out
 
 def build_frame() -> dict:
