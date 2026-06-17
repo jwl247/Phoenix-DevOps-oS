@@ -233,16 +233,20 @@ Import sequence:
 - [x] Frank bridge: frank_lifefirst.py (sector4/frank/) — dispatch packets to Life First HTTP
 - [x] /lifefirst routes added to frank_http.py (port 7347)
 - [x] D1 custody logging wired into frank_lifefirst.py dispatch cycle
+- [x] Ollama primary AI wired: callOllama() in config.php, Module 7 uses llama3.1 first, Claude fallback
+- [x] MODEL_LIFEFIRST = llama3.1 (dedicated, never shared) — dispatch_lifefirst() in frank_ollama_bridge.py
 - [ ] Rotate Claude API key
 - [ ] D1 custody table dedicated to Life First interactions (currently uses shared custody table)
+- [ ] Pre-warm llama3.1 on boot via Frank PCS (eliminates 60s cold-start on first Laurie message)
 
 ### Phase 6 — Apps (Entourage)
 - [x] Glossary wired to D1 — dark cockpit UI, 135 entries, drawer/LED/copy, live at /glossary/
+- [x] Review Platform — general peer review, immutable D1, 6 submission types, auto-promote at 2 votes, live at /review/
+- [x] Operator Manual — 13-section interactive web manual, dark cockpit, copy buttons, live at /manual/
 - [ ] Desktop (shade UI, drawer filesystem) — needs UI/UX collaborator for 3D shell
 - [ ] Office (dual browser pane)
 - [ ] Sketchpad/Concepts
 - [ ] Music Notation Transcriber
-- [ ] Review Platform
 
 ### Phase 7 — GRUB + polish
 - [ ] Custom Phoenix GRUB theme
@@ -265,6 +269,16 @@ Repos to eventually archive (NOT delete): CoPES, Helix_lightning_kernel, uniteds
 Phoenix_Universal_Kernel — added as submodule (phoenix_universal_kernel/). No longer needs separate archiving.
 SECTOR4 security stack (guardians, honeypot, copes_runtime) — held from public GitHub pending Jerry's go-ahead.
 
+## OLLAMA AI STACK
+- **llama3.1** (4.9GB) — Laurie / Life First — dedicated, never shared
+- **llama3.2:3b** (2.0GB) — kernel/code fast path (routes on keywords)
+- **deepseek-r1:1.5b** (1.1GB) — reasoning, shows chain of thought
+- **phi3.5** (pending pull) — chat/conversational desktop AI
+- qwen2.5 — BANNED (dishonest about task completion, removed)
+- Benchmark (Jun 16): llama3.2:3b warm = 6.1 tok/s, avg 4.1 tok/s (CPU-only)
+- Cold start penalty: ~60s first call (model load). Pre-warm via Frank PCS = next priority.
+- Life First fallback: if Ollama unreachable → Claude API (automatic, transparent)
+
 ## SESSION LOG
 <!-- Claude appends a one-line note here at end of every session -->
 <!-- Format: YYYY-MM-DD — what was done -->
@@ -275,3 +289,4 @@ SECTOR4 security stack (guardians, honeypot, copes_runtime) — held from public
 2026-06-16 (session 1) — Full pipeline mapped (PCS→Freewheeling→Cpt_conductor→Propcoms→coms rings→Frank→Helix). Phoenix_Universal_Kernel added as submodule (phoenix_universal_kernel/). Frank×LifeFirst bridge complete: frank_lifefirst.py (sector4/frank/) dispatches Double Helix AI packets through Frank proxy wall → Life First HTTP API → D1 custody. /lifefirst routes added to frank_http.py (port 7347). intake.py updated — description now extracted from file headers automatically (Python docstring, shell comments, JS blocks). Frank×Ollama3 test suite written (test_frank_ollama.py, 26 unit tests pass). Next: wire Frank→Universal Kernel process resolution, dedicated D1 custody table for LF interactions, rotate Claude API key.
 2026-06-16 (session 2) — HLK (Helix_lightning_kernel) added as submodule — full kernel: franken5/helixi/helixe/frank_ring/frank_spawn/process_library. UK main_kernel.py now boots HLK (CoPES substrate). FrankSpawn wired to ProcessLibrary for suit resolution. ProcessLibrary falls back to lol/clonepool when suit not on disk. Import names fixed (helixi/helixe), frank_ring syntax error fixed. Kernel confirmed OPERATIONAL on WSL (668ms boot, 20 suits, 8 channels). Kernel confirmed OPERATIONAL on phoenix-ext (668ms boot). setup_phoenix_ext.sh written — installs Prometheus, Nextcloud, phoenix-kernel.service in one sudo run. HLK repo: make private on GitHub (Settings → Make private). Next: run setup_phoenix_ext.sh on phoenix-ext, Phase 2 sector1 files, breach_coms drive map, clonepool init on external.
 2026-06-16 (session 3) — Phases 2-5 all complete. breach_coms 4-tier vault live. PHOENIX_AUTH rotated + wired to kernel service. D1 sync confirmed end-to-end. Propagator wired. WireGuard mesh fully handshaking — all 3 nodes (Windows hub 10.77.0.1, WSL 10.77.0.2, phoenix-ext 10.77.0.3) peered Now. windows_concierge.py recovered from Phone Link backup + committed. WSL wg0.conf installed to /etc/wireguard/wg0.conf. Next: Phase 6 Apps (Glossary → D1, Desktop HUD, Office, Sketchpad, Music Notation, Review Platform).
+2026-06-16 (session 4) — Ollama installed on phoenix-ext. Models: llama3.1 (4.9GB, Life First/Laurie dedicated), llama3.2:3b, deepseek-r1:1.5b live. phi3.5 pending pull. frank_ollama_bridge.py complete: MODEL_LIFEFIRST, dispatch_lifefirst(), LIFEFIRST_SYSTEM prompt, benchmark CLI. Benchmark: llama3.2:3b warm=6.1 tok/s, avg 4.1 tok/s CPU-only. Life First Module 7 + config.php updated: callOllama() primary, Claude API fallback. Review Platform live at /review/ (immutable D1, 6 types, auto-approve). Operator Manual live at /manual/ (13 sections, dark cockpit, interactive). Next: pull phi3.5, pre-warm llama3.1 on boot, desktop temp shell, rotate Claude API key.
