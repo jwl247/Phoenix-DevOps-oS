@@ -16,11 +16,13 @@ systemctl start ollama
 sleep 3
 
 echo "[ollama] Pulling models..."
-# Primary: llama3.2:3b — Meta, honest about uncertainty, strong on kernel/code
+# Life First (Laurie) — dedicated, never shared with desktop pool
+sudo -u "$REAL_USER" ollama pull llama3.1:8b
+# Kernel/code fast path
 sudo -u "$REAL_USER" ollama pull llama3.2:3b
-# Chat: phi3.5:mini — Microsoft, conversational, honest, efficient
+# Chat/conversational
 sudo -u "$REAL_USER" ollama pull phi3.5:mini
-# Reasoning: deepseek-r1:1.5b — shows chain of thought, transparent by design
+# Reasoning — shows chain of thought
 sudo -u "$REAL_USER" ollama pull deepseek-r1:1.5b
 
 echo ""
