@@ -23,8 +23,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 OLLAMA_URL  = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-MODEL_FAST  = os.environ.get("OLLAMA_MODEL_FAST",    "qwen2.5:3b")
-MODEL_CHAT  = os.environ.get("OLLAMA_MODEL_CHAT",    "phi3.5:mini")
+MODEL_FAST   = os.environ.get("OLLAMA_MODEL_FAST",   "llama3.2:3b")
+MODEL_CHAT   = os.environ.get("OLLAMA_MODEL_CHAT",   "phi3.5:mini")
+MODEL_REASON = os.environ.get("OLLAMA_MODEL_REASON", "deepseek-r1:1.5b")
 FRANK_URL   = os.environ.get("FRANK_HTTP_URL",        "http://localhost:7347")
 AUDIT_LOG   = Path(os.environ.get("PHOENIX_AUDIT",   "/var/log/phoenix/audit.log"))
 
@@ -132,11 +133,11 @@ def _audit(packet: dict, result: dict):
 # ── Benchmark ─────────────────────────────────────────────────────────────────
 
 BENCH_PROMPTS = [
-    ("kernel",   MODEL_FAST,  "Explain in one sentence what Frank5's role is in the Phoenix kernel."),
-    ("code",     MODEL_FAST,  "Write a Python one-liner to count files in a directory."),
-    ("reasoning",MODEL_FAST,  "If breach_coms4 is T1 PRIMARY and it fills up, what's the failover path?"),
-    ("chat",     MODEL_CHAT,  "What is Phoenix DevOps OS in plain English?"),
-    ("creative", MODEL_CHAT,  "Describe the Phoenix desktop HUD in two sentences as if pitching it to a designer."),
+    ("kernel",   MODEL_FAST,   "Explain in one sentence what Frank5's role is in the Phoenix kernel."),
+    ("code",     MODEL_FAST,   "Write a Python one-liner to count files in a directory."),
+    ("honest",   MODEL_FAST,   "What tasks can you NOT reliably help with as a local AI assistant?"),
+    ("chat",     MODEL_CHAT,   "What is Phoenix DevOps OS in plain English?"),
+    ("reasoning",MODEL_REASON, "If breach_coms4 is T1 PRIMARY and it fills up, what is the failover path? Think step by step."),
 ]
 
 def benchmark():
