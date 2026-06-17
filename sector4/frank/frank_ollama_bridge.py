@@ -5,9 +5,10 @@ Routes AI dispatch packets through Frank proxy wall → Ollama local LLM.
 Self-hosted, zero API cost, no data leaves phoenix-ext.
 
 Routing logic:
-  - kernel / system / code queries → qwen2.5:3b  (fast, strong reasoning)
+  - Life First (Laurie)            → llama3.1:8b  (dedicated, never shared)
+  - kernel / system / code queries → llama3.2:3b  (fast)
   - creative / general / chat      → phi3.5:mini  (conversational)
-  - fallback                       → qwen2.5:3b
+  - reasoning                      → deepseek-r1:1.5b (shows chain of thought)
 
 Phoenix DevOps OS | jwl247 | GPL v3
 """
@@ -23,9 +24,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 OLLAMA_URL  = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-MODEL_FAST   = os.environ.get("OLLAMA_MODEL_FAST",   "llama3.2:3b")
-MODEL_CHAT   = os.environ.get("OLLAMA_MODEL_CHAT",   "phi3.5:mini")
-MODEL_REASON = os.environ.get("OLLAMA_MODEL_REASON", "deepseek-r1:1.5b")
+MODEL_LIFEFIRST = os.environ.get("OLLAMA_MODEL_LIFEFIRST", "llama3.1:8b")   # Laurie — dedicated, never shared
+MODEL_FAST      = os.environ.get("OLLAMA_MODEL_FAST",      "llama3.2:3b")   # kernel/code fast path
+MODEL_CHAT      = os.environ.get("OLLAMA_MODEL_CHAT",      "phi3.5:mini")   # desktop chat
+MODEL_REASON    = os.environ.get("OLLAMA_MODEL_REASON",    "deepseek-r1:1.5b")  # reasoning, shows work
 FRANK_URL   = os.environ.get("FRANK_HTTP_URL",        "http://localhost:7347")
 AUDIT_LOG   = Path(os.environ.get("PHOENIX_AUDIT",   "/var/log/phoenix/audit.log"))
 
@@ -98,7 +100,23 @@ def route_model(prompt: str) -> str:
     return MODEL_FAST if words & KERNEL_KEYWORDS else MODEL_CHAT
 
 
+LIFEFIRST_SYSTEM = """You are Laurie's personal AI assistant inside Phoenix DevOps OS.
+Laurie is high-functioning autistic. Be clear, literal, and consistent.
+Never be vague. Never assume — ask if unclear. Keep responses concise.
+If you don't know something, say so plainly. Never guess and present it as fact.
+You help with daily tasks, scheduling, information, and conversation."""
+
+
 # ── Frank dispatch interface ──────────────────────────────────────────────────
+
+def dispatch_lifefirst(prompt: str, context: dict | None = None) -> dict:
+    """Dedicated Life First dispatch — always uses llama3.1:8b, never shared."""
+    system = context.get("system", LIFEFIRST_SYSTEM) if context else LIFEFIRST_SYSTEM
+    result = ollama_generate(prompt, MODEL_LIFEFIRST, system)
+    result["channel"] = "lifefirst"
+    result["routed_to"] = MODEL_LIFEFIRST
+    _audit({"payload": prompt, "id": "lifefirst"}, result)
+    return result
 
 def dispatch(packet: dict) -> dict:
     prompt   = packet.get("payload", packet.get("prompt", ""))
