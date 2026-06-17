@@ -19,7 +19,7 @@ import ctypes
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, Optional
 import logging
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -67,15 +67,15 @@ class WindowsSystemMonitor:
     def get_memory_status(self):
         class MEMORYSTATUSEX(ctypes.Structure):
             _fields_ = [
-                ("dwLength",                ctypes.c_ulong),
-                ("dwMemoryLoad",            ctypes.c_ulong),
-                ("ullTotalPhys",            ctypes.c_ulonglong),
-                ("ullAvailPhys",            ctypes.c_ulonglong),
-                ("ullTotalPageFile",        ctypes.c_ulonglong),
-                ("ullAvailPageFile",        ctypes.c_ulonglong),
-                ("ullTotalVirtual",         ctypes.c_ulonglong),
-                ("ullAvailVirtual",         ctypes.c_ulonglong),
-                ("sullAvailExtendedVirtual",ctypes.c_ulonglong),
+                ("dwLength",                 ctypes.c_ulong),
+                ("dwMemoryLoad",             ctypes.c_ulong),
+                ("ullTotalPhys",             ctypes.c_ulonglong),
+                ("ullAvailPhys",             ctypes.c_ulonglong),
+                ("ullTotalPageFile",         ctypes.c_ulonglong),
+                ("ullAvailPageFile",         ctypes.c_ulonglong),
+                ("ullTotalVirtual",          ctypes.c_ulonglong),
+                ("ullAvailVirtual",          ctypes.c_ulonglong),
+                ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
             ]
         stat = MEMORYSTATUSEX()
         stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
@@ -85,13 +85,12 @@ class WindowsSystemMonitor:
     def virtual_memory(self):
         stat = self.get_memory_status()
         class MemInfo:
-            pass
-        m = MemInfo()
-        m.total     = stat.ullTotalPhys
-        m.available = stat.ullAvailPhys
-        m.used      = stat.ullTotalPhys - stat.ullAvailPhys
-        m.percent   = stat.dwMemoryLoad
-        return m
+            def __init__(self):
+                self.total     = stat.ullTotalPhys
+                self.available = stat.ullAvailPhys
+                self.used      = stat.ullTotalPhys - stat.ullAvailPhys
+                self.percent   = stat.dwMemoryLoad
+        return MemInfo()
 
     def swap_memory(self):
         stat  = self.get_memory_status()
@@ -99,13 +98,12 @@ class WindowsSystemMonitor:
         avail = stat.ullAvailPageFile
         used  = total - avail if total > 0 else 0
         class SwapInfo:
-            pass
-        s = SwapInfo()
-        s.total   = total
-        s.used    = used
-        s.free    = avail
-        s.percent = (used / total * 100) if total > 0 else 0
-        return s
+            def __init__(self):
+                self.total   = total
+                self.used    = used
+                self.free    = avail
+                self.percent = (used / total * 100) if total > 0 else 0
+        return SwapInfo()
 
     def cpu_percent(self, interval=1):
         try:
@@ -118,7 +116,7 @@ class WindowsSystemMonitor:
             return 0.0
 
     def get_cpu_temperature(self):
-        return None  # requires OpenHardwareMonitor
+        return None  # requires OpenHardwareMonitor or similar
 
     def get_disk_temperature(self):
         return None
@@ -145,35 +143,76 @@ class WindowsPagefileManager:
             return 0
 
     def set_pagefile_size(self, size_gb: float) -> bool:
+        """Configure pagefile InitialSize and MaximumSize (fixed size).
+        Uses robust WMI via PowerShell with proper error handling.
+        NOTE: Changes require a reboot to take full effect.
+        """
         try:
-            size_mb = int(size_gb * 1024)
-            ps = f"""
-$cs = Get-WmiObject Win32_ComputerSystem -EnableAllPrivileges
-$cs.AutomaticManagedPagefile = $false
-$cs.Put()
-$pf = Get-WmiObject Win32_PageFileSetting -Filter "SettingID='pagefile.sys @ {self.config.pagefile_drive}'"
-if ($pf) {{
-    $pf.InitialSize = {size_mb}
-    $pf.MaximumSize = {size_mb}
-    $pf.Put()
-}} else {{
-    $pf = ([WMIClass]"Win32_PageFileSetting").CreateInstance()
-    $pf.Name = "{self.config.pagefile_drive}\\pagefile.sys"
-    $pf.InitialSize = {size_mb}
-    $pf.MaximumSize = {size_mb}
-    $pf.Put()
+            size_mb     = int(size_gb * 1024)
+            drive       = self.config.pagefile_drive.rstrip(":\\")
+            pf_path     = f"{drive}:\\pagefile.sys"
+
+            ps_script = f"""
+$ErrorActionPreference = 'Stop'
+try {{
+    $cs = Get-WmiObject Win32_ComputerSystem -EnableAllPrivileges
+    if ($cs.AutomaticManagedPagefile) {{
+        $cs.AutomaticManagedPagefile = $false
+        [void]$cs.Put()
+        Write-Host "Disabled automatic pagefile management."
+    }}
+
+    $filter = "Name='{pf_path}'"
+    $pf = Get-WmiObject Win32_PageFileSetting -Filter $filter
+
+    if ($pf) {{
+        $pf.InitialSize = {size_mb}
+        $pf.MaximumSize = {size_mb}
+        [void]$pf.Put()
+        Write-Host "SUCCESS: Updated existing pagefile to {size_mb} MB fixed size."
+    }} else {{
+        $pf = ([wmiclass]"Win32_PageFileSetting").CreateInstance()
+        $pf.Name = "{pf_path}"
+        $pf.InitialSize = {size_mb}
+        $pf.MaximumSize = {size_mb}
+        [void]$pf.Put()
+        Write-Host "SUCCESS: Created new pagefile setting for {size_mb} MB."
+    }}
+
+    Write-Host "Pagefile target configured to {size_gb:.2f} GB. REBOOT REQUIRED."
+    exit 0
+}} catch {{
+    Write-Error "ERROR: $($_.Exception.Message)"
+    exit 1
 }}
 """
-            r = subprocess.run(['powershell', '-Command', ps],
-                               capture_output=True, text=True, timeout=30)
+            r = subprocess.run(
+                ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps_script],
+                capture_output=True, text=True, timeout=60,
+                encoding='utf-8', errors='replace')
+
+            stdout = (r.stdout or "").strip()
+            stderr = (r.stderr or "").strip()
+
             if r.returncode == 0:
                 self.current_size_mb = size_mb
-                logging.info(f"Pagefile set to {size_gb:.2f}GB")
-                logging.warning("Restart required for changes to take full effect")
+                logging.info(f"Pagefile configured to {size_gb:.2f}GB")
+                for line in stdout.splitlines():
+                    if line.strip():
+                        logging.info(f"  PS: {line}")
+                logging.warning("REBOOT REQUIRED: pagefile changes do not take effect until restart.")
                 return True
             else:
-                logging.error(f"Failed to set pagefile: {r.stderr}")
+                logging.error(f"Failed to configure pagefile (exit {r.returncode})")
+                if stderr:
+                    logging.error(f"  PowerShell error: {stderr}")
+                if stdout:
+                    logging.error(f"  PowerShell output: {stdout}")
                 return False
+
+        except subprocess.TimeoutExpired:
+            logging.error("Pagefile configuration timed out after 60s")
+            return False
         except Exception as e:
             logging.error(f"Error setting pagefile: {e}")
             return False
@@ -239,23 +278,22 @@ class ControlSystem:
     def enable(self):
         with self.lock:
             self.state.update({'enabled': True, 'emergency_stop': False,
-                               'last_command': 'enable', 'last_command_time': datetime.now()})
-            self._save_state()
-            logging.info("ENABLED")
+                               'last_command': 'enable',
+                               'last_command_time': datetime.now()})
+            self._save_state(); logging.info("ENABLED")
 
     def disable(self):
         with self.lock:
-            self.state.update({'enabled': False,
-                               'last_command': 'disable', 'last_command_time': datetime.now()})
-            self._save_state()
-            logging.info("DISABLED")
+            self.state.update({'enabled': False, 'last_command': 'disable',
+                               'last_command_time': datetime.now()})
+            self._save_state(); logging.info("DISABLED")
 
     def emergency_stop(self):
         with self.lock:
             self.state.update({'enabled': False, 'emergency_stop': True,
-                               'last_command': 'emergency_stop', 'last_command_time': datetime.now()})
-            self._save_state()
-            logging.critical("EMERGENCY STOP")
+                               'last_command': 'emergency_stop',
+                               'last_command_time': datetime.now()})
+            self._save_state(); logging.critical("EMERGENCY STOP")
 
     def set_thermal_throttle(self, throttle: bool):
         with self.lock:
@@ -275,45 +313,6 @@ class ControlSystem:
 # DASHBOARD
 ################################################################################
 
-class DashboardHandler(BaseHTTPRequestHandler):
-    manager = None
-
-    def do_GET(self):
-        if self.path == '/':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.wfile.write(DASHBOARD_HTML.encode())
-
-        elif self.path == '/api/status':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps(self.manager.get_status_dict(), default=str).encode())
-
-        elif self.path.startswith('/api/control/'):
-            action = self.path.split('/')[-1]
-            if action == 'enable':
-                self.manager.control.enable()
-            elif action == 'disable':
-                self.manager.control.disable()
-            elif action == 'emergency':
-                self.manager.control.emergency_stop()
-            elif action == 'expand':
-                self.manager.pagefile_manager.expand_pagefile(4.0)
-            elif action == 'shrink':
-                self.manager.pagefile_manager.shrink_pagefile(4.0)
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(b'{"ok":true}')
-        else:
-            self.send_error(404)
-
-    def log_message(self, format, *args):
-        pass
-
-
 DASHBOARD_HTML = """<!DOCTYPE html>
 <html><head><title>AI Paging - Windows</title>
 <meta http-equiv="refresh" content="5">
@@ -331,7 +330,7 @@ pre{color:#fff}
 <button onclick="fetch('/api/control/disable')">DISABLE</button>
 <button onclick="fetch('/api/control/expand')">EXPAND +4GB</button>
 <button onclick="fetch('/api/control/shrink')">SHRINK -4GB</button>
-<button class="em" onclick="if(confirm('Emergency stop?'))fetch('/api/control/emergency')">EMERGENCY</button>
+<button class="em" onclick="if(confirm('Emergency?'))fetch('/api/control/emergency')">EMERGENCY</button>
 </div>
 <pre id="s">Loading...</pre>
 <script>
@@ -343,19 +342,56 @@ setInterval(upd,5000);upd();
 </script></body></html>"""
 
 
+class DashboardHandler(BaseHTTPRequestHandler):
+    manager = None
+
+    def do_GET(self):
+        if self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(DASHBOARD_HTML.encode())
+        elif self.path == '/api/status':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(self.manager.get_status_dict(), default=str).encode())
+        elif self.path.startswith('/api/control/'):
+            action = self.path.split('/')[-1]
+            if action == 'enable':    self.manager.control.enable()
+            elif action == 'disable': self.manager.control.disable()
+            elif action == 'emergency': self.manager.control.emergency_stop()
+            elif action == 'expand':  self.manager.pagefile_manager.expand_pagefile(4.0)
+            elif action == 'shrink':  self.manager.pagefile_manager.shrink_pagefile(4.0)
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"success":true}')
+        else:
+            self.send_error(404)
+
+    def log_message(self, format, *args):
+        pass
+
+
 ################################################################################
 # MAIN MANAGER
 ################################################################################
 
 class AIPagingManagerWindows:
     def __init__(self, config: SystemConfig):
-        self.config   = config
-        self.monitor  = WindowsSystemMonitor()
+        self.config           = config
+        self.monitor          = WindowsSystemMonitor()
         self.pagefile_manager = WindowsPagefileManager(config)
-        self.control  = ControlSystem(config.control_file)
-        self.running  = False
-        self.start_time = datetime.now()
-        self.stats = {'expansions': 0, 'shrinks': 0, 'thermal_events': 0}
+        self.control          = ControlSystem(config.control_file)
+        self.running          = False
+        self.start_time       = datetime.now()
+        self.stats = {
+            'pagefile_expansions': 0,
+            'pagefile_shrinks': 0,
+            'thermal_throttle_events': 0,
+            'emergency_stops': 0,
+        }
 
         log_file = Path("C:\\ProgramData\\ai-paging-manager.log")
         log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -378,6 +414,10 @@ class AIPagingManagerWindows:
                 logging.error(f"Dashboard error: {e}")
         threading.Thread(target=_run, daemon=True).start()
 
+    def check_thermal_status(self):
+        cpu_temp = self.monitor.get_cpu_temperature()
+        return {'cpu_temp': cpu_temp, 'disk_temp': None, 'throttle': False, 'emergency': False}
+
     def get_system_load(self):
         mem  = self.monitor.virtual_memory()
         swap = self.monitor.swap_memory()
@@ -388,20 +428,25 @@ class AIPagingManagerWindows:
             'swap_percent':     swap.percent,
             'swap_used_gb':     swap.used / (1024**3),
             'cpu_percent':      cpu,
+            'combined_load':    (mem.percent + swap.percent) / 2,
         }
 
     def get_status_dict(self):
         load    = self.get_system_load()
+        thermal = self.check_thermal_status()
+        pf_size = self.pagefile_manager.get_current_pagefile_size()
+        disk_free = self.pagefile_manager.get_available_disk_space_gb()
         uptime  = datetime.now() - self.start_time
         up_str  = f"{uptime.days}d {uptime.seconds//3600}h {(uptime.seconds%3600)//60}m"
         return {
             'control':  self.control.get_state(),
             'load':     load,
+            'thermal':  thermal,
             'pagefile': {
-                'current_gb': self.pagefile_manager.get_current_pagefile_size(),
-                'max_gb':     self.config.max_pagefile_gb,
-                'disk_free_gb': self.pagefile_manager.get_available_disk_space_gb(),
-                'location':   f"{self.config.pagefile_drive}\\pagefile.sys",
+                'current_size_gb': pf_size,
+                'max_size_gb':     self.config.max_pagefile_gb,
+                'disk_free_gb':    disk_free,
+                'location':        f"{self.config.pagefile_drive}\\pagefile.sys",
             },
             'stats':  self.stats,
             'uptime': up_str,
@@ -412,6 +457,7 @@ class AIPagingManagerWindows:
         while self.running:
             try:
                 if not self.control.is_enabled():
+                    logging.info("Disabled")
                     time.sleep(30)
                     continue
 
@@ -420,16 +466,16 @@ class AIPagingManagerWindows:
                 if load['swap_percent'] > self.config.expand_threshold_percent:
                     current = self.pagefile_manager.get_current_pagefile_size()
                     if current < self.config.max_pagefile_gb:
-                        logging.info(f"High swap ({load['swap_percent']:.1f}%) — expanding")
+                        logging.info(f"High usage ({load['swap_percent']:.1f}%) - expanding")
                         if self.pagefile_manager.expand_pagefile(4.0):
-                            self.stats['expansions'] += 1
+                            self.stats['pagefile_expansions'] += 1
 
                 elif load['swap_percent'] < self.config.shrink_threshold_percent:
                     current = self.pagefile_manager.get_current_pagefile_size()
                     if current > self.config.min_pagefile_gb:
-                        logging.info(f"Low swap ({load['swap_percent']:.1f}%) — shrinking")
+                        logging.info(f"Low usage ({load['swap_percent']:.1f}%) - shrinking")
                         if self.pagefile_manager.shrink_pagefile(2.0):
-                            self.stats['shrinks'] += 1
+                            self.stats['pagefile_shrinks'] += 1
 
                 self._log_status(load)
                 time.sleep(self.config.monitoring_interval_seconds)
@@ -438,17 +484,17 @@ class AIPagingManagerWindows:
                 self.running = False
                 break
             except Exception as e:
-                logging.error(f"Monitor error: {e}")
+                logging.error(f"Error: {e}")
                 time.sleep(self.config.monitoring_interval_seconds)
 
     def _log_status(self, load):
         pf = self.pagefile_manager.get_current_pagefile_size()
         logging.info(
-            f"RAM {load['ram_percent']:.0f}% | "
-            f"Swap {load['swap_percent']:.0f}% ({load['swap_used_gb']:.1f}GB) | "
-            f"CPU {load['cpu_percent']:.0f}% | "
-            f"Pagefile {pf:.1f}GB | "
-            f"exp={self.stats['expansions']} shr={self.stats['shrinks']}"
+            f"RAM {load['ram_percent']:.1f}% ({load['ram_available_gb']:.2f}GB free) | "
+            f"Pagefile {load['swap_percent']:.1f}% ({load['swap_used_gb']:.2f}GB) | "
+            f"CPU {load['cpu_percent']:.1f}% | "
+            f"PF size {pf:.2f}GB | "
+            f"exp={self.stats['pagefile_expansions']} shr={self.stats['pagefile_shrinks']}"
         )
 
     def start(self):
@@ -483,12 +529,13 @@ def main():
 
     if cmd == 'start':
         print(f"Starting — Dashboard: http://localhost:{config.web_dashboard_port}")
+        print(f"RAM: {config.total_ram_gb}GB | Max pagefile: {config.max_pagefile_gb}GB | Initial: {config.initial_pagefile_gb}GB")
+        print("NOTE: Pagefile changes require restart to take effect.")
         manager = AIPagingManagerWindows(config)
         try:
             manager.start()
         except KeyboardInterrupt:
             manager.stop()
-
     else:
         control  = ControlSystem(config.control_file)
         pagefile = WindowsPagefileManager(config)
@@ -501,10 +548,10 @@ def main():
             control.emergency_stop(); print("Emergency stop")
         elif cmd == 'expand':
             gb = float(sys.argv[2]) if len(sys.argv) > 2 else 4.0
-            pagefile.expand_pagefile(gb); print(f"Expanded +{gb}GB (restart required)")
+            print("Expanded (restart required)" if pagefile.expand_pagefile(gb) else "Failed")
         elif cmd == 'shrink':
             gb = float(sys.argv[2]) if len(sys.argv) > 2 else 2.0
-            pagefile.shrink_pagefile(gb); print(f"Shrunk -{gb}GB (restart required)")
+            print("Shrunk (restart required)" if pagefile.shrink_pagefile(gb) else "Failed")
         elif cmd == 'status':
             print(json.dumps(control.get_state(), indent=2, default=str))
 
