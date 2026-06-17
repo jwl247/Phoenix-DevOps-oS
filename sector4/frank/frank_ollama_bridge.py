@@ -26,7 +26,7 @@ from pathlib import Path
 OLLAMA_URL  = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 MODEL_LIFEFIRST = os.environ.get("OLLAMA_MODEL_LIFEFIRST", "llama3.1")      # Laurie — dedicated, never shared
 MODEL_FAST      = os.environ.get("OLLAMA_MODEL_FAST",      "llama3.2:3b")   # kernel/code fast path
-MODEL_CHAT      = os.environ.get("OLLAMA_MODEL_CHAT",      "phi3.5:mini")   # desktop chat
+MODEL_CHAT      = os.environ.get("OLLAMA_MODEL_CHAT",      "phi3.5:latest") # desktop chat
 MODEL_REASON    = os.environ.get("OLLAMA_MODEL_REASON",    "deepseek-r1:1.5b")  # reasoning, shows work
 FRANK_URL   = os.environ.get("FRANK_HTTP_URL",        "http://localhost:7347")
 AUDIT_LOG   = Path(os.environ.get("PHOENIX_AUDIT",   "/var/log/phoenix/audit.log"))
@@ -60,7 +60,7 @@ def ollama_generate(prompt: str, model: str, system: str = SYSTEM_PROMPT, stream
     )
     t0 = time.perf_counter()
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=300) as resp:
             raw = resp.read().decode()
             elapsed = time.perf_counter() - t0
             data = json.loads(raw)
@@ -154,7 +154,7 @@ BENCH_PROMPTS = [
     ("kernel",   MODEL_FAST,   "Explain in one sentence what Frank5's role is in the Phoenix kernel."),
     ("code",     MODEL_FAST,   "Write a Python one-liner to count files in a directory."),
     ("honest",   MODEL_FAST,   "What tasks can you NOT reliably help with as a local AI assistant?"),
-    ("chat",     MODEL_CHAT,   "What is Phoenix DevOps OS in plain English?"),
+    ("chat",     MODEL_CHAT,   "Describe Phoenix DevOps OS in two sentences."),
     ("reasoning",MODEL_REASON, "If breach_coms4 is T1 PRIMARY and it fills up, what is the failover path? Think step by step."),
 ]
 
