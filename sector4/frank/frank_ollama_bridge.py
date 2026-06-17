@@ -5,7 +5,7 @@ Routes AI dispatch packets through Frank proxy wall → Ollama local LLM.
 Self-hosted, zero API cost, no data leaves phoenix-ext.
 
 Routing logic:
-  - Life First (Laurie)            → llama3.1:8b  (dedicated, never shared)
+  - Life First (Laurie)            → llama3.1     (dedicated, never shared)
   - kernel / system / code queries → llama3.2:3b  (fast)
   - creative / general / chat      → phi3.5:mini  (conversational)
   - reasoning                      → deepseek-r1:1.5b (shows chain of thought)
@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 OLLAMA_URL  = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-MODEL_LIFEFIRST = os.environ.get("OLLAMA_MODEL_LIFEFIRST", "llama3.1:8b")   # Laurie — dedicated, never shared
+MODEL_LIFEFIRST = os.environ.get("OLLAMA_MODEL_LIFEFIRST", "llama3.1")      # Laurie — dedicated, never shared
 MODEL_FAST      = os.environ.get("OLLAMA_MODEL_FAST",      "llama3.2:3b")   # kernel/code fast path
 MODEL_CHAT      = os.environ.get("OLLAMA_MODEL_CHAT",      "phi3.5:mini")   # desktop chat
 MODEL_REASON    = os.environ.get("OLLAMA_MODEL_REASON",    "deepseek-r1:1.5b")  # reasoning, shows work
