@@ -391,8 +391,8 @@ lol myfile.py
 # Register with a description
 lol myfile.py "Frank HTTP proxy handler"
 
-# Register everything in a directory
-for f in ~/myproject/*; do lol "$f"; done</code></div>
+# Register everything in a directory (recursive)
+zsh ~/phoenix-devops/sector4/intake/intake.sh dir ~/myproject/</code></div>
 
   <h2>What Happens on Intake</h2>
   <table>
@@ -406,7 +406,14 @@ for f in ~/myproject/*; do lol "$f"; done</code></div>
   </table>
 
   <h2>Direct intake.sh</h2>
-  <div class="code-block"><button class="copy-btn" onclick="cp(this)">copy</button><code>bash ~/phoenix-devops/sector2/package-handler/intake.sh &lt;file&gt; [description]</code></div>
+  <div class="code-block"><button class="copy-btn" onclick="cp(this)">copy</button><code># Single file
+zsh ~/phoenix-devops/sector4/intake/intake.sh file &lt;path&gt;
+
+# Full directory (recursive)
+zsh ~/phoenix-devops/sector4/intake/intake.sh dir &lt;path&gt;
+
+# Check vault + catalog status
+zsh ~/phoenix-devops/sector4/intake/intake.sh status</code></div>
 
   <h2>Checking What's in the Pool</h2>
   <div class="code-block"><button class="copy-btn" onclick="cp(this)">copy</button><code># Count
