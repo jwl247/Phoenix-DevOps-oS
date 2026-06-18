@@ -897,17 +897,18 @@ const Shell = (() => {
   const BUILTINS = {
     help: () => {
       print(`Phoenix Shell — Commands:
-  status          System status (Frank, Ollama, WireGuard)
-  mixer           Open Mixer
-  switches        Open Switches
+  status          System status (CPU / RAM / Threat)
+  threat          Detailed threat level breakdown
+  services        All service states
+  frank           Frank kernel status
+  ollama          Ollama running models
+  wg              WireGuard status
+  ask <question>  Ask Phoenix AI (Ollama → Claude fallback)
+  mixer           Open Mixer pane
+  switches        Open Switches pane
   files           Open File Tree
   desk            Open Desktop window
   clear           Clear output
-  frank           Frank kernel status
-  ollama          Ollama status + models
-  wg              WireGuard status
-  threat          Current threat level
-  services        All service states
   run <cmd>       Execute shell command on phoenix-ext`, 'var(--accent)');
     },
     clear: () => { output.innerHTML = ''; },
@@ -935,6 +936,51 @@ const Shell = (() => {
     fetch(url).then(r=>r.json()).then(d => print(fmt(d), 'var(--accent)')).catch(e => print(`Error: ${e.message}`, 'var(--danger)'));
   }
 
+  async function askPhoenixAI(question) {
+    if (!question) { print('Usage: ask <question>', 'var(--dim)'); return; }
+    print('Phoenix AI thinking…', 'var(--dim)');
+    try {
+      // Routes through Frank → Life First Module 7 → Ollama primary → Claude fallback
+      const res  = await fetch('http://192.168.1.133:7347/lifefirst/ask', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ message: question, user: 'shell', context: 'Phoenix Desktop Global Shell' }),
+      });
+      const data = await res.json();
+      if (data.response || data.reply || data.text) {
+        const reply = data.response || data.reply || data.text;
+        const model = data.model || data.engine || 'Phoenix AI';
+        print(`[${model}] ${reply}`, '#aaffcc');
+      } else if (data.error) {
+        print(`AI error: ${data.error}`, 'var(--danger)');
+      } else {
+        // Try Life First API directly (port 80 fallback)
+        const res2  = await fetch('/lifefirst/api/module7.php', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ message: question, user_id: 'shell' }),
+        });
+        const d2 = await res2.json();
+        const reply2 = d2.response || d2.message || JSON.stringify(d2);
+        print(`[Phoenix AI] ${reply2}`, '#aaffcc');
+      }
+    } catch(e) {
+      // Direct Life First fallback
+      try {
+        const res2  = await fetch('/lifefirst/api/module7.php', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ message: question, user_id: 'shell' }),
+        });
+        const d2 = await res2.json();
+        const reply2 = d2.response || d2.message || JSON.stringify(d2);
+        print(`[Phoenix AI] ${reply2}`, '#aaffcc');
+      } catch(e2) {
+        print(`AI offline: ${e2.message}`, 'var(--danger)');
+      }
+    }
+  }
+
   async function run(cmd) {
     prompt_echo(cmd);
     const parts  = cmd.trim().split(/\s+/);
@@ -943,6 +989,12 @@ const Shell = (() => {
 
     // Built-in
     if (BUILTINS[name]) { BUILTINS[name](args); return; }
+
+    // ask <question> → Frank → Ollama → Claude fallback
+    if (name === 'ask') {
+      await askPhoenixAI(args);
+      return;
+    }
 
     // run <command> → POST to api/shell.php
     if (name === 'run' && args) {
