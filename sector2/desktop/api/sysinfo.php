@@ -129,15 +129,40 @@ function get_threat_level(): array {
     ];
 }
 
-// ── Response ──────────────────────────────────────────────────────────────
-$mem     = get_mem();
-$threat  = get_threat_level();
-$cpu_pct = get_cpu_pct();
+// ── Security stack state (written by phoenix_security.js) ────────────────────
+function get_security_state(): array {
+    $state_file = '/var/phoenix/security_state.json';
+    if (!is_readable($state_file)) return [];
+    $data = json_decode(file_get_contents($state_file), true);
+    return is_array($data) ? $data : [];
+}
+
+// ── Response ──────────────────────────────────────────────────────────────────
+$mem      = get_mem();
+$threat   = get_threat_level();
+$cpu_pct  = get_cpu_pct();
+$security = get_security_state();
+
+// If security stack is running, its buffer level overrides log-derived threat level
+if (!empty($security['threat_level'])) {
+    $sec_level = (int)$security['threat_level'];
+    // Take the higher of the two sources
+    if ($sec_level > $threat['level']) {
+        $threat['level']  = $sec_level;
+        $labels = [1=>'CLEAR', 2=>'LOW', 3=>'ELEVATED', 4=>'HIGH', 5=>'CRITICAL'];
+        $threat['label']  = $labels[$sec_level] ?? 'CRITICAL';
+        $threat['detail'] = array_merge(
+            $threat['detail'],
+            ["buffer:{$security['buffer_level']}"]
+        );
+    }
+}
 
 echo json_encode([
-    'ok'      => true,
-    'ts'      => date('c'),
-    'cpu_pct' => $cpu_pct,
-    'memory'  => $mem,
-    'threat'  => $threat,
+    'ok'       => true,
+    'ts'       => date('c'),
+    'cpu_pct'  => $cpu_pct,
+    'memory'   => $mem,
+    'threat'   => $threat,
+    'security' => $security,
 ]);
