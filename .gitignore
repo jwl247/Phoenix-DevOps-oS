@@ -13,3 +13,6 @@ sector1/helix/lts/*.zip
 tools/benchmarks/*.zip
 .DS_Store
 Thumbs.db
+
+# Security stack — private submodule (github.com/jwl247/phoenix-security)
+sector4/security/
