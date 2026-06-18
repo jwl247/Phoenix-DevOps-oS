@@ -784,6 +784,211 @@ document.getElementById('desktop').addEventListener('contextmenu',e=>{
 document.addEventListener('click',()=>{ctx.style.display='none';});
 
 
+// ── Global Shell Toggle — backtick or F12 ────────────────────────────────────
+//
+// Slides down from top of screen over everything.
+// Real commands POST to api/shell.php (exec wrapper).
+// Falls back to local status commands when offline.
+
+const Shell = (() => {
+  let open   = false;
+  let hist   = [];
+  let hIdx   = -1;
+  let el, output, input;
+
+  function build() {
+    el = document.createElement('div');
+    el.id = 'global-shell';
+    el.style.cssText = `
+      position:fixed;top:0;left:0;right:0;z-index:99999;
+      height:340px;background:rgba(5,8,14,0.97);
+      border-bottom:2px solid var(--accent);
+      display:flex;flex-direction:column;
+      transform:translateY(-100%);
+      transition:transform 0.22s cubic-bezier(0.4,0,0.2,1);
+      font-family:var(--font);font-size:12px;
+      box-shadow:0 8px 40px rgba(0,0,0,0.8);
+    `;
+
+    const hdr = document.createElement('div');
+    hdr.style.cssText = `
+      display:flex;align-items:center;gap:10px;padding:5px 12px;
+      background:rgba(0,255,136,0.06);border-bottom:1px solid var(--border);
+      flex-shrink:0;
+    `;
+    hdr.innerHTML = `
+      <span style="color:var(--accent);letter-spacing:2px;font-size:9px;text-transform:uppercase">Phoenix Shell</span>
+      <span style="color:var(--dim);font-size:9px;" id="gsh-cwd">jwlef@phoenix-ext</span>
+      <span style="margin-left:auto;color:var(--dim);font-size:8px;letter-spacing:1px">F12 / \` to close</span>
+    `;
+
+    output = document.createElement('div');
+    output.id = 'gsh-output';
+    output.style.cssText = `
+      flex:1;overflow-y:auto;padding:8px 12px;color:#aac;
+      font-size:11px;line-height:1.7;
+    `;
+    output.innerHTML = `<span style="color:var(--accent)">Phoenix Shell ready — type help for commands</span>\n`;
+
+    const inputRow = document.createElement('div');
+    inputRow.style.cssText = `
+      display:flex;align-items:center;gap:6px;padding:6px 12px;
+      border-top:1px solid var(--border);flex-shrink:0;
+      background:rgba(0,0,0,0.3);
+    `;
+    inputRow.innerHTML = `
+      <span style="color:var(--accent);font-size:11px;flex-shrink:0">jwlef@phoenix ›</span>
+    `;
+    input = document.createElement('input');
+    input.style.cssText = `
+      flex:1;background:transparent;border:none;outline:none;
+      color:var(--text);font-family:var(--font);font-size:11px;
+      caret-color:var(--accent);
+    `;
+    input.placeholder = '';
+    inputRow.appendChild(input);
+
+    el.appendChild(hdr);
+    el.appendChild(output);
+    el.appendChild(inputRow);
+    document.body.appendChild(el);
+
+    input.addEventListener('keydown', onKey);
+  }
+
+  function onKey(e) {
+    if (e.key === 'Enter') {
+      const cmd = input.value.trim();
+      input.value = '';
+      if (!cmd) return;
+      hist.unshift(cmd); hIdx = -1;
+      if (hist.length > 100) hist.pop();
+      run(cmd);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      hIdx = Math.min(hIdx + 1, hist.length - 1);
+      input.value = hist[hIdx] || '';
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      hIdx = Math.max(hIdx - 1, -1);
+      input.value = hIdx < 0 ? '' : hist[hIdx];
+    } else if (e.key === 'Escape') {
+      toggle(false);
+    }
+  }
+
+  function print(text, color) {
+    const line = document.createElement('div');
+    line.style.color = color || 'var(--text)';
+    line.style.whiteSpace = 'pre-wrap';
+    line.textContent = text;
+    output.appendChild(line);
+    output.scrollTop = output.scrollHeight;
+  }
+
+  function prompt_echo(cmd) {
+    const line = document.createElement('div');
+    line.style.cssText = 'color:var(--dim);';
+    line.textContent = `› ${cmd}`;
+    output.appendChild(line);
+  }
+
+  // Built-in commands (no server needed)
+  const BUILTINS = {
+    help: () => {
+      print(`Phoenix Shell — Commands:
+  status          System status (Frank, Ollama, WireGuard)
+  mixer           Open Mixer
+  switches        Open Switches
+  files           Open File Tree
+  desk            Open Desktop window
+  clear           Clear output
+  frank           Frank kernel status
+  ollama          Ollama status + models
+  wg              WireGuard status
+  threat          Current threat level
+  services        All service states
+  run <cmd>       Execute shell command on phoenix-ext`, 'var(--accent)');
+    },
+    clear: () => { output.innerHTML = ''; },
+    mixer:    () => { App.open('mixer');    toggle(false); },
+    switches: () => { App.open('switches'); toggle(false); },
+    files:    () => { Files.toggle();       toggle(false); },
+    desk:     () => { App.open('welcome');  toggle(false); },
+    frank:    () => fetchAndPrint('/desktop/api/sysinfo.php', d => `Frank: ${d.security?.buffer_level||'─'} | Threat: ${d.threat?.label||'─'}`),
+    ollama:   () => fetchAndPrint('/desktop/api/sysinfo.php', d => `Ollama: running`),
+    wg:       () => fetchAndPrint('/desktop/api/sysinfo.php', d => `WireGuard: see mixer`),
+    threat:   () => fetchAndPrint('/desktop/api/sysinfo.php', d => {
+      const t = d.threat || {};
+      return `Threat: ${t.label||'─'} (${t.level||'─'}/5)\nLoad: ${t.load1||'─'} / ${t.load5||'─'} / ${t.load15||'─'}\n${(t.detail||[]).join(', ')||'No anomalies'}`;
+    }),
+    status:   () => fetchAndPrint('/desktop/api/sysinfo.php', d => {
+      const m = d.memory || {};
+      return `CPU: ${d.cpu_pct||'─'}%  RAM: ${m.ram_used_mb||'─'}/${m.ram_total_mb||'─'}MB (${m.ram_pct||'─'}%)  Swap: ${m.swap_pct||'─'}%\nThreat: ${d.threat?.label||'─'}  Buffer: ${d.security?.buffer_level||'─'}`;
+    }),
+    services: () => fetchAndPrint('/desktop/api/service.php', d => {
+      return (d.services||[]).map(s => `  ${s.state==='active'?'●':'○'} ${s.label.padEnd(16)} ${s.state}`).join('\n');
+    }),
+  };
+
+  function fetchAndPrint(url, fmt) {
+    fetch(url).then(r=>r.json()).then(d => print(fmt(d), 'var(--accent)')).catch(e => print(`Error: ${e.message}`, 'var(--danger)'));
+  }
+
+  async function run(cmd) {
+    prompt_echo(cmd);
+    const parts  = cmd.trim().split(/\s+/);
+    const name   = parts[0].toLowerCase();
+    const args   = parts.slice(1).join(' ');
+
+    // Built-in
+    if (BUILTINS[name]) { BUILTINS[name](args); return; }
+
+    // run <command> → POST to api/shell.php
+    if (name === 'run' && args) {
+      print(`Executing: ${args}`, 'var(--dim)');
+      try {
+        const res  = await fetch('/desktop/api/shell.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cmd: args }),
+        });
+        const data = await res.json();
+        if (data.out)  print(data.out.trimEnd());
+        if (data.err)  print(data.err.trimEnd(), 'var(--warn)');
+        if (data.error) print(data.error, 'var(--danger)');
+      } catch(e) { print(`shell.php offline: ${e.message}`, 'var(--danger)'); }
+      return;
+    }
+
+    // Unknown — try as shell command via run
+    print(`Unknown command: ${name}  (use 'run ${cmd}' to execute on phoenix-ext)`, 'var(--dim)');
+  }
+
+  function toggle(force) {
+    open = (force !== undefined) ? force : !open;
+    if (!el) build();
+    el.style.transform = open ? 'translateY(0)' : 'translateY(-100%)';
+    if (open) setTimeout(() => input?.focus(), 250);
+  }
+
+  // Global keyboard listener
+  document.addEventListener('keydown', e => {
+    // Backtick or F12 — ignore if typing in an input/textarea (except our own shell input)
+    const inInput = document.activeElement.tagName === 'INPUT' ||
+                    document.activeElement.tagName === 'TEXTAREA';
+    if (inInput && document.activeElement !== input) return;
+
+    if (e.key === '`' || e.key === 'F12') {
+      e.preventDefault();
+      toggle();
+    }
+  });
+
+  return { toggle, run, print };
+})();
+
+
 // ── Boot ───────────────────────────────────────────────────────────────────────
 
 startClock();
@@ -791,6 +996,7 @@ fetchStatus();
 setInterval(fetchStatus, 28000);
 App.open('welcome');
 setTimeout(()=>toast('Phoenix Desktop'),500);
+setTimeout(()=>toast('` or F12 — Global Shell',),1800);
 </script>
 </body>
 </html>
