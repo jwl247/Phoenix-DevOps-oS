@@ -10,10 +10,19 @@ WEB_ROOT="/var/www/html/desktop"
 echo "[Desktop] Deploying from: $REPO"
 
 mkdir -p "$WEB_ROOT/api"
-cp "$REPO/sector2/desktop/index.php"       "$WEB_ROOT/index.php"
-cp "$REPO/sector2/desktop/mixer.php"       "$WEB_ROOT/mixer.php"
-cp "$REPO/sector2/desktop/api/service.php" "$WEB_ROOT/api/service.php"
-cp "$REPO/sector2/desktop/api/sysinfo.php" "$WEB_ROOT/api/sysinfo.php"
+cp "$REPO/sector2/desktop/index.php"        "$WEB_ROOT/index.php"
+cp "$REPO/sector2/desktop/mixer.php"        "$WEB_ROOT/mixer.php"
+cp "$REPO/sector2/desktop/switches.php"     "$WEB_ROOT/switches.php"
+cp "$REPO/sector2/desktop/filetree.php"     "$WEB_ROOT/filetree.php"
+cp "$REPO/sector2/desktop/api/service.php"  "$WEB_ROOT/api/service.php"
+cp "$REPO/sector2/desktop/api/sysinfo.php"  "$WEB_ROOT/api/sysinfo.php"
+cp "$REPO/sector2/desktop/api/switches.php" "$WEB_ROOT/api/switches.php"
+cp "$REPO/sector2/desktop/api/files.php"    "$WEB_ROOT/api/files.php"
+cp "$REPO/sector2/desktop/api/shell.php"    "$WEB_ROOT/api/shell.php"
+
+# Phoenix state dirs
+mkdir -p /var/phoenix /var/log/phoenix
+chown www-data:www-data /var/phoenix /var/log/phoenix
 
 chown -R www-data:www-data "$WEB_ROOT"
 chmod 644 "$WEB_ROOT"/*.php "$WEB_ROOT/api"/*.php
@@ -71,5 +80,9 @@ systemctl reload apache2
 IP=$(hostname -I | awk '{print $1}')
 echo ""
 echo "=== Phoenix Desktop LIVE ==="
-echo "  Desktop: http://$IP/desktop/"
-echo "  Mixer:   http://$IP/desktop/mixer.php"
+echo "  Desktop:  http://$IP/desktop/"
+echo "  Mixer:    http://$IP/desktop/mixer.php"
+echo "  Switches: http://$IP/desktop/switches.php"
+echo "  Files:    http://$IP/desktop/filetree.php"
+echo ""
+echo "  Global Shell: backtick (\`) or F12 from anywhere in the Desktop"
