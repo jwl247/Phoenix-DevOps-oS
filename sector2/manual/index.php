@@ -130,6 +130,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
   <div class="nav-section">Daily Use</div>
   <a class="nav-item" onclick="show('intake')">Intake — lol / intake.sh</a>
   <a class="nav-item" onclick="show('ssh')">SSH &amp; WireGuard</a>
+  <a class="nav-item" onclick="show('desktop')">Desktop — Mixer / Shell</a>
   <a class="nav-item" onclick="show('apps')">Apps — Glossary / Review</a>
   <a class="nav-item" onclick="show('lifefirst')">Life First (Laurie)</a>
 
@@ -461,6 +462,83 @@ ssh phoenix-lan "sudo wg show"</code></div>
   </div>
 </section>
 
+<!-- DESKTOP -->
+<section class="section" id="sec-desktop">
+  <h1>Phoenix Desktop</h1>
+  <p class="subtitle">Dark cockpit control surface — http://192.168.1.133/desktop/</p>
+
+  <p>The Desktop is the web-based control surface for phoenix-ext. Everything Phoenix — services, AI, files, security — is reachable from one URL without SSH. Open it from any browser on the LAN.</p>
+
+  <div class="key-grid">
+    <div class="key-card"><div class="kc-label">URL</div><div class="kc-val">/desktop/</div><div class="kc-sub"><a href="/desktop/" style="color:var(--accent)">Open Desktop</a></div></div>
+    <div class="key-card"><div class="kc-label">Global Shell</div><div class="kc-val">Backtick (`) or F12</div><div class="kc-sub">Drop-down terminal from anywhere</div></div>
+    <div class="key-card"><div class="kc-label">Mixer</div><div class="kc-val">/desktop/mixer.php</div><div class="kc-sub">12 service channels · telemetry · threat level</div></div>
+    <div class="key-card"><div class="kc-label">Switches</div><div class="kc-val">/desktop/switches.php</div><div class="kc-sub">Toggles · dropdowns · action buttons</div></div>
+  </div>
+
+  <h2>Global Shell <span class="pill ok">LIVE</span></h2>
+  <p>Press <strong>backtick (`)</strong> or <strong>F12</strong> from anywhere in the Desktop to drop a terminal panel down from the top of the screen. It overlays all open windows. Same key (or Escape) closes it.</p>
+  <div class="key-grid">
+    <div class="key-card"><div class="kc-label">History</div><div class="kc-val">↑ / ↓ arrows</div><div class="kc-sub">Command history (last 100)</div></div>
+    <div class="key-card"><div class="kc-label">run &lt;cmd&gt;</div><div class="kc-val">Execute on phoenix-ext</div><div class="kc-sub">Proxied via api/shell.php · 30s timeout</div></div>
+    <div class="key-card"><div class="kc-label">Audit log</div><div class="kc-val">/var/log/phoenix/shell.log</div><div class="kc-sub">Every command logged with timestamp + IP</div></div>
+    <div class="key-card"><div class="kc-label">Blocklist</div><div class="kc-val">rm -rf / · mkfs · dd wipe</div><div class="kc-sub">Destructive patterns rejected at server</div></div>
+  </div>
+
+  <div class="code-block"><button class="copy-btn" onclick="cp(this)">copy</button><code"># Built-in shell commands (no server needed)
+status          CPU / RAM / Swap / Threat
+threat          Detailed threat level breakdown
+services        All service states
+frank           Frank kernel status
+ollama          Ollama running models
+mixer           Open Mixer pane
+switches        Open Switches pane
+files           Open File Tree
+clear           Clear shell output
+help            Full command list
+
+# Execute anything on phoenix-ext
+run systemctl status phoenix-kernel
+run journalctl -n 50 -u ollama
+run wg show</code></div>
+
+  <h2>Mixer <span class="pill ok">LIVE</span></h2>
+  <p>12 channel strips — one per service. The faders are replaced with CPU/RAM/Swap/Threat bars. VU meters show active/inactive. ON/OFF buttons toggle services via systemctl. Threat level is a 5-bar DefCon display driven by auth.log, load, zombie count, and the live security stack.</p>
+  <div class="key-grid">
+    <div class="key-card"><div class="kc-label">Channels</div><div class="kc-val">12 services</div><div class="kc-sub">SSH · WG · Cloudflared · Frank · Conversion · Ollama · LifeFirst · Nextcloud · Prometheus · venv×3</div></div>
+    <div class="key-card"><div class="kc-label">Telemetry</div><div class="kc-val">CPU · RAM · Swap · Threat</div><div class="kc-sub">Polls every 8s (sysinfo.php)</div></div>
+    <div class="key-card"><div class="kc-label">Threat Level</div><div class="kc-val">1–5 (CLEAR → CRITICAL)</div><div class="kc-sub">Higher of log-derived or security stack buffer</div></div>
+    <div class="key-card"><div class="kc-label">Service poll</div><div class="kc-val">Every 15s</div><div class="kc-sub">auto-updates channel states</div></div>
+  </div>
+
+  <h2>Switches <span class="pill ok">LIVE</span></h2>
+  <p>Toggle panel for security and ops settings. Green = safe, amber = caution, red = danger. All state is persisted to <span class="inline-code">/var/phoenix/settings.json</span> and applied instantly.</p>
+  <table>
+    <tr><th>Toggle</th><th>Color</th><th>What it does</th></tr>
+    <tr><td>Bounce Armed</td><td><span class="pill warn">RED</span></td><td>Enables SignalMirrorBouncer — return-to-sender (1:1 mirror, no amplification)</td></tr>
+    <tr><td>Full Audit Log</td><td><span class="pill warn">AMBER</span></td><td>Verbose audit logging via Frank /audit/verbose</td></tr>
+    <tr><td>Auto-Forge Incidents</td><td><span class="pill warn">AMBER</span></td><td>Auto-submit security incidents to D1 as confidential docs</td></tr>
+    <tr><td>Guardian Scan</td><td><span class="pill ok">GREEN</span></td><td>Enable periodic guardian port/path conflict scanning (5 min)</td></tr>
+    <tr><td>Prometheus</td><td><span class="pill ok">GREEN</span></td><td>Enable Prometheus metrics collection</td></tr>
+  </table>
+
+  <h2>File Tree <span class="pill ok">LIVE</span></h2>
+  <p>Full Phoenix filesystem browser with drag-and-drop group assignment. Pinned groups appear at the top. Drag any file from any sector onto a group header to assign it.</p>
+  <div class="code-block"><button class="copy-btn" onclick="cp(this)">copy</button><code"># Assignable groups are stored in:
+/var/phoenix/file_assignments.json
+
+# Right-click a file to:
+# - Assign to group
+# - Create new group
+# - Copy path
+# - Open in Desktop window</code></div>
+
+  <h2>Deploy</h2>
+  <div class="code-block"><button class="copy-btn" onclick="cp(this)">copy</button><code"># On phoenix-ext:
+cd ~/phoenix-devops && git pull
+sudo bash deploy/setup_desktop.sh</code></div>
+</section>
+
 <!-- APPS -->
 <section class="section" id="sec-apps">
   <h1>Apps — Glossary / Review Platform</h1>
@@ -693,6 +771,7 @@ python3 ~/phoenix-devops/sector2/propagator/propagator.py</code></div>
     <tr><td>deploy/setup_glossary.sh</td><td>Deploy glossary.php to Apache, wire Phoenix env</td><td>sudo bash</td></tr>
     <tr><td>deploy/setup_review_platform.sh</td><td>Deploy review platform to Apache</td><td>sudo bash</td></tr>
     <tr><td>deploy/setup_ollama.sh</td><td>Install Ollama, pull all 4 models</td><td>sudo bash</td></tr>
+    <tr><td>deploy/setup_desktop.sh</td><td>Deploy Desktop + Mixer + Shell + Switches + File Tree to Apache</td><td>sudo bash</td></tr>
     <tr><td>deploy/setup_telemetry.sh</td><td>Install phoenix-telemetry.service, WebSocket port 7899</td><td>sudo bash</td></tr>
     <tr><td>lifefirst_modules/deploy_lifefirst.sh</td><td>Full Life First deploy — MySQL + Apache + all modules</td><td>bash (self-elevates)</td></tr>
   </table>
