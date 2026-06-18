@@ -13,7 +13,7 @@ VAULT_MOUNT="/mnt/g"
 CATALOG_DB="${HOME}/.catalog/catalog.db"
 LOG_DIR="${HOME}/.unitedsys/logs"
 LOG_FILE="${LOG_DIR}/intake.log"
-INTAKE_PY="${HOME}/projects/unitedsys/core/intake.py"
+INTAKE_PY="${PHOENIX_INSTALL_DIR:-${HOME}/phoenix-devops}/unitedsys/core/intake.py"
 VERSION="0.1.0"
 
 mkdir -p "${LOG_DIR}"
