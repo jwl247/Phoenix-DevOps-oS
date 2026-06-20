@@ -166,6 +166,42 @@ else
     inf "Check: echo '{\"op\":\"health\"}' | nc localhost 7701"
 fi
 
+
+# ── Step 3: llama3.1 pre-warm ─────────────────────────────────────────────────
+echo -e "${B}3/4  llama3.1${N} — pre-warm via ollama"
+if command -v ollama &>/dev/null; then
+    ollama run llama3.1 "ping" &>/dev/null &
+    LLAMA_PID=$!
+    echo "llama3.1=$LLAMA_PID" >> "$PID_FILE"
+    sleep 2
+    if kill -0 "$LLAMA_PID" 2>/dev/null; then
+        ok "llama3.1 warming (PID $LLAMA_PID)"
+    else
+        inf "llama3.1 pre-warm completed (model loaded into memory)"
+    fi
+else
+    inf "ollama not found — skipping llama3.1 pre-warm"
+fi
+
+# ── Step 4: Cpt_conductor ─────────────────────────────────────────────────────
+CONDUCTOR="${REPO}/SECTOR4/Cpt_conductor.py"
+if [[ ! -f "$CONDUCTOR" ]]; then
+    bad "Cpt_conductor not found: $CONDUCTOR"
+else
+    echo -e "${B}4/4  Cpt_conductor${N} — SECTOR4 ring coordination (coms1-4)"
+    python3 "$CONDUCTOR" start > "$LOG_DIR/phoenix_conductor.log" 2>&1 &
+    CONDUCTOR_PID=$!
+    echo "conductor=$CONDUCTOR_PID" >> "$PID_FILE"
+    inf "PID $CONDUCTOR_PID → $LOG_DIR/phoenix_conductor.log"
+    sleep 2
+    if kill -0 "$CONDUCTOR_PID" 2>/dev/null; then
+        ok "Cpt_conductor running (PID $CONDUCTOR_PID)"
+    else
+        bad "Cpt_conductor died — check $LOG_DIR/phoenix_conductor.log"
+        tail -5 "$LOG_DIR/phoenix_conductor.log"
+    fi
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${B}${G}Phoenix stack is up.${N}"
