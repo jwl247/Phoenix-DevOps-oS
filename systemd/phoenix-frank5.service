@@ -1,0 +1,19 @@
+[Unit]
+Description=Phoenix Frank5 — SHM bus + rings
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=jwlef
+WorkingDirectory=/home/jwlef/phoenix-devops
+EnvironmentFile=/etc/phoenix.env
+ExecStart=/home/jwlef/Phoenix/.venv/bin/python3 /home/jwlef/phoenix-devops/helix_lightning_kernel/franken5.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

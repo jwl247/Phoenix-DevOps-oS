@@ -1,0 +1,18 @@
+[Unit]
+Description=Phoenix llama3.1 pre-warm
+After=network.target ollama.service
+Wants=ollama.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=jwlef
+EnvironmentFile=/etc/phoenix.env
+ExecStart=/usr/local/bin/ollama run llama3.1 "ping"
+StandardOutput=append:/tmp/phoenix_llama.log
+StandardError=append:/tmp/phoenix_llama.log
+
+[Install]
+WantedBy=multi-user.target
