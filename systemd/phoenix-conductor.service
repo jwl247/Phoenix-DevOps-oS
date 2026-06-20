@@ -1,0 +1,24 @@
+[Unit]
+Description=Phoenix Cpt_conductor — SECTOR4 ring coordination
+After=network.target phoenix-frank5.service phoenix-kernel.service
+Requires=phoenix-frank5.service phoenix-kernel.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=jwlef
+WorkingDirectory=/home/jwlef/phoenix-devops/SECTOR4
+EnvironmentFile=/etc/phoenix.env
+Environment=BREACH_COMS1=/breach_coms1
+Environment=BREACH_COMS2=/breach_coms2
+Environment=BREACH_COMS3=/breach_coms3
+Environment=BREACH_COMS4=/breach_coms4
+ExecStart=/home/jwlef/Phoenix/.venv/bin/python3 /home/jwlef/phoenix-devops/SECTOR4/Cpt_conductor.py start
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

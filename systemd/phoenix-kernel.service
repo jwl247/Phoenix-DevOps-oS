@@ -1,0 +1,20 @@
+[Unit]
+Description=Phoenix Universal Kernel — HelixI + HelixE
+After=network.target phoenix-frank5.service
+Requires=phoenix-frank5.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=jwlef
+WorkingDirectory=/home/jwlef/phoenix-devops
+EnvironmentFile=/etc/phoenix.env
+ExecStart=/home/jwlef/Phoenix/.venv/bin/python3 /home/jwlef/phoenix-devops/phoenix_universal_kernel/main_kernel.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
