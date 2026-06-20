@@ -109,9 +109,9 @@ for (( i=0; i<TOTAL; i++ )); do
     printf "\r  [%d/%d] %-70s" "$NUM" "$TOTAL" "$RELPATH"
 
     if python3 "$INTAKE_PY" "$f" >> "$LOG" 2>&1; then
-        (( PASS++ ))
+        PASS=$(( PASS + 1 ))
     else
-        (( FAIL++ ))
+        FAIL=$(( FAIL + 1 ))
         echo ""
         echo -e "  ${R}[FAIL]${N}  $f"
     fi

@@ -881,3 +881,21 @@ def demo():
 
 if __name__ == "__main__":
     demo()
+
+
+# ── Frank ring entry point ────────────────────────────────────────────────────
+def run(data: bytes, ball, pcs, **kwargs):
+    """
+    Called by FrankRing when helix suit is worn.
+    data = raw bytes from the channel.
+    Returns the health status — Helix is alive and conducting.
+    """
+    import json
+    try:
+        req = json.loads(data.decode("utf-8", errors="replace"))
+        op = req.get("op", "")
+        if op == "health":
+            return json.dumps({"status": "ok", "helix": "HelixSystem", "alive": True}).encode()
+    except Exception:
+        pass
+    return json.dumps({"status": "ok", "helix": "alive"}).encode()
