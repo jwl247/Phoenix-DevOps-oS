@@ -26,11 +26,19 @@ from typing import Dict, Optional
 # ============================================================================
 
 SECTOR          = "SECTOR4"
-BASE_DIR        = Path("/etc/systemd/system/SECTOR4")
-COMS_DIR        = BASE_DIR                          # coms1-4 live here
-STORAGE_DIR     = Path("/etc/HEix7_3GIII/storage")  # persistent storage index
-PEER_QUEUE      = Path("/etc/HEix7_3GIII/peer_queue")
-PID_DIR         = Path("/etc/HEix7_3GIII/conductors")
+_PLATFORM       = os.environ.get("PHOENIX_PLATFORM", "ext")
+_COMS_ROOT      = Path("/tmp/phoenix_coms") if _PLATFORM == "wsl2" else Path("/")
+COMS_MOUNTS = {
+    "coms1": Path(os.environ.get("BREACH_COMS1", str(_COMS_ROOT / "breach_coms1"))),
+    "coms2": Path(os.environ.get("BREACH_COMS2", str(_COMS_ROOT / "breach_coms2"))),
+    "coms3": Path(os.environ.get("BREACH_COMS3", str(_COMS_ROOT / "breach_coms3"))),
+    "coms4": Path(os.environ.get("BREACH_COMS4", str(_COMS_ROOT / "breach_coms4"))),
+}
+BASE_DIR        = COMS_MOUNTS["coms1"]
+COMS_DIR        = BASE_DIR
+STORAGE_DIR     = BASE_DIR / "storage"
+PEER_QUEUE      = BASE_DIR / "peer_queue"
+PID_DIR         = BASE_DIR / "conductors"
 CHIEF_DIR       = Path("/opt/chief")
 
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
@@ -165,7 +173,7 @@ class ComsConductor(BaseConductor):
 
     def _write_to_storage(self, data, msg_id: str):
         """Write translated data to this ring's storage segment."""
-        storage_path = BASE_DIR / self.coms_id / "breach" / f"storage_{self.storage_segment}"
+        storage_path = COMS_MOUNTS.get(self.coms_id, BASE_DIR) / "breach" / f"storage_{self.storage_segment}"
         storage_path.mkdir(parents=True, exist_ok=True)
 
         out = storage_path / f"{msg_id}.json"
