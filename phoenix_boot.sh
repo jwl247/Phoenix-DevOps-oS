@@ -97,6 +97,18 @@ case "${1:-}" in
     --restart) stop_stack; sleep 1 ;;
 esac
 
+# ── Single-supervisor guard ───────────────────────────────────────────────────
+# If systemd owns the stack on this box, refuse to double-start it.
+# Prevents a second Frank5 fighting the first over the same SHM bus.
+if command -v systemctl &>/dev/null && systemctl is-active --quiet phoenix-frank5 2>/dev/null; then
+    echo -e "  ${R}[BLOCKED]${N} phoenix-frank5 is running under systemd on this box."
+    echo -e "  ${C}->${N}       Use systemd, not this script:"
+    echo -e "             sudo systemctl restart phoenix-frank5 phoenix-kernel phoenix-conductor"
+    echo -e "             sudo systemctl status  phoenix-frank5 phoenix-kernel phoenix-conductor"
+    exit 1
+fi
+
+
 # ── Boot ──────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${B}${C}Phoenix DevOps OS — Booting${N}  $(date '+%H:%M:%S')"
