@@ -884,11 +884,28 @@ if __name__ == "__main__":
 
 
 # ── Frank ring entry point ────────────────────────────────────────────────────
+# Resident clonepool tier — hydrated once, reused across calls (no re-hydrate per request)
+_CLONEPOOL_TIER = None
+
+def _get_tier():
+    global _CLONEPOOL_TIER
+    if _CLONEPOOL_TIER is None:
+        try:
+            from helix_clonepool_tier import ClonepoolTier
+            _CLONEPOOL_TIER = ClonepoolTier()
+        except Exception as e:
+            import logging
+            logging.getLogger("helix").error(f"clonepool tier init failed: {e}")
+            _CLONEPOOL_TIER = False  # mark as tried-and-failed so we don't retry every call
+    return _CLONEPOOL_TIER or None
+
 def run(data: bytes, ball, pcs, **kwargs):
     """
     Called by FrankRing when helix suit is worn.
     data = raw bytes from the channel.
-    Returns the health status — Helix is alive and conducting.
+    ops:
+      {"op":"health"}            -> health status JSON
+      {"op":"get","key":"<hex>"} -> faults the asset from the clonepool, returns its bytes
     """
     import json
     try:
@@ -896,6 +913,16 @@ def run(data: bytes, ball, pcs, **kwargs):
         op = req.get("op", "")
         if op == "health":
             return json.dumps({"status": "ok", "helix": "HelixSystem", "alive": True}).encode()
-    except Exception:
-        pass
+        if op == "get":
+            key = req.get("key", "")
+            tier = _get_tier()
+            if tier is None:
+                return json.dumps({"status": "error", "reason": "tier unavailable"}).encode()
+            asset = tier.read(key)
+            if asset is None:
+                return json.dumps({"status": "miss", "key": key}).encode()
+            return asset  # raw asset bytes, served straight out egress
+    except Exception as e:
+        import json as _j
+        return _j.dumps({"status": "error", "reason": str(e)}).encode()
     return json.dumps({"status": "ok", "helix": "alive"}).encode()
