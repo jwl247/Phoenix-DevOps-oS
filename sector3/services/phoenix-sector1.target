@@ -1,0 +1,8 @@
+[Unit]
+Description=Phoenix Sector 1 — kernels, hardware, boot layer
+Documentation=https://github.com/jwl247/phoenix-devops
+After=multi-user.target
+Wants=phoenix-auto-config.service phoenix-frankenhelix.service phoenix-frank-helix.service
+
+[Install]
+WantedBy=multi-user.target

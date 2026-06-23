@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# ============================================================
+# helix_run — Helix LD_PRELOAD Launcher
+# Project:   Phoenix DevOps / Full Propagator Framework
+# Author:    jwl247 / Phoenix DevOps LLC
+# ============================================================
+# Wraps python3 (or any binary) with libhelix.so preloaded.
+# Sets mesh config, upstream brain, downstream storage paths.
+# This is your original helix entry point — LP load and fuse.
+#
+# Usage:
+#   helix_run script.py
+#   helix_run frankenhelix.py
+#   helix_run quadengine.py
+# ============================================================
+
+set -euo pipefail
+
+HELIX_BASE="/opt2/VMCOMS/julietshouse"
+HELIX_LIB="${HELIX_BASE}/libhelix.so"
+HELIX_CONF="${HELIX_BASE}/helix_mesh.conf"
+HELIX_UP="${HELIX_BASE}/upstream_brain"
+HELIX_DOWN="${HELIX_BASE}/downstream_storage"
+
+# Fallback to sector1 paths if opt2 not mounted
+if [[ ! -f "${HELIX_LIB}" ]]; then
+    SECTOR1_BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    HELIX_LIB="${SECTOR1_BASE}/lib/libhelix.so"
+    HELIX_CONF="${SECTOR1_BASE}/conf/helix_mesh.conf"
+    HELIX_UP="${SECTOR1_BASE}/mesh/upstream_brain"
+    HELIX_DOWN="${SECTOR1_BASE}/mesh/downstream_storage"
+    echo "[helix_run] opt2 not mounted — using sector1 fallback paths"
+fi
+
+if [[ ! -f "${HELIX_LIB}" ]]; then
+    echo "[helix_run] ERROR: libhelix.so not found at ${HELIX_LIB}"
+    echo "[helix_run] Build with: cd helix/kernel && make"
+    exit 1
+fi
+
+export LD_PRELOAD="${HELIX_LIB}"
+export HELIX_CONFIG="${HELIX_CONF}"
+export HELIX_UPSTREAM="${HELIX_UP}"
+export HELIX_DOWNSTREAM="${HELIX_DOWN}"
+
+echo "[helix_run] LD_PRELOAD=${HELIX_LIB}"
+echo "[helix_run] Launching: python3 $*"
+
+exec python3 "$@"
