@@ -1,0 +1,21 @@
+# frank3-slot-a.service
+# Slot A — loads Frank3 10 seconds after boot
+# /etc/systemd/system/frank3-slot-a.service
+
+[Unit]
+Description=Frank3 Kernel Sideload — Slot A
+After=multi-user.target
+Wants=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/bin/sleep 10
+ExecStart=/sbin/modprobe frank3_slot_a
+ExecStop=/sbin/modprobe -r frank3_slot_a
+Restart=no
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# ============================================================
+# Phoenix Global Command: align_dirs
+# Linux/macOS wrapper for Phoenix Directory Alignment
+# ============================================================
+
+set -euo pipefail
+
+# Source Phoenix environment
+[[ -f "$HOME/.phoenix_env.sh" ]] && source "$HOME/.phoenix_env.sh"
+
+# Find Phoenix root
+PHOENIX_ROOT="${PHOENIX_ROOT:-}"
+if [[ -z "$PHOENIX_ROOT" ]]; then
+    if [[ -f "$HOME/Phoenix/Phoenix-DevOps-oS/tools/align_dirs.sh" ]]; then
+        PHOENIX_ROOT="$HOME/Phoenix/Phoenix-DevOps-oS"
+    elif [[ -f "$(dirname "$(dirname "${BASH_SOURCE[0]}")")/tools/align_dirs.sh" ]]; then
+        PHOENIX_ROOT="$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)"
+    fi
+fi
+
+if [[ -z "$PHOENIX_ROOT" ]]; then
+    echo "[ERROR] PHOENIX_ROOT not set. Run install.sh first." >&2
+    exit 1
+fi
+
+# Find align_dirs.sh
+ALIGN_SH="$PHOENIX_ROOT/tools/align_dirs.sh"
+if [[ ! -f "$ALIGN_SH" ]]; then
+    echo "[ERROR] align_dirs.sh not found at $ALIGN_SH" >&2
+    exit 1
+fi
+
+# Execute align_dirs command
+exec bash "$ALIGN_SH" "$@"
+
+# Made with Bob

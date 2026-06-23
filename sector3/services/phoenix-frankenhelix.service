@@ -1,0 +1,31 @@
+[Unit]
+Description=Phoenix frankenhelix — ZZZring0 bidirectional listener, COM daisy-chain
+Documentation=https://github.com/jwl247/phoenix-devops
+After=phoenix-auto-config.service
+Requires=phoenix-auto-config.service
+PartOf=phoenix-sector1.target
+
+[Service]
+Type=simple
+User=jwl247
+Group=jwl247
+WorkingDirectory=/home/jwl247/projects/phoenix
+ExecStart=/usr/bin/env python3 /home/jwl247/projects/phoenix/sector1/frankenhelix.py
+Restart=on-failure
+RestartSec=5
+
+Environment=PYTHONUNBUFFERED=1
+Environment=PHOENIX_SECTOR=1
+Environment=PHOENIX_VAULT=/media/jwl247/breach_coms2/CLONEPOOL
+EnvironmentFile=-/home/jwl247/projects/phoenix/.env
+
+NoNewPrivileges=true
+PrivateTmp=true
+ReadWritePaths=/home/jwl247/projects/phoenix /media/jwl247/breach_coms1 /media/jwl247/breach_coms2 /media/jwl247/breach_coms3 /media/jwl247/breach_coms4
+
+StandardOutput=append:/var/log/phoenix/frankenhelix.log
+StandardError=append:/var/log/phoenix/frankenhelix.error.log
+SyslogIdentifier=phoenix-frankenhelix
+
+[Install]
+WantedBy=phoenix-sector1.target
