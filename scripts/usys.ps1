@@ -683,7 +683,7 @@ function Invoke-UsysRun {
             if ($value -match '\$\{([^:}]+)(?::-(.*))?\}') {
                 $envVar = $matches[1]
                 $default = $matches[2]
-                $value = if ($env:$envVar) { $env:$envVar } else { $default }
+                $value = if ([Environment]::GetEnvironmentVariable($envVar)) { [Environment]::GetEnvironmentVariable($envVar) } else { $default }
             }
             Set-Item -Path "env:$($_.Name)" -Value $value
         }

@@ -690,10 +690,11 @@ class HelixSync:
         cfg = config or {}
         self.version = '1.0.0'
 
-        self.helix_root     = Path(cfg.get('helix_root',     '/opt/heix'))
-        self.snapshot_base  = Path(cfg.get('snapshot_base',  '/snapshots/heix-versions'))
-        self.log_dir        = Path(cfg.get('log_dir',        '/var/log/heix'))
-        self.syncthing_home = Path(cfg.get('syncthing_home', '/opt/heix/.syncthing'))
+        _home = Path.home()
+        self.helix_root     = Path(cfg.get('helix_root',     str(_home / '.helix')))
+        self.snapshot_base  = Path(cfg.get('snapshot_base',  str(_home / '.helix' / 'snapshots')))
+        self.log_dir        = Path(cfg.get('log_dir',        str(_home / '.helix' / 'logs')))
+        self.syncthing_home = Path(cfg.get('syncthing_home', str(_home / '.helix' / 'syncthing')))
         self.syncthing_port = cfg.get('syncthing_port', 8384)
         self.api_key        = cfg.get('syncthing_api_key', self._generate_api_key())
         self.role           = SyncRole(cfg.get('role', 'master'))
