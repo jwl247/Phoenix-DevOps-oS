@@ -1,0 +1,51 @@
+{
+  "name": "phoenix-dashboard",
+  "version": "1.0.0",
+  "description": "Phoenix DevOps OS Command Center Dashboard",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win",
+    "build-mac": "electron-builder --mac",
+    "build-linux": "electron-builder --linux"
+  },
+  "keywords": [
+    "phoenix",
+    "devops",
+    "dashboard",
+    "electron"
+  ],
+  "author": "jwl247",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "electron": "^28.0.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.phoenix.dashboard",
+    "productName": "Phoenix Dashboard",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!dist",
+      "!node_modules"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png"
+    }
+  }
+}

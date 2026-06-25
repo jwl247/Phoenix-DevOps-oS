@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phoenix DevOps OS - Command Center</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Left Control Panel -->
+        <div class="left-panel">
+            <div class="switch-panel">
+                <div class="panel-label">SECTOR CONTROL PANEL</div>
+                <div class="switch-group">
+                    <div class="switch-item">
+                        <label>SECTOR 1</label>
+                        <div class="toggle-switch" data-sector="1">
+                            <div class="switch-light"></div>
+                        </div>
+                    </div>
+                    <div class="switch-item">
+                        <label>SECTOR 2</label>
+                        <div class="toggle-switch" data-sector="2">
+                            <div class="switch-light"></div>
+                        </div>
+                    </div>
+                    <div class="switch-item">
+                        <label>SECTOR 3</label>
+                        <div class="toggle-switch" data-sector="3">
+                            <div class="switch-light"></div>
+                        </div>
+                    </div>
+                    <div class="switch-item">
+                        <label>SECTOR 4</label>
+                        <div class="toggle-switch" data-sector="4">
+                            <div class="switch-light"></div>
+                        </div>
+                    </div>
+                    <div class="switch-item">
+                        <label>HELIX ENGINE</label>
+                        <div class="toggle-switch active" data-sector="helix">
+                            <div class="switch-light active"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="warning-label">
+                    <span class="warning-icon">⚠</span>
+                    AUTHORIZED PERSONNEL ONLY
+                </div>
+            </div>
+            
+            <div class="status-panel">
+                <div class="status-item">
+                    <span class="status-label">ALTITUDE:</span>
+                    <span class="status-value" id="altitude">1500m</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">AIRSPEED:</span>
+                    <span class="status-value" id="airspeed">120kt</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">HEADING:</span>
+                    <span class="status-value" id="heading">045°</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Center Display -->
+        <div class="main-display">
+            <!-- Top Status Bar -->
+            <div class="top-bar">
+                <div class="system-title">PHOENIX DEVOPS OS - COMMAND CENTER</div>
+                <div class="system-time" id="system-time"></div>
+            </div>
+
+            <!-- Holographic Main View -->
+            <div class="holographic-display">
+                <div class="holo-overlay">
+                    <div class="holo-grid"></div>
+                    <div class="holo-scanline"></div>
+                </div>
+                
+                <div class="main-viewport">
+                    <canvas id="main-canvas"></canvas>
+                    <div class="viewport-overlay">
+                        <div class="target-reticle"></div>
+                        <div class="hud-info">
+                            <div class="hud-item">SYSTEM STATUS: <span class="status-ok">OPERATIONAL</span></div>
+                            <div class="hud-item">HELIX ENGINE: <span class="status-ok">ACTIVE</span></div>
+                            <div class="hud-item">THROUGHPUT: <span id="throughput">700,000 ops/sec</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Phoenix Logo Hologram -->
+                <div class="phoenix-logo">
+                    <svg viewBox="0 0 100 100" class="logo-svg">
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(0, 255, 136, 0.5)" stroke-width="1"/>
+                        <circle cx="50" cy="50" r="35" fill="none" stroke="rgba(0, 255, 136, 0.3)" stroke-width="1"/>
+                        <path d="M 50 20 L 50 80 M 30 50 L 70 50" stroke="rgba(0, 255, 136, 0.6)" stroke-width="2"/>
+                        <text x="50" y="55" text-anchor="middle" fill="rgba(0, 255, 136, 0.8)" font-size="12" font-family="monospace">PHX</text>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Control Buttons Grid -->
+            <div class="control-grid">
+                <button class="control-btn" data-action="status">
+                    <span class="btn-icon">📊</span>
+                    <span class="btn-label">SYSTEM STATUS</span>
+                </button>
+                <button class="control-btn" data-action="clone">
+                    <span class="btn-icon">📋</span>
+                    <span class="btn-label">CLONE POOL</span>
+                </button>
+                <button class="control-btn" data-action="intake">
+                    <span class="btn-icon">📥</span>
+                    <span class="btn-label">INTAKE</span>
+                </button>
+                <button class="control-btn" data-action="suites">
+                    <span class="btn-icon">📦</span>
+                    <span class="btn-label">SUITES</span>
+                </button>
+                <button class="control-btn" data-action="helix">
+                    <span class="btn-icon">⚡</span>
+                    <span class="btn-label">HELIX ENGINE</span>
+                </button>
+                <button class="control-btn" data-action="catalog">
+                    <span class="btn-icon">📚</span>
+                    <span class="btn-label">CATALOG</span>
+                </button>
+                <button class="control-btn" data-action="security">
+                    <span class="btn-icon">🔒</span>
+                    <span class="btn-label">SECURITY</span>
+                </button>
+                <button class="control-btn" data-action="settings">
+                    <span class="btn-icon">⚙️</span>
+                    <span class="btn-label">SETTINGS</span>
+                </button>
+            </div>
+
+            <!-- Bottom Data Panels -->
+            <div class="data-panels">
+                <div class="data-panel">
+                    <div class="panel-header">SECTOR STATUS</div>
+                    <div class="panel-content" id="sector-status">
+                        <div class="data-row">
+                            <span>Sector 1:</span>
+                            <span class="value" id="s1-files">0 files</span>
+                        </div>
+                        <div class="data-row">
+                            <span>Sector 2:</span>
+                            <span class="value" id="s2-files">0 files</span>
+                        </div>
+                        <div class="data-row">
+                            <span>Sector 3:</span>
+                            <span class="value" id="s3-files">0 files</span>
+                        </div>
+                        <div class="data-row">
+                            <span>Sector 4:</span>
+                            <span class="value" id="s4-files">0 files</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="data-panel">
+                    <div class="panel-header">ENGINE METRICS</div>
+                    <div class="panel-content" id="engine-metrics">
+                        <div class="data-row">
+                            <span>Cache Hit:</span>
+                            <span class="value status-ok">100%</span>
+                        </div>
+                        <div class="data-row">
+                            <span>RAM Usage:</span>
+                            <span class="value" id="ram-usage">4GB / 8GB</span>
+                        </div>
+                        <div class="data-row">
+                            <span>Compression:</span>
+                            <span class="value">zlib-5</span>
+                        </div>
+                        <div class="data-row">
+                            <span>Languages:</span>
+                            <span class="value">4 active</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="data-panel">
+                    <div class="panel-header">CLONEPOOL</div>
+                    <div class="panel-content" id="clonepool-info">
+                        <div class="data-row">
+                            <span>Total Files:</span>
+                            <span class="value" id="clone-count">0</span>
+                        </div>
+                        <div class="data-row">
+                            <span>Suites:</span>
+                            <span class="value" id="suite-count">0</span>
+                        </div>
+                        <div class="data-row">
+                            <span>Storage:</span>
+                            <span class="value" id="storage-used">0 MB</span>
+                        </div>
+                        <div class="data-row">
+                            <span>Last Sync:</span>
+                            <span class="value" id="last-sync">--:--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side Panels -->
+        <div class="right-panel">
+            <!-- System Metrics -->
+            <div class="metric-display">
+                <div class="metric-label">CPU</div>
+                <div class="metric-value" id="cpu-usage">45%</div>
+                <div class="metric-bar">
+                    <div class="metric-fill" id="cpu-bar" style="width: 45%"></div>
+                </div>
+            </div>
+
+            <div class="metric-display">
+                <div class="metric-label">MEMORY</div>
+                <div class="metric-value" id="mem-usage">62%</div>
+                <div class="metric-bar">
+                    <div class="metric-fill" id="mem-bar" style="width: 62%"></div>
+                </div>
+            </div>
+
+            <div class="metric-display">
+                <div class="metric-label">DISK</div>
+                <div class="metric-value" id="disk-usage">38%</div>
+                <div class="metric-bar">
+                    <div class="metric-fill" id="disk-bar" style="width: 38%"></div>
+                </div>
+            </div>
+
+            <!-- Circular Gauges -->
+            <div class="gauge-container">
+                <div class="circular-gauge">
+                    <svg viewBox="0 0 100 100" class="gauge-svg">
+                        <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(0, 255, 136, 0.2)" stroke-width="8"/>
+                        <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(0, 255, 136, 0.8)" stroke-width="8" 
+                                stroke-dasharray="251.2" stroke-dashoffset="62.8" transform="rotate(-90 50 50)"/>
+                        <text x="50" y="50" text-anchor="middle" fill="rgba(0, 255, 136, 1)" font-size="16" font-weight="bold" dy="5">75%</text>
+                        <text x="50" y="65" text-anchor="middle" fill="rgba(0, 255, 136, 0.6)" font-size="8">UPTIME</text>
+                    </svg>
+                </div>
+
+                <div class="circular-gauge">
+                    <svg viewBox="0 0 100 100" class="gauge-svg">
+                        <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(0, 255, 136, 0.2)" stroke-width="8"/>
+                        <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(0, 255, 136, 0.8)" stroke-width="8" 
+                                stroke-dasharray="251.2" stroke-dashoffset="50.24" transform="rotate(-90 50 50)"/>
+                        <text x="50" y="50" text-anchor="middle" fill="rgba(0, 255, 136, 1)" font-size="16" font-weight="bold" dy="5">80%</text>
+                        <text x="50" y="65" text-anchor="middle" fill="rgba(0, 255, 136, 0.6)" font-size="8">HEALTH</text>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Temperature Displays -->
+            <div class="temp-display">
+                <div class="temp-label">TEMP</div>
+                <div class="temp-value">22°</div>
+                <div class="temp-unit">CELSIUS</div>
+            </div>
+
+            <div class="temp-display">
+                <div class="temp-label">TEMP</div>
+                <div class="temp-value">22°</div>
+                <div class="temp-unit">CELSIUS</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Terminal Overlay -->
+    <div class="terminal-overlay" id="terminal-overlay" style="display: none;">
+        <div class="terminal-window">
+            <div class="terminal-header">
+                <span>Phoenix Terminal</span>
+                <button class="terminal-close" id="terminal-close">×</button>
+            </div>
+            <div class="terminal-content" id="terminal-content">
+                <div class="terminal-line">Phoenix DevOps OS v0.1.0</div>
+                <div class="terminal-line">Type 'help' for available commands</div>
+                <div class="terminal-line">> <span class="terminal-cursor">_</span></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>

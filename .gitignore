@@ -13,3 +13,8 @@ sector1/helix/lts/*.zip
 tools/benchmarks/*.zip
 .DS_Store
 Thumbs.db
+
+node_modules/
+dist/
+.env
+.wrangler/
