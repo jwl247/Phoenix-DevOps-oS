@@ -25,12 +25,14 @@ import urllib.error
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-PHOENIX_HOME    = Path(os.environ.get("PHOENIX_HOME", Path.home() / "Phoenix"))
-HELIX_DB        = Path(os.environ.get("HELIX_DB",     PHOENIX_HOME / "db/helix.db"))
-FRANK_DB        = Path(os.environ.get("FRANK_DB",     PHOENIX_HOME / "db/frank.db"))
-LIFEFIRST_API   = os.environ.get("LIFEFIRST_API",     "http://localhost/lifefirst/api.php")
-LIFEFIRST_SEC   = os.environ.get("LF_API_SECRET",     "")
-STATUS_PORT     = int(os.environ.get("PHOENIX_STATUS_PORT", "8765"))
+PHOENIX_HOME     = Path(os.environ.get("PHOENIX_HOME", Path.home() / "Phoenix"))
+HELIX_DB         = Path(os.environ.get("HELIX_DB",     PHOENIX_HOME / "db/helix.db"))
+FRANK_DB         = Path(os.environ.get("FRANK_DB",     PHOENIX_HOME / "db/frank.db"))
+LIFEFIRST_API    = os.environ.get("LIFEFIRST_API",     "http://localhost/lifefirst/api.php")
+LIFEFIRST_SEC    = os.environ.get("LF_API_SECRET",     "")
+STATUS_PORT      = int(os.environ.get("PHOENIX_STATUS_PORT", "8765"))
+FILETREE_PORT    = int(os.environ.get("PHOENIX_TREE_PORT",   "7703"))
+CLONE_PORT       = int(os.environ.get("PHOENIX_CLONE_PORT",  "7704"))
 
 # ── Data collectors ───────────────────────────────────────────────────────────
 
@@ -142,7 +144,10 @@ class PhoenixStatusHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        path = self.path.split("?")[0].rstrip("/")
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(self.path)
+        path   = parsed.path.rstrip("/")
+        params = {k: v[0] for k, v in parse_qs(parsed.query).items()}
 
         if path == "/status":
             helix = get_helix_status()
@@ -172,6 +177,37 @@ class PhoenixStatusHandler(BaseHTTPRequestHandler):
         elif path == "/health":
             self._send({"ok": True, "port": STATUS_PORT})
 
+        # ── File tree endpoints ───────────────────────────────────────────────
+        elif path == "/tree":
+            root  = params.get("path", str(Path.home()))
+            depth = int(params.get("depth", 2))
+            self._send(get_tree(root, depth))
+
+        elif path == "/node":
+            self._send(do_node(params.get("path", "")))
+
+        elif path == "/search":
+            self._send(do_search(
+                params.get("root", str(Path.home())),
+                params.get("pattern", "*")
+            ))
+
+        else:
+            self._send({"error": "not found"}, 404)
+
+    def do_POST(self):
+        path = self.path.split("?")[0].rstrip("/")
+        length = int(self.headers.get("Content-Length", 0))
+        body   = json.loads(self.rfile.read(length)) if length else {}
+
+        if path == "/clone":
+            self._send(do_clone(
+                body.get("src", ""),
+                body.get("dst", ""),
+                body.get("into_pool", False),
+            ))
+        elif path == "/intake":
+            self._send(do_intake(body.get("path", "")))
         else:
             self._send({"error": "not found"}, 404)
 

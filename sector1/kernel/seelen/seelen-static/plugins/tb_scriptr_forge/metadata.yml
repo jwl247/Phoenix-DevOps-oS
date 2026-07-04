@@ -1,0 +1,12 @@
+id: "@phoenix/tb-scriptr-forge"
+metadata:
+  displayName: !extend i18n/display_name.yml
+  description: !extend i18n/description.yml
+icon: TbTerminal2
+target: "@seelen/fancy-toolbar"
+plugin:
+  scopes: []
+  template: !include plugin/template.js
+  tooltip: !include plugin/tooltip.js
+  onClickV2: |-
+    trigger("@phoenix/scriptr-forge-popup");
