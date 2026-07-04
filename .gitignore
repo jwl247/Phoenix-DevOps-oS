@@ -1,20 +1,54 @@
-__pycache__/
+﻿__pycache__/
 *.pyc
 *.pyo
+
+# Virtual envs and build artifacts
 .venv/
+venv/
+node_modules/
+dist/
+build/
+*.egg-info/
+
+# Databases
 *.db
 *.db-wal
 *.db-shm
+
+# Logs
 *.log
+
+# Phoenix runtime data - live on the machine, not in the repo
+clonepool/
 qr/
 *.sidecar.json
+breach_coms*/
+pkg-cache/
+
+# Helix archives
 sector1/helix/c_express/*.zip
 sector1/helix/lts/*.zip
+sector1/kernel/build/
+sector1/kernel/dist/
+sector1/kernel/venv/
+sector1/kernel/phoenix_kernel.spec
 tools/benchmarks/*.zip
+
+# Cloudflare
+.wrangler/
+.env
+
+# Seelen UI binaries - install via: winget install Seelen.SeelenUI
+sector1/kernel/seelen/seelen-static/*.exe
+sector1/kernel/seelen/seelen-static/*.dll
+sector1/kernel/seelen/seelen-static/uninstall.exe
+
+# Android build
+sector2/apps/lifefirst-android/.gradle/
+sector2/apps/lifefirst-android/build/
+sector2/apps/lifefirst-android/app/build/
+sector2/apps/lifefirst-android/local.properties
+
+# OS artifacts
 .DS_Store
 Thumbs.db
-
-node_modules/
-dist/
-.env
-.wrangler/

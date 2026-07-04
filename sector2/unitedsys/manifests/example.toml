@@ -1,0 +1,23 @@
+[package]
+name        = "ripgrep"
+version     = "14.1.0"
+description = "Fast grep replacement written in Rust"
+
+[source]
+sha3_512 = ""
+blake2b  = ""
+
+[backends]
+apt     = "ripgrep"
+dnf     = "ripgrep"
+pacman  = "ripgrep"
+winget  = "BurntSushi.ripgrep"
+choco   = "ripgrep"
+scoop   = "ripgrep"
+brew    = "ripgrep"
+
+[hooks]
+pre_install  = ""
+post_install = ""
+pre_remove   = ""
+post_remove  = ""

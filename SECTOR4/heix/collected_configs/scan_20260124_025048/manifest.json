@@ -1,0 +1,385 @@
+{
+  "scan_time": "20260124_025048",
+  "root_path": "/home/jwl247/GII-E",
+  "dedicated_configs_found": 5,
+  "files_with_in_code_settings": 9,
+  "collected_files": [
+    {
+      "type": "dedicated_config",
+      "original_path": "/home/jwl247/GII-E/config.json",
+      "collected_path": "collected_files/config.json"
+    },
+    {
+      "type": "dedicated_config",
+      "original_path": "/home/jwl247/GII-E/secure_settings.php",
+      "collected_path": "collected_files/secure_settings.php"
+    },
+    {
+      "type": "dedicated_config",
+      "original_path": "/home/jwl247/GII-E/secure_settings_schema.sql",
+      "collected_path": "collected_files/secure_settings_schema.sql"
+    },
+    {
+      "type": "dedicated_config",
+      "original_path": "/home/jwl247/GII-E/modules/config_scanner.py",
+      "collected_path": "collected_files/modules/config_scanner.py"
+    },
+    {
+      "type": "dedicated_config",
+      "original_path": "/home/jwl247/GII-E/modules/__pycache__/config_scanner.cpython-311.pyc",
+      "collected_path": "collected_files/modules/__pycache__/config_scanner.cpython-311.pyc"
+    }
+  ],
+  "in_code_settings": [
+    {
+      "type": "in_code_setting",
+      "file_path": "config.json",
+      "settings": [
+        {
+          "line_num": 2,
+          "line_text": "\"modules\": ["
+        },
+        {
+          "line_num": 4,
+          "line_text": "\"name\": \"hello_module\","
+        },
+        {
+          "line_num": 5,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 6,
+          "line_text": "\"path\": \"modules/hello.py\","
+        },
+        {
+          "line_num": 7,
+          "line_text": "\"enabled\": false"
+        },
+        {
+          "line_num": 10,
+          "line_text": "\"name\": \"syncthing_module\","
+        },
+        {
+          "line_num": 11,
+          "line_text": "\"type\": \"javascript\","
+        },
+        {
+          "line_num": 12,
+          "line_text": "\"path\": \"modules/heix_syncthing_module.js\","
+        },
+        {
+          "line_num": 13,
+          "line_text": "\"enabled\": false"
+        },
+        {
+          "line_num": 16,
+          "line_text": "\"name\": \"memory_module\","
+        },
+        {
+          "line_num": 17,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 18,
+          "line_text": "\"path\": \"modules/Module5_Memory.py\","
+        },
+        {
+          "line_num": 19,
+          "line_text": "\"enabled\": false"
+        },
+        {
+          "line_num": 22,
+          "line_text": "\"name\": \"config_scanner\","
+        },
+        {
+          "line_num": 23,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 24,
+          "line_text": "\"path\": \"modules/config_scanner.py\","
+        },
+        {
+          "line_num": 25,
+          "line_text": "\"enabled\": true"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "agnostic_layer.py",
+      "settings": [
+        {
+          "line_num": 24,
+          "line_text": "WINDOWS = \"windows\""
+        },
+        {
+          "line_num": 25,
+          "line_text": "LINUX = \"linux\""
+        },
+        {
+          "line_num": 26,
+          "line_text": "MACOS = \"darwin\""
+        },
+        {
+          "line_num": 27,
+          "line_text": "UNKNOWN = \"unknown\""
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "module_2_api_router.php",
+      "settings": [
+        {
+          "line_num": 42,
+          "line_text": "define('DB_HOST', 'localhost');"
+        },
+        {
+          "line_num": 43,
+          "line_text": "define('DB_USER', 'root');  // Change if you have different MySQL user"
+        },
+        {
+          "line_num": 44,
+          "line_text": "define('DB_PASS', '');      // Add your MySQL password if you have one"
+        },
+        {
+          "line_num": 45,
+          "line_text": "define('DB_NAME', 'lifefirst');"
+        },
+        {
+          "line_num": 48,
+          "line_text": "define('API_SECRET', 'your_secret_token_change_me_12345');"
+        },
+        {
+          "line_num": 51,
+          "line_text": "define('AI_SCHEDULE_PATH', __DIR__ . '/ai/ai_schedule.php');"
+        },
+        {
+          "line_num": 52,
+          "line_text": "define('AI_MESSENGER_PATH', __DIR__ . '/ai/ai_messenger.php');"
+        },
+        {
+          "line_num": 53,
+          "line_text": "define('AI_MEMORY_PATH', __DIR__ . '/ai/ai_memory.php');"
+        },
+        {
+          "line_num": 54,
+          "line_text": "define('AI_NOTIFICATION_PATH', __DIR__ . '/ai/ai_notifications.php');"
+        },
+        {
+          "line_num": 55,
+          "line_text": "define('AI_VOICE_PATH', __DIR__ . '/ai/ai_voice.php');"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "module_3_schedule_ai.php",
+      "settings": [
+        {
+          "line_num": 26,
+          "line_text": "define('CLAUDE_API_KEY', 'YOUR_CLAUDE_API_KEY_HERE');  // ADD YOUR KEY HERE!"
+        },
+        {
+          "line_num": 27,
+          "line_text": "define('CLAUDE_MODEL', 'claude-sonnet-4-5-20250929');"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "module_5_memory.php",
+      "settings": [
+        {
+          "line_num": 14,
+          "line_text": "define('GEMINI_API_KEY', 'YOUR_GEMINI_API_KEY_HERE');"
+        },
+        {
+          "line_num": 15,
+          "line_text": "define('GEMINI_MODEL', 'gemini-1.5-flash');"
+        },
+        {
+          "line_num": 18,
+          "line_text": "define('OLLAMA_API_URL', 'http://localhost:11434/api/generate');"
+        },
+        {
+          "line_num": 19,
+          "line_text": "define('OLLAMA_MODEL', 'llama3');"
+        },
+        {
+          "line_num": 22,
+          "line_text": "define('HIGH_CONFIDENCE', 0.90);"
+        },
+        {
+          "line_num": 23,
+          "line_text": "define('MEDIUM_CONFIDENCE', 0.70);"
+        },
+        {
+          "line_num": 24,
+          "line_text": "define('LOW_CONFIDENCE', 0.50);"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "module_6_notification_ai.php",
+      "settings": [
+        {
+          "line_num": 26,
+          "line_text": "define('CLAUDE_API_KEY', 'YOUR_CLAUDE_API_KEY_HERE');"
+        },
+        {
+          "line_num": 27,
+          "line_text": "define('CLAUDE_MODEL', 'claude-sonnet-4-5-20250929');"
+        },
+        {
+          "line_num": 30,
+          "line_text": "define('MAX_ESCALATION_LEVEL', 5);"
+        },
+        {
+          "line_num": 31,
+          "line_text": "define('ESCALATION_INTERVAL_SECONDS', 30);  // Repeat every 30 seconds if not answered"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "lifefirst_setup.sh",
+      "settings": [
+        {
+          "line_num": 14,
+          "line_text": "define('GEMINI_API_KEY', 'YOUR_GEMINI_API_KEY_HERE');"
+        },
+        {
+          "line_num": 15,
+          "line_text": "define('GEMINI_MODEL', 'gemini-1.5-flash');"
+        },
+        {
+          "line_num": 18,
+          "line_text": "define('OLLAMA_API_URL', 'http://localhost:11434/api/generate');"
+        },
+        {
+          "line_num": 19,
+          "line_text": "define('OLLAMA_MODEL', 'llama3');"
+        },
+        {
+          "line_num": 22,
+          "line_text": "define('HIGH_CONFIDENCE', 0.90);"
+        },
+        {
+          "line_num": 23,
+          "line_text": "define('MEDIUM_CONFIDENCE', 0.70);"
+        },
+        {
+          "line_num": 24,
+          "line_text": "define('LOW_CONFIDENCE', 0.50);"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "modules/Module5_Memory.py",
+      "settings": [
+        {
+          "line_num": 7,
+          "line_text": "DB_FILE = 'lifefirst.db'"
+        },
+        {
+          "line_num": 10,
+          "line_text": "GEMINI_API_KEY = os.getenv(\"GEMINI_API_KEY\")"
+        },
+        {
+          "line_num": 11,
+          "line_text": "GEMINI_MODEL = os.getenv(\"GEMINI_MODEL\", \"gemini-1.5-flash\") # Default to 1.5-flash"
+        },
+        {
+          "line_num": 12,
+          "line_text": "OLLAMA_API_URL = os.getenv(\"OLLAMA_URL\", \"http://localhost:11434/api/generate\") # Already in .env"
+        },
+        {
+          "line_num": 13,
+          "line_text": "OLLAMA_MODEL = os.getenv(\"OLLAMA_MODEL\", \"llama3\")"
+        },
+        {
+          "line_num": 31,
+          "line_text": "\"contents\": ["
+        },
+        {
+          "line_num": 33,
+          "line_text": "\"role\": \"user\","
+        },
+        {
+          "line_num": 34,
+          "line_text": "\"parts\": [{\"text\": f\"SYSTEM: {system_prompt}\\n\\nUSER: {user_content}\"}]"
+        },
+        {
+          "line_num": 54,
+          "line_text": "\"model\": OLLAMA_MODEL,"
+        },
+        {
+          "line_num": 55,
+          "line_text": "\"prompt\": f\"### System: {system_prompt}\\n### User: {user_content}\\n### Assistant:\","
+        },
+        {
+          "line_num": 56,
+          "line_text": "\"stream\": False"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "modules/config_scanner.py",
+      "settings": [
+        {
+          "line_num": 104,
+          "line_text": "\"scan_time\": self.timestamp,"
+        },
+        {
+          "line_num": 105,
+          "line_text": "\"root_path\": str(self.root_path),"
+        },
+        {
+          "line_num": 106,
+          "line_text": "\"dedicated_configs_found\": len(self.found_configs),"
+        },
+        {
+          "line_num": 107,
+          "line_text": "\"files_with_in_code_settings\": len(self.found_in_code_settings),"
+        },
+        {
+          "line_num": 108,
+          "line_text": "\"collected_files\": [],"
+        },
+        {
+          "line_num": 109,
+          "line_text": "\"in_code_settings\": []"
+        },
+        {
+          "line_num": 120,
+          "line_text": "\"type\": \"dedicated_config\","
+        },
+        {
+          "line_num": 121,
+          "line_text": "\"original_path\": str(config_file),"
+        },
+        {
+          "line_num": 122,
+          "line_text": "\"collected_path\": str(dest_path.relative_to(output_path)),"
+        },
+        {
+          "line_num": 131,
+          "line_text": "\"type\": \"in_code_setting\","
+        },
+        {
+          "line_num": 132,
+          "line_text": "\"file_path\": str(filepath.relative_to(self.root_path)),"
+        },
+        {
+          "line_num": 133,
+          "line_text": "\"settings\": lines"
+        }
+      ]
+    }
+  ]
+}

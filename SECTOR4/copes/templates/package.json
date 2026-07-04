@@ -1,0 +1,14 @@
+{
+  "name": "package",
+  "description": "Phoenix package template",
+  "type": "dict",
+  "required_fields": ["name", "backend"],
+  "fields": {
+    "name":     {"type": "str",  "required": true,  "description": "Package name"},
+    "backend":  {"type": "str",  "required": true,  "description": "apt|dnf|pacman|brew|pip|npm|winget"},
+    "version":  {"type": "str",  "required": false, "description": "Version or latest"},
+    "platform": {"type": "str",  "required": false, "description": "Target platform"},
+    "tier":     {"type": "str",  "required": false, "description": "T1|T2|T3|T4"},
+    "meta":     {"type": "dict", "required": false, "description": "Arbitrary metadata"}
+  }
+}

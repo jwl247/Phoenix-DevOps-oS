@@ -1,0 +1,6 @@
+def run(input_data):
+    """Entry point for C kernel"""
+    print(f"Module starting with input: {input_data}")
+    # Your module initialization here
+    demo()  # or whatever your main function is
+    return "Module completed successfully"

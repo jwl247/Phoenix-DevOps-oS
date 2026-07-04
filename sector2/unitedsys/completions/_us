@@ -1,0 +1,43 @@
+#compdef us
+
+_us() {
+    local state
+
+    _arguments \
+        '--version[Show version]' \
+        '--help[Show help]' \
+        '1: :->command' \
+        '*: :->args'
+
+    case $state in
+        command)
+            local commands=(
+                'install:Install one or more packages'
+                'remove:Remove one or more packages'
+                'upgrade:Upgrade one or all packages'
+                'search:Search for packages'
+                'info:Show package details'
+                'list:List installed packages'
+                'doctor:Diagnose system and backends'
+                'rollback:Undo last transaction'
+                'manifests:List available manifests'
+            )
+            _describe 'us commands' commands
+        ;;
+        args)
+            case $words[2] in
+                install|remove|upgrade|info)
+                    _arguments \
+                        '--via[Force specific backend]:backend:(apt dnf pacman zypper brew winget choco scoop pip)' \
+                        '--dry-run[Show what would happen without doing it]'
+                ;;
+                search)
+                    _arguments \
+                        '--via[Force specific backend]:backend:(apt dnf pacman zypper brew winget choco scoop pip)'
+                ;;
+            esac
+        ;;
+    esac
+}
+
+_us "$@"

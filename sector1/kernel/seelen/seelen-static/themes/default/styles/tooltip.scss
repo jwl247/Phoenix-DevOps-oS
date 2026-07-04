@@ -1,0 +1,21 @@
+body {
+  background-color: transparent;
+  overflow: hidden;
+
+  > #root,
+   > #app {
+    width: min-content;
+    height: min-content;
+    padding: 12px; // acts as margin from pointer and content
+  }
+}
+
+.tooltip {
+  max-width: 500px;
+  padding: 6px 8px;
+
+  border-radius: 10px;
+
+  box-shadow: var(--shadow-m);
+  font-size: 0.8rem;
+}

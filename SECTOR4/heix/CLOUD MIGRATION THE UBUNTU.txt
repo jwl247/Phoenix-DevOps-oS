@@ -1,0 +1,37 @@
+🧬 CLOUD MIGRATION: THE UBUNTU ORBITAL WHALE
+
+We are moving the Magnet-Helix stack from local hardware to a Cloud Virtual Machine (Ubuntu 22.04/24.04).
+
+1. The Virtual Rack (Provisioning)
+
+OS: Pure Ubuntu Server (Avoid Alma/RHEL for this build).
+
+Disk 1 (OS): 40GB+ for the system and the 18+ Helix Modules.
+
+Disk 2 (The Whale): Attach a 1TB or 2TB Block Storage volume (EBS, Persistent Disk, or NVMe). Do not format it yet.
+
+2. The Neural Backplane (ZeroTier)
+
+Since your satellite link lacks a static IP:
+
+Both your Local PC and the Cloud VM join a private ZeroTier network.
+
+This gives the Cloud VM a permanent internal IP (e.g., 10.147.17.1).
+
+Your Local PC can now "see" the cloud node as if it were on your desk.
+
+3. The Migration Strategy (The Gun)
+
+We use a two-phase push to maintain bit-parity:
+
+Phase A (Logic): rsync pushes the /etc/HEix7_3GIII/ directory.
+
+Phase B (Data): dd streams the Jonas segments from your local 1TB drive into the Cloud LVM nodes.
+
+4. The 3-Buffer Safety
+
+In the cloud, we maintain the End Game architecture. The invisible buffers (.buf1, .buf2, .buf3) stay in the Cloud VM's staging_area/. This prevents satellite latency from causing "tearing" in the game engine—the engine only sees the data once it has successfully reached the 3rd-layer commit.
+
+5. Ring 0 Graduation (Cloud Hardware)
+
+Because the Cloud VM uses a different virtual CPU, we must rebuild the ENCOMPASS kernel module once the code lands. The build_core.sh script handles this locally on the VM.

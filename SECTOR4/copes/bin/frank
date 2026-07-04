@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+source "/home/jwwlef/Phoenix/.venv/bin/activate"
+PYTHONPATH="/home/jwwlef/Phoenix/src" python3 "/home/jwwlef/Phoenix/src/frank.py" "$@"

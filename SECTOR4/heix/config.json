@@ -1,0 +1,28 @@
+{
+  "modules": [
+    {
+      "name": "hello_module",
+      "type": "python",
+      "path": "modules/hello.py",
+      "enabled": false
+    },
+    {
+      "name": "syncthing_module",
+      "type": "javascript",
+      "path": "modules/heix_syncthing_module.js",
+      "enabled": true
+    },
+    {
+      "name": "memory_module_py",
+      "type": "python",
+      "path": "modules/Module5_Memory.py",
+      "enabled": false
+    },
+    {
+      "name": "config_scanner",
+      "type": "python",
+      "path": "modules/config_scanner.py",
+      "enabled": true
+    }
+  ]
+}

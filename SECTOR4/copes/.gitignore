@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+*.egg
+
+# DBs — never commit live data
+db/*.db
+
+# Secrets
+.env
+config.json
+
+# Distros — too big
+distros/
+
+# Logs
+logs/
+
+# Backup
+*.bak
+*.tmp
+*.prev
+
+# OS
+.DS_Store
+Thumbs.db
+clonepool/
+*.sidecar.json
+clonepool/
+*.sidecar.json
+db/*.db
+update.sh

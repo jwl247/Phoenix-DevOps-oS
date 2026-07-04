@@ -1,0 +1,146 @@
+"""
+HTg2b: Helix Translator Generation 2 (Branch B)
+Replacement for legacy interpreter.py
+Experimental Design: Pure Deception Layer with Global Versioning
+"""
+
+import time
+from typing import Dict, Optional, Any
+from dataclasses import dataclass
+
+# ============================================================================
+# HTg2b DATA STRUCTURES
+# ============================================================================
+
+@dataclass
+class TranslationEntry:
+    """The Versioned DNA of a Helix Memory Block"""
+    app_pointer: int          # The 'Lie' (Fake pointer for the app)
+    helix_key: str            # The 'Truth' (Helix key for raw data)
+    size: int                 
+    version_id: int           # Global DNA for 2TB Sync & Double Helix
+    thermal_state: str        # HOT (VRAM), WARM (RAM), COLD (Drive)
+    created_at: float         
+    last_access: float        
+    access_count: int = 0     
+
+    def access(self):
+        """Record an access and update pulse timing"""
+        self.last_access = time.time()
+        self.access_count += 1
+
+# ============================================================================
+# HELIX TRANSLATOR GENERATION 2 (BRANCH B)
+# ============================================================================
+
+class HTg2b:
+    """
+    Experimental Translator for the Life First OS.
+    Designed to manage the 'Great Lie' without conventional OS overhead.
+    """
+    
+    def __init__(self, helix_backend):
+        """
+        helix_backend: The actual HelixSystem instance
+        """
+        self.helix = helix_backend
+        
+        # The Handshake Map (Shared between Ingress and Egress)
+        self.ptr_to_key: Dict[int, TranslationEntry] = {}
+        
+        # Operational Versioning Baseline
+        self.global_version = 0x0100 
+        self.next_fake_pointer = 0x10000000  # High-address space to avoid collisions
+        
+        # Path for the 2TB Google Drive "Deep Freeze"
+        self.cold_storage_path = "/home/jwl247/gdrive/helix_cold/"
+        
+        # Stats for the Audit
+        self.stats = {
+            'translations': 0,
+            'clones': 0,
+            'sync_triggers': 0
+        }
+
+    # ========================================================================
+    # MEMORY TRANSLATION (The Pure Lie)
+    # ========================================================================
+
+    def translate_malloc(self, size: int) -> int:
+        """
+        INGRESS: App requests RAM.
+        EGRESS: Return a Versioned Lie (Fake Pointer).
+        """
+        fake_ptr = self.next_fake_pointer
+        helix_key = f"HX_{fake_ptr:08x}"
+        
+        # Local Helix backend allocation
+        success = self.helix.memory.malloc(helix_key, bytearray(size))
+        
+        if not success:
+            return 0 
+        
+        entry = TranslationEntry(
+            app_pointer=fake_ptr,
+            helix_key=helix_key,
+            size=size,
+            version_id=self.global_version,
+            thermal_state="WARM",
+            created_at=time.time(),
+            last_access=time.time()
+        )
+        
+        self.ptr_to_key[fake_ptr] = entry
+        self.next_fake_pointer += 0x1000  # Page-aligned increments
+        self.stats['translations'] += 1
+        
+        return fake_ptr
+
+    def translate_clone(self, source_ptr: int) -> int:
+        """
+        The 'Double Helix' Clone: Syncs to destination via Global Versioning.
+        Creates a new 'Lie' pointing to existing data with incremented DNA.
+        """
+        if source_ptr not in self.ptr_to_key:
+            return 0
+            
+        # The Sync Trigger: Incrementing the Global Version DNA
+        self.global_version += 1 
+        clone_ptr = self.next_fake_pointer
+        source_entry = self.ptr_to_key[source_ptr]
+        
+        clone_entry = TranslationEntry(
+            app_pointer=clone_ptr,
+            helix_key=source_entry.helix_key, 
+            size=source_entry.size,
+            version_id=self.global_version,   
+            thermal_state="HOT",              # Clones are high-priority for sync
+            created_at=time.time(),
+            last_access=time.time()
+        )
+        
+        self.ptr_to_key[clone_ptr] = clone_entry
+        self.next_fake_pointer += 0x1000
+        self.stats['clones'] += 1
+        self.stats['sync_triggers'] += 1
+        
+        return clone_ptr
+
+    # ========================================================================
+    # SYSTEM AUDIT (Verification)
+    # ========================================================================
+
+    def audit_map(self):
+        """Visual verification of the current Global Versioning state"""
+        print(f"\n--- HTg2b GLOBAL VERSION AUDIT (Ver: {hex(self.global_version)}) ---")
+        print(f"Total Translations: {self.stats['translations']} | Clones: {self.stats['clones']}")
+        print("-" * 70)
+        for ptr, entry in self.ptr_to_key.items():
+            print(f"PTR: {hex(ptr)} | VER: {hex(entry.version_id)} | STATE: {entry.thermal_state} | KEY: {entry.helix_key}")
+        print("-" * 70)
+
+    def get_version_dna(self, pointer: int) -> Optional[int]:
+        """Returns the version ID for a specific pointer for Sync matching"""
+        if pointer in self.ptr_to_key:
+            return self.ptr_to_key[pointer].version_id
+        return None

@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"path": "C:/Users/creat/AppleClone"
+		},
+		{
+			"path": "C:/Users/creat/AppleClone/CSS"
+		}
+	],
+	"settings": {
+		"liveServer.settings.multiRootWorkspaceName": "AppleClone",
+		"workbench.editor.enablePreviewFromCodeNavigation": true,
+		"workbench.editor.enablePreviewFromQuickOpen": true
+	}
+}

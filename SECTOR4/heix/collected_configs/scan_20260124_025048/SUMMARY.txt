@@ -1,0 +1,27 @@
+Config Collection Summary (Upgraded Scan)
+============================================================
+Scan Time: 20260124_025048
+Root Path: /home/jwl247/GII-E
+Dedicated Config Files Found: 5
+Files with In-Code Settings: 9
+
+Collected Dedicated Config Files:
+---------------------------------
+  - config.json
+  - secure_settings.php
+  - secure_settings_schema.sql
+  - config_scanner.py
+  - config_scanner.cpython-311.pyc
+
+
+Files with Discovered In-Code Settings:
+-----------------------------------------
+  - agnostic_layer.py (4 settings found)
+  - config.json (17 settings found)
+  - lifefirst_setup.sh (7 settings found)
+  - module_2_api_router.php (10 settings found)
+  - module_3_schedule_ai.php (2 settings found)
+  - module_5_memory.php (7 settings found)
+  - module_6_notification_ai.php (4 settings found)
+  - modules/Module5_Memory.py (11 settings found)
+  - modules/config_scanner.py (12 settings found)

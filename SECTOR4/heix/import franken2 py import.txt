@@ -1,0 +1,161 @@
+import franken2.py
+import freewheeling.py
+import propcoms.py
+
+class franken2.py:
+    """
+    Peer A: Deterministic routing.
+    Chooses the initial target system based on the ball's metadata.
+    """
+
+    def propose_route(self, ball):
+        # Simple deterministic routing based on ball type
+        ball_type = ball.get("type", "default")
+
+        routing_table = {
+            "physics": "system_1",
+            "ai": "system_2",
+            "network": "system_3",
+            "assets": "system_4",
+        }
+
+        target = routing_table.get(ball_type, "system_1")
+
+        return {"target": target}
+
+    def broadcast(self, ball):
+        return {"peer": "A", "status": "ok"}
+
+    def heartbeat(self):
+        return {"peer": "A", "alive": True}
+class freewheeling.py:
+    """
+    Peer B: Load balancing.
+    Adjusts the route proposed by Peer A based on system load.
+    """
+
+    def __init__(self):
+        self.load = {
+            "system_1": 0,
+            "system_2": 0,
+            "system_3": 0,
+            "system_4": 0,
+        }
+        self.threshold = 5
+
+    def adjust_route(self, ball, proposal):
+        target = proposal["target"]
+
+        # Accept if under threshold
+        if self.load[target] < self.threshold:
+            return {"target": target}
+
+        # Otherwise shift to next system
+        systems = list(self.load.keys())
+        idx = systems.index(target)
+
+        for i in range(1, len(systems)):
+            alt = systems[(idx + i) % len(systems)]
+            if self.load[alt] < self.threshold:
+                return {"target": alt}
+
+        # All overloaded → escalate
+        return {"escalate": True}
+
+    def broadcast(self, ball):
+        return {"peer": "B", "status": "ok"}
+
+    def heartbeat(self):
+        return {"peer": "B", "alive": True, "load": self.load}
+class propcoms.py:
+    """
+    Peer C: Consensus and conflict resolution.
+    Validates the final route or escalates if inconsistent.
+    """
+
+    def resolve_route(self, ball, adjusted):
+        # If Peer B escalated, pass escalation upward
+        if adjusted.get("escalate"):
+            return {"escalate": True}
+
+        # Validate the target
+        target = adjusted["target"]
+
+        # Example: reject invalid systems
+        valid = {"system_1", "system_2", "system_3", "system_4"}
+
+        if target not in valid:
+            return {"escalate": True}
+
+        return {"target": target}
+
+    def broadcast(self, ball):
+        return {"peer": "C", "status": "ok"}
+
+    def heartbeat(self):
+        return {"peer": "C", "alive": True}
+from ..Peer_A.api import PeerAAPI
+from ..Peer_B.api import PeerBAPI
+from ..Peer_C.api import PeerCAPI
+
+
+class TriplePeerAPI:
+    """
+    The Triple Peer Ring:
+    - Peer A: routing
+    - Peer B: load balancing
+    - Peer C: consensus
+
+    This ring handles:
+    - routing
+    - load distribution
+    - conflict resolution
+    - broadcast fan-out
+    """
+
+    def __init__(self):
+        self.peer_a = PeerAAPI()
+        self.peer_b = PeerBAPI()
+        self.peer_c = PeerCAPI()
+
+        self.peers = [self.peer_a, self.peer_b, self.peer_c]
+
+    # ---------------------------------------------------------
+    # ROUTING PIPELINE
+    # ---------------------------------------------------------
+
+    def route(self, ball):
+        """
+        Full routing pipeline:
+        1. Peer A proposes
+        2. Peer B adjusts based on load
+        3. Peer C validates or escalates
+        """
+
+        proposal = self.peer_a.propose_route(ball)
+        adjusted = self.peer_b.adjust_route(ball, proposal)
+        final = self.peer_c.resolve_route(ball, adjusted)
+
+        return final
+
+    # ---------------------------------------------------------
+    # BROADCAST
+    # ---------------------------------------------------------
+
+    def broadcast(self, ball):
+        results = {}
+        for peer in self.peers:
+            results[peer.__class__.__name__] = peer.broadcast(ball)
+        return results
+
+    # ---------------------------------------------------------
+    # HEARTBEAT
+    # ---------------------------------------------------------
+
+    def heartbeat(self):
+        return {
+            "peer_a": self.peer_a.heartbeat(),
+            "peer_b": self.peer_b.heartbeat(),
+            "peer_c": self.peer_c.heartbeat(),
+        }
+

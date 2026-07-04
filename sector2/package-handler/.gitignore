@@ -1,0 +1,32 @@
+# Phoenix Package Handler — .gitignore
+
+# Local clonepool (machine specific)
+clonepool/
+*.clonepool/
+
+# Logs
+*.log
+logs/
+.unitedsys/
+
+# Local catalog db
+*.db
+.catalog/
+
+# Wrangler local state
+.wrangler/
+
+# Auth tokens — NEVER commit
+.env
+*.env
+.dev.vars
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+*.swp
+*~
