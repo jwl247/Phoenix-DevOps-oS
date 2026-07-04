@@ -219,3 +219,4 @@ Import sequence:
 <!-- Claude appends a one-line note here at end of every session -->
 <!-- Format: YYYY-MM-DD — what was done -->
 2026-05-03 — New canonical CLAUDE.md written. Repos audited. External Ubuntu build target established. Import method confirmed as intake strategy. Build plan phased across 7 phases.
+2025-07-15 — LLM offload engine (llm_engine.py) added to Phoenix_Universal_Kernel: paged vRAM via Helix memory stack, intent-aware model ladder (70b/8b/phi3:mini), Frank Ring 3 dispatch. File tree service (file_tree_service.py) added: clone-to-dir, drag-drop intake, TAV identity on 7703-7704. Frank wired with llm_dispatch + lifefirst_dispatch Ring 3 routes. config.php upgraded to three-tier model ladder (LARGE/MEDIUM/SMALL) with automatic fallback. module_2_api_router.php paths fixed to resolve live module files. module_7_voice_ai.php wired to ollamaModelForIntent. GRUB left on chopping block per Jerry's direction.
