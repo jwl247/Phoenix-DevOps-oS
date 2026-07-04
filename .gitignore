@@ -52,3 +52,8 @@ sector2/apps/lifefirst-android/local.properties
 # OS artifacts
 .DS_Store
 Thumbs.db
+
+# Credential files
+SECTOR4/heix/api drive.txt
+SECTOR4/heix/*.txt
+**/api drive*
