@@ -97,6 +97,40 @@ class HelixPropagatorLeech(threading.Thread):
             # Metrics & Self-Adjustment
             duration_ms = (time.time() - start_time) * 1000
             self.update_tuning('last_snap_ms', duration_ms)
+
+# ============================================================
+# INTEGRATION WITH NEW CONNECTIONS SYSTEM (2026-06-30)
+# ============================================================
+"""
+The canonical connections system (SECTOR4/connections.py) provides:
+- register_from_dispatch()
+- daisy_relay()
+- health_check_all()
+- Syncthing + ZMQ helpers
+- Glossary publishing
+
+Example usage from propcoms context:
+    from connections import get_connections
+    cm = get_connections()
+    cm.register_from_dispatch("sector2/propagator/dispatch.json")
+    cm.daisy_relay({"from": "propcoms-leech", "sha": sha})
+    cm.health_check_all()
+"""
+
+try:
+    # When the canonical is on PYTHONPATH or sibling
+    from connections import get_connections as _get_phoenix_connections
+    PHOENIX_CONNECTIONS = _get_phoenix_connections()
+except Exception:
+    PHOENIX_CONNECTIONS = None
+
+def relay_via_connections(payload: dict):
+    """Preferred relay once connections system is wired everywhere."""
+    if PHOENIX_CONNECTIONS:
+        return PHOENIX_CONNECTIONS.daisy_relay(payload)
+    # fallback to local leech logic
+    return {"status": "fallback", "payload": payload}
+
             self.update_tuning('total_cycles', tuning.get('total_cycles', 0) + 1)
             
             if hits >= tuning.get('reset_threshold', 3):

@@ -1,0 +1,25 @@
+# TEMPLATE — deploy-dashboard.sh generates the real version with actual paths.
+# Launches dashboard/start-desktop.sh (loads ~/.phoenix/phoenix.env, npm start).
+
+[Unit]
+Description=Phoenix DevOps OS Desktop (Electron shell + Help Desk)
+After=network-online.target graphical-session.target phoenix-ollama.service
+Wants=network-online.target
+Wants=phoenix-ollama.service
+
+[Service]
+Type=simple
+ExecStart=DASHBOARD_DIR/start-desktop.sh
+WorkingDirectory=DASHBOARD_DIR
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=120
+EnvironmentFile=-%h/.phoenix/phoenix.env
+Environment=DISPLAY=:0
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=phoenix-dashboard
+
+[Install]
+WantedBy=phoenix-desktop.target

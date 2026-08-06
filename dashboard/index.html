@@ -14,35 +14,67 @@
                 <div class="panel-label">SECTOR CONTROL PANEL</div>
                 <div class="switch-group">
                     <div class="switch-item">
-                        <label>SECTOR 1</label>
+                        <div class="switch-label-group">
+                            <label>SECTOR 1</label>
+                            <span class="switch-role">boot · kernel</span>
+                        </div>
                         <div class="toggle-switch" data-sector="1">
                             <div class="switch-light"></div>
                         </div>
                     </div>
                     <div class="switch-item">
-                        <label>SECTOR 2</label>
+                        <div class="switch-label-group">
+                            <label>SECTOR 2</label>
+                            <span class="switch-role">packages · clone</span>
+                        </div>
                         <div class="toggle-switch" data-sector="2">
                             <div class="switch-light"></div>
                         </div>
                     </div>
                     <div class="switch-item">
-                        <label>SECTOR 3</label>
+                        <div class="switch-label-group">
+                            <label>SECTOR 3</label>
+                            <span class="switch-role">comms · network</span>
+                        </div>
                         <div class="toggle-switch" data-sector="3">
                             <div class="switch-light"></div>
                         </div>
                     </div>
                     <div class="switch-item">
-                        <label>SECTOR 4</label>
+                        <div class="switch-label-group">
+                            <label>SECTOR 4</label>
+                            <span class="switch-role">helix · frank</span>
+                        </div>
                         <div class="toggle-switch" data-sector="4">
                             <div class="switch-light"></div>
                         </div>
                     </div>
                     <div class="switch-item">
-                        <label>HELIX ENGINE</label>
+                        <div class="switch-label-group">
+                            <label>HELIX ENGINE</label>
+                            <span class="switch-role">core engine</span>
+                        </div>
                         <div class="toggle-switch active" data-sector="helix">
                             <div class="switch-light active"></div>
                         </div>
                     </div>
+                </div>
+                <div class="control-actions">
+                    <div class="panel-label">SECTOR ACTIONS</div>
+                    <select id="sector-action-select" class="control-dropdown" title="Action for active sector">
+                        <option value="status">status — sector health</option>
+                        <option value="open">open — sector folder</option>
+                        <option value="services">services — list units (linux)</option>
+                    </select>
+                    <button type="button" class="control-btn" id="sector-action-run">EXECUTE</button>
+                    <div class="control-quick-row">
+                        <button type="button" class="control-btn small" data-cmd="usys status">STATUS</button>
+                        <button type="button" class="control-btn small" data-cmd="intake status">INTAKE</button>
+                        <button type="button" class="control-btn small" data-cmd="help">HELP</button>
+                    </div>
+                </div>
+                <div class="control-hint" id="sector-hint">
+                    Switches gate sector subsystems. ON = monitor + enable CLI commands for that sector.
                 </div>
                 <div class="warning-label">
                     <span class="warning-icon">⚠</span>
@@ -50,20 +82,6 @@
                 </div>
             </div>
             
-            <div class="status-panel">
-                <div class="status-item">
-                    <span class="status-label">ALTITUDE:</span>
-                    <span class="status-value" id="altitude">1500m</span>
-                </div>
-                <div class="status-item">
-                    <span class="status-label">AIRSPEED:</span>
-                    <span class="status-value" id="airspeed">120kt</span>
-                </div>
-                <div class="status-item">
-                    <span class="status-label">HEADING:</span>
-                    <span class="status-value" id="heading">045°</span>
-                </div>
-            </div>
         </div>
 
         <!-- Main Center Display -->
@@ -74,140 +92,194 @@
                 <div class="system-time" id="system-time"></div>
             </div>
 
-            <!-- Holographic Main View -->
-            <div class="holographic-display">
-                <div class="holo-overlay">
-                    <div class="holo-grid"></div>
-                    <div class="holo-scanline"></div>
-                </div>
-                
-                <div class="main-viewport">
-                    <canvas id="main-canvas"></canvas>
-                    <div class="viewport-overlay">
-                        <div class="target-reticle"></div>
-                        <div class="hud-info">
-                            <div class="hud-item">SYSTEM STATUS: <span class="status-ok">OPERATIONAL</span></div>
-                            <div class="hud-item">HELIX ENGINE: <span class="status-ok">ACTIVE</span></div>
-                            <div class="hud-item">THROUGHPUT: <span id="throughput">700,000 ops/sec</span></div>
+            <!-- HUD = phoenix art backdrop + entire operator interface on top -->
+            <div class="hud-zone" id="hud-zone">
+                <div class="holographic-display">
+                    <div class="main-viewport">
+                        <img src="assets/phoenix-logo.png" alt="Phoenix" class="phoenix-hero">
+                        <canvas id="main-canvas" class="phoenix-ember-canvas"></canvas>
+                        <div class="holo-overlay">
+                            <div class="holo-grid"></div>
+                            <div class="holo-scanline"></div>
+                        </div>
+                        <div class="hud-reticle" aria-hidden="true">
+                            <div class="reticle-ring reticle-outer"></div>
+                            <div class="reticle-ring reticle-inner"></div>
+                            <div class="reticle-cross-h"></div>
+                            <div class="reticle-cross-v"></div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Phoenix Logo Hologram -->
-                <div class="phoenix-logo">
-                    <svg viewBox="0 0 100 100" class="logo-svg">
-                        <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(0, 255, 136, 0.5)" stroke-width="1"/>
-                        <circle cx="50" cy="50" r="35" fill="none" stroke="rgba(0, 255, 136, 0.3)" stroke-width="1"/>
-                        <path d="M 50 20 L 50 80 M 30 50 L 70 50" stroke="rgba(0, 255, 136, 0.6)" stroke-width="2"/>
-                        <text x="50" y="55" text-anchor="middle" fill="rgba(0, 255, 136, 0.8)" font-size="12" font-family="monospace">PHX</text>
-                    </svg>
+                    <div class="hud-interface">
+                        <div class="hud-status-bar">
+                            <div class="hud-info hud-info-left">
+                                <div class="hud-item">SYSTEM: <span class="status-ok">OPERATIONAL</span></div>
+                                <div class="hud-item">HELIX: <span class="status-ok">ACTIVE</span></div>
+                            </div>
+                            <div class="hud-reticle-label">PHOENIX COMMAND</div>
+                            <div class="hud-info hud-info-right">
+                                <div class="hud-item">THROUGHPUT: <span id="throughput">-- ops/sec</span></div>
+                                <div class="hud-item">AI: <span id="helpdesk-status" class="status-ok">CHECKING</span></div>
+                            </div>
+                        </div>
+
+                        <div class="hud-main" id="hud-main">
+                            <!-- AI CHAT — primary HUD (Ollama → Grok → Claude) -->
+                            <div class="hud-nav-pane active" id="hud-pane-ai-chat" data-hud-nav="ai-chat">
+                                <div class="hud-pane-title">AI CHAT</div>
+                                <div class="hud-messages" id="hud-messages">
+                                    <div class="hud-msg hud-msg-assist">AI Chat ready. Ollama primary, Grok fallback. Use HELP CHAT tab for the operator manual.</div>
+                                </div>
+                                <div class="hud-input-row">
+                                    <input type="text" id="hud-input" class="hud-input" placeholder="ask phoenix anything...">
+                                    <button class="hud-send" id="hud-send" type="button">&#9658;</button>
+                                </div>
+                                <div class="hud-provider" id="hud-provider" title="click to change AI auth">ollama → grok → claude</div>
+                            </div>
+
+                            <!-- HELP CHAT — operator manual / help reference -->
+                            <div class="hud-nav-pane" id="hud-pane-help-chat" data-hud-nav="help-chat">
+                                <div class="hud-pane-title">HELP CHAT</div>
+                                <div class="manual-toolbar">
+                                    <input type="text" id="manual-search" class="manual-search" placeholder="search manual...">
+                                    <button class="manual-reload" id="manual-reload" type="button" title="reload">&#8635;</button>
+                                </div>
+                                <div class="manual-body" id="manual-body">loading manual...</div>
+                            </div>
+
+                            <!-- MAP — filesystem browser -->
+                            <div class="hud-nav-pane" id="hud-pane-map" data-hud-nav="map">
+                                <div class="hud-pane-title">MAP</div>
+            <div class="nav-bar">
+                <!-- user/home places — populated by JS from get-user-dirs + get-drives -->
+                <div class="nav-group" id="nav-places">
+                    <button class="nav-btn active" data-navkey="phoenix">PHOENIX ROOT</button>
+                    <button class="nav-btn" data-navkey="home">HOME</button>
+                    <button class="nav-btn" data-navkey="documents">DOCUMENTS</button>
+                    <button class="nav-btn" data-navkey="desktop">DESKTOP</button>
+                    <button class="nav-btn" data-navkey="pictures">PICTURES</button>
+                    <button class="nav-btn" data-navkey="music">MUSIC</button>
+                    <button class="nav-btn" data-navkey="downloads">DOWNLOADS</button>
+                </div>
+                <!-- root filesystem paths (Linux: /opt /etc /usr /mnt /home /var; Windows: drive letters) -->
+                <div class="nav-group" id="nav-root">
+                    <!-- populated by JS -->
+                </div>
+                <!-- Frequent / pinned directories -->
+                <div class="nav-group nav-frequent" id="nav-frequent">
+                    <span class="nav-group-label">FREQUENT</span>
+                    <div class="frequent-list" id="frequent-list"></div>
+                    <div class="frequent-input-row" id="frequent-input-row" style="display:none;">
+                        <input type="text" class="frequent-input" id="frequent-input" placeholder="/path/to/dir">
+                        <button class="frequent-save" id="frequent-save">↵</button>
+                    </div>
+                    <button class="frequent-add" id="frequent-add">+ add path</button>
                 </div>
             </div>
 
-            <!-- Control Buttons Grid -->
-            <div class="control-grid">
-                <button class="control-btn" data-action="status">
-                    <span class="btn-icon">📊</span>
-                    <span class="btn-label">SYSTEM STATUS</span>
-                </button>
-                <button class="control-btn" data-action="clone">
-                    <span class="btn-icon">📋</span>
-                    <span class="btn-label">CLONE POOL</span>
-                </button>
-                <button class="control-btn" data-action="intake">
-                    <span class="btn-icon">📥</span>
-                    <span class="btn-label">INTAKE</span>
-                </button>
-                <button class="control-btn" data-action="suites">
-                    <span class="btn-icon">📦</span>
-                    <span class="btn-label">SUITES</span>
-                </button>
-                <button class="control-btn" data-action="helix">
-                    <span class="btn-icon">⚡</span>
-                    <span class="btn-label">HELIX ENGINE</span>
-                </button>
-                <button class="control-btn" data-action="catalog">
-                    <span class="btn-icon">📚</span>
-                    <span class="btn-label">CATALOG</span>
-                </button>
-                <button class="control-btn" data-action="security">
-                    <span class="btn-icon">🔒</span>
-                    <span class="btn-label">SECURITY</span>
-                </button>
-                <button class="control-btn" data-action="settings">
-                    <span class="btn-icon">⚙️</span>
-                    <span class="btn-label">SETTINGS</span>
-                </button>
+            <!-- Root tree — real top-level dirs (/, mnt, opt, drives, etc.) -->
+            <div class="root-tree-bar">
+                <span class="root-tree-label">ROOT</span>
+                <div class="root-tree-scroll" id="root-tree">
+                    <div class="place-loading">scanning root...</div>
+                </div>
             </div>
 
-            <!-- Bottom Data Panels -->
-            <div class="data-panels">
-                <div class="data-panel">
-                    <div class="panel-header">SECTOR STATUS</div>
-                    <div class="panel-content" id="sector-status">
-                        <div class="data-row">
-                            <span>Sector 1:</span>
-                            <span class="value" id="s1-files">0 files</span>
+            <div class="nav-path" id="nav-path">—</div>
+
+            <div class="fs-places" id="fs-places">
+                <div class="place-loading">scanning filesystem...</div>
+            </div>
+                            </div><!-- /MAP -->
+
+                            <!-- SECTOR MAP -->
+                            <div class="hud-nav-pane" id="hud-pane-sector-map" data-hud-nav="sector-map">
+                                <div class="hud-pane-title">SECTOR MAP</div>
+                                <div class="sector-map-body" id="sector-map-body">
+                                    <div class="sector-map-hint">Toggle sector switches on the left panel. Active sector controls CLI presets and EXECUTE actions.</div>
+                                </div>
+                            </div>
+
+                            <div class="hud-nav-pane" id="hud-pane-prev-task" data-hud-nav="prev-task">
+                                <div class="hud-pane-title">PREV. TASK</div>
+                                <div class="hud-stub-body">No previous task logged.</div>
+                            </div>
+                            <div class="hud-nav-pane" id="hud-pane-next-task" data-hud-nav="next-task">
+                                <div class="hud-pane-title">NEXT TASK</div>
+                                <div class="hud-stub-body">No queued task.</div>
+                            </div>
+                            <div class="hud-nav-pane" id="hud-pane-reports" data-hud-nav="reports">
+                                <div class="hud-pane-title">REPORTS</div>
+                                <div class="hud-stub-body">Run <code>usys status</code> from CODES tab for system report.</div>
+                            </div>
+                            <div class="hud-nav-pane" id="hud-pane-settings" data-hud-nav="settings">
+                                <div class="hud-pane-title">SETTINGS</div>
+                                <div class="hud-stub-body">Click the provider line in AI CHAT to open auth settings.</div>
+                            </div>
+
+                            <!-- CODES — Phoenix CLI + RUNIT -->
+                            <div class="hud-nav-pane" id="hud-pane-codes" data-hud-nav="codes">
+                                <div class="hud-pane-title">CODES</div>
+            <div class="operator-drawer operator-inline" id="operator-drawer">
+                <div class="drawer-tabs">
+                    <button type="button" class="drawer-tab active" data-drawer="cli">PHOENIX CLI</button>
+                    <button type="button" class="drawer-tab" data-drawer="runit">RUNIT DRAWER</button>
+                    <button type="button" class="drawer-tab-toggle" id="drawer-collapse" title="collapse/expand">▲</button>
+                </div>
+                <div class="drawer-body" id="drawer-body">
+                    <div class="drawer-pane active" id="drawer-cli">
+                        <div class="cli-output" id="cli-output">
+                            <div class="cli-line cli-system">Phoenix DevOps OS — type commands below or pick from dropdown</div>
+                            <div class="cli-line cli-dim">Sector switches on the left gate which subsystems are active.</div>
                         </div>
-                        <div class="data-row">
-                            <span>Sector 2:</span>
-                            <span class="value" id="s2-files">0 files</span>
-                        </div>
-                        <div class="data-row">
-                            <span>Sector 3:</span>
-                            <span class="value" id="s3-files">0 files</span>
-                        </div>
-                        <div class="data-row">
-                            <span>Sector 4:</span>
-                            <span class="value" id="s4-files">0 files</span>
+                        <div class="cli-input-row">
+                            <select id="cli-preset" class="cli-preset" title="preset commands">
+                                <option value="">— preset —</option>
+                                <option value="usys status">usys status</option>
+                                <option value="intake status">intake status</option>
+                                <option value="usys clone">usys clone (needs path)</option>
+                                <option value="usys search">usys search</option>
+                                <option value="help">help</option>
+                            </select>
+                            <input type="text" id="cli-input" class="cli-input" placeholder="usys status  |  intake ./file.py  |  clone ./tool.sh" autocomplete="off">
+                            <button type="button" class="drawer-btn" id="cli-run">RUN</button>
+                            <button type="button" class="drawer-btn secondary" id="cli-clear">CLR</button>
                         </div>
                     </div>
-                </div>
-
-                <div class="data-panel">
-                    <div class="panel-header">ENGINE METRICS</div>
-                    <div class="panel-content" id="engine-metrics">
-                        <div class="data-row">
-                            <span>Cache Hit:</span>
-                            <span class="value status-ok">100%</span>
+                    <div class="drawer-pane" id="drawer-runit">
+                        <div class="runit-drop" id="runit-drop">
+                            <span class="runit-drop-label">DROP FILE HERE</span>
+                            <span class="runit-drop-hint">.ps1 .sh .py .exe .cmd .js .bat — runs via Phoenix</span>
                         </div>
-                        <div class="data-row">
-                            <span>RAM Usage:</span>
-                            <span class="value" id="ram-usage">4GB / 8GB</span>
+                        <div class="runit-input-row">
+                            <input type="text" id="runit-path" class="cli-input" placeholder="C:\path\to\script.ps1">
+                            <button type="button" class="drawer-btn secondary" id="runit-browse">BROWSE</button>
+                            <input type="text" id="runit-args" class="cli-input runit-args" placeholder="args">
+                            <button type="button" class="drawer-btn run" id="runit-run">▶ RUNIT</button>
                         </div>
-                        <div class="data-row">
-                            <span>Compression:</span>
-                            <span class="value">zlib-5</span>
-                        </div>
-                        <div class="data-row">
-                            <span>Languages:</span>
-                            <span class="value">4 active</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="data-panel">
-                    <div class="panel-header">CLONEPOOL</div>
-                    <div class="panel-content" id="clonepool-info">
-                        <div class="data-row">
-                            <span>Total Files:</span>
-                            <span class="value" id="clone-count">0</span>
-                        </div>
-                        <div class="data-row">
-                            <span>Suites:</span>
-                            <span class="value" id="suite-count">0</span>
-                        </div>
-                        <div class="data-row">
-                            <span>Storage:</span>
-                            <span class="value" id="storage-used">0 MB</span>
-                        </div>
-                        <div class="data-row">
-                            <span>Last Sync:</span>
-                            <span class="value" id="last-sync">--:--</span>
-                        </div>
+                        <div class="runit-output" id="runit-output"></div>
                     </div>
                 </div>
             </div>
+                            </div><!-- /CODES -->
+                        </div><!-- /.hud-main -->
+                    </div><!-- /.hud-interface -->
+                </div><!-- /.holographic-display -->
+
+                <!-- Phoenix desktop dock — bottom tab bar (your reference layout) -->
+                <nav class="phoenix-desktop-dock" id="hud-nav-bar" aria-label="Phoenix desktop">
+                    <button type="button" class="hud-nav-btn active" data-hud-nav="ai-chat"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">AI CHAT</span></button>
+                    <button type="button" class="hud-nav-btn" data-hud-nav="help-chat"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">HELP CHAT</span></button>
+                    <button type="button" class="hud-nav-btn" data-hud-nav="map"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">MAP</span></button>
+                    <button type="button" class="hud-nav-btn" data-hud-nav="sector-map"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">SECTOR MAP</span></button>
+                    <button type="button" class="hud-nav-btn" data-hud-nav="prev-task"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">PREV. TASK</span></button>
+                    <button type="button" class="hud-nav-btn" data-hud-nav="next-task"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">NEXT TASK</span></button>
+                    <button type="button" class="hud-nav-btn" data-hud-nav="reports"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">REPORTS</span></button>
+                    <button type="button" class="hud-nav-btn" data-hud-nav="settings"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">SETTINGS</span></button>
+                    <button type="button" class="hud-nav-btn" data-hud-nav="codes"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">CODES</span></button>
+                </nav>
+                <div class="hud-zone-boundary" title="HUD boundary"></div>
+            </div><!-- /.hud-zone -->
         </div>
 
         <!-- Right Side Panels -->
@@ -260,18 +332,6 @@
                 </div>
             </div>
 
-            <!-- Temperature Displays -->
-            <div class="temp-display">
-                <div class="temp-label">TEMP</div>
-                <div class="temp-value">22°</div>
-                <div class="temp-unit">CELSIUS</div>
-            </div>
-
-            <div class="temp-display">
-                <div class="temp-label">TEMP</div>
-                <div class="temp-value">22°</div>
-                <div class="temp-unit">CELSIUS</div>
-            </div>
         </div>
     </div>
 
@@ -287,6 +347,105 @@
                 <div class="terminal-line">Type 'help' for available commands</div>
                 <div class="terminal-line">> <span class="terminal-cursor">_</span></div>
             </div>
+        </div>
+    </div>
+
+    <!-- Phoenix AI Auth Modal — shown at every boot -->
+    <div class="auth-overlay" id="auth-overlay">
+        <div class="auth-modal">
+            <div class="auth-header">
+                <div class="auth-logo">PHX</div>
+                <div class="auth-title">HELP DESK AUTH</div>
+                <div class="auth-subtitle">ollama primary · grok fallback</div>
+            </div>
+
+            <div class="auth-body">
+                <div class="auth-provider-tabs">
+                    <button class="auth-tab active" id="tab-helpdesk" data-tab="helpdesk">HELP DESK</button>
+                    <button class="auth-tab" id="tab-grok" data-tab="grok">GROK</button>
+                    <button class="auth-tab" id="tab-ollama" data-tab="ollama">OLLAMA</button>
+                    <button class="auth-tab" id="tab-subscription" data-tab="subscription">CLAUDE</button>
+                    <button class="auth-tab" id="tab-claude" data-tab="claude">API KEY</button>
+                </div>
+
+                <!-- Help Desk section (Ollama + Grok fallback — default) -->
+                <div class="auth-section" id="section-helpdesk">
+                    <div class="auth-hint" style="margin-bottom:8px;">Default mode: Ollama answers locally. Grok (xAI) takes over if Ollama is down. Claude is tertiary.</div>
+                    <div class="auth-field-label">OLLAMA ENDPOINT</div>
+                    <input type="text" id="auth-helpdesk-ollama-url" class="auth-input" value="http://localhost:11434" placeholder="http://localhost:11434">
+                    <div class="auth-field-label" style="margin-top:10px;">OLLAMA MODEL</div>
+                    <input type="text" id="auth-helpdesk-ollama-model" class="auth-input" value="llama3.2" placeholder="llama3.2">
+                    <div class="auth-field-label" style="margin-top:10px;">GROK API KEY (fallback)</div>
+                    <div class="auth-field-row">
+                        <input type="password" id="auth-grok-key" class="auth-input" placeholder="xai-... (or set XAI_API_KEY in env)">
+                        <button class="auth-reveal" id="auth-grok-reveal" title="show/hide">&#128065;</button>
+                    </div>
+                    <div class="auth-field-label" style="margin-top:10px;">GROK MODEL (optional)</div>
+                    <input type="text" id="auth-grok-model" class="auth-input" value="grok-3-mini" placeholder="grok-3-mini">
+                    <div class="auth-cli-status" id="auth-ollama-status">
+                        <span class="cli-checking">checking ollama...</span>
+                    </div>
+                </div>
+
+                <!-- Grok-only section -->
+                <div class="auth-section" id="section-grok" style="display:none;">
+                    <div class="auth-field-label">XAI API KEY</div>
+                    <div class="auth-field-row">
+                        <input type="password" id="auth-grok-only-key" class="auth-input" placeholder="xai-...">
+                        <button class="auth-reveal" id="auth-grok-only-reveal" title="show/hide">&#128065;</button>
+                    </div>
+                    <div class="auth-field-label" style="margin-top:10px;">MODEL</div>
+                    <input type="text" id="auth-grok-only-model" class="auth-input" value="grok-3-mini" placeholder="grok-3-mini">
+                    <div class="auth-hint">Grok-only mode — no Ollama attempt.</div>
+                </div>
+
+                <!-- Subscription section (Claude.ai Pro/Max/Teams — tertiary fallback) -->
+                <div class="auth-section" id="section-subscription" style="display:none;">
+                    <div class="auth-hint" style="margin-bottom:8px;">Uses your Claude.ai subscription via the Claude Code CLI. No API key needed.</div>
+                    <div class="auth-cli-status" id="auth-cli-status">
+                        <span class="cli-checking">checking for claude CLI...</span>
+                    </div>
+                    <div class="auth-hint" style="margin-top:8px;">
+                        Not installed? <span class="auth-code">npm install -g @anthropic-ai/claude-code</span><br>
+                        Not logged in? <span class="auth-code">claude login</span>
+                    </div>
+                </div>
+
+                <!-- Claude API section -->
+                <div class="auth-section" id="section-claude" style="display:none;">
+                    <div class="auth-field-label">ANTHROPIC API KEY</div>
+                    <div class="auth-field-row">
+                        <input type="password" id="auth-api-key" class="auth-input" placeholder="sk-ant-...">
+                        <button class="auth-reveal" id="auth-reveal" title="show/hide">&#128065;</button>
+                    </div>
+                    <div class="auth-field-label" style="margin-top:10px;">MODEL (optional)</div>
+                    <input type="text" id="auth-model" class="auth-input" placeholder="claude-sonnet-4-6">
+                    <div class="auth-hint">Key stays in memory — not written to disk unless you save it.</div>
+                </div>
+
+                <!-- Ollama section -->
+                <div class="auth-section" id="section-ollama" style="display:none;">
+                    <div class="auth-field-label">OLLAMA ENDPOINT</div>
+                    <input type="text" id="auth-ollama-url" class="auth-input" value="http://localhost:11434" placeholder="http://localhost:11434">
+                    <div class="auth-field-label" style="margin-top:10px;">MODEL</div>
+                    <input type="text" id="auth-ollama-model" class="auth-input" value="llama3.2" placeholder="llama3.2">
+                    <div class="auth-hint">Requires Ollama running locally. No API key or account needed.</div>
+                </div>
+
+                <div class="auth-save-row">
+                    <label class="auth-checkbox-label">
+                        <input type="checkbox" id="auth-save" checked>
+                        <span>Save to ~/.phoenix/ai_auth.json</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="auth-footer">
+                <button class="auth-btn auth-btn-skip" id="auth-skip">SKIP (USE ENV)</button>
+                <button class="auth-btn auth-btn-go" id="auth-go">LAUNCH PHOENIX</button>
+            </div>
+
+            <div class="auth-status" id="auth-status"></div>
         </div>
     </div>
 

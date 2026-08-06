@@ -4,6 +4,39 @@
 
 $ErrorActionPreference = 'Stop'
 
+# Always run from the dashboard directory regardless of where the script was invoked from
+Set-Location $PSScriptRoot
+
+# Load ~/.phoenix/phoenix.env (same file systemd / Scheduled Task uses)
+$envFile = Join-Path $HOME '.phoenix\phoenix.env'
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -eq '' -or $line.StartsWith('#')) { return }
+        $idx = $line.IndexOf('=')
+        if ($idx -lt 1) { return }
+        $key = $line.Substring(0, $idx).Trim()
+        $val = $line.Substring($idx + 1).Trim().Trim('"').Trim("'")
+        if (-not [string]::IsNullOrEmpty($key)) {
+            $current = [Environment]::GetEnvironmentVariable($key, 'Process')
+            if ([string]::IsNullOrEmpty($current)) {
+                [Environment]::SetEnvironmentVariable($key, $val, 'Process')
+            }
+        }
+    }
+    Write-Host "  ✓ Loaded $envFile" -ForegroundColor DarkGray
+}
+
+if (-not $env:PHOENIX_GROK_KEY -and $env:XAI_API_KEY) {
+    $env:PHOENIX_GROK_KEY = $env:XAI_API_KEY
+}
+if (-not $env:PHOENIX_AI_PROVIDER) {
+    $env:PHOENIX_AI_PROVIDER = 'helpdesk'
+}
+if (-not $env:PHOENIX_SKIP_AUTH_MODAL) {
+    $env:PHOENIX_SKIP_AUTH_MODAL = '1'
+}
+
 Write-Host ""
 Write-Host "  ╔═══════════════════════════════════════╗" -ForegroundColor Cyan
 Write-Host "  ║   Phoenix DevOps OS Dashboard        ║" -ForegroundColor Cyan

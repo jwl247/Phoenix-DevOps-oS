@@ -4,6 +4,9 @@
 
 $ErrorActionPreference = 'Stop'
 
+# Always run from the dashboard directory regardless of where the script was invoked from
+Set-Location $PSScriptRoot
+
 Write-Host ""
 Write-Host "  ╔═══════════════════════════════════════════════════╗" -ForegroundColor Cyan
 Write-Host "  ║   Phoenix DevOps OS Dashboard                    ║" -ForegroundColor Cyan

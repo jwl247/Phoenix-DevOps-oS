@@ -186,19 +186,24 @@ Import sequence:
 ### Phase 4 — Sector 2 (Package handler + clone pool)
 - [ ] Phoenix-Package_handler migrated into sector2/
 - [ ] intake.sh operational on external
-- [ ] packages-worker deployed and healthy
-- [ ] Import method tested end-to-end (Frank → intake → D1)
+- [x] packages-worker deployed and healthy (v3.4+ with /stats endpoint)
+- [x] Import method tested end-to-end (C core ingress → D1 + R2 + local sidecar.json)
 - [ ] Propagator rebuilt in sector2/propagator/
 
 ### Phase 5 — Sector 3 (Comms/networking)
 - [ ] romeo.py + juliet.py + dbl_juliet.py placed
 - [ ] translator.sh placed — OUTPUT ONLY rule enforced
 - [ ] quadengine.py placed
-- [ ] All .service + .target files deployed via install-units.sh
+- [x] phoenix-dashboard.service written → sector3/services/phoenix-dashboard.service
+- [ ] All .service + .target files deployed via install-units.sh on Ubuntu
 
 ### Phase 6 — Apps (Entourage)
-- [ ] Glossary wired to D1
-- [ ] Desktop (shade UI, drawer filesystem)
+- [x] Dashboard Electron app — real D1/R2 data, Claude HUD, boot-time auth modal
+- [x] Claude HUD wired — subscription / API key / Ollama (three-tier, nobody excluded)
+- [x] Helix memory on both ends — helix_packet.js (JS) + ClaudeMemory (Python, QuadralingualPacket)
+- [ ] MapTiler integration (next session — paid, goes in dashboard map panel)
+- [ ] Glossary wired to D1 (glossary panel in dashboard)
+- [ ] Desktop (shade UI, drawer filesystem) — dashboard transforms into this
 - [ ] Office (dual browser pane)
 - [ ] Sketchpad/Concepts
 - [ ] Music Notation Transcriber
@@ -218,4 +223,12 @@ Import sequence:
 ## SESSION LOG
 <!-- Claude appends a one-line note here at end of every session -->
 <!-- Format: YYYY-MM-DD — what was done -->
+2026-06-28 — C core Helix double-strand proven (ingress + egress, D1 + R2 + local cache). packages-worker /stats endpoint live. Dashboard wired to real data. Claude HUD added — 3-tier auth (subscription/API key/Ollama, nobody excluded). Helix memory on both ends: helix_packet.js (QuadralingualPacket JS), ClaudeMemory (Python via HelixTranslationPipeline + DoubleHelixStorage). SectorID.CLAUDE added. phoenix-dashboard.service written to sector3/services/. helix_memory.py placed in SECTOR4/vault/.
+
+## NEXT SESSION
+- MapTiler map panel in dashboard (Jerry paying, integrate as desktop panel)
+- Glossary panel wired to D1 live data
+- Shade UI + drawer filesystem (desktop transformation begins)
+- Deploy phoenix-dashboard.service on Ubuntu 192.168.1.133
+- Start manual/phoenix_manual.md
 2026-05-03 — New canonical CLAUDE.md written. Repos audited. External Ubuntu build target established. Import method confirmed as intake strategy. Build plan phased across 7 phases.
