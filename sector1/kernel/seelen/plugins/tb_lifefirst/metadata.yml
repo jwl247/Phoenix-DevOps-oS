@@ -1,0 +1,11 @@
+id: "@phoenix/tb-lifefirst"
+metadata:
+  displayName: !extend i18n/display_name.yml
+  description: !extend i18n/description.yml
+icon: IoHeart
+target: "@seelen/fancy-toolbar"
+plugin:
+  scopes: []
+  template: !include plugin/template.js
+  tooltip: !include plugin/tooltip.js
+  onClickV2: open("http://localhost/lifefirst/api.php?action=health")

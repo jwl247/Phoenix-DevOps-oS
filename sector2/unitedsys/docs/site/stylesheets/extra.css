@@ -1,0 +1,9 @@
+.az-bar {
+  position: sticky;
+  top: 0;
+  background: var(--md-default-bg-color);
+  padding: 6px 0;
+  font-weight: bold;
+  border-bottom: 1px solid #ccc;
+  z-index: 10;
+}

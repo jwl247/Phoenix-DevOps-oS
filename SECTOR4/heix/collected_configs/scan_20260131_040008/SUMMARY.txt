@@ -1,0 +1,31 @@
+Config Collection Summary (Upgraded Scan)
+============================================================
+Scan Time: 20260131_040008
+Root Path: /home/jwl247/GII-E
+Dedicated Config Files Found: 4
+Files with In-Code Settings: 14
+
+Collected Dedicated Config Files:
+---------------------------------
+  - config.json
+  - usr bin env python3 Example.py
+  - config_scanner.py
+  - config_scanner.cpython-311.pyc
+
+
+Files with Discovered In-Code Settings:
+-----------------------------------------
+  - Gemini.txt (181 settings found)
+  - commands_explanation.txt (8 settings found)
+  - config.json (17 settings found)
+  - explanation.txt (3 settings found)
+  - kernel name Universal.txt (24 settings found)
+  - modules/Module5_Memory.py (11 settings found)
+  - modules/agnostic_layer.py (13 settings found)
+  - modules/config_scanner.py (12 settings found)
+  - modules/helix_complete_package.py (13 settings found)
+  - modules/helix_translator.py (15 settings found)
+  - modules/helix_userspace_lib.txt (3 settings found)
+  - modules/helix_vram.py (31 settings found)
+  - run_agnostic_layer.py (5 settings found)
+  - updated_commands.txt (13 settings found)

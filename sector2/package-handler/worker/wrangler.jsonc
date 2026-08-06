@@ -1,0 +1,25 @@
+{
+  // packages-worker — Phoenix DevOps OS
+  // UnitedSys — United Systems | jwl247
+  // Deploy: wrangler deploy
+  // Tail:   wrangler tail
+  // Secret: wrangler secret put PHOENIX_AUTH
+
+  "name": "packages-worker",
+  "main": "index.js",
+  "compatibility_date": "2025-01-01",
+
+  // ── D1 Binding ─────────────────────────────────────────────────────────────
+  // PHOENIX_DB → phoenix_dev_db (the backbone — all tables live here)
+  "d1_databases": [
+    {
+      "binding":       "PHOENIX_DB",
+      "database_name": "phoenix_dev_db",
+      "database_id":   "27958687-4349-47ed-8b6a-dbc4ab29730f"
+    }
+  ]
+
+  // ── Secrets ────────────────────────────────────────────────────────────────
+  // PHOENIX_AUTH — set via: wrangler secret put PHOENIX_AUTH
+  // Never put the token here — secrets only
+}

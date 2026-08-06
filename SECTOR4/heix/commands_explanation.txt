@@ -1,0 +1,60 @@
+Based on my analysis of `AgnosticLayer.py` and `heix_syncthing_module.js`, commands are sent to the `AgnosticLayer` as a JSON string (a "Quadralingual Packet"). To control the `syncthing` module, the JSON packet must have its `target` field set to `"js"`.
+
+The `AgnosticLayer` then forwards the `intent` and `payload` from that packet to the `heix_syncthing_module.js` process.
+
+Looking at `heix_syncthing_module.js`, it is set up to handle different "intents." However, at the moment, only **one intent is fully implemented**:
+
+*   **`snapshot`**: This command is designed to trigger a snapshot of a directory.
+
+---
+
+### Available Command Details
+
+#### 1. `snapshot`
+
+*   **Intent:** `snapshot`
+*   **Description:** Instructs the `syncthing` module to perform a snapshot. The current implementation is a placeholder and will only log the target directory. The comment `// Future: Insert your actual Syncthing API/CLI calls here` indicates where the actual snapshot logic would be added.
+*   **Payload:** A JSON object containing a `directory` key with the path to the directory you want to snapshot.
+
+---
+
+### Example Command
+
+To use this, you would call the `unravel_packet` method of the `AgnosticLayer` instance with a JSON string like this. This is the "viable command" that the `AgnosticLayer` understands for controlling the `syncthing` module.
+
+```json
+{
+  "target": "js",
+  "intent": "snapshot",
+  "payload": {
+    "directory": "/path/to/your/data"
+  }
+}
+```
+
+If you were to modify the `run_agnostic_layer.py` script to send this command, it would look like this:
+
+```python
+import json
+# ... (inside the main function, after the AgnosticLayer is initialized)
+
+snapshot_command = {
+    "target": "js",
+    "intent": "snapshot",
+    "payload": {
+        "directory": "/home/user/my_data"
+    }
+}
+
+# The unravel_packet method takes a string, so we dump the dict to a JSON string
+agnostic_layer.unravel_packet(json.dumps(snapshot_command))
+```
+
+### Future Commands
+
+The `heix_syncthing_module.js` file contains comments that suggest other commands were planned but are **not yet implemented**:
+
+*   `revert`
+*   `sync`
+
+To make these commands work, you would need to add the corresponding `if (packet.intent === '...')` logic inside the `heix_syncthing_module.js` file.

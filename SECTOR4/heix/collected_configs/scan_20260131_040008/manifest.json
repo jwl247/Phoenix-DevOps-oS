@@ -1,0 +1,1510 @@
+{
+  "scan_time": "20260131_040008",
+  "root_path": "/home/jwl247/GII-E",
+  "dedicated_configs_found": 4,
+  "files_with_in_code_settings": 14,
+  "collected_files": [
+    {
+      "type": "dedicated_config",
+      "original_path": "/home/jwl247/GII-E/config.json",
+      "collected_path": "collected_files/config.json"
+    },
+    {
+      "type": "dedicated_config",
+      "original_path": "/home/jwl247/GII-E/usr bin env python3 Example.py",
+      "collected_path": "collected_files/usr bin env python3 Example.py"
+    },
+    {
+      "type": "dedicated_config",
+      "original_path": "/home/jwl247/GII-E/modules/config_scanner.py",
+      "collected_path": "collected_files/modules/config_scanner.py"
+    },
+    {
+      "type": "dedicated_config",
+      "original_path": "/home/jwl247/GII-E/modules/__pycache__/config_scanner.cpython-311.pyc",
+      "collected_path": "collected_files/modules/__pycache__/config_scanner.cpython-311.pyc"
+    }
+  ],
+  "in_code_settings": [
+    {
+      "type": "in_code_setting",
+      "file_path": "config.json",
+      "settings": [
+        {
+          "line_num": 2,
+          "line_text": "\"modules\": ["
+        },
+        {
+          "line_num": 4,
+          "line_text": "\"name\": \"hello_module\","
+        },
+        {
+          "line_num": 5,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 6,
+          "line_text": "\"path\": \"modules/hello.py\","
+        },
+        {
+          "line_num": 7,
+          "line_text": "\"enabled\": false"
+        },
+        {
+          "line_num": 10,
+          "line_text": "\"name\": \"syncthing_module\","
+        },
+        {
+          "line_num": 11,
+          "line_text": "\"type\": \"javascript\","
+        },
+        {
+          "line_num": 12,
+          "line_text": "\"path\": \"modules/heix_syncthing_module.js\","
+        },
+        {
+          "line_num": 13,
+          "line_text": "\"enabled\": true"
+        },
+        {
+          "line_num": 16,
+          "line_text": "\"name\": \"memory_module_py\","
+        },
+        {
+          "line_num": 17,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 18,
+          "line_text": "\"path\": \"modules/Module5_Memory.py\","
+        },
+        {
+          "line_num": 19,
+          "line_text": "\"enabled\": false"
+        },
+        {
+          "line_num": 22,
+          "line_text": "\"name\": \"config_scanner\","
+        },
+        {
+          "line_num": 23,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 24,
+          "line_text": "\"path\": \"modules/config_scanner.py\","
+        },
+        {
+          "line_num": 25,
+          "line_text": "\"enabled\": true"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "kernel name Universal.txt",
+      "settings": [
+        {
+          "line_num": 2,
+          "line_text": "\"kernel\": {"
+        },
+        {
+          "line_num": 3,
+          "line_text": "\"name\": \"Universal Kernel\","
+        },
+        {
+          "line_num": 4,
+          "line_text": "\"version\": \"1.0\","
+        },
+        {
+          "line_num": 5,
+          "line_text": "\"platform\": \"any\""
+        },
+        {
+          "line_num": 7,
+          "line_text": "\"modules\": ["
+        },
+        {
+          "line_num": 9,
+          "line_text": "\"name\": \"hello_module\","
+        },
+        {
+          "line_num": 10,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 11,
+          "line_text": "\"path\": \"./modules/hello.py\","
+        },
+        {
+          "line_num": 12,
+          "line_text": "\"enabled\": true,"
+        },
+        {
+          "line_num": 13,
+          "line_text": "\"description\": \"Simple hello world module\""
+        },
+        {
+          "line_num": 16,
+          "line_text": "\"name\": \"memory_module\","
+        },
+        {
+          "line_num": 17,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 18,
+          "line_text": "\"path\": \"./modules/memory.py\","
+        },
+        {
+          "line_num": 19,
+          "line_text": "\"enabled\": true,"
+        },
+        {
+          "line_num": 20,
+          "line_text": "\"description\": \"Memory management module\""
+        },
+        {
+          "line_num": 23,
+          "line_text": "\"name\": \"system_info\","
+        },
+        {
+          "line_num": 24,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 25,
+          "line_text": "\"path\": \"./modules/sysinfo.py\","
+        },
+        {
+          "line_num": 26,
+          "line_text": "\"enabled\": true,"
+        },
+        {
+          "line_num": 27,
+          "line_text": "\"description\": \"System information reporter\""
+        },
+        {
+          "line_num": 30,
+          "line_text": "\"settings\": {"
+        },
+        {
+          "line_num": 31,
+          "line_text": "\"max_memory_mb\": 8192,"
+        },
+        {
+          "line_num": 32,
+          "line_text": "\"enable_compression\": true,"
+        },
+        {
+          "line_num": 33,
+          "line_text": "\"log_level\": \"info\""
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "explanation.txt",
+      "settings": [
+        {
+          "line_num": 47,
+          "line_text": "\"intent\": \"snapshot\","
+        },
+        {
+          "line_num": 48,
+          "line_text": "\"data\": {"
+        },
+        {
+          "line_num": 49,
+          "line_text": "\"directory\": \"/home/user/my_data\""
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "run_agnostic_layer.py",
+      "settings": [
+        {
+          "line_num": 10,
+          "line_text": "\"target\": \"js\","
+        },
+        {
+          "line_num": 11,
+          "line_text": "\"intent\": intent,"
+        },
+        {
+          "line_num": 12,
+          "line_text": "\"payload\": {"
+        },
+        {
+          "line_num": 13,
+          "line_text": "\"directory\": directory,"
+        },
+        {
+          "line_num": 14,
+          "line_text": "\"version\": version"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "commands_explanation.txt",
+      "settings": [
+        {
+          "line_num": 27,
+          "line_text": "\"target\": \"js\","
+        },
+        {
+          "line_num": 28,
+          "line_text": "\"intent\": \"snapshot\","
+        },
+        {
+          "line_num": 29,
+          "line_text": "\"payload\": {"
+        },
+        {
+          "line_num": 30,
+          "line_text": "\"directory\": \"/path/to/your/data\""
+        },
+        {
+          "line_num": 42,
+          "line_text": "\"target\": \"js\","
+        },
+        {
+          "line_num": 43,
+          "line_text": "\"intent\": \"snapshot\","
+        },
+        {
+          "line_num": 44,
+          "line_text": "\"payload\": {"
+        },
+        {
+          "line_num": 45,
+          "line_text": "\"directory\": \"/home/user/my_data\""
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "updated_commands.txt",
+      "settings": [
+        {
+          "line_num": 17,
+          "line_text": "\"target\": \"js\","
+        },
+        {
+          "line_num": 18,
+          "line_text": "\"intent\": \"snapshot\","
+        },
+        {
+          "line_num": 19,
+          "line_text": "\"payload\": {"
+        },
+        {
+          "line_num": 20,
+          "line_text": "\"directory\": \"/path/to/your/data\""
+        },
+        {
+          "line_num": 33,
+          "line_text": "\"target\": \"js\","
+        },
+        {
+          "line_num": 34,
+          "line_text": "\"intent\": \"revert\","
+        },
+        {
+          "line_num": 35,
+          "line_text": "\"payload\": {"
+        },
+        {
+          "line_num": 36,
+          "line_text": "\"directory\": \"/path/to/your/data\","
+        },
+        {
+          "line_num": 37,
+          "line_text": "\"version\": \"v1.2.3\""
+        },
+        {
+          "line_num": 50,
+          "line_text": "\"target\": \"js\","
+        },
+        {
+          "line_num": 51,
+          "line_text": "\"intent\": \"sync\","
+        },
+        {
+          "line_num": 52,
+          "line_text": "\"payload\": {"
+        },
+        {
+          "line_num": 53,
+          "line_text": "\"directory\": \"/path/to/your/data\""
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "Gemini.txt",
+      "settings": [
+        {
+          "line_num": 1598,
+          "line_text": "\"kernel\": {"
+        },
+        {
+          "line_num": 1600,
+          "line_text": "\"name\": \"ENCOMPASS\","
+        },
+        {
+          "line_num": 1602,
+          "line_text": "\"version\": \"1.0.0\""
+        },
+        {
+          "line_num": 1606,
+          "line_text": "\"modules\": ["
+        },
+        {
+          "line_num": 1610,
+          "line_text": "\"name\": \"agnostic_layer\","
+        },
+        {
+          "line_num": 1612,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 1614,
+          "line_text": "\"path\": \"./agnostic_layer.py\","
+        },
+        {
+          "line_num": 1616,
+          "line_text": "\"enabled\": true"
+        },
+        {
+          "line_num": 1622,
+          "line_text": "\"name\": \"vram\","
+        },
+        {
+          "line_num": 1624,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 1626,
+          "line_text": "\"path\": \"./vram.py\","
+        },
+        {
+          "line_num": 1628,
+          "line_text": "\"enabled\": true"
+        },
+        {
+          "line_num": 1634,
+          "line_text": "\"name\": \"translator\","
+        },
+        {
+          "line_num": 1636,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 1638,
+          "line_text": "\"path\": \"./GII_translator.py\","
+        },
+        {
+          "line_num": 1640,
+          "line_text": "\"enabled\": true"
+        },
+        {
+          "line_num": 1646,
+          "line_text": "\"name\": \"configman\","
+        },
+        {
+          "line_num": 1648,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 1650,
+          "line_text": "\"path\": \"./config_scan.py\","
+        },
+        {
+          "line_num": 1652,
+          "line_text": "\"enabled\": true"
+        },
+        {
+          "line_num": 1658,
+          "line_text": "\"name\": \"guardian\","
+        },
+        {
+          "line_num": 1660,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 1662,
+          "line_text": "\"path\": \"./guardian_sec.py\","
+        },
+        {
+          "line_num": 1664,
+          "line_text": "\"enabled\": true"
+        },
+        {
+          "line_num": 1670,
+          "line_text": "\"name\": \"frankenstien\","
+        },
+        {
+          "line_num": 1672,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 1674,
+          "line_text": "\"path\": \"./franken\","
+        },
+        {
+          "line_num": 1676,
+          "line_text": "\"enabled\": true"
+        },
+        {
+          "line_num": 1682,
+          "line_text": "\"name\": \"the one\","
+        },
+        {
+          "line_num": 1684,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 1686,
+          "line_text": "\"path\": \"./helix_complete.py\","
+        },
+        {
+          "line_num": 1688,
+          "line_text": "\"enabled\": true"
+        },
+        {
+          "line_num": 1696,
+          "line_text": "\"name\": \"syncthing\","
+        },
+        {
+          "line_num": 1698,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 1700,
+          "line_text": "\"path\": \"./encompass_syncthing.py\","
+        },
+        {
+          "line_num": 1702,
+          "line_text": "\"enabled\": true"
+        },
+        {
+          "line_num": 1756,
+          "line_text": "CRITICAL_FILES = ["
+        },
+        {
+          "line_num": 2120,
+          "line_text": "\"id\": folder_id,"
+        },
+        {
+          "line_num": 2122,
+          "line_text": "\"label\": label or folder_id,"
+        },
+        {
+          "line_num": 2124,
+          "line_text": "\"path\": path,"
+        },
+        {
+          "line_num": 2126,
+          "line_text": "\"type\": \"sendreceive\","
+        },
+        {
+          "line_num": 2128,
+          "line_text": "\"devices\": [],"
+        },
+        {
+          "line_num": 2130,
+          "line_text": "\"rescanIntervalS\": 3600,"
+        },
+        {
+          "line_num": 2132,
+          "line_text": "\"fsWatcherEnabled\": True,"
+        },
+        {
+          "line_num": 2134,
+          "line_text": "\"fsWatcherDelayS\": 10,"
+        },
+        {
+          "line_num": 2136,
+          "line_text": "\"ignorePerms\": False,"
+        },
+        {
+          "line_num": 2138,
+          "line_text": "\"autoNormalize\": True"
+        },
+        {
+          "line_num": 2937,
+          "line_text": "WINDOWS = \"windows\""
+        },
+        {
+          "line_num": 2939,
+          "line_text": "LINUX = \"linux\""
+        },
+        {
+          "line_num": 2941,
+          "line_text": "MACOS = \"darwin\""
+        },
+        {
+          "line_num": 2943,
+          "line_text": "UNKNOWN = \"unknown\""
+        },
+        {
+          "line_num": 3299,
+          "line_text": "L1_HOT = \"l1_hot\"           # Fastest, uncompressed"
+        },
+        {
+          "line_num": 3301,
+          "line_text": "L2_WARM = \"l2_warm\"         # Medium, may be compressed"
+        },
+        {
+          "line_num": 3303,
+          "line_text": "L3_COMPRESSED = \"l3_cold\"   # Slowest, compressed"
+        },
+        {
+          "line_num": 3407,
+          "line_text": "'l1_hits': 0, 'l1_misses': 0,"
+        },
+        {
+          "line_num": 3409,
+          "line_text": "'l2_hits': 0, 'l2_misses': 0,"
+        },
+        {
+          "line_num": 3411,
+          "line_text": "'l3_hits': 0, 'l3_misses': 0,"
+        },
+        {
+          "line_num": 3413,
+          "line_text": "'promotions': 0, 'demotions': 0,"
+        },
+        {
+          "line_num": 3415,
+          "line_text": "'evictions': 0"
+        },
+        {
+          "line_num": 3679,
+          "line_text": "'malloc_calls': 0,"
+        },
+        {
+          "line_num": 3681,
+          "line_text": "'free_calls': 0,"
+        },
+        {
+          "line_num": 3683,
+          "line_text": "'read_calls': 0,"
+        },
+        {
+          "line_num": 3685,
+          "line_text": "'write_calls': 0"
+        },
+        {
+          "line_num": 3777,
+          "line_text": "'file_reads': 0, 'file_writes': 0,"
+        },
+        {
+          "line_num": 3779,
+          "line_text": "'cache_hits': 0, 'cache_misses': 0,"
+        },
+        {
+          "line_num": 3781,
+          "line_text": "'disk_reads': 0, 'disk_writes': 0"
+        },
+        {
+          "line_num": 3951,
+          "line_text": "'system': {"
+        },
+        {
+          "line_num": 3953,
+          "line_text": "'os': self.agnostic.system.os_type.value,"
+        },
+        {
+          "line_num": 3955,
+          "line_text": "'uptime_seconds': uptime"
+        },
+        {
+          "line_num": 3959,
+          "line_text": "'cache': {"
+        },
+        {
+          "line_num": 3961,
+          "line_text": "'l1_size_mb': l1_size / (1024 * 1024),"
+        },
+        {
+          "line_num": 3963,
+          "line_text": "'l2_size_mb': l2_size / (1024 * 1024),"
+        },
+        {
+          "line_num": 3965,
+          "line_text": "'l3_size_mb': l3_size / (1024 * 1024),"
+        },
+        {
+          "line_num": 3967,
+          "line_text": "'hit_rate_percent': hit_rate,"
+        },
+        {
+          "line_num": 3973,
+          "line_text": "'memory': self.memory.stats,"
+        },
+        {
+          "line_num": 3975,
+          "line_text": "'filesystem': self.fs.stats"
+        },
+        {
+          "line_num": 4127,
+          "line_text": "'files_synced': 0,"
+        },
+        {
+          "line_num": 4129,
+          "line_text": "'bytes_sent': 0,"
+        },
+        {
+          "line_num": 4131,
+          "line_text": "'bytes_received': 0,"
+        },
+        {
+          "line_num": 4133,
+          "line_text": "'conflicts_resolved': 0,"
+        },
+        {
+          "line_num": 4135,
+          "line_text": "'sync_errors': 0"
+        },
+        {
+          "line_num": 4403,
+          "line_text": "'local_newer': [],"
+        },
+        {
+          "line_num": 4405,
+          "line_text": "'remote_newer': [],"
+        },
+        {
+          "line_num": 4407,
+          "line_text": "'conflicts': [],"
+        },
+        {
+          "line_num": 4409,
+          "line_text": "'local_only': [],"
+        },
+        {
+          "line_num": 4411,
+          "line_text": "'remote_only': []"
+        },
+        {
+          "line_num": 4487,
+          "line_text": "'nodes_configured': len(self.nodes),"
+        },
+        {
+          "line_num": 4489,
+          "line_text": "'nodes_online': alive_count,"
+        },
+        {
+          "line_num": 4491,
+          "line_text": "'watched_directories': len(self.watched_dirs),"
+        },
+        {
+          "line_num": 4493,
+          "line_text": "'tracked_files': len(self.file_metadata),"
+        },
+        {
+          "line_num": 4495,
+          "line_text": "'stats': self.stats"
+        },
+        {
+          "line_num": 4990,
+          "line_text": "\"timestamp\": time.time(),"
+        },
+        {
+          "line_num": 4991,
+          "line_text": "\"vram_allocation\": _helix_core.memory.get_allocated_size(),"
+        },
+        {
+          "line_num": 4992,
+          "line_text": "\"buffer_integrity\": run_guardian(), # Re-verify SHA256"
+        },
+        {
+          "line_num": 4993,
+          "line_text": "\"network_status\": _syncthing.is_running() if _syncthing else False"
+        },
+        {
+          "line_num": 5146,
+          "line_text": "\"clones\": [f.name for f in (self.root / \"clones\").iterdir()],"
+        },
+        {
+          "line_num": 5147,
+          "line_text": "\"snapshots\": [f.name for f in (self.root / \"snapshots\").iterdir()],"
+        },
+        {
+          "line_num": 5148,
+          "line_text": "\"active_buffers\": [\".buf_alpha\", \".buf_beta\", \".buf_gamma\"]"
+        },
+        {
+          "line_num": 5154,
+          "line_text": "\"status\": \"HEALTHY\","
+        },
+        {
+          "line_num": 5155,
+          "line_text": "\"vram_load\": system_info.vram_state,"
+        },
+        {
+          "line_num": 5156,
+          "line_text": "\"integrity\": \"SECURED\","
+        },
+        {
+          "line_num": 5157,
+          "line_text": "\"timestamp\": time.strftime(\"%H:%M:%S\")"
+        },
+        {
+          "line_num": 5224,
+          "line_text": "\"vram_blocks\": list(self.vram.allocated.keys()),"
+        },
+        {
+          "line_num": 5225,
+          "line_text": "\"buffer_states\": [\"buf_alpha\", \"buf_beta\", \"buf_gamma\"],"
+        },
+        {
+          "line_num": 5226,
+          "line_text": "\"sha_status\": \"LOCKED\""
+        },
+        {
+          "line_num": 6561,
+          "line_text": "\"modules\": {"
+        },
+        {
+          "line_num": 6562,
+          "line_text": "\"agnostic_layer\": false,"
+        },
+        {
+          "line_num": 6563,
+          "line_text": "\"vram\": false,"
+        },
+        {
+          "line_num": 6564,
+          "line_text": "\"translator\": false,"
+        },
+        {
+          "line_num": 6565,
+          "line_text": "\"configman\": false,"
+        },
+        {
+          "line_num": 6566,
+          "line_text": "\"guardian\": true,"
+        },
+        {
+          "line_num": 6567,
+          "line_text": "\"frankenstien\": false,"
+        },
+        {
+          "line_num": 6569,
+          "line_text": "\"syncthing\": true"
+        },
+        {
+          "line_num": 7605,
+          "line_text": "\"modules\": {"
+        },
+        {
+          "line_num": 7606,
+          "line_text": "\"agnostic_layer\": true,"
+        },
+        {
+          "line_num": 7607,
+          "line_text": "\"vram\": false,"
+        },
+        {
+          "line_num": 7608,
+          "line_text": "\"translator\": false,"
+        },
+        {
+          "line_num": 7609,
+          "line_text": "\"configman\": false,"
+        },
+        {
+          "line_num": 7610,
+          "line_text": "\"guardian\": false,"
+        },
+        {
+          "line_num": 7611,
+          "line_text": "\"frankenstien\": false,"
+        },
+        {
+          "line_num": 7613,
+          "line_text": "\"syncthing\": false"
+        },
+        {
+          "line_num": 7708,
+          "line_text": "\"modules\": {"
+        },
+        {
+          "line_num": 7709,
+          "line_text": "\"frankenstien\": true,"
+        },
+        {
+          "line_num": 7710,
+          "line_text": "\"guardian\": true,"
+        },
+        {
+          "line_num": 7711,
+          "line_text": "\"agnostic_layer\": false,"
+        },
+        {
+          "line_num": 7712,
+          "line_text": "\"vram\": false,"
+        },
+        {
+          "line_num": 7713,
+          "line_text": "\"translator\": false,"
+        },
+        {
+          "line_num": 7714,
+          "line_text": "\"configman\": false,"
+        },
+        {
+          "line_num": 7716,
+          "line_text": "\"syncthing\": false"
+        },
+        {
+          "line_num": 7968,
+          "line_text": "\"modules\": {"
+        },
+        {
+          "line_num": 7969,
+          "line_text": "\"agnostic_layer\": true,"
+        },
+        {
+          "line_num": 7970,
+          "line_text": "\"vram\": false,"
+        },
+        {
+          "line_num": 7971,
+          "line_text": "\"translator\": false,"
+        },
+        {
+          "line_num": 7972,
+          "line_text": "\"configman\": false,"
+        },
+        {
+          "line_num": 7973,
+          "line_text": "\"guardian\": false,"
+        },
+        {
+          "line_num": 7974,
+          "line_text": "\"frankenstien\": true,"
+        },
+        {
+          "line_num": 7976,
+          "line_text": "\"syncthing\": false"
+        },
+        {
+          "line_num": 7996,
+          "line_text": "\"configman\": false,"
+        },
+        {
+          "line_num": 7998,
+          "line_text": "\"guardian\": false,"
+        },
+        {
+          "line_num": 8000,
+          "line_text": "\"frankenstien\": true,"
+        },
+        {
+          "line_num": 8004,
+          "line_text": "\"syncthing\": false"
+        },
+        {
+          "line_num": 8014,
+          "line_text": "\"modules\": {"
+        },
+        {
+          "line_num": 8016,
+          "line_text": "\"agnostic_layer\": true,"
+        },
+        {
+          "line_num": 8018,
+          "line_text": "\"vram\": false,"
+        },
+        {
+          "line_num": 8020,
+          "line_text": "\"translator\": false,"
+        },
+        {
+          "line_num": 8022,
+          "line_text": "\"configman\": false,"
+        },
+        {
+          "line_num": 8024,
+          "line_text": "\"guardian\": false,"
+        },
+        {
+          "line_num": 8026,
+          "line_text": "\"frankenstien\": true,"
+        },
+        {
+          "line_num": 8030,
+          "line_text": "\"syncthing\": false"
+        },
+        {
+          "line_num": 8126,
+          "line_text": "\"modules\": {"
+        },
+        {
+          "line_num": 8127,
+          "line_text": "\"agnostic_layer\": true,"
+        },
+        {
+          "line_num": 8128,
+          "line_text": "\"vram\": false,"
+        },
+        {
+          "line_num": 8129,
+          "line_text": "\"translator\": false,"
+        },
+        {
+          "line_num": 8130,
+          "line_text": "\"configman\": false,"
+        },
+        {
+          "line_num": 8131,
+          "line_text": "\"guardian\": true,"
+        },
+        {
+          "line_num": 8132,
+          "line_text": "\"frankenstien\": true,"
+        },
+        {
+          "line_num": 8134,
+          "line_text": "\"syncthing\": true"
+        },
+        {
+          "line_num": 8166,
+          "line_text": "\"modules\": {"
+        },
+        {
+          "line_num": 8167,
+          "line_text": "\"agnostic_layer\": false,"
+        },
+        {
+          "line_num": 8168,
+          "line_text": "\"vram\": false,"
+        },
+        {
+          "line_num": 8169,
+          "line_text": "\"translator\": false,"
+        },
+        {
+          "line_num": 8170,
+          "line_text": "\"configman\": false,"
+        },
+        {
+          "line_num": 8171,
+          "line_text": "\"guardian\": true,"
+        },
+        {
+          "line_num": 8172,
+          "line_text": "\"frankenstien\": true,"
+        },
+        {
+          "line_num": 8174,
+          "line_text": "\"syncthing\": false"
+        },
+        {
+          "line_num": 9131,
+          "line_text": "\"modules\": {"
+        },
+        {
+          "line_num": 9132,
+          "line_text": "\"agnostic_layer\": true,"
+        },
+        {
+          "line_num": 9133,
+          "line_text": "\"vram\": false,"
+        },
+        {
+          "line_num": 9134,
+          "line_text": "\"translator\": false,"
+        },
+        {
+          "line_num": 9135,
+          "line_text": "\"configman\": false,"
+        },
+        {
+          "line_num": 9136,
+          "line_text": "\"guardian\": false,"
+        },
+        {
+          "line_num": 9137,
+          "line_text": "\"frankenstien\": true,"
+        },
+        {
+          "line_num": 9139,
+          "line_text": "\"syncthing\": false"
+        },
+        {
+          "line_num": 9174,
+          "line_text": "\"modules\": {"
+        },
+        {
+          "line_num": 9175,
+          "line_text": "\"agnostic_layer\": true,"
+        },
+        {
+          "line_num": 9176,
+          "line_text": "\"vram\": false,"
+        },
+        {
+          "line_num": 9177,
+          "line_text": "\"translator\": false,"
+        },
+        {
+          "line_num": 9178,
+          "line_text": "\"configman\": false,"
+        },
+        {
+          "line_num": 9179,
+          "line_text": "\"guardian\": false,"
+        },
+        {
+          "line_num": 9180,
+          "line_text": "\"frankenstien\": true,"
+        },
+        {
+          "line_num": 9182,
+          "line_text": "\"syncthing\": false"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "modules/Module5_Memory.py",
+      "settings": [
+        {
+          "line_num": 7,
+          "line_text": "DB_FILE = 'lifefirst.db'"
+        },
+        {
+          "line_num": 10,
+          "line_text": "GEMINI_API_KEY = os.getenv(\"GEMINI_API_KEY\")"
+        },
+        {
+          "line_num": 11,
+          "line_text": "GEMINI_MODEL = os.getenv(\"GEMINI_MODEL\", \"gemini-1.5-flash\") # Default to 1.5-flash"
+        },
+        {
+          "line_num": 12,
+          "line_text": "OLLAMA_API_URL = os.getenv(\"OLLAMA_URL\", \"http://localhost:11434/api/generate\") # Already in .env"
+        },
+        {
+          "line_num": 13,
+          "line_text": "OLLAMA_MODEL = os.getenv(\"OLLAMA_MODEL\", \"llama3\")"
+        },
+        {
+          "line_num": 31,
+          "line_text": "\"contents\": ["
+        },
+        {
+          "line_num": 33,
+          "line_text": "\"role\": \"user\","
+        },
+        {
+          "line_num": 34,
+          "line_text": "\"parts\": [{\"text\": f\"SYSTEM: {system_prompt}\\n\\nUSER: {user_content}\"}]"
+        },
+        {
+          "line_num": 54,
+          "line_text": "\"model\": OLLAMA_MODEL,"
+        },
+        {
+          "line_num": 55,
+          "line_text": "\"prompt\": f\"### System: {system_prompt}\\n### User: {user_content}\\n### Assistant:\","
+        },
+        {
+          "line_num": 56,
+          "line_text": "\"stream\": False"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "modules/config_scanner.py",
+      "settings": [
+        {
+          "line_num": 104,
+          "line_text": "\"scan_time\": self.timestamp,"
+        },
+        {
+          "line_num": 105,
+          "line_text": "\"root_path\": str(self.root_path),"
+        },
+        {
+          "line_num": 106,
+          "line_text": "\"dedicated_configs_found\": len(self.found_configs),"
+        },
+        {
+          "line_num": 107,
+          "line_text": "\"files_with_in_code_settings\": len(self.found_in_code_settings),"
+        },
+        {
+          "line_num": 108,
+          "line_text": "\"collected_files\": [],"
+        },
+        {
+          "line_num": 109,
+          "line_text": "\"in_code_settings\": []"
+        },
+        {
+          "line_num": 120,
+          "line_text": "\"type\": \"dedicated_config\","
+        },
+        {
+          "line_num": 121,
+          "line_text": "\"original_path\": str(config_file),"
+        },
+        {
+          "line_num": 122,
+          "line_text": "\"collected_path\": str(dest_path.relative_to(output_path)),"
+        },
+        {
+          "line_num": 131,
+          "line_text": "\"type\": \"in_code_setting\","
+        },
+        {
+          "line_num": 132,
+          "line_text": "\"file_path\": str(filepath.relative_to(self.root_path)),"
+        },
+        {
+          "line_num": 133,
+          "line_text": "\"settings\": lines"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "modules/agnostic_layer.py",
+      "settings": [
+        {
+          "line_num": 15,
+          "line_text": "WINDOWS = \"windows\""
+        },
+        {
+          "line_num": 16,
+          "line_text": "LINUX = \"linux\""
+        },
+        {
+          "line_num": 17,
+          "line_text": "MACOS = \"darwin\""
+        },
+        {
+          "line_num": 18,
+          "line_text": "UNKNOWN = \"unknown\""
+        },
+        {
+          "line_num": 234,
+          "line_text": "'file_reads': 0, 'file_writes': 0,"
+        },
+        {
+          "line_num": 235,
+          "line_text": "'cache_hits': 0, 'cache_misses': 0,"
+        },
+        {
+          "line_num": 236,
+          "line_text": "'disk_reads': 0, 'disk_writes': 0"
+        },
+        {
+          "line_num": 313,
+          "line_text": "'ingress_calls': 0, 'egress_calls': 0,"
+        },
+        {
+          "line_num": 314,
+          "line_text": "'malloc_intercepts': 0, 'free_intercepts': 0,"
+        },
+        {
+          "line_num": 315,
+          "line_text": "'read_intercepts': 0, 'write_intercepts': 0"
+        },
+        {
+          "line_num": 459,
+          "line_text": "'raw_content': content,"
+        },
+        {
+          "line_num": 460,
+          "line_text": "'file_type': path.suffix,"
+        },
+        {
+          "line_num": 461,
+          "line_text": "'parsed': False"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "modules/helix_userspace_lib.txt",
+      "settings": [
+        {
+          "line_num": 206,
+          "line_text": "'helix_init': ['int', []],"
+        },
+        {
+          "line_num": 207,
+          "line_text": "'helix_register': ['int', ['string']],"
+        },
+        {
+          "line_num": 208,
+          "line_text": "'helix_cleanup': ['void', []]"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "modules/helix_translator.py",
+      "settings": [
+        {
+          "line_num": 75,
+          "line_text": "'ingress_calls': 0,"
+        },
+        {
+          "line_num": 76,
+          "line_text": "'egress_calls': 0,"
+        },
+        {
+          "line_num": 77,
+          "line_text": "'translations': 0,"
+        },
+        {
+          "line_num": 78,
+          "line_text": "'malloc_intercepts': 0,"
+        },
+        {
+          "line_num": 79,
+          "line_text": "'free_intercepts': 0,"
+        },
+        {
+          "line_num": 80,
+          "line_text": "'read_intercepts': 0,"
+        },
+        {
+          "line_num": 81,
+          "line_text": "'write_intercepts': 0,"
+        },
+        {
+          "line_num": 362,
+          "line_text": "'app_pointer': hex(entry.app_pointer),"
+        },
+        {
+          "line_num": 363,
+          "line_text": "'helix_key': entry.helix_key,"
+        },
+        {
+          "line_num": 364,
+          "line_text": "'size': entry.size,"
+        },
+        {
+          "line_num": 365,
+          "line_text": "'age': time.time() - entry.created_at,"
+        },
+        {
+          "line_num": 366,
+          "line_text": "'last_access': time.time() - entry.last_access,"
+        },
+        {
+          "line_num": 367,
+          "line_text": "'access_count': entry.access_count"
+        },
+        {
+          "line_num": 373,
+          "line_text": "'active_translations': len(self.ptr_to_key),"
+        },
+        {
+          "line_num": 374,
+          "line_text": "'active_file_descriptors': len(self.fd_to_path),"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "modules/helix_complete_package.py",
+      "settings": [
+        {
+          "line_num": 15,
+          "line_text": "WINDOWS = \"windows\""
+        },
+        {
+          "line_num": 16,
+          "line_text": "LINUX = \"linux\""
+        },
+        {
+          "line_num": 17,
+          "line_text": "MACOS = \"darwin\""
+        },
+        {
+          "line_num": 18,
+          "line_text": "UNKNOWN = \"unknown\""
+        },
+        {
+          "line_num": 234,
+          "line_text": "'file_reads': 0, 'file_writes': 0,"
+        },
+        {
+          "line_num": 235,
+          "line_text": "'cache_hits': 0, 'cache_misses': 0,"
+        },
+        {
+          "line_num": 236,
+          "line_text": "'disk_reads': 0, 'disk_writes': 0"
+        },
+        {
+          "line_num": 313,
+          "line_text": "'ingress_calls': 0, 'egress_calls': 0,"
+        },
+        {
+          "line_num": 314,
+          "line_text": "'malloc_intercepts': 0, 'free_intercepts': 0,"
+        },
+        {
+          "line_num": 315,
+          "line_text": "'read_intercepts': 0, 'write_intercepts': 0"
+        },
+        {
+          "line_num": 459,
+          "line_text": "'raw_content': content,"
+        },
+        {
+          "line_num": 460,
+          "line_text": "'file_type': path.suffix,"
+        },
+        {
+          "line_num": 461,
+          "line_text": "'parsed': False"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "modules/helix_vram.py",
+      "settings": [
+        {
+          "line_num": 24,
+          "line_text": "HOT = 0      # Pure RAM, instant access"
+        },
+        {
+          "line_num": 25,
+          "line_text": "WARM = 1     # Compressed RAM"
+        },
+        {
+          "line_num": 26,
+          "line_text": "COLD = 2     # Memory-mapped, ready to evict"
+        },
+        {
+          "line_num": 27,
+          "line_text": "FROZEN = 3   # Evicted to disk"
+        },
+        {
+          "line_num": 111,
+          "line_text": "'allocations': 0,"
+        },
+        {
+          "line_num": 112,
+          "line_text": "'deallocations': 0,"
+        },
+        {
+          "line_num": 113,
+          "line_text": "'promotions': 0,"
+        },
+        {
+          "line_num": 114,
+          "line_text": "'demotions': 0,"
+        },
+        {
+          "line_num": 115,
+          "line_text": "'compressions': 0,"
+        },
+        {
+          "line_num": 116,
+          "line_text": "'decompressions': 0,"
+        },
+        {
+          "line_num": 117,
+          "line_text": "'evictions': 0,"
+        },
+        {
+          "line_num": 118,
+          "line_text": "'hits': 0,"
+        },
+        {
+          "line_num": 119,
+          "line_text": "'misses': 0,"
+        },
+        {
+          "line_num": 120,
+          "line_text": "'bytes_saved': 0"
+        },
+        {
+          "line_num": 328,
+          "line_text": "'total_blocks': total_blocks,"
+        },
+        {
+          "line_num": 329,
+          "line_text": "'hot_blocks': hot_blocks,"
+        },
+        {
+          "line_num": 330,
+          "line_text": "'warm_blocks': warm_blocks,"
+        },
+        {
+          "line_num": 331,
+          "line_text": "'cold_blocks': cold_blocks,"
+        },
+        {
+          "line_num": 332,
+          "line_text": "'frozen_blocks': frozen_blocks,"
+        },
+        {
+          "line_num": 333,
+          "line_text": "'hot_usage_mb': hot_usage / (32768 * 32768),"
+        },
+        {
+          "line_num": 334,
+          "line_text": "'warm_usage_mb': warm_usage / (32768 * 32768),"
+        },
+        {
+          "line_num": 335,
+          "line_text": "'cold_usage_mb': cold_usage / (32768 * 32768),"
+        },
+        {
+          "line_num": 336,
+          "line_text": "'total_usage_mb': (hot_usage + warm_usage + cold_usage) / (32768 * 32768),"
+        },
+        {
+          "line_num": 337,
+          "line_text": "'bytes_saved_mb': self.stats['bytes_saved'] / (32768 * 32768),"
+        },
+        {
+          "line_num": 338,
+          "line_text": "'hit_rate': hit_rate * 1000,"
+        },
+        {
+          "line_num": 391,
+          "line_text": "'id': i,"
+        },
+        {
+          "line_num": 392,
+          "line_text": "'payload': 'x' * 1000,  # 1KB each"
+        },
+        {
+          "line_num": 393,
+          "line_text": "'metadata': {'created': time.time(), 'version': 1}"
+        },
+        {
+          "line_num": 411,
+          "line_text": "'id': i,"
+        },
+        {
+          "line_num": 412,
+          "line_text": "'payload': 'y' * 1000,"
+        },
+        {
+          "line_num": 413,
+          "line_text": "'metadata': {'created': time.time(), 'version': 1}"
+        }
+      ]
+    }
+  ]
+}

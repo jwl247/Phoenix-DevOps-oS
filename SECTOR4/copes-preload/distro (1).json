@@ -1,0 +1,19 @@
+{
+  "name": "distro",
+  "description": "Phoenix distro template — OS images managed by the clone pool",
+  "type": "dict",
+  "required_fields": ["name", "version", "arch"],
+  "fields": {
+    "name":        {"type": "str",  "required": true,  "description": "Distro name: ubuntu-server, debian, kali, arch, fedora, rhel, alpine"},
+    "version":     {"type": "str",  "required": true,  "description": "Version string e.g. 24.04.2, 12.5, 2024.1"},
+    "arch":        {"type": "str",  "required": true,  "description": "Architecture: amd64, arm64, x86"},
+    "flavor":      {"type": "str",  "required": false, "description": "Flavor: server, desktop, minimal, hwe"},
+    "iso_url":     {"type": "str",  "required": false, "description": "Upstream ISO URL for update checks"},
+    "checksum":    {"type": "str",  "required": false, "description": "SHA256 of current cached ISO"},
+    "checksum_url":{"type": "str",  "required": false, "description": "Upstream checksum file URL"},
+    "size_bytes":  {"type": "int",  "required": false, "description": "ISO size in bytes"},
+    "tier":        {"type": "str",  "required": false, "description": "T1=current T2=previous T3=legacy"},
+    "pinned":      {"type": "bool", "required": false, "description": "If true never rotate out on 4-day window"},
+    "meta":        {"type": "dict", "required": false, "description": "Arbitrary metadata"}
+  }
+}

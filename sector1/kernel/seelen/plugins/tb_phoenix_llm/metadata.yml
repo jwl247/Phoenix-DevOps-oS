@@ -1,0 +1,10 @@
+id: "@phoenix/tb-phoenix-llm"
+metadata:
+  displayName: !extend i18n/display_name.yml
+  description: !extend i18n/description.yml
+icon: BiBrain
+target: "@seelen/fancy-toolbar"
+plugin:
+  scopes: []
+  template: !include plugin/template.js
+  tooltip: !include plugin/tooltip.js

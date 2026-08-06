@@ -1,0 +1,10 @@
+Could you please clarify what you mean by "commands one word"?
+
+The current commands (`snapshot`, `revert`, `sync`) are already single words for the `intent` field within the JSON packet.
+
+Are you referring to:
+*   The `intent` keywords themselves (e.g., wanting "snap" instead of "snapshot")?
+*   The overall structure of the JSON packet (e.g., trying to send just "snapshot" instead of the full `{"target": "js", "intent": "snapshot", ...}` object)?
+*   Something else entirely?
+
+The `AgnosticLayer` is designed to receive structured JSON packets to properly route commands to different modules and targets. Simplifying it to a single word might lose necessary information for the system to function correctly.

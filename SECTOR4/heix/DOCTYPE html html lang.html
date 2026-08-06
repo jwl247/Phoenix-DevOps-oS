@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GemIII Neural Desktop // Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;700&display=swap');
+        
+        :root {
+            --neon-green: #00ff41;
+            --neon-blue: #3b82f6;
+            --neon-red: #ef4444;
+            --bg-deep: #020203;
+            --panel-bg: rgba(10, 10, 15, 0.9);
+            --border-glow: rgba(0, 255, 65, 0.2);
+        }
+
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: var(--bg-deep);
+            color: var(--neon-green);
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            background-image: 
+                radial-gradient(circle at 2px 2px, rgba(0, 255, 65, 0.05) 1px, transparent 0);
+            background-size: 40px 40px;
+        }
+
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+
+        /* Neural Windowing System */
+        .window {
+            position: absolute;
+            background: var(--panel-bg);
+            border: 1px solid #1a1a1a;
+            box-shadow: 0 10px 60px rgba(0,0,0,0.95);
+            display: flex;
+            flex-direction: column;
+            backdrop-filter: blur(25px);
+            transition: border-color 0.3s, box-shadow 0.3s;
+            border-radius: 4px;
+        }
+        .window.active {
+            border-color: var(--neon-blue);
+            box-shadow: 0 0 25px rgba(59, 130, 246, 0.3);
+            z-index: 50;
+        }
+        .window-header {
+            background: rgba(0,0,0,0.7);
+            padding: 8px 12px;
+            cursor: move;
+            border-bottom: 1px solid #1a1a1a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            font-size: 0.65rem;
+            letter-spacing: 0.2em;
+        }
+        .window-content {
+            flex: 1;
+            overflow: auto;
+            padding: 15px;
+        }
+
+        /* 3-Buffer Staging Visualization */
+        .buffer-lane {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            background: rgba(0,0,0,0.4);
+            border: 1px solid #111;
+            border-radius: 4px;
+        }
+        .node {
+            width: 42px;
+            height: 42px;
+            border: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.55rem;
+            border-radius: 2px;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .node-active {
+            border-color: var(--neon-blue);
+            background: rgba(59, 130, 246, 0.15);
+            box-shadow: 0 0 15px var(--neon-blue);
+            transform: scale(1.1);
+        }
+        .node-commit {
+            border-color: var(--neon-green);
+            background: rgba(0, 255, 65, 0.15);
+            box-shadow: 0 0 15px var(--neon-green);
+        }
+
+        /* Integrated Command Console (Docked) */
+        .console-dock {
+            position: fixed;
+            right: 20px;
+            top: 20px;
+            bottom: 65px;
+            width: 420px;
+            background: rgba(3, 3, 5, 0.98);
+            border: 1px solid #1a1a1a;
+            border-left: 2px solid var(--neon-blue);
+            display: flex;
+            flex-direction: column;
+            z-index: 100;
+            box-shadow: -15px 0 40px rgba(0,0,0,0.6);
+        }
+
+        /* Taskbar */
+        .taskbar {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            height: 45px;
+            background: #000;
+            border-top: 1px solid #1a1a1a;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 1000;
+        }
+        .gem-btn {
+            background: linear-gradient(135deg, #00ff41 0%, #008f11 100%);
+            color: #000;
+            font-weight: 900;
+            padding: 4px 18px;
+            margin-right: 20px;
+            cursor: pointer;
+            border-radius: 2px;
+            font-size: 0.7rem;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.4);
+            letter-spacing: 0.05em;
+        }
+
+        /* Explorer Icons */
+        .file-item {
+            padding: 8px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .file-item:hover {
+            background: rgba(59, 130, 246, 0.05);
+            border-color: rgba(59, 130, 246, 0.2);
+        }
+        .file-item.selected {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: var(--neon-blue);
+            color: white;
+        }
+
+        /* Scanline Overlay */
+        .crt-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.05) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.01), rgba(0, 255, 0, 0.005), rgba(0, 0, 255, 0.01));
+            background-size: 100% 4px, 4px 100%;
+            pointer-events: none;
+            z-index: 10000;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.5; }
+            50% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.5; }
+        }
+        .neural-pulse { animation: pulse-ring 2s infinite; }
+    </style>
+</head>
+<body onmousemove="handleGlobalMouseMove(event)" onmouseup="handleGlobalMouseUp()">
+
+    <div class="crt-overlay"></div>
+
+    <!-- DESKTOP WORKSPACE -->
+    <div id="desktop" class="relative h-full w-full p-8 pr-[460px]">
+        
+        <!-- Sidebar Quick Access -->
+        <div class="flex flex-col gap-10 w-20">
+            <div onclick="toggleWindow('win-explorer')" class="flex flex-col items-center group cursor-pointer">
+                <div class="w-12 h-12 flex items-center justify-center border border-gray-800 bg-black/50 group-hover:border-blue-500 transition-all rounded shadow-inner">
+                    <i class="fas fa-folder-open text-xl group-hover:text-blue-400"></i>
+                </div>
+                <span class="text-[8px] mt-2 text-gray-500 group-hover:text-blue-300 font-bold uppercase tracking-widest">GEM_SPACE</span>
+            </div>
+            <div onclick="toggleWindow('win-whale')" class="flex flex-col items-center group cursor-pointer">
+                <div class="w-12 h-12 flex items-center justify-center border border-gray-800 bg-black/50 group-hover:border-blue-500 transition-all rounded">
+                    <i class="fas fa-whale text-xl group-hover:text-blue-400"></i>
+                </div>
+                <span class="text-[8px] mt-2 text-gray-500 group-hover:text-blue-300 font-bold uppercase tracking-widest">WHALE_LVM</span>
+            </div>
+            <div onclick="toggleWindow('win-pipeline')" class="flex flex-col items-center group cursor-pointer">
+                <div class="w-12 h-12 flex items-center justify-center border border-gray-800 bg-black/50 group-hover:border-green-500 transition-all rounded">
+                    <i class="fas fa-stream text-xl group-hover:text-green-400"></i>
+                </div>
+                <span class="text-[8px] mt-2 text-gray-500 group-hover:text-green-300 font-bold uppercase tracking-widest">STAGING</span>
+            </div>
+        </div>
+
+        <!-- WINDOW: GEM SPACE EXPLORER (THE NEW STUFF) -->
+        <div id="win-explorer" class="window" style="top: 80px; left: 150px; width: 600px; height: 450px;" onmousedown="focusWindow('win-explorer')">
+            <div class="window-header" onmousedown="startDrag(event, 'win-explorer')">
+                <span class="orbitron"><i class="fas fa-satellite mr-2 text-blue-500"></i>GEM_SPACE_EXPLORER // NEURAL_FS</span>
+                <span class="cursor-pointer opacity-50 hover:opacity-100" onclick="closeWindow('win-explorer')">×</span>
+            </div>
+            <div class="flex h-full overflow-hidden">
+                <!-- Sidebar: Jonas Segments -->
+                <div class="w-40 border-r border-gray-900 bg-black/30 p-2 space-y-2">
+                    <div class="text-[9px] text-gray-600 mb-4 px-2 uppercase tracking-tighter">Whale Nodes</div>
+                    <div onclick="filterExplorer(1)" class="text-[10px] p-2 hover:bg-blue-500/10 cursor-pointer border-l-2 border-transparent hover:border-blue-500 transition-all active-node-link" id="node-link-1">JONAS_RAW_1</div>
+                    <div onclick="filterExplorer(2)" class="text-[10px] p-2 hover:bg-blue-500/10 cursor-pointer border-l-2 border-transparent hover:border-blue-500 transition-all" id="node-link-2">JONAS_RAW_2</div>
+                    <div onclick="filterExplorer(3)" class="text-[10px] p-2 hover:bg-blue-500/10 cursor-pointer border-l-2 border-transparent hover:border-blue-500 transition-all" id="node-link-3">JONAS_RAW_3</div>
+                    <div onclick="filterExplorer(4)" class="text-[10px] p-2 hover:bg-blue-500/10 cursor-pointer border-l-2 border-transparent hover:border-blue-500 transition-all" id="node-link-4">JONAS_RAW_4</div>
+                    <div class="pt-4 border-t border-gray-900 mt-4">
+                        <div onclick="filterExplorer('staging')" class="text-[10px] p-2 text-yellow-500/70 hover:bg-yellow-500/5 cursor-pointer">STAGING_AREA</div>
+                    </div>
+                </div>
+                <!-- Main Content -->
+                <div class="flex-1 flex flex-col">
+                    <div class="p-3 bg-black/20 border-b border-gray-900 flex items-center justify-between">
+                        <span id="current-path" class="text-[10px] text-gray-400 font-bold">/dev/gemiii_whale/jonas_raw_1</span>
+                        <span class="text-[9px] text-blue-500">RAW_BLOCK_MODE</span>
+                    </div>
+                    <div id="explorer-grid" class="flex-1 overflow-y-auto p-2 grid grid-cols-2 gap-2 content-start">
+                        <!-- Items injected by JS -->
+                    </div>
+                    <!-- Selection Detail Bar -->
+                    <div id="selection-bar" class="p-3 bg-black border-t border-gray-900 flex justify-between items-center opacity-30 pointer-events-none">
+                        <div class="flex flex-col">
+                            <span id="sel-name" class="text-xs text-white font-bold">NO_SELECTION</span>
+                            <span id="sel-sha" class="text-[9px] text-gray-500">SHA1: N/A</span>
+                        </div>
+                        <button onclick="deploySelected()" class="px-4 py-1 bg-blue-600 text-white text-[10px] font-bold hover:bg-blue-500 transition-all rounded-sm uppercase">Snap to Pipeline</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- WINDOW: WHALE STATUS -->
+        <div id="win-whale" class="window" style="top: 400px; left: 150px; width: 400px; height: 280px; display:none;" onmousedown="focusWindow('win-whale')">
+            <div class="window-header" onmousedown="startDrag(event, 'win-whale')">
+                <span class="orbitron"><i class="fas fa-database mr-2 text-blue-500"></i>WHALE_LVM_INFRA</span>
+                <span class="cursor-pointer opacity-50 hover:opacity-100" onclick="closeWindow('win-whale')">×</span>
+            </div>
+            <div class="window-content space-y-4">
+                <div class="flex justify-between items-end border-b border-gray-800 pb-2">
+                    <span class="text-[10px] text-gray-500">2.0 TB TOTAL CAPACITY</span>
+                </div>
+                <div id="jonas-status-container" class="space-y-4"></div>
+            </div>
+        </div>
+
+        <!-- WINDOW: PIPELINE -->
+        <div id="win-pipeline" class="window" style="top: 150px; left: 780px; width: 450px; height: 260px; display:none;" onmousedown="focusWindow('win-pipeline')">
+            <div class="window-header" onmousedown="startDrag(event, 'win-pipeline')">
+                <span class="orbitron"><i class="fas fa-shuffle mr-2 text-green-500"></i>PIPELINE_STAGING</span>
+                <span class="cursor-pointer opacity-50 hover:opacity-100" onclick="closeWindow('win-pipeline')">×</span>
+            </div>
+            <div class="window-content flex flex-col items-center justify-center">
+                <div class="buffer-lane">
+                    <div class="flex flex-col items-center gap-2">
+                        <div id="buf-1" class="node">B1</div>
+                        <span class="text-[8px] text-gray-500">INGEST</span>
+                    </div>
+                    <div class="text-gray-800"><i class="fas fa-chevron-right"></i></div>
+                    <div class="flex flex-col items-center gap-2">
+                        <div id="buf-2" class="node">B2</div>
+                        <span class="text-[8px] text-gray-500">VALIDATE</span>
+                    </div>
+                    <div class="text-gray-800"><i class="fas fa-chevron-right"></i></div>
+                    <div class="flex flex-col items-center gap-2">
+                        <div id="buf-3" class="node">B3</div>
+                        <span class="text-[8px] text-gray-500">COMMIT</span>
+                    </div>
+                    <div class="w-1 bg-gray-800 h-10 mx-2"></div>
+                    <div class="flex flex-col items-center gap-2">
+                        <div id="buf-live" class="w-12 h-12 border border-blue-500 flex items-center justify-center text-blue-500 rounded-full font-bold text-[10px]">LIVE</div>
+                        <span class="text-[8px] text-blue-700">TRUTH</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- COMMAND CENTER DOCK -->
+    <div id="console-dock" class="console-dock">
+        <div class="p-3 bg-black border-b border-gray-900 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <div class="w-3 h-3 rounded-full bg-blue-500 neural-pulse"></div>
+                <span class="orbitron text-[10px] font-bold text-blue-400">COMMAND_CENTER_v2.0</span>
+            </div>
+            <div class="text-[8px] text-gray-600 font-mono tracking-widest">RING_0_DICTATOR_ACTIVE</div>
+        </div>
+        <div id="console-logs" class="flex-1 p-4 overflow-y-auto font-mono text-[10px] text-gray-400 space-y-1">
+            <p class="text-blue-500 font-bold">💎 GEMIII NEURAL DESKTOP INITIALIZED.</p>
+            <p class="text-gray-500">--- SYSTEM STATUS: DETERMINISTIC ---</p>
+            <p class="text-gray-600 italic mt-2">> Awaiting Intent Injection...</p>
+        </div>
+        <div class="p-3 bg-black border-t border-gray-900 flex items-center gap-2">
+            <span class="text-blue-500 font-bold text-xs">J4_INTENT></span>
+            <input type="text" id="console-input" class="bg-transparent border-none outline-none flex-1 text-white text-xs font-mono" placeholder="spawn unit_id..." autofocus onkeydown="handleInput(event)">
+        </div>
+        <div class="p-3 bg-blue-500/5 border-t border-gray-900 flex justify-between items-center">
+             <div class="flex gap-4">
+                 <div class="flex flex-col">
+                     <span class="text-[8px] text-gray-600 uppercase">Snap Velocity</span>
+                     <span id="stat-ms" class="text-[11px] font-bold text-blue-400">0.00ms</span>
+                 </div>
+                 <div class="flex flex-col">
+                     <span class="text-[8px] text-gray-600 uppercase">Pressure</span>
+                     <span class="text-[11px] font-bold text-green-500">0.02</span>
+                 </div>
+             </div>
+             <div class="text-[10px] text-blue-500 font-bold orbitron">CORE_SHIELD: 0</div>
+        </div>
+    </div>
+
+    <!-- TASKBAR -->
+    <div class="taskbar">
+        <div class="gem-btn orbitron">GEMIII</div>
+        <div id="task-explorer" class="px-3 text-[10px] cursor-pointer hover:text-white text-blue-400 border-b-2 border-blue-500" onclick="toggleWindow('win-explorer')">GEM_SPACE</div>
+        <div id="task-whale" class="px-3 text-[10px] cursor-pointer hover:text-white text-gray-500" onclick="toggleWindow('win-whale')">WHALE_INFRA</div>
+        <div id="task-pipeline" class="px-3 text-[10px] cursor-pointer hover:text-white text-gray-500" onclick="toggleWindow('task-pipeline')">PIPELINE</div>
+        
+        <div class="flex-1"></div>
+
+        <div class="flex items-center gap-6">
+            <div id="clock" class="text-xs font-bold text-gray-100 tracking-wider">00:00:00</div>
+            <div class="flex items-center gap-2">
+                <span class="text-[9px] text-green-500 font-bold">PULSE_SYNC</span>
+                <div class="w-1.5 h-1.5 rounded-full bg-green-500"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA STATE ---
+        const JONAS_DATA = {
+            1: [
+                { id: 'BLK_A01', name: 'SHADOW_ACOLYTE_LOGIC', sha: '90210-A01-B02-C03' },
+                { id: 'BLK_A02', name: 'VOID_SENTINEL_GEOM', sha: '90210-A02-F11-D04' },
+                { id: 'BLK_A03', name: 'SOUL_REAPER_SFX', sha: '90210-A03-X99-Z01' },
+                { id: 'BLK_A04', name: 'TERRAIN_FRAGMENT_01', sha: '11201-B01-K02-L03' }
+            ],
+            2: [
+                { id: 'BLK_B11', name: 'UNIT_PATHFINDER_ZH', sha: '00321-B11-M01-N02' },
+                { id: 'BLK_B12', name: 'COLLISION_SPHERE_09', sha: '00321-B12-P01-Q02' }
+            ],
+            3: [
+                { id: 'BLK_C55', name: 'VIBRATIONAL_ASSET_EN', sha: '55521-C55-T01-U02' }
+            ],
+            4: [
+                { id: 'BLK_D99', name: 'POST_BOOT_PURITY_CFG', sha: '99999-D99-S01-W02' }
+            ],
+            'staging': [
+                { id: 'STG_01', name: 'LAST_SNAP_MIRROR', sha: 'MIRROR_SNAP_ALPHA' }
+            ]
+        };
+
+        let selectedAsset = null;
+
+        // --- WINDOW MANAGER ---
+        let dragTarget = null, offset = {x:0, y:0}, zIndex = 100;
+
+        function startDrag(e, id) {
+            dragTarget = document.getElementById(id);
+            focusWindow(id);
+            offset.x = e.clientX - dragTarget.offsetLeft;
+            offset.y = e.clientY - dragTarget.offsetTop;
+            e.preventDefault();
+        }
+
+        function handleGlobalMouseMove(e) {
+            if(dragTarget) {
+                dragTarget.style.left = (e.clientX - offset.x) + 'px';
+                dragTarget.style.top = (e.clientY - offset.y) + 'px';
+            }
+        }
+
+        function handleGlobalMouseUp() { dragTarget = null; }
+
+        function focusWindow(id) {
+            zIndex++;
+            document.querySelectorAll('.window').forEach(w => w.classList.remove('active'));
+            const win = document.getElementById(id);
+            win.style.zIndex = zIndex;
+            win.classList.add('active');
+            
+            const taskKey = id.split('-')[1];
+            document.querySelectorAll('.taskbar div').forEach(t => t.classList.remove('border-b-2', 'border-blue-500', 'text-blue-400'));
+            const taskItem = document.getElementById('task-' + taskKey);
+            if(taskItem) taskItem.classList.add('border-b-2', 'border-blue-500', 'text-blue-400');
+        }
+
+        function closeWindow(id) { document.getElementById(id).style.display = 'none'; }
+
+        function toggleWindow(id) {
+            const win = document.getElementById(id);
+            if(win.style.display === 'none') {
+                win.style.display = 'flex';
+                focusWindow(id);
+            } else { closeWindow(id); }
+        }
+
+        // --- EXPLORER LOGIC ---
+        function filterExplorer(node) {
+            const grid = document.getElementById('explorer-grid');
+            const pathDisp = document.getElementById('current-path');
+            grid.innerHTML = '';
+            
+            // UI Link State
+            document.querySelectorAll('.w-40 div').forEach(d => d.classList.remove('border-blue-500', 'text-blue-400', 'bg-blue-500/10'));
+            const link = document.getElementById(`node-link-${node}`);
+            if(link) link.classList.add('border-blue-500', 'text-blue-400', 'bg-blue-500/10');
+
+            pathDisp.innerText = node === 'staging' ? '/etc/HEix7_3GIII/staging_area' : `/dev/gemiii_whale/jonas_raw_${node}`;
+
+            const items = JONAS_DATA[node] || [];
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'file-item flex items-center gap-3';
+                div.innerHTML = `
+                    <div class="w-8 h-8 flex items-center justify-center bg-gray-900 border border-gray-800 text-xs">
+                        <i class="fas ${node === 'staging' ? 'fa-file' : 'fa-cube text-blue-500'}"></i>
+                    </div>
+                    <div class="flex flex-col">
+                        <span class="text-[10px] font-bold">${item.name}</span>
+                        <span class="text-[8px] text-gray-600">${item.id}</span>
+                    </div>
+                `;
+                div.onclick = () => selectFile(item, div);
+                grid.appendChild(div);
+            });
+        }
+
+        function selectFile(item, el) {
+            document.querySelectorAll('.file-item').forEach(d => d.classList.remove('selected'));
+            el.classList.add('selected');
+            selectedAsset = item;
+            
+            const bar = document.getElementById('selection-bar');
+            bar.style.opacity = "1";
+            bar.style.pointerEvents = "all";
+            
+            document.getElementById('sel-name').innerText = item.name;
+            document.getElementById('sel-sha').innerText = `SHA1: ${item.sha}`;
+            
+            // Auto-fill Console input
+            document.getElementById('console-input').value = `snap ${item.id}`;
+        }
+
+        function deploySelected() {
+            if(!selectedAsset) return;
+            processCommand(`snap ${selectedAsset.id}`);
+        }
+
+        // --- CONSOLE LOGIC ---
+        const logs = document.getElementById('console-logs');
+        const input = document.getElementById('console-input');
+
+        function appendLog(msg, color = 'text-gray-400') {
+            const p = document.createElement('p');
+            p.className = color;
+            p.innerHTML = `<span class="text-gray-700">[${new Date().toLocaleTimeString([], {hour12:false})}]</span> ${msg}`;
+            logs.appendChild(p);
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function handleInput(e) {
+            if(e.key === 'Enter') {
+                const cmd = input.value.trim();
+                if(!cmd) return;
+                appendLog(`J4_INTENT> ${cmd}`, 'text-white font-bold');
+                processCommand(cmd.toLowerCase());
+                input.value = '';
+            }
+        }
+
+        function processCommand(cmd) {
+            const parts = cmd.split(' ');
+            const verb = parts[0];
+
+            if(verb === 'spawn' || verb === 'snap') {
+                const target = parts[1] || 'UNIT_ALPHA';
+                appendLog(`🎾 PCS BALL: Dropping intent for ${target} into Portal...`, 'text-blue-400');
+                
+                setTimeout(() => {
+                    appendLog(`🔥 TRIGGER: Ring 0 Handshake Detected.`, 'text-red-400');
+                    animatePipeline(target);
+                }, 400);
+            } else if(verb === 'health') {
+                appendLog('--- SYSTEM HEALTH: NOMINAL ---', 'text-yellow-500');
+            } else if(verb === 'clear') {
+                logs.innerHTML = '';
+            } else {
+                appendLog(`Error: '${verb}' command unknown.`, 'text-red-500');
+            }
+        }
+
+        function animatePipeline(assetId) {
+            const sequence = ['buf-1', 'buf-2', 'buf-3', 'buf-live'];
+            const snapTime = (Math.random() * 4 + 1.2).toFixed(2);
+            
+            sequence.forEach((id, i) => {
+                setTimeout(() => {
+                    const el = document.getElementById(id);
+                    el.classList.add(id === 'buf-live' ? 'node-commit' : 'node-active');
+                    
+                    if(id === 'buf-1') appendLog(`⚙️  INGEST: Pulling bits from Jonas segment...`);
+                    if(id === 'buf-2') appendLog(`🧬 TRANSMUTE: Agnostic Layer applying Native Tongue...`);
+                    if(id === 'buf-3') appendLog(`🔒 COMMIT: Profile locked in 3rd-layer buffer.`);
+                    
+                    setTimeout(() => {
+                        el.classList.remove('node-active', 'node-commit');
+                        if(id === 'buf-live') {
+                            appendLog(`✅ SUCCESS: ${assetId} live in ${snapTime}ms`, 'text-green-500');
+                            document.getElementById('stat-ms').innerText = snapTime + 'ms';
+                        }
+                    }, 500);
+                }, i * 250);
+            });
+        }
+
+        // --- WHALE DATA GENERATOR ---
+        function initWhaleUI() {
+            const container = document.getElementById('jonas-status-container');
+            for(let i=1; i<=4; i++) {
+                const div = document.createElement('div');
+                div.className = 'jonas-entry group';
+                div.innerHTML = `
+                    <div class="flex justify-between text-[10px] mb-1">
+                        <span class="text-gray-400 tracking-widest">JONAS_RAW_${i}</span>
+                        <span class="text-blue-500 font-bold">READY</span>
+                    </div>
+                    <div class="h-1 bg-gray-900 overflow-hidden rounded-full">
+                        <div class="h-full bg-blue-500/50" style="width: ${Math.random()*60+10}%"></div>
+                    </div>
+                `;
+                container.appendChild(div);
+            }
+        }
+
+        // --- SYSTEM HEARTBEAT ---
+        function updateClock() {
+            document.getElementById('clock').innerText = new Date().toLocaleTimeString([], {hour12: false});
+        }
+        setInterval(updateClock, 1000);
+
+        window.onload = () => {
+            initWhaleUI();
+            filterExplorer(1);
+            updateClock();
+            setTimeout(() => {
+                appendLog('Neural Backplane Sync: 127.0.0.1');
+                appendLog('Awaiting Ring 0 Handshake...');
+            }, 600);
+        };
+    </script>
+</body>
+</html>

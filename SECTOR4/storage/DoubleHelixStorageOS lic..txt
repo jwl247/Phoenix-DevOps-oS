@@ -1,0 +1,14 @@
+Polyform Noncommercial License 1.0.0
+
+Copyright © 2025 Jerry Leftwich
+
+This software and associated documentation files ("Double Helix Storage and OS") are licensed under the Polyform Noncommercial License 1.0.0 (“License”).
+
+You may use, copy, modify, and distribute the Software and Documentation solely for noncommercial purposes.  
+Commercial use (including use, licensing, hosting, offering as a service, or distribution for commercial advantage or monetary compensation) is prohibited without a separate commercial license from the copyright holder.
+
+For commercial licensing, contact: jerry.leftwich@example.com
+
+Full license text: https://polyformproject.org/licenses/noncommercial/1.0.0/
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND.

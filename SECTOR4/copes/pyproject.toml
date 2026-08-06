@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phoenix-copes"
+version = "2.0.0"
+description = "Phoenix DevOps OS — COPES — Coordinated Process Engine Substrate"
+authors = [
+    {name = "Jerry Leftwich"}
+]
+license = {text = "GPL-3.0"}
+requires-python = ">=3.10"
+dependencies = [
+    "base58",
+    "qrcode",
+    "prometheus-client",
+    "numpy",
+    "inotify-simple",
+]
+
+[project.scripts]
+ph               = "package_handler:main"
+frank            = "frank:main"
+egress_helix     = "helix:egress_main"
+ph-distro        = "distro_handler:main"
+intake-package   = "package_handler:intake_package_main"
+intake-dir       = "package_handler:intake_dir_main"
+watch-phoenix    = "watcher:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"

@@ -1,0 +1,225 @@
+{
+  "scan_time": "20260124_024544",
+  "root_path": "/home/jwl247/GII-E",
+  "dedicated_configs_found": 3,
+  "files_with_in_code_settings": 4,
+  "collected_files": [
+    {
+      "type": "dedicated_config",
+      "original_path": "/home/jwl247/GII-E/config.json",
+      "collected_path": "collected_files/config.json"
+    },
+    {
+      "type": "dedicated_config",
+      "original_path": "/home/jwl247/GII-E/modules/config_scanner.py",
+      "collected_path": "collected_files/modules/config_scanner.py"
+    },
+    {
+      "type": "dedicated_config",
+      "original_path": "/home/jwl247/GII-E/modules/__pycache__/config_scanner.cpython-311.pyc",
+      "collected_path": "collected_files/modules/__pycache__/config_scanner.cpython-311.pyc"
+    }
+  ],
+  "in_code_settings": [
+    {
+      "type": "in_code_setting",
+      "file_path": "config.json",
+      "settings": [
+        {
+          "line_num": 2,
+          "line_text": "\"modules\": ["
+        },
+        {
+          "line_num": 4,
+          "line_text": "\"name\": \"hello_module\","
+        },
+        {
+          "line_num": 5,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 6,
+          "line_text": "\"path\": \"modules/hello.py\","
+        },
+        {
+          "line_num": 7,
+          "line_text": "\"enabled\": false"
+        },
+        {
+          "line_num": 10,
+          "line_text": "\"name\": \"syncthing_module\","
+        },
+        {
+          "line_num": 11,
+          "line_text": "\"type\": \"javascript\","
+        },
+        {
+          "line_num": 12,
+          "line_text": "\"path\": \"modules/heix_syncthing_module.js\","
+        },
+        {
+          "line_num": 13,
+          "line_text": "\"enabled\": false"
+        },
+        {
+          "line_num": 16,
+          "line_text": "\"name\": \"memory_module\","
+        },
+        {
+          "line_num": 17,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 18,
+          "line_text": "\"path\": \"modules/Module5_Memory.py\","
+        },
+        {
+          "line_num": 19,
+          "line_text": "\"enabled\": false"
+        },
+        {
+          "line_num": 22,
+          "line_text": "\"name\": \"config_scanner\","
+        },
+        {
+          "line_num": 23,
+          "line_text": "\"type\": \"python\","
+        },
+        {
+          "line_num": 24,
+          "line_text": "\"path\": \"modules/config_scanner.py\","
+        },
+        {
+          "line_num": 25,
+          "line_text": "\"enabled\": true"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "agnostic_layer.py",
+      "settings": [
+        {
+          "line_num": 24,
+          "line_text": "WINDOWS = \"windows\""
+        },
+        {
+          "line_num": 25,
+          "line_text": "LINUX = \"linux\""
+        },
+        {
+          "line_num": 26,
+          "line_text": "MACOS = \"darwin\""
+        },
+        {
+          "line_num": 27,
+          "line_text": "UNKNOWN = \"unknown\""
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "modules/Module5_Memory.py",
+      "settings": [
+        {
+          "line_num": 7,
+          "line_text": "DB_FILE = 'lifefirst.db'"
+        },
+        {
+          "line_num": 10,
+          "line_text": "GEMINI_API_KEY = os.getenv(\"GEMINI_API_KEY\")"
+        },
+        {
+          "line_num": 11,
+          "line_text": "GEMINI_MODEL = os.getenv(\"GEMINI_MODEL\", \"gemini-1.5-flash\") # Default to 1.5-flash"
+        },
+        {
+          "line_num": 12,
+          "line_text": "OLLAMA_API_URL = os.getenv(\"OLLAMA_URL\", \"http://localhost:11434/api/generate\") # Already in .env"
+        },
+        {
+          "line_num": 13,
+          "line_text": "OLLAMA_MODEL = os.getenv(\"OLLAMA_MODEL\", \"llama3\")"
+        },
+        {
+          "line_num": 31,
+          "line_text": "\"contents\": ["
+        },
+        {
+          "line_num": 33,
+          "line_text": "\"role\": \"user\","
+        },
+        {
+          "line_num": 34,
+          "line_text": "\"parts\": [{\"text\": f\"SYSTEM: {system_prompt}\\n\\nUSER: {user_content}\"}]"
+        },
+        {
+          "line_num": 54,
+          "line_text": "\"model\": OLLAMA_MODEL,"
+        },
+        {
+          "line_num": 55,
+          "line_text": "\"prompt\": f\"### System: {system_prompt}\\n### User: {user_content}\\n### Assistant:\","
+        },
+        {
+          "line_num": 56,
+          "line_text": "\"stream\": False"
+        }
+      ]
+    },
+    {
+      "type": "in_code_setting",
+      "file_path": "modules/config_scanner.py",
+      "settings": [
+        {
+          "line_num": 104,
+          "line_text": "\"scan_time\": self.timestamp,"
+        },
+        {
+          "line_num": 105,
+          "line_text": "\"root_path\": str(self.root_path),"
+        },
+        {
+          "line_num": 106,
+          "line_text": "\"dedicated_configs_found\": len(self.found_configs),"
+        },
+        {
+          "line_num": 107,
+          "line_text": "\"files_with_in_code_settings\": len(self.found_in_code_settings),"
+        },
+        {
+          "line_num": 108,
+          "line_text": "\"collected_files\": [],"
+        },
+        {
+          "line_num": 109,
+          "line_text": "\"in_code_settings\": []"
+        },
+        {
+          "line_num": 120,
+          "line_text": "\"type\": \"dedicated_config\","
+        },
+        {
+          "line_num": 121,
+          "line_text": "\"original_path\": str(config_file),"
+        },
+        {
+          "line_num": 122,
+          "line_text": "\"collected_path\": str(dest_path.relative_to(output_path)),"
+        },
+        {
+          "line_num": 131,
+          "line_text": "\"type\": \"in_code_setting\","
+        },
+        {
+          "line_num": 132,
+          "line_text": "\"file_path\": str(filepath.relative_to(self.root_path)),"
+        },
+        {
+          "line_num": 133,
+          "line_text": "\"settings\": lines"
+        }
+      ]
+    }
+  ]
+}
