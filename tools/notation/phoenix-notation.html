@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phoenix Notation — Live Multi-Instrument Score</title>
+<style>
+/* ── Reset & base ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  background: #0d0f14;
+  color: #c8d0dd;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: #11141c;
+  border-bottom: 1px solid #1e2535;
+  flex-shrink: 0;
+}
+header h1 { font-size: 15px; font-weight: 600; letter-spacing: .05em; color: #e2e8f0; }
+header .sub { font-size: 11px; color: #566477; margin-top: 1px; }
+.header-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* ── Buttons & inputs ─────────────────────────────────────────────────── */
+button {
+  cursor: pointer; border: none; border-radius: 4px;
+  font-size: 12px; font-family: inherit; padding: 6px 12px;
+  transition: background .15s, opacity .15s;
+}
+button:disabled { opacity: .4; cursor: default; }
+.btn-primary   { background: #2563eb; color: #fff; }
+.btn-primary:hover:not(:disabled)   { background: #1d4ed8; }
+.btn-danger    { background: #dc2626; color: #fff; }
+.btn-danger:hover:not(:disabled)    { background: #b91c1c; }
+.btn-ghost     { background: #1e2535; color: #c8d0dd; }
+.btn-ghost:hover:not(:disabled)     { background: #263047; }
+.btn-record    { background: #16a34a; color: #fff; min-width: 90px; }
+.btn-record.recording { background: #dc2626; animation: pulse 1s infinite; }
+.btn-record:hover:not(:disabled):not(.recording) { background: #15803d; }
+
+select, input[type=text], input[type=number] {
+  background: #1e2535; border: 1px solid #2a3349; color: #c8d0dd;
+  border-radius: 4px; padding: 5px 8px; font-size: 12px; font-family: inherit;
+}
+select:focus, input:focus { outline: 1px solid #2563eb; }
+
+label { font-size: 11px; color: #7a8899; }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+
+/* ── Instrument strip ────────────────────────────────────────────────── */
+.instruments-bar {
+  background: #11141c;
+  border-bottom: 1px solid #1e2535;
+  padding: 10px 20px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.inst-card {
+  background: #161b27;
+  border: 1px solid #2a3349;
+  border-radius: 6px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 240px;
+  position: relative;
+}
+.inst-card.active  { border-color: #2563eb; }
+.inst-card.muted   { opacity: .5; }
+.inst-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.inst-label { font-size: 12px; font-weight: 600; flex: 1; }
+.inst-midi-status { font-size: 10px; color: #566477; white-space: nowrap; }
+.inst-last-note {
+  font-size: 11px; color: #60a5fa; min-width: 30px; text-align: center;
+  font-weight: 700; letter-spacing: .02em;
+}
+.inst-controls { display: flex; gap: 4px; }
+.inst-controls button { padding: 3px 7px; font-size: 11px; }
+
+/* ── Score area ──────────────────────────────────────────────────────── */
+#score-wrap {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background: #0d0f14;
+}
+.score-sheet {
+  background: #fff;
+  color: #111;
+  border-radius: 6px;
+  padding: 24px 32px;
+  max-width: 900px;
+  margin: 0 auto;
+  box-shadow: 0 4px 24px rgba(0,0,0,.4);
+  min-height: 500px;
+}
+.score-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  font-family: Georgia, serif;
+  color: #111;
+}
+.score-subtitle {
+  text-align: center;
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 20px;
+  font-family: Georgia, serif;
+}
+canvas.staff-canvas {
+  display: block;
+  width: 100%;
+  margin-bottom: 0;
+}
+.system-label {
+  font-size: 11px;
+  color: #888;
+  margin: 16px 0 4px;
+  font-family: "Courier New", monospace;
+}
+.system-separator {
+  border: none;
+  border-top: 1px dashed #ccc;
+  margin: 12px 0;
+}
+
+/* ── Transport / status bar ──────────────────────────────────────────── */
+.transport {
+  background: #11141c;
+  border-top: 1px solid #1e2535;
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.transport .t-group { display: flex; align-items: center; gap: 6px; }
+.transport .t-label { font-size: 11px; color: #566477; }
+.transport .t-val   { font-size: 12px; color: #c8d0dd; font-weight: 600; min-width: 24px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.status-dot.green { background: #16a34a; }
+.status-dot.red   { background: #dc2626; }
+.status-dot.grey  { background: #566477; }
+
+/* ── Dialogs ─────────────────────────────────────────────────────────── */
+.overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.65);
+  z-index: 100;
+  align-items: center; justify-content: center;
+}
+.overlay.open { display: flex; }
+.modal {
+  background: #161b27;
+  border: 1px solid #2a3349;
+  border-radius: 8px;
+  padding: 24px;
+  width: 340px;
+  max-width: 95vw;
+}
+.modal h2 { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: #e2e8f0; }
+.modal .field { margin-bottom: 12px; }
+.modal .field label { display: block; margin-bottom: 4px; }
+.modal .field select,
+.modal .field input { width: 100%; }
+.modal .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+/* ── Print ───────────────────────────────────────────────────────────── */
+@media print {
+  body { background: #fff; }
+  header, .instruments-bar, .transport, #score-wrap>*:not(.score-sheet) { display: none !important; }
+  #score-wrap { padding: 0; overflow: visible; }
+  .score-sheet { box-shadow: none; max-width: 100%; border-radius: 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<header>
+  <div>
+    <div class="header-title" style="display:flex;align-items:center;gap:10px;">
+      <h1>PHOENIX NOTATION</h1>
+      <span style="font-size:10px;background:#1e2535;padding:2px 8px;border-radius:3px;color:#7a8899;letter-spacing:.05em">LIVE SCORE</span>
+    </div>
+    <div class="sub">Multi-instrument · offline · up to 3 players</div>
+  </div>
+  <div class="header-controls">
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <label>Title</label>
+      <input type="text" id="score-title-input" value="Untitled Score" style="width:160px;">
+    </div>
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <label>Key</label>
+      <select id="key-select">
+        <option value="C">C major</option>
+        <option value="G">G major</option>
+        <option value="D">D major</option>
+        <option value="A">A major</option>
+        <option value="E">E major</option>
+        <option value="F">F major</option>
+        <option value="Bb">Bb major</option>
+        <option value="Am">A minor</option>
+        <option value="Em">E minor</option>
+        <option value="Dm">D minor</option>
+      </select>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <label>Tempo</label>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <input type="number" id="tempo-input" value="120" min="40" max="300" style="width:60px;">
+        <span style="font-size:11px;color:#566477">BPM</span>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <label>Time</label>
+      <select id="time-select">
+        <option value="4/4">4/4</option>
+        <option value="3/4">3/4</option>
+        <option value="6/8">6/8</option>
+        <option value="2/4">2/4</option>
+        <option value="2/2">2/2</option>
+      </select>
+    </div>
+    <button class="btn-ghost" id="btn-add-inst" style="margin-top:14px;">+ Add Instrument</button>
+    <button class="btn-primary" id="btn-print" style="margin-top:14px;">⎙ Print / PDF</button>
+    <button class="btn-ghost" id="btn-clear" style="margin-top:14px;">⊗ Clear Score</button>
+  </div>
+</header>
+
+<!-- ── Instrument strip ────────────────────────────────────────────────── -->
+<div class="instruments-bar" id="instruments-bar">
+  <!-- populated by JS -->
+</div>
+
+<!-- ── Score canvas area ──────────────────────────────────────────────── -->
+<div id="score-wrap">
+  <div class="score-sheet" id="score-sheet">
+    <div class="score-title" id="sheet-title">Untitled Score</div>
+    <div class="score-subtitle" id="sheet-subtitle">C major · 4/4 · ♩= 120</div>
+    <div id="systems-container"></div>
+  </div>
+</div>
+
+<!-- ── Transport ──────────────────────────────────────────────────────── -->
+<div class="transport">
+  <div class="t-group">
+    <div class="status-dot" id="midi-dot" title="MIDI status"></div>
+    <span class="t-label">MIDI</span>
+    <span class="t-val" id="midi-label">checking...</span>
+  </div>
+  <div class="t-group">
+    <span class="t-label">Measure</span>
+    <span class="t-val" id="transport-measure">1</span>
+  </div>
+  <div class="t-group">
+    <span class="t-label">Beat</span>
+    <span class="t-val" id="transport-beat">1</span>
+  </div>
+  <div class="t-group">
+    <span class="t-label">Notes recorded</span>
+    <span class="t-val" id="transport-notes">0</span>
+  </div>
+  <div style="flex:1"></div>
+  <button class="btn-record" id="btn-record">● Record</button>
+  <button class="btn-ghost" id="btn-undo" disabled>↩ Undo</button>
+  <button class="btn-ghost" id="btn-save">⬇ Save JSON</button>
+  <button class="btn-ghost" id="btn-load">⬆ Load JSON</button>
+  <input type="file" id="file-load" accept=".json" style="display:none">
+</div>
+
+<!-- ── Add Instrument Modal ────────────────────────────────────────────── -->
+<div class="overlay" id="overlay-add">
+  <div class="modal">
+    <h2>Add Instrument</h2>
+    <div class="field">
+      <label>Instrument name</label>
+      <input type="text" id="add-inst-name" value="Piano">
+    </div>
+    <div class="field">
+      <label>Clef</label>
+      <select id="add-inst-clef">
+        <option value="treble">Treble</option>
+        <option value="bass">Bass</option>
+        <option value="alto">Alto (viola)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>MIDI channel (1–16, or "any")</label>
+      <select id="add-inst-channel">
+        <option value="any">Any</option>
+        <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+        <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+        <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+        <option value="10">10 (drums)</option><option value="11">11</option>
+        <option value="12">12</option><option value="13">13</option>
+        <option value="14">14</option><option value="15">15</option><option value="16">16</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Color</label>
+      <select id="add-inst-color">
+        <option value="#2563eb">Blue</option>
+        <option value="#16a34a">Green</option>
+        <option value="#dc2626">Red</option>
+        <option value="#d97706">Amber</option>
+        <option value="#7c3aed">Purple</option>
+        <option value="#0891b2">Cyan</option>
+      </select>
+    </div>
+    <div class="row">
+      <button class="btn-ghost" id="btn-add-cancel">Cancel</button>
+      <button class="btn-primary" id="btn-add-confirm">Add</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// PHOENIX NOTATION ENGINE — fully self-contained, no external dependencies
+// ============================================================================
+
+// ── Note / pitch constants ───────────────────────────────────────────────────
+
+// MIDI note → { name, octave, alter }
+// alter: 0 = natural, 1 = sharp, -1 = flat
+function midiToNote(midi) {
+  const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const FLAT  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+  const pc    = midi % 12;
+  const oct   = Math.floor(midi / 12) - 1;
+  const sharp = NAMES[pc];
+  const flat  = FLAT[pc];
+  const hasAccidental = sharp.includes('#');
+  return { midi, name: sharp, flatName: flat, octave: oct, alter: hasAccidental ? 1 : 0, pc };
+}
+
+// Staff position (steps from middle-C = 0) for a note in a given clef.
+// Treble: middle-C is ledger line below staff (step 0 = C4).
+// Bass:   middle-C is first ledger line above staff.
+function noteToStaffStep(note, clef) {
+  // Steps from C0
+  const STEP_FROM_C = [0,0,1,1,2,3,3,4,4,5,5,6]; // C D E F G A B
+  const stepsFromC0 = note.octave * 7 + STEP_FROM_C[note.pc];
+  if (clef === 'treble') {
+    // Middle B (B4) is on the middle line = step 0 from center (we offset below)
+    // Treble staff center = B4. B4 = 4*7+6 = 34 steps from C0.
+    return stepsFromC0 - 34;
+  } else if (clef === 'bass') {
+    // Bass staff center = D3. D3 = 3*7+1 = 22 steps from C0.
+    return stepsFromC0 - 22;
+  } else {
+    // Alto: center = C4 = 4*7+0 = 28.
+    return stepsFromC0 - 28;
+  }
+}
+
+// ── Duration helpers ─────────────────────────────────────────────────────────
+
+// Duration values in ticks (whole = 96)
+const DUR = { '1': 96, '2': 48, '4': 24, '8': 12, '16': 6 };
+const DUR_NAMES = { 96:'whole', 48:'half', 24:'quarter', 12:'eighth', 6:'sixteenth' };
+
+function quantizeDuration(ms, bpm) {
+  const msPerBeat = 60000 / bpm;
+  const beats = ms / msPerBeat;
+  const ticks = beats * 24; // 24 ticks per beat
+  // Find nearest standard duration
+  const candidates = [96, 48, 24, 12, 6];
+  let best = 24, bestDiff = Infinity;
+  for (const c of candidates) {
+    const d = Math.abs(ticks - c);
+    if (d < bestDiff) { bestDiff = d; best = c; }
+  }
+  return best;
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+
+let state = {
+  title: 'Untitled Score',
+  key: 'C',
+  time: '4/4',
+  tempo: 120,
+  instruments: [],   // { id, name, clef, channel, color, muted, notes: [] }
+  recording: false,
+  noteCount: 0,
+  history: [],       // snapshots for undo
+};
+
+let midiAccess = null;
+let midiInputs  = [];    // WebMIDI MIDIInput objects
+const activeNoteTimers = {}; // midi+instId → { startMs }
+
+// ── Instrument management ────────────────────────────────────────────────────
+
+const COLORS = ['#2563eb','#16a34a','#dc2626','#d97706','#7c3aed','#0891b2'];
+let instIdCounter = 0;
+
+function addInstrument(name, clef, channel, color) {
+  if (state.instruments.length >= 3) {
+    alert('Maximum 3 instruments. Remove one first.');
+    return;
+  }
+  const id = ++instIdCounter;
+  state.instruments.push({ id, name, clef: clef||'treble', channel: channel||'any', color: color||COLORS[id%COLORS.length], muted: false, notes: [] });
+  renderInstrumentsBar();
+  renderScore();
+}
+
+function removeInstrument(id) {
+  state.instruments = state.instruments.filter(i => i.id !== id);
+  renderInstrumentsBar();
+  renderScore();
+}
+
+function toggleMute(id) {
+  const inst = state.instruments.find(i => i.id === id);
+  if (inst) { inst.muted = !inst.muted; renderInstrumentsBar(); renderScore(); }
+}
+
+// ── MIDI ─────────────────────────────────────────────────────────────────────
+
+async function initMidi() {
+  const dot   = document.getElementById('midi-dot');
+  const label = document.getElementById('midi-label');
+  if (!navigator.requestMIDIAccess) {
+    dot.className = 'status-dot grey';
+    label.textContent = 'not supported';
+    return;
+  }
+  try {
+    midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+    dot.className = 'status-dot green';
+    refreshMidiInputs();
+    midiAccess.onstatechange = refreshMidiInputs;
+  } catch (e) {
+    dot.className = 'status-dot red';
+    label.textContent = 'denied';
+  }
+}
+
+function refreshMidiInputs() {
+  const dot   = document.getElementById('midi-dot');
+  const label = document.getElementById('midi-label');
+  midiInputs = [];
+  midiAccess.inputs.forEach(input => {
+    midiInputs.push(input);
+    input.onmidimessage = onMidiMessage;
+  });
+  const count = midiInputs.length;
+  dot.className = count > 0 ? 'status-dot green' : 'status-dot grey';
+  label.textContent = count > 0 ? `${count} device${count>1?'s':''} connected` : 'no devices';
+}
+
+function onMidiMessage(msg) {
+  if (!state.recording) return;
+  const [status, note, velocity] = msg.data;
+  const cmd  = status & 0xf0;
+  const chan  = (status & 0x0f) + 1;
+
+  if (cmd === 0x90 && velocity > 0) {
+    // note on
+    handleNoteOn(chan, note, velocity);
+  } else if (cmd === 0x80 || (cmd === 0x90 && velocity === 0)) {
+    // note off
+    handleNoteOff(chan, note);
+  }
+}
+
+function resolveInstrument(chan) {
+  // Find first non-muted instrument matching channel (or 'any')
+  return state.instruments.find(i => !i.muted && (i.channel === 'any' || Number(i.channel) === chan));
+}
+
+function handleNoteOn(chan, midiNote, velocity) {
+  const inst = resolveInstrument(chan);
+  if (!inst) return;
+  const key = `${midiNote}-${inst.id}`;
+  activeNoteTimers[key] = { startMs: performance.now(), midiNote, inst };
+  // Flash the instrument card
+  flashInst(inst.id, midiNote);
+}
+
+function handleNoteOff(chan, midiNote) {
+  const inst = resolveInstrument(chan);
+  if (!inst) return;
+  const key = `${midiNote}-${inst.id}`;
+  const timer = activeNoteTimers[key];
+  if (!timer) return;
+  const durationMs = performance.now() - timer.startMs;
+  delete activeNoteTimers[key];
+  commitNote(inst, midiNote, durationMs);
+}
+
+function commitNote(inst, midiNote, durationMs) {
+  const note = midiToNote(midiNote);
+  const durTicks = quantizeDuration(durationMs, state.tempo);
+  // Push to history
+  state.history.push(JSON.parse(JSON.stringify(state.instruments)));
+  if (state.history.length > 100) state.history.shift();
+
+  inst.notes.push({ ...note, durTicks, ts: Date.now() });
+  state.noteCount++;
+  document.getElementById('transport-notes').textContent = state.noteCount;
+  document.getElementById('btn-undo').disabled = false;
+  renderScore();
+}
+
+function flashInst(id, midiNote) {
+  const card = document.querySelector(`.inst-card[data-id="${id}"]`);
+  if (!card) return;
+  const noteLabel = card.querySelector('.inst-last-note');
+  const n = midiToNote(midiNote);
+  if (noteLabel) noteLabel.textContent = n.name + n.octave;
+  card.classList.add('active');
+  setTimeout(() => card.classList.remove('active'), 300);
+}
+
+// ── Keyboard input (fallback / demo — computer keyboard plays notes) ─────────
+
+const KB_NOTE_MAP = {
+  'a': 60, 'w': 61, 's': 62, 'e': 63, 'd': 64, 'f': 65,
+  't': 66, 'g': 67, 'y': 68, 'h': 69, 'u': 70, 'j': 71,
+  'k': 72, 'o': 73, 'l': 74, 'p': 75, ';': 76,
+};
+const kbActiveNotes = {};
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (!state.recording) return;
+  const midi = KB_NOTE_MAP[e.key];
+  if (midi === undefined || kbActiveNotes[midi]) return;
+  kbActiveNotes[midi] = true;
+  handleNoteOn(1, midi, 80); // channel 1 for keyboard
+});
+
+document.addEventListener('keyup', e => {
+  if (!state.recording) return;
+  const midi = KB_NOTE_MAP[e.key];
+  if (midi === undefined) return;
+  delete kbActiveNotes[midi];
+  handleNoteOff(1, midi);
+});
+
+// ── On-screen piano keyboard ─────────────────────────────────────────────────
+// (used in renderInstrumentsBar — a mini 1-octave keyboard per instrument strip)
+
+// ── Rendering ────────────────────────────────────────────────────────────────
+
+// ── Instrument cards ─────────────────────────────────────────────────────────
+
+function renderInstrumentsBar() {
+  const bar = document.getElementById('instruments-bar');
+  if (state.instruments.length === 0) {
+    bar.innerHTML = '<div style="color:#566477;font-size:12px;padding:4px 0;">No instruments added — click "+ Add Instrument" to begin.</div>';
+    return;
+  }
+  bar.innerHTML = '';
+  for (const inst of state.instruments) {
+    const card = document.createElement('div');
+    card.className = 'inst-card' + (inst.muted ? ' muted' : '');
+    card.dataset.id = inst.id;
+    card.innerHTML = `
+      <div class="inst-dot" style="background:${inst.color}"></div>
+      <div style="flex:1">
+        <div class="inst-label">${esc(inst.name)}</div>
+        <div class="inst-midi-status">${inst.clef} clef · ch ${inst.channel} · ${inst.notes.length} note${inst.notes.length!==1?'s':''}</div>
+      </div>
+      <div class="inst-last-note">—</div>
+      <div class="inst-controls">
+        <button class="btn-ghost" onclick="toggleMute(${inst.id})" title="mute">${inst.muted?'🔇':'🔊'}</button>
+        <button class="btn-danger" onclick="removeInstrument(${inst.id})" title="remove">✕</button>
+      </div>
+    `;
+    bar.appendChild(card);
+  }
+}
+
+// ── Score / staff rendering ──────────────────────────────────────────────────
+
+const STAFF_LINE_COUNT = 5;
+const STAFF_SPACING    = 10; // px between staff lines
+const STAFF_HEIGHT     = STAFF_SPACING * (STAFF_LINE_COUNT - 1); // 40px
+const NOTE_R           = STAFF_SPACING * 0.45;
+const MEASURES_PER_ROW = 4;
+
+// We'll render on Canvas — one canvas row per "system" (row of measures across all instruments)
+
+function renderScore() {
+  updateSheetHeader();
+  const container = document.getElementById('systems-container');
+  container.innerHTML = '';
+
+  if (state.instruments.length === 0) {
+    container.innerHTML = '<p style="color:#999;font-size:13px;font-family:Georgia,serif;text-align:center;padding:40px 0;">Add instruments above, then record or use the keyboard (A–L keys) to enter notes.</p>';
+    return;
+  }
+
+  // Build measure grid per instrument
+  const beatsPerMeasure = getBeatsPerMeasure();
+  const ticksPerMeasure = beatsPerMeasure * 24;
+
+  // For each instrument, bin notes into measures
+  const instMeasures = state.instruments.map(inst => binNotes(inst.notes, ticksPerMeasure));
+  const maxMeasures  = Math.max(1, ...instMeasures.map(m => m.length));
+
+  // Draw in rows of MEASURES_PER_ROW
+  let measureIdx = 0;
+  while (measureIdx < maxMeasures) {
+    const rowEnd  = Math.min(measureIdx + MEASURES_PER_ROW, maxMeasures);
+    const rowMeas = rowEnd - measureIdx;
+    appendSystemRow(container, instMeasures, measureIdx, rowMeas, ticksPerMeasure);
+    measureIdx += MEASURES_PER_ROW;
+  }
+
+  // Update transport
+  document.getElementById('transport-measure').textContent = maxMeasures;
+  const lastInst = state.instruments[0];
+  if (lastInst) {
+    const totalTicks = lastInst.notes.reduce((a,n) => a + n.durTicks, 0);
+    const beat = Math.floor((totalTicks % ticksPerMeasure) / 24) + 1;
+    document.getElementById('transport-beat').textContent = beat;
+  }
+}
+
+function binNotes(notes, ticksPerMeasure) {
+  const measures = [];
+  let measureTicks = 0;
+  let current = [];
+  for (const note of notes) {
+    current.push({ ...note });
+    measureTicks += note.durTicks;
+    while (measureTicks >= ticksPerMeasure) {
+      measures.push(current);
+      current = [];
+      measureTicks -= ticksPerMeasure;
+    }
+  }
+  if (current.length > 0) measures.push(current);
+  return measures;
+}
+
+function getBeatsPerMeasure() {
+  const [top] = state.time.split('/');
+  return parseInt(top, 10);
+}
+
+function appendSystemRow(container, instMeasures, startMeasure, rowMeas, ticksPerMeasure) {
+  const DPR    = window.devicePixelRatio || 1;
+  const W_CSS  = Math.min(document.getElementById('score-sheet').offsetWidth - 64, 836);
+  const MARGIN_LEFT  = 80; // for clef, key sig, instrument name
+  const MARGIN_RIGHT = 16;
+  const measW  = (W_CSS - MARGIN_LEFT - MARGIN_RIGHT) / rowMeas;
+
+  const instCount = state.instruments.length;
+  const systemPad = 20;   // top & bottom padding around each system
+  const instGap   = 20;   // gap between instruments within a system
+  const ledgerPad = 20;   // vertical space above/below staff for ledger lines
+  const instH     = ledgerPad + STAFF_HEIGHT + ledgerPad;
+  const systemH   = systemPad + instCount * (instH + instGap) - instGap + systemPad;
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = W_CSS  * DPR;
+  canvas.height = systemH * DPR;
+  canvas.style.width  = W_CSS  + 'px';
+  canvas.style.height = systemH + 'px';
+  canvas.className = 'staff-canvas';
+
+  container.appendChild(canvas);
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+  ctx.clearRect(0, 0, W_CSS, systemH);
+
+  // Draw each instrument staff
+  for (let i = 0; i < instCount; i++) {
+    const inst   = state.instruments[i];
+    const staffY = systemPad + i * (instH + instGap) + ledgerPad;
+
+    // ── Staff lines ──
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth   = 1;
+    for (let line = 0; line < STAFF_LINE_COUNT; line++) {
+      const y = staffY + line * STAFF_SPACING;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W_CSS, y);
+      ctx.stroke();
+    }
+
+    // ── Instrument label ──
+    ctx.fillStyle = inst.color;
+    ctx.font = 'bold 10px "Segoe UI",system-ui,sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(inst.name, 4, staffY - 5);
+
+    // ── Clef ──
+    drawClef(ctx, inst.clef, 10, staffY);
+
+    // ── Time signature (first row only, or if first measure of this chunk = 0) ──
+    if (startMeasure === 0) {
+      drawTimeSig(ctx, state.time, MARGIN_LEFT - 24, staffY);
+    }
+
+    // ── Bar lines ──
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth   = 1;
+    for (let m = 0; m <= rowMeas; m++) {
+      const x = MARGIN_LEFT + m * measW;
+      ctx.beginPath();
+      ctx.moveTo(x, staffY);
+      ctx.lineTo(x, staffY + STAFF_HEIGHT);
+      ctx.stroke();
+      // double barline at left edge
+      if (m === 0) {
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x - 1, staffY);
+        ctx.lineTo(x - 1, staffY + STAFF_HEIGHT);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      }
+    }
+
+    // ── Measure numbers ──
+    ctx.fillStyle = '#aaa';
+    ctx.font = '9px "Courier New",monospace';
+    ctx.textAlign = 'center';
+    for (let m = 0; m < rowMeas; m++) {
+      const mx = MARGIN_LEFT + (m + 0.5) * measW;
+      ctx.fillText(String(startMeasure + m + 1), mx, staffY - 7);
+    }
+
+    // ── Notes ──
+    const measuresForInst = instMeasures[i];
+    for (let m = 0; m < rowMeas; m++) {
+      const measure = measuresForInst[startMeasure + m] || [];
+      drawMeasureNotes(ctx, inst, measure, MARGIN_LEFT + m * measW, measW, staffY, ticksPerMeasure);
+    }
+  }
+
+  // ── Grand staff brace (if 2+ instruments) ──
+  if (instCount > 1) {
+    const topStaffY    = systemPad + ledgerPad;
+    const bottomStaffY = systemPad + (instCount - 1) * (instH + instGap) + ledgerPad + STAFF_HEIGHT;
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth   = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, topStaffY);
+    ctx.lineTo(0, bottomStaffY);
+    ctx.stroke();
+  }
+
+  // ── Final double barline on last row if last measure ──
+  const totalMeasures = Math.max(...instMeasures.map(m => m.length));
+  if (startMeasure + rowMeas >= totalMeasures && rowMeas < MEASURES_PER_ROW) {
+    for (let i = 0; i < instCount; i++) {
+      const staffY = systemPad + i * (instH + instGap) + ledgerPad;
+      const x = MARGIN_LEFT + rowMeas * measW;
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x - 4, staffY); ctx.lineTo(x - 4, staffY + STAFF_HEIGHT); ctx.stroke();
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x, staffY); ctx.lineTo(x, staffY + STAFF_HEIGHT); ctx.stroke();
+      ctx.lineWidth = 1;
+    }
+  }
+}
+
+// ── Note rendering ────────────────────────────────────────────────────────────
+
+function drawMeasureNotes(ctx, inst, notes, measX, measW, staffY, ticksPerMeasure) {
+  if (notes.length === 0) return;
+  const pad = 12;
+  const usableW = measW - pad * 2;
+
+  // Horizontal layout: distribute notes proportionally by duration
+  const totalTicks = notes.reduce((a, n) => a + n.durTicks, 0);
+  let xCursor = measX + pad;
+
+  for (const note of notes) {
+    const xFrac = (totalTicks > 0) ? note.durTicks / Math.max(totalTicks, ticksPerMeasure) : 1 / notes.length;
+    const noteX = xCursor + (xFrac * usableW) * 0.5;
+    xCursor    += xFrac * usableW;
+
+    const step  = noteToStaffStep(note, inst.clef);
+    // staff top = line 0, each step is STAFF_SPACING/2
+    const noteY = staffY + STAFF_HEIGHT / 2 - step * (STAFF_SPACING / 2);
+
+    drawNote(ctx, inst, note, noteX, noteY, staffY);
+  }
+}
+
+function drawNote(ctx, inst, note, x, y, staffY) {
+  const dur = note.durTicks;
+  const filled = dur <= 48;
+  const color  = inst.color;
+
+  // ── Ledger lines ──
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth   = 1;
+  // Check if outside staff
+  const topLine    = staffY;
+  const bottomLine = staffY + STAFF_HEIGHT;
+  const halfStep   = STAFF_SPACING / 2;
+  // Lines above staff
+  let ly = topLine - STAFF_SPACING;
+  while (y <= ly + 1) {
+    ctx.beginPath(); ctx.moveTo(x - 8, ly); ctx.lineTo(x + 8, ly); ctx.stroke();
+    ly -= STAFF_SPACING;
+  }
+  // Lines below staff
+  ly = bottomLine + STAFF_SPACING;
+  while (y >= ly - 1) {
+    ctx.beginPath(); ctx.moveTo(x - 8, ly); ctx.lineTo(x + 8, ly); ctx.stroke();
+    ly += STAFF_SPACING;
+  }
+  // Middle C ledger (C4 in treble)
+  if (Math.abs(y - (staffY + STAFF_HEIGHT + STAFF_SPACING)) < 2) {
+    ctx.beginPath(); ctx.moveTo(x - 8, y); ctx.lineTo(x + 8, y); ctx.stroke();
+  }
+
+  // ── Note head ──
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = 1.5;
+  if (dur >= 96) {
+    // whole note: open oval
+    ctx.beginPath();
+    ctx.ellipse(x, y, NOTE_R * 1.3, NOTE_R * 0.85, -0.3, 0, Math.PI * 2);
+    ctx.stroke();
+    // hole
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.ellipse(x + 1, y, NOTE_R * 0.55, NOTE_R * 0.55, -0.3, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (!filled) {
+    // half note: open
+    ctx.fillStyle   = '#fff';
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(x, y, NOTE_R * 1.1, NOTE_R * 0.78, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    // filled
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(x, y, NOTE_R * 1.1, NOTE_R * 0.78, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ── Stem ──
+  if (dur < 96) {
+    const stemDir = y < staffY + STAFF_HEIGHT / 2 ? 1 : -1; // down if above middle, up if below
+    const stemX   = stemDir > 0 ? x + NOTE_R * 0.85 : x - NOTE_R * 0.85;
+    const stemLen = STAFF_SPACING * 3;
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(stemX, y);
+    ctx.lineTo(stemX, y + stemDir * stemLen);
+    ctx.stroke();
+
+    // ── Flags / beams ──
+    const tipY = y + stemDir * stemLen;
+    if (dur === 12) {
+      // eighth: one flag
+      drawFlag(ctx, stemX, tipY, stemDir, color);
+    } else if (dur === 6) {
+      // sixteenth: two flags
+      drawFlag(ctx, stemX, tipY, stemDir, color);
+      drawFlag(ctx, stemX, tipY + stemDir * 6, stemDir, color);
+    }
+  }
+
+  // ── Dots for dotted values (not implemented — placeholder) ──
+
+  // ── Accidental ──
+  if (note.alter !== 0) {
+    ctx.fillStyle = color;
+    ctx.font = 'bold 11px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(note.alter > 0 ? '♯' : '♭', x - NOTE_R * 2.5, y + 4);
+  }
+}
+
+function drawFlag(ctx, x, y, dir, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.bezierCurveTo(x + 10, y + dir * 6, x + 8, y + dir * 12, x + 2, y + dir * 16);
+  ctx.stroke();
+}
+
+// ── Clef drawing ──────────────────────────────────────────────────────────────
+
+function drawClef(ctx, clef, x, staffY) {
+  ctx.fillStyle = '#222';
+  if (clef === 'treble') {
+    // Draw treble clef as text glyph
+    ctx.font = `${STAFF_HEIGHT * 2.2}px serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText('𝄞', x, staffY + STAFF_HEIGHT + 9);
+  } else if (clef === 'bass') {
+    ctx.font = `${STAFF_HEIGHT * 1.6}px serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText('𝄢', x, staffY + STAFF_HEIGHT * 0.8);
+  } else {
+    // Alto — draw a simple B-clef symbol as text
+    ctx.font = `${STAFF_HEIGHT * 1.4}px serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText('𝄡', x, staffY + STAFF_HEIGHT * 0.8);
+  }
+}
+
+// ── Time signature drawing ────────────────────────────────────────────────────
+
+function drawTimeSig(ctx, time, x, staffY) {
+  const [top, bot] = time.split('/');
+  ctx.fillStyle = '#222';
+  ctx.textAlign = 'center';
+  ctx.font = `bold ${STAFF_SPACING * 1.8}px serif`;
+  ctx.fillText(top, x + 10, staffY + STAFF_SPACING * 1.9);
+  ctx.fillText(bot, x + 10, staffY + STAFF_SPACING * 3.7);
+}
+
+// ── Sheet header ──────────────────────────────────────────────────────────────
+
+function updateSheetHeader() {
+  document.getElementById('sheet-title').textContent = state.title;
+  const instNames = state.instruments.map(i => i.name).join(' · ');
+  document.getElementById('sheet-subtitle').textContent =
+    `${state.key} · ${state.time} · ♩= ${state.tempo}${instNames ? ' · ' + instNames : ''}`;
+}
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+
+// Record toggle
+document.getElementById('btn-record').addEventListener('click', () => {
+  if (state.instruments.length === 0) {
+    alert('Add at least one instrument before recording.');
+    return;
+  }
+  state.recording = !state.recording;
+  const btn = document.getElementById('btn-record');
+  btn.textContent = state.recording ? '■ Stop' : '● Record';
+  btn.classList.toggle('recording', state.recording);
+});
+
+// Undo
+document.getElementById('btn-undo').addEventListener('click', () => {
+  if (state.history.length === 0) return;
+  state.instruments = state.history.pop();
+  state.noteCount   = state.instruments.reduce((a, i) => a + i.notes.length, 0);
+  document.getElementById('transport-notes').textContent = state.noteCount;
+  document.getElementById('btn-undo').disabled = state.history.length === 0;
+  renderInstrumentsBar();
+  renderScore();
+});
+
+// Clear
+document.getElementById('btn-clear').addEventListener('click', () => {
+  if (!confirm('Clear all recorded notes? This cannot be undone.')) return;
+  state.instruments.forEach(i => i.notes = []);
+  state.noteCount = 0;
+  state.history   = [];
+  document.getElementById('transport-notes').textContent = '0';
+  document.getElementById('btn-undo').disabled = true;
+  renderInstrumentsBar();
+  renderScore();
+});
+
+// Print
+document.getElementById('btn-print').addEventListener('click', () => window.print());
+
+// Score title live update
+document.getElementById('score-title-input').addEventListener('input', e => {
+  state.title = e.target.value || 'Untitled Score';
+  renderScore();
+});
+
+// Key sig
+document.getElementById('key-select').addEventListener('change', e => {
+  state.key = e.target.value;
+  renderScore();
+});
+
+// Tempo
+document.getElementById('tempo-input').addEventListener('change', e => {
+  state.tempo = Math.max(40, Math.min(300, parseInt(e.target.value, 10) || 120));
+  e.target.value = state.tempo;
+  renderScore();
+});
+
+// Time sig
+document.getElementById('time-select').addEventListener('change', e => {
+  state.time = e.target.value;
+  renderScore();
+});
+
+// Save JSON
+document.getElementById('btn-save').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = (state.title.replace(/\s+/g,'_') || 'score') + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+// Load JSON
+document.getElementById('btn-load').addEventListener('click', () => {
+  document.getElementById('file-load').click();
+});
+document.getElementById('file-load').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const loaded = JSON.parse(ev.target.result);
+      // Restore state keys
+      Object.assign(state, {
+        title:       loaded.title || 'Untitled Score',
+        key:         loaded.key   || 'C',
+        time:        loaded.time  || '4/4',
+        tempo:       loaded.tempo || 120,
+        instruments: loaded.instruments || [],
+        noteCount:   loaded.noteCount   || 0,
+        history:     [],
+        recording:   false,
+      });
+      // Sync instIdCounter
+      if (state.instruments.length) {
+        instIdCounter = Math.max(...state.instruments.map(i => i.id));
+      }
+      document.getElementById('score-title-input').value = state.title;
+      document.getElementById('key-select').value        = state.key;
+      document.getElementById('time-select').value       = state.time;
+      document.getElementById('tempo-input').value       = state.tempo;
+      document.getElementById('btn-undo').disabled       = true;
+      renderInstrumentsBar();
+      renderScore();
+    } catch (err) {
+      alert('Could not load file: ' + err.message);
+    }
+  };
+  reader.readAsText(f);
+  e.target.value = '';
+});
+
+// ── Add instrument modal ──────────────────────────────────────────────────────
+
+document.getElementById('btn-add-inst').addEventListener('click', () => {
+  document.getElementById('overlay-add').classList.add('open');
+  document.getElementById('add-inst-name').focus();
+});
+document.getElementById('btn-add-cancel').addEventListener('click', () => {
+  document.getElementById('overlay-add').classList.remove('open');
+});
+document.getElementById('btn-add-confirm').addEventListener('click', () => {
+  const name  = document.getElementById('add-inst-name').value.trim() || 'Instrument';
+  const clef  = document.getElementById('add-inst-clef').value;
+  const ch    = document.getElementById('add-inst-channel').value;
+  const color = document.getElementById('add-inst-color').value;
+  addInstrument(name, clef, ch, color);
+  document.getElementById('overlay-add').classList.remove('open');
+});
+document.getElementById('add-inst-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btn-add-confirm').click();
+  if (e.key === 'Escape') document.getElementById('btn-add-cancel').click();
+});
+document.getElementById('overlay-add').addEventListener('click', e => {
+  if (e.target === document.getElementById('overlay-add'))
+    document.getElementById('overlay-add').classList.remove('open');
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Resize handler ────────────────────────────────────────────────────────────
+
+let _resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(renderScore, 120);
+});
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+initMidi();
+renderInstrumentsBar();
+renderScore();
+
+// ── Keyboard hint banner ──────────────────────────────────────────────────────
+// Show a one-time hint about computer keyboard input
+
+(function showKeyboardHint() {
+  const banner = document.createElement('div');
+  banner.id = 'kb-hint';
+  banner.style.cssText = `
+    position:fixed; bottom:60px; right:20px; background:#1e2535; border:1px solid #2a3349;
+    border-radius:6px; padding:10px 14px; font-size:11px; color:#c8d0dd; z-index:50;
+    max-width:280px; line-height:1.6;
+  `;
+  banner.innerHTML = `
+    <strong style="color:#60a5fa">Computer keyboard input</strong><br>
+    No MIDI device? Use these keys while recording:<br>
+    <code style="letter-spacing:.1em">A W S E D F T G Y H U J K</code><br>
+    = C D E F G A B C D E F G A (C4–A5)<br>
+    <button onclick="this.parentNode.remove()" style="margin-top:6px;font-size:10px;background:#2a3349;color:#c8d0dd;border:none;border-radius:3px;padding:2px 8px;cursor:pointer;">Dismiss</button>
+  `;
+  document.body.appendChild(banner);
+  setTimeout(() => banner.remove(), 12000);
+})();
+</script>
+</body>
+</html>

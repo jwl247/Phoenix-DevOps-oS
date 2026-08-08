@@ -777,6 +777,7 @@ const { HelixMemoryJS } = require('./helix_packet');
 const _helixMem = new HelixMemoryJS(40);   // SectorID.CLAUDE, 40-turn rolling window
 
 const PHOENIX_MANUAL_PATH = path.join(__dirname, 'manual', 'phoenix_manual.md');
+const LAURIE_GUIDE_PATH   = path.join(__dirname, 'manual', 'laurie_guide.md');
 
 function _phoenixSystemPrompt(stats) {
     const statsLine = stats
@@ -807,6 +808,18 @@ ipcMain.handle('get-user-manual', async () => {
         }
         const content = fs.readFileSync(PHOENIX_MANUAL_PATH, 'utf8');
         return { success: true, content, path: PHOENIX_MANUAL_PATH };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('get-laurie-guide', async () => {
+    try {
+        if (!fs.existsSync(LAURIE_GUIDE_PATH)) {
+            return { success: false, error: 'Guide not found at dashboard/manual/laurie_guide.md' };
+        }
+        const content = fs.readFileSync(LAURIE_GUIDE_PATH, 'utf8');
+        return { success: true, content, path: LAURIE_GUIDE_PATH };
     } catch (e) {
         return { success: false, error: e.message };
     }

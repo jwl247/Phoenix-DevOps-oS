@@ -1004,6 +1004,24 @@ class PhoenixDashboard {
         if (nav === 'help-chat' && !this._manualRaw) this._loadManual();
         if (nav === 'sector-map') this._renderSectorMap();
         if (nav === 'ai-chat') document.getElementById('hud-input')?.focus();
+        if (nav === 'guide' && !this._guideRaw) this._loadGuide();
+    }
+
+    async _loadGuide() {
+        const body = document.getElementById('guide-body');
+        if (!body) return;
+        body.textContent = 'loading guide...';
+        if (!isElectron || !ipcRenderer) {
+            body.textContent = 'Guide requires Electron runtime.';
+            return;
+        }
+        const result = await ipcRenderer.invoke('get-laurie-guide');
+        if (!result.success) {
+            body.textContent = result.error || 'Could not load guide.';
+            return;
+        }
+        this._guideRaw = result.content;
+        body.innerHTML = this._markdownToHtml(this._guideRaw);
     }
 
     _renderSectorMap() {

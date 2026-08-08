@@ -13,8 +13,18 @@ VAULT_MOUNT="/mnt/g"
 CATALOG_DB="${HOME}/.catalog/catalog.db"
 LOG_DIR="${HOME}/.unitedsys/logs"
 LOG_FILE="${LOG_DIR}/intake.log"
-INTAKE_PY="${HOME}/projects/unitedsys/core/intake.py"
-VERSION="0.1.0"
+VERSION="0.2.0"
+
+# Resolve intake.py from PHOENIX_ROOT (preferred) or fallback locations
+if [[ -n "${PHOENIX_ROOT:-}" && -f "${PHOENIX_ROOT}/phoenix-core/tools/intake.py" ]]; then
+    INTAKE_PY="${PHOENIX_ROOT}/phoenix-core/tools/intake.py"
+elif [[ -f "${HOME}/Phoenix/Phoenix-DevOps-oS/phoenix-core/tools/intake.py" ]]; then
+    INTAKE_PY="${HOME}/Phoenix/Phoenix-DevOps-oS/phoenix-core/tools/intake.py"
+elif [[ -f "$(dirname "$(dirname "$(realpath "$0")")")/../../phoenix-core/tools/intake.py" ]]; then
+    INTAKE_PY="$(dirname "$(dirname "$(realpath "$0")")")/../../phoenix-core/tools/intake.py"
+else
+    INTAKE_PY="${HOME}/projects/unitedsys/core/intake.py"   # legacy fallback
+fi
 
 mkdir -p "${LOG_DIR}"
 
