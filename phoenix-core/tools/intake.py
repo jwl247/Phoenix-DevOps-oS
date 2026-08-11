@@ -263,8 +263,8 @@ def d1_sync(
     }).encode()
 
     headers = {
-        "Content-Type":  "application/json",
-        "Authorization": f"Bearer {WORKER_AUTH}",
+        "Content-Type": "application/json",
+        "X-Phoenix-Auth": WORKER_AUTH,
         "User-Agent":    "Phoenix-Intake/0.3.0",
     }
 

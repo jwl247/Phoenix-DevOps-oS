@@ -52,10 +52,24 @@ _pending: queue.Queue = queue.Queue()   # files waiting for user decision
 
 def intake_file(path: Path) -> bool:
     """Run intake.py on a file. Returns True on success."""
+    # Forward auth env vars so intake.py can sync to D1
+    env = os.environ.copy()
+    for var in ("PHOENIX_AUTH", "PHOENIX_WORKER_URL", "CLONEPOOL_DIR"):
+        stored = None
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                 r"Environment", 0, winreg.KEY_READ)
+            stored, _ = winreg.QueryValueEx(key, var)
+            winreg.CloseKey(key)
+        except Exception:
+            pass
+        if stored and var not in env:
+            env[var] = stored
     try:
         result = subprocess.run(
             [PYTHON, str(INTAKE_PY), str(path)],
-            capture_output=True, text=True, timeout=120
+            capture_output=True, text=True, timeout=120, env=env
         )
         return result.returncode == 0
     except Exception:

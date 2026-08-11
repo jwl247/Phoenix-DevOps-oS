@@ -212,6 +212,7 @@ function Invoke-UsysInit {
 
     Test-UsysElevation | Out-Null
 
+    # ── Directories ──────────────────────────────────────────────────────────
     @($script:UsysHome, $script:UsysBin, $script:UsysLogDir,
       (Join-Path $script:UsysHome 'versions'),
       (Get-UsysClonepoolDir),
@@ -222,6 +223,68 @@ function Invoke-UsysInit {
         }
     }
 
+    # ── Auth setup — silent after first run ──────────────────────────────────
+    $existingUrl  = [Environment]::GetEnvironmentVariable('PHOENIX_WORKER_URL', 'User')
+    $existingAuth = [Environment]::GetEnvironmentVariable('PHOENIX_AUTH', 'User')
+
+    if (-not $existingUrl) {
+        Write-Host ''
+        Write-Host '  Phoenix worker URL not set.' -ForegroundColor Yellow
+        $url = Read-Host '  Enter PHOENIX_WORKER_URL (e.g. https://packages-worker.phoenix-jwl.workers.dev)'
+        if ($url) {
+            [Environment]::SetEnvironmentVariable('PHOENIX_WORKER_URL', $url.Trim(), 'User')
+            $env:PHOENIX_WORKER_URL = $url.Trim()
+            Write-UsysOk "PHOENIX_WORKER_URL saved (user scope)"
+        }
+    } else {
+        Write-UsysOk "PHOENIX_WORKER_URL already set"
+    }
+
+    if (-not $existingAuth) {
+        Write-Host ''
+        Write-Host '  Phoenix auth token not set.' -ForegroundColor Yellow
+        $token = Read-Host '  Enter PHOENIX_AUTH token'
+        if ($token) {
+            [Environment]::SetEnvironmentVariable('PHOENIX_AUTH', $token.Trim(), 'User')
+            $env:PHOENIX_AUTH = $token.Trim()
+            Write-UsysOk "PHOENIX_AUTH saved (user scope)"
+        }
+    } else {
+        Write-UsysOk "PHOENIX_AUTH already set"
+    }
+
+    # Load into current session immediately
+    if (-not $env:PHOENIX_WORKER_URL) {
+        $env:PHOENIX_WORKER_URL = [Environment]::GetEnvironmentVariable('PHOENIX_WORKER_URL', 'User')
+    }
+    if (-not $env:PHOENIX_AUTH) {
+        $env:PHOENIX_AUTH = [Environment]::GetEnvironmentVariable('PHOENIX_AUTH', 'User')
+    }
+
+    # ── Wire into $PROFILE so every new terminal loads silently ──────────────
+    $profilePath = $PROFILE.CurrentUserAllHosts
+    $profileDir  = Split-Path $profilePath
+    if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force | Out-Null }
+
+    $loaderLine  = ". `"$(Join-Path $script:UsysScriptRoot 'usys.ps1')`""
+    $envBlock = @"
+
+# Phoenix USys — auto-loaded by usys init
+`$env:PHOENIX_WORKER_URL = [Environment]::GetEnvironmentVariable('PHOENIX_WORKER_URL','User')
+`$env:PHOENIX_AUTH       = [Environment]::GetEnvironmentVariable('PHOENIX_AUTH','User')
+$loaderLine
+"@
+
+    $profileContent = if (Test-Path $profilePath) { Get-Content $profilePath -Raw } else { '' }
+    if ($profileContent -notmatch 'Phoenix USys') {
+        Add-Content -Path $profilePath -Value $envBlock
+        Write-UsysOk "Profile updated: $profilePath"
+        Write-UsysInfo "Auth + usys will load silently in every new terminal"
+    } else {
+        Write-UsysOk "Profile already wired"
+    }
+
+    # ── Config ────────────────────────────────────────────────────────────────
     $cfg = @{
         version    = $script:UsysVersion
         repo_root  = (Get-UsysRepoRoot)
@@ -236,11 +299,12 @@ function Invoke-UsysInit {
     if ($registered) {
         Write-UsysOk 'PATH updated (user scope)'
     } else {
-        Write-UsysWarn 'PATH not updated — run: usys path-register'
+        Write-UsysOk 'PATH already registered'
     }
 
     Write-Host ''
-    Write-UsysInfo 'Next: usys status'
+    Write-UsysOk 'Init complete. Open a new terminal — everything loads silently.'
+    Write-UsysInfo 'Run: usys status   to verify'
     Write-Host ''
 }
 
