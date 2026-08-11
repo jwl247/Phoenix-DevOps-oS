@@ -1,0 +1,23 @@
+{
+  "name": "qemu-system",
+  "version": "9.0.0",
+  "description": "QEMU full-system emulator. Single binary. No install. Phoenix brings the machine.",
+  "author": "QEMU project / Phoenix intake by jwl247",
+  "type": "binary",
+  "entry": "qemu-system-x86_64.exe",
+  "runtime": "binary",
+  "dependencies": [],
+  "environment": {},
+  "permissions": [
+    "network",
+    "filesystem:read",
+    "filesystem:write"
+  ],
+  "metadata": {
+    "category": "infrastructure",
+    "tags": ["vm", "emulator", "qemu", "no-install", "cross-os"],
+    "source": "https://qemu.weilnetz.de/w64/",
+    "license": "GPL-2.0",
+    "note": "QEMU for Windows x64. Drop qemu-system-x86_64.exe into this suite directory."
+  }
+}

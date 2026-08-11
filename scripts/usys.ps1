@@ -157,6 +157,29 @@ function Get-UsysClonepoolDir {
     return (Join-Path $HOME 'Phoenix\clonepool')
 }
 
+function Get-UsysQemu {
+    # Resolve QEMU binary — check clonepool suite first, then PATH, then common install locations.
+    # Phoenix carries its own QEMU so no system install is required.
+    $suites = Find-UsysSuites -Name 'qemu-system'
+    if ($suites.Count -gt 0) {
+        $candidate = Join-Path $suites[0].Path 'qemu-system-x86_64.exe'
+        if (Test-Path $candidate) { return $candidate }
+    }
+
+    $fromPath = Get-Command 'qemu-system-x86_64' -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty Source -First 1
+    if ($fromPath) { return $fromPath }
+
+    foreach ($loc in @(
+        'C:\Program Files\qemu\qemu-system-x86_64.exe',
+        'C:\qemu\qemu-system-x86_64.exe',
+        "$env:LOCALAPPDATA\qemu\qemu-system-x86_64.exe"
+    )) {
+        if (Test-Path $loc) { return $loc }
+    }
+    return $null
+}
+
 function Get-UsysCatalogDb {
     Join-Path $HOME '.catalog\catalog.db'
 }
@@ -557,6 +580,82 @@ function Invoke-UsysDelegate {
 }
 
 # =============================================================================
+# COMMAND: pull — fetch a suite from D1/clonepool by name and stage it locally
+# =============================================================================
+function Invoke-UsysPull {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [string]$SuiteName,
+        [switch]$DryRun
+    )
+
+    $workerUrl  = $env:PHOENIX_WORKER_URL
+    $workerAuth = $env:PHOENIX_AUTH
+
+    if (-not $workerUrl) {
+        Write-UsysErr 'PHOENIX_WORKER_URL not set — cannot pull from D1'
+        return
+    }
+
+    Write-Host ''
+    Write-UsysInfo "Pulling suite from D1: $SuiteName"
+
+    # Ask D1 for the record
+    try {
+        $uri = "$($workerUrl.TrimEnd('/'))/clonepool/$([Uri]::EscapeDataString($SuiteName))"
+        $headers = @{ 'Accept' = 'application/json' }
+        if ($workerAuth) { $headers['Authorization'] = "Bearer $workerAuth" }
+        $resp = Invoke-RestMethod -Uri $uri -Headers $headers -Method GET -ErrorAction Stop
+    } catch {
+        Write-UsysErr "Suite '$SuiteName' not found in D1 — has it been intaked?"
+        return
+    }
+
+    $hexDisplay = if ($resp.hex_id) { $resp.hex_id.Substring(0,16) } else { $resp.b58 }
+    Write-UsysOk "Found in D1: $($resp.name) hex=$hexDisplay..."
+
+    if ($DryRun) {
+        Write-Host ''
+        Write-Host '  [DRY RUN] Would stage suite to clonepool:' -ForegroundColor Cyan
+        Write-Host "    Name     : $($resp.name)"
+        Write-Host "    hex_id   : $($resp.hex_id)"
+        Write-Host "    pool_path: $($resp.pool_path)"
+        Write-Host ''
+        return
+    }
+
+    # If pool_path is a local path on the source machine it won't exist here —
+    # that is expected on a second machine. We stage from what D1 knows.
+    $suiteDir = Join-Path (Get-UsysClonepoolDir) $resp.name
+    New-Item -ItemType Directory -Path $suiteDir -Force | Out-Null
+
+    # Write a stub .suite.json so the suite is runnable if the binary is already present
+    $manifest = @{
+        name        = $resp.name
+        version     = 'v1'
+        description = "Pulled from Phoenix D1 — hex $hexDisplay"
+        type        = 'script'
+        entry       = $resp.name
+        runtime     = 'binary'
+        metadata    = @{
+            hex_id     = $resp.hex_id
+            b58        = $resp.b58
+            pulled_at  = (Get-Date -Format 'o')
+            source     = 'D1'
+        }
+    }
+    $manifest | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $suiteDir '.suite.json') -Encoding UTF8
+
+    Write-UsysOk "Staged at: $suiteDir"
+    if ($resp.hex_id) { Write-Host "  hex_id  : $($resp.hex_id)" -ForegroundColor DarkGray }
+    if ($resp.b58)    { Write-Host "  b58     : $($resp.b58)"    -ForegroundColor DarkGray }
+    Write-Host ''
+    Write-UsysInfo "Next: place the binary/script in $suiteDir then: usys run $SuiteName"
+    Write-Host ''
+}
+
+# =============================================================================
 # SUITE EXECUTION — run suites from clonepool without installation
 # =============================================================================
 function Get-UsysSuiteManifest {
@@ -621,10 +720,19 @@ function Invoke-UsysRun {
     param(
         [Parameter(Mandatory)]
         [string]$SuiteName,
-        
+
         [string]$Version = '',
         [switch]$DryRun,
-        
+
+        # Override accelerator: auto | tcg | whpx | hyperv | kvm
+        # 'auto' = Phoenix picks the best available (default)
+        # 'tcg'  = pure software, always works, slow
+        # 'whpx' = Windows Hypervisor Platform, fast
+        # 'hyperv' = WHPX + full Hyper-V enlightenments, fastest on Windows
+        # 'kvm'  = Linux KVM, fast on Linux/WSL
+        [ValidateSet('auto','tcg','whpx','hyperv','kvm')]
+        [string]$Accel = 'auto',
+
         [Parameter(ValueFromRemainingArguments = $true)]
         [string[]]$Arguments
     )
@@ -716,6 +824,93 @@ function Invoke-UsysRun {
             }
             'binary' {
                 & $entryPath @Arguments
+            }
+            'qemu' {
+                $qemu = Get-UsysQemu
+                if (-not $qemu) {
+                    Write-UsysErr 'QEMU not found. Run: usys distro fetch-qemu'
+                    Write-UsysInfo 'Or drop qemu-system-x86_64.exe into your qemu-system suite directory.'
+                    return
+                }
+
+                # Pull VM parameters from manifest environment (with defaults)
+                $ram     = if ($manifest.environment.PHOENIX_VM_RAM)    { $manifest.environment.PHOENIX_VM_RAM }    else { '512M' }
+                $cpus    = if ($manifest.environment.PHOENIX_VM_CPUS)   { $manifest.environment.PHOENIX_VM_CPUS }   else { '1' }
+                $display = if ($manifest.environment.PHOENIX_VM_DISPLAY){ $manifest.environment.PHOENIX_VM_DISPLAY } else { 'sdl' }
+
+                # Snapshot mode: writes go to a temp overlay — disk image stays pristine
+                # Pass -Persist to write changes back to the image
+                $snapshot = if ($Arguments -contains '-Persist') { '' } else { '-snapshot' }
+
+                Write-UsysInfo "QEMU   : $qemu"
+                Write-UsysInfo "Image  : $entryPath"
+                Write-UsysInfo "RAM    : $ram  CPUs: $cpus  Display: $display"
+                if ($snapshot) { Write-UsysInfo 'Mode   : ephemeral (changes discarded on exit — pass -Persist to save)' }
+                else           { Write-UsysInfo 'Mode   : persistent (changes saved to image)' }
+                Write-Host ''
+
+                # ── Accelerator resolution ────────────────────────────────
+                # 'hyperv' = WHPX + every Hyper-V enlightenment QEMU supports
+                #            This is the Act 2 demo — near-native speed,
+                #            Phoenix picked the engine, not Windows.
+                # 'auto'   = Phoenix picks the best available
+                # explicit = user override via --accel flag
+
+                $resolvedAccel = $Accel
+
+                if ($Accel -eq 'auto') {
+                    if ($IsWindows -or $env:OS -eq 'Windows_NT') {
+                        $hvFeature = Get-WindowsOptionalFeature -Online -FeatureName 'HypervisorPlatform' -ErrorAction SilentlyContinue
+                        if ($hvFeature -and $hvFeature.State -eq 'Enabled') {
+                            $resolvedAccel = 'whpx'
+                        } else {
+                            $resolvedAccel = 'tcg'
+                        }
+                    } else {
+                        $resolvedAccel = if (Test-Path '/dev/kvm') { 'kvm' } else { 'tcg' }
+                    }
+                }
+
+                switch ($resolvedAccel) {
+                    'hyperv' { Write-UsysInfo 'Accelerator: Hyper-V enlightenments (WHPX + full HV) — maximum speed' }
+                    'whpx'   { Write-UsysInfo 'Accelerator: WHPX (Windows Hypervisor Platform) — near-native speed' }
+                    'kvm'    { Write-UsysInfo 'Accelerator: KVM — near-native speed' }
+                    'tcg'    { Write-UsysInfo 'Accelerator: TCG (software emulation) — works everywhere, no HW required' }
+                }
+                if ($resolvedAccel -eq 'tcg' -and ($IsWindows -or $env:OS -eq 'Windows_NT')) {
+                    Write-UsysInfo '  → For full speed run: usys run debian --accel hyperv'
+                }
+
+                # ── Build QEMU argument list ──────────────────────────────
+                $qemuArgs = @(
+                    '-m',       $ram,
+                    '-smp',     $cpus,
+                    '-display', $display,
+                    '-drive',   "file=$entryPath,format=qcow2,if=virtio",
+                    '-net',     'nic,model=virtio',
+                    '-net',     'user'
+                )
+
+                # Accelerator args — hyperv gets the full enlightenment set
+                # These tell the guest kernel to use Hyper-V hypercalls instead of
+                # emulated hardware for timers, spinlocks, APIC, etc.
+                # Result: boot time drops from minutes to seconds.
+                if ($resolvedAccel -eq 'hyperv') {
+                    $qemuArgs += @('-accel', 'whpx')
+                    $qemuArgs += @('-cpu', 'host,hv_relaxed,hv_spinlocks=0x1fff,hv_vapic,hv_time,hv_crash,hv_reset,hv_vpindex,hv_runtime,hv_synic,hv_stimer,hv_tlbflush,hv_ipi')
+                } elseif ($resolvedAccel -eq 'kvm') {
+                    $qemuArgs += @('-accel', 'kvm')
+                    $qemuArgs += @('-cpu', 'host')
+                } else {
+                    $qemuArgs += @('-accel', $resolvedAccel)
+                }
+                if ($snapshot) { $qemuArgs += $snapshot }
+
+                # Pass any extra user args through (e.g. -cdrom seed.iso for cloud-init)
+                $extraArgs = $Arguments | Where-Object { $_ -ne '-Persist' }
+                if ($extraArgs) { $qemuArgs += $extraArgs }
+
+                & $qemu @qemuArgs
             }
             default {
                 Write-UsysErr "Unsupported runtime: $($manifest.runtime)"
@@ -827,9 +1022,30 @@ function Show-UsysHelp {
     intake dir <path>            Intake all files in directory
     clone <file> [-Category] [-Tag] [-Destination] [-DryRun]
     open <file>                  Magic extension handler (.lol, .phx)
+    download <url>               Download + auto-intake in one command
+    download <url> -OutFile <p>  Download to specific path, then intake
+    download <url> -NoIntake     Download only, skip intake
+
+  Auto-intake (Downloads\ watcher):
+    watch start                  Watch ~/Downloads, prompt on each new file
+    watch start -Auto            Watch ~/Downloads, silent auto-intake
+    watch start -Path <dir>      Watch a custom directory
+    watch stop                   Stop the watcher
+    watch pending                Review + intake files caught since last check
+    watch status                 Is the watcher running?
 
   Discovery:
     search <query>               Search clonepool + catalog
+    pull <suite>                 Pull suite record from D1 and stage locally
+
+  Distros (Linux VMs via QEMU — no install, no WSL, Phoenix brings the OS):
+    distro list                  Show registered distros
+    distro fetch-qemu            Instructions to get QEMU binary
+    distro intake-qemu           Intake QEMU binary into clone pool
+    run debian                   Boot Debian 12 VM (auto accelerator)
+    run ubuntu                   Boot Ubuntu 24.04 VM (auto accelerator)
+    run debian --accel tcg       Act 1: pure software emulation, no HW required
+    run debian --accel hyperv    Act 2: WHPX + Hyper-V enlightenments, near-native speed
 
   Registry (requires ~/.usys/usys.sh):
     register <file> <name>       Register callable file
@@ -912,6 +1128,50 @@ function global:usys {
             Invoke-UsysSearch -Query ($Rest -join ' ')
         }
 
+        'download' {
+            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys download <url> [-OutFile <path>] [-NoIntake]'; return }
+            $url     = $Rest[0]
+            $outFile = ''
+            $noIntake = $false
+            for ($i = 1; $i -lt $Rest.Count; $i++) {
+                switch ($Rest[$i]) {
+                    '-OutFile'   { if ($i + 1 -lt $Rest.Count) { $outFile = $Rest[++$i] } }
+                    '-NoIntake'  { $noIntake = $true }
+                }
+            }
+            $params = @{ Uri = $url }
+            if ($outFile)   { $params['OutFile']   = $outFile }
+            if ($noIntake)  { $params['NoIntake']  = $true }
+            Invoke-UsysDownload @params
+        }
+
+        'watch' {
+            $sub = if ($Rest.Count -gt 0) { $Rest[0] } else { 'status' }
+            switch ($sub) {
+                'start' {
+                    $auto = $Rest -contains '-Auto' -or $Rest -contains '--auto'
+                    $pathArg = ''
+                    for ($i = 1; $i -lt $Rest.Count; $i++) {
+                        if ($Rest[$i] -eq '-Path' -and $i + 1 -lt $Rest.Count) { $pathArg = $Rest[++$i] }
+                    }
+                    $p = @{}
+                    if ($pathArg)  { $p['Path']       = $pathArg }
+                    if ($auto)     { $p['AutoIntake']  = $true }
+                    Start-UsysWatcher @p
+                }
+                'stop'    { Stop-UsysWatcher }
+                'pending' { Get-UsysWatcherPending }
+                'status'  {
+                    $j = if ($script:UsysWatcherJob) { $script:UsysWatcherJob } else {
+                        Get-Job -Name 'PhoenixWatcher' -ErrorAction SilentlyContinue | Select-Object -First 1
+                    }
+                    if ($j) { Write-UsysInfo "Watcher running — job $($j.Id), state: $($j.State)" }
+                    else    { Write-UsysInfo 'Watcher not running. Start with: usys watch start' }
+                }
+                default { Write-UsysErr "usage: usys watch start|stop|pending|status" }
+            }
+        }
+
         'open' {
             if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys open <file>'; return }
             $dry = $Rest -contains '-DryRun'
@@ -920,19 +1180,48 @@ function global:usys {
         }
 
         'run' {
-            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys run <suite> [args...]'; return }
-            $dry = $Rest -contains '-DryRun' -or $Rest -contains '--dry-run'
+            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys run <suite> [--accel auto|tcg|whpx|hyperv|kvm] [args...]'; return }
+            $dry       = $Rest -contains '-DryRun' -or $Rest -contains '--dry-run'
+            $accel     = 'auto'
             $suiteName = $Rest[0]
-            $version = ''
-            
+            $version   = ''
+
             # Handle suite@version syntax
             if ($suiteName -match '^(.+)@(.+)$') {
                 $suiteName = $matches[1]
-                $version = $matches[2]
+                $version   = $matches[2]
             }
-            
-            $args = $Rest | Select-Object -Skip 1 | Where-Object { $_ -notin '-DryRun', '--dry-run' }
-            Invoke-UsysRun -SuiteName $suiteName -Version $version -DryRun:$dry -Arguments $args
+
+            # Parse --accel flag
+            $filteredRest = [System.Collections.Generic.List[string]]::new()
+            $skipNext = $false
+            foreach ($token in ($Rest | Select-Object -Skip 1)) {
+                if ($skipNext) { $skipNext = $false; continue }
+                if ($token -eq '--accel' -or $token -eq '-accel') {
+                    # next token is the value — peek by re-iterating with index below
+                    $skipNext = $true
+                    continue
+                }
+                $filteredRest.Add($token)
+            }
+            # Second pass for --accel=value and value-after-flag
+            for ($i = 1; $i -lt $Rest.Count; $i++) {
+                if ($Rest[$i] -match '^--?accel=(.+)$') {
+                    $accel = $matches[1]
+                } elseif (($Rest[$i] -eq '--accel' -or $Rest[$i] -eq '-accel') -and $i + 1 -lt $Rest.Count) {
+                    $accel = $Rest[$i + 1]
+                }
+            }
+
+            $passArgs = $filteredRest | Where-Object { $_ -notin '-DryRun', '--dry-run' }
+            Invoke-UsysRun -SuiteName $suiteName -Version $version -Accel $accel -DryRun:$dry -Arguments $passArgs
+        }
+
+        'pull' {
+            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys pull <suite>'; return }
+            $dry = $Rest -contains '-DryRun' -or $Rest -contains '--dry-run'
+            $name = $Rest | Where-Object { $_ -notin '-DryRun','--dry-run' } | Select-Object -First 1
+            Invoke-UsysPull -SuiteName $name -DryRun:$dry
         }
 
         'list-suites' {
@@ -963,6 +1252,70 @@ function global:usys {
             }
         }
 
+        'distro' {
+            $sub = if ($Rest.Count -ge 1) { $Rest[0] } else { 'list' }
+            switch ($sub.ToLowerInvariant()) {
+                'list' {
+                    Write-Host ''
+                    Write-UsysInfo 'Phoenix distro registry:'
+                    Write-Host ''
+                    $distroSuites = Find-UsysSuites -Type 'distro'
+                    if ($distroSuites.Count -eq 0) {
+                        Write-Host '    No distros registered. Run: usys distro add debian' -ForegroundColor DarkGray
+                    } else {
+                        $distroSuites | ForEach-Object {
+                            $src = if ($_.Manifest.metadata.source) { "  <- $($_.Manifest.metadata.source)" } else { '' }
+                            Write-Host "    $($_.Name) " -NoNewline -ForegroundColor Cyan
+                            Write-Host "v$($_.Version) " -NoNewline -ForegroundColor Green
+                            Write-Host "[$($_.Manifest.metadata.flavor)]$src" -ForegroundColor DarkGray
+                        }
+                    }
+                    Write-Host ''
+                    Write-UsysInfo "Run a distro: usys run debian"
+                    Write-UsysInfo "QEMU binary : $(if (Get-UsysQemu) { Get-UsysQemu } else { 'NOT FOUND — run: usys distro fetch-qemu' })"
+                    Write-Host ''
+                }
+                'fetch-qemu' {
+                    # Download QEMU for Windows into the qemu-system suite directory
+                    $qemuSuites = Find-UsysSuites -Name 'qemu-system'
+                    if ($qemuSuites.Count -eq 0) {
+                        Write-UsysErr 'qemu-system suite not found in clonepool. Clone the suite first.'
+                        return
+                    }
+                    $dest = Join-Path $qemuSuites[0].Path 'qemu-system-x86_64.exe'
+                    if (Test-Path $dest) {
+                        Write-UsysOk "QEMU already present: $dest"
+                        return
+                    }
+                    Write-UsysInfo 'QEMU is not bundled — download it once from https://qemu.weilnetz.de/w64/'
+                    Write-UsysInfo "Place qemu-system-x86_64.exe at: $dest"
+                    Write-UsysInfo 'Then run: usys distro intake-qemu'
+                    Write-Host ''
+                }
+                'intake-qemu' {
+                    $qemu = Get-UsysQemu
+                    if (-not $qemu) { Write-UsysErr 'QEMU binary not found. Run: usys distro fetch-qemu'; return }
+                    Write-UsysInfo "Intaking QEMU binary into Phoenix clone pool..."
+                    $pythonCmd = if (Get-Command python3 -ErrorAction SilentlyContinue) { 'python3' } else { 'python' }
+                    $intakePy = Join-Path (Get-UsysRepoRoot) 'phoenix-core\tools\intake.py'
+                    & $pythonCmd $intakePy $qemu
+                    Write-Host ''
+                }
+                default {
+                    Write-Host ''
+                    Write-Host '  usys distro commands:' -ForegroundColor Cyan
+                    Write-Host '    list           — show registered distros'
+                    Write-Host '    fetch-qemu     — instructions to get QEMU binary'
+                    Write-Host '    intake-qemu    — intake QEMU binary into Phoenix clone pool'
+                    Write-Host ''
+                    Write-Host '  Run a distro:'
+                    Write-Host '    usys run debian'
+                    Write-Host '    usys run ubuntu'
+                    Write-Host ''
+                }
+            }
+        }
+
         { $_ -in @('register', 'call', 'swap', 'rollback', 'list', 'info', 'remove', 'where', 'sync') } {
             Invoke-UsysDelegate -SubCommand $Command @Rest
         }
@@ -979,6 +1332,168 @@ function global:usys {
 # Dot-source mode: . usys.ps1  →  usys function available in session
 # =============================================================================
 Set-Alias -Name phx -Value usys -Scope Global -Force -ErrorAction SilentlyContinue
+
+# =============================================================================
+# COMMAND: download — Invoke-WebRequest wrapper that auto-intakes the result
+# =============================================================================
+function global:Invoke-UsysDownload {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, Position = 0)][string]$Uri,
+        [string]$OutFile,
+        [switch]$NoIntake
+    )
+
+    # Derive output filename from URI if not given
+    if (-not $OutFile) {
+        $leaf    = [System.IO.Path]::GetFileName(([uri]$Uri).LocalPath)
+        if (-not $leaf) { $leaf = 'download' }
+        $OutFile = Join-Path ([System.IO.Path]::GetTempPath()) $leaf
+    }
+
+    Write-UsysInfo "Downloading: $Uri"
+    Write-UsysInfo "        To : $OutFile"
+    Invoke-WebRequest -Uri $Uri -OutFile $OutFile
+    Write-UsysOk "Download complete"
+
+    if (-not $NoIntake) {
+        Write-UsysInfo "Auto-intaking into Phoenix clonepool..."
+        $py = if (Get-Command python3 -ErrorAction SilentlyContinue) { 'python3' } else { 'python' }
+        $intakePy = Join-Path (Get-UsysRepoRoot) 'phoenix-core\tools\intake.py'
+        & $py $intakePy $OutFile
+        Write-UsysOk "Intaked: $OutFile"
+    }
+}
+Set-Alias -Name usys-download -Value Invoke-UsysDownload -Scope Global -Force -ErrorAction SilentlyContinue
+
+# =============================================================================
+# COMMAND: watch — filesystem watcher on Downloads\ that auto-intakes new files
+# =============================================================================
+
+# Shared state for the watcher job
+$script:UsysWatcherJob = $null
+
+function Start-UsysWatcher {
+    [CmdletBinding()]
+    param(
+        [string]$Path     = (Join-Path $HOME 'Downloads'),
+        [switch]$AutoIntake   # if set: silent auto-intake; otherwise: prompt
+    )
+
+    if ($script:UsysWatcherJob -and $script:UsysWatcherJob.State -eq 'Running') {
+        Write-UsysWarn "Watcher already running (job $($script:UsysWatcherJob.Id)). Run: usys watch stop"
+        return
+    }
+
+    if (-not (Test-Path $Path)) {
+        Write-UsysErr "Watch path not found: $Path"
+        return
+    }
+
+    $repoRoot  = Get-UsysRepoRoot
+    $intakePy  = Join-Path $repoRoot 'phoenix-core\tools\intake.py'
+    $auto      = $AutoIntake.IsPresent
+
+    $script:UsysWatcherJob = Start-Job -Name 'PhoenixWatcher' -ScriptBlock {
+        param($watchPath, $intakePy, $auto)
+
+        $watcher                     = New-Object System.IO.FileSystemWatcher
+        $watcher.Path                = $watchPath
+        $watcher.Filter              = '*.*'
+        $watcher.IncludeSubdirectories = $false
+        $watcher.NotifyFilter        = [System.IO.NotifyFilters]::FileName
+
+        $handler = {
+            param($src, $ev)
+            $file = $ev.FullPath
+            # Wait briefly — browser writes in chunks, give it a moment to finish
+            Start-Sleep -Seconds 2
+            # Skip temp/partial files (Chrome .crdownload, Edge .tmp, etc.)
+            if ($file -match '\.(crdownload|tmp|part|download)$') { return }
+            if (-not (Test-Path $file)) { return }
+
+            if ($auto) {
+                $py = if (Get-Command python3 -ErrorAction SilentlyContinue) { 'python3' } else { 'python' }
+                & $py $intakePy $file
+            } else {
+                # Toast-style prompt via BurntToast if available, else console
+                $msg = "Phoenix: Intake '$([System.IO.Path]::GetFileName($file))'?"
+                $hasBurnt = Get-Module -ListAvailable -Name BurntToast -ErrorAction SilentlyContinue
+                if ($hasBurnt) {
+                    Import-Module BurntToast -ErrorAction SilentlyContinue
+                    New-BurntToastNotification -Text 'Phoenix Intake', $msg -ErrorAction SilentlyContinue
+                }
+                # Always write to job output so the parent can show it
+                Write-Output "INTAKE_PROMPT:$file"
+            }
+        }
+
+        Register-ObjectEvent $watcher Created -Action $handler | Out-Null
+        $watcher.EnableRaisingEvents = $true
+
+        Write-Output "WATCHER_STARTED:$watchPath"
+
+        # Keep alive — check for stop signal every second
+        while ($true) { Start-Sleep -Seconds 1 }
+    } -ArgumentList $Path, $intakePy, $auto
+
+    # Poll for startup confirmation (up to 5s)
+    $deadline = (Get-Date).AddSeconds(5)
+    while ((Get-Date) -lt $deadline) {
+        $out = Receive-Job $script:UsysWatcherJob -Keep 2>$null
+        if ($out -match 'WATCHER_STARTED') { break }
+        Start-Sleep -Milliseconds 200
+    }
+
+    Write-UsysOk "Watcher started — monitoring: $Path"
+    Write-UsysInfo "Job ID: $($script:UsysWatcherJob.Id)  |  run 'usys watch stop' to stop"
+    if (-not $auto) {
+        Write-UsysInfo "Mode: prompt — run 'usys watch pending' to see files waiting for intake"
+    } else {
+        Write-UsysInfo "Mode: auto-intake — every new download is intaked immediately"
+    }
+}
+
+function Stop-UsysWatcher {
+    if (-not $script:UsysWatcherJob) {
+        # Try to find it by name if script was reloaded
+        $script:UsysWatcherJob = Get-Job -Name 'PhoenixWatcher' -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    if (-not $script:UsysWatcherJob) {
+        Write-UsysWarn 'No watcher job found.'
+        return
+    }
+    Stop-Job  $script:UsysWatcherJob
+    Remove-Job $script:UsysWatcherJob
+    $script:UsysWatcherJob = $null
+    Write-UsysOk 'Watcher stopped.'
+}
+
+function Get-UsysWatcherPending {
+    if (-not $script:UsysWatcherJob) {
+        $script:UsysWatcherJob = Get-Job -Name 'PhoenixWatcher' -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    if (-not $script:UsysWatcherJob) { Write-UsysWarn 'Watcher not running.'; return }
+
+    $py       = if (Get-Command python3 -ErrorAction SilentlyContinue) { 'python3' } else { 'python' }
+    $intakePy = Join-Path (Get-UsysRepoRoot) 'phoenix-core\tools\intake.py'
+
+    $lines = Receive-Job $script:UsysWatcherJob -Keep 2>$null | Where-Object { $_ -match '^INTAKE_PROMPT:' }
+    if (-not $lines) { Write-UsysInfo 'No pending files.'; return }
+
+    foreach ($line in $lines) {
+        $file = $line -replace '^INTAKE_PROMPT:', ''
+        Write-Host ''
+        Write-Host "  New file: $file" -ForegroundColor Yellow
+        $choice = Read-Host '  Intake into Phoenix? [Y/n]'
+        if ($choice -eq '' -or $choice -match '^[Yy]') {
+            & $py $intakePy $file
+            Write-UsysOk "Intaked: $([System.IO.Path]::GetFileName($file))"
+        } else {
+            Write-UsysInfo "Skipped: $([System.IO.Path]::GetFileName($file))"
+        }
+    }
+}
 
 # Back-compat: expose clone as a global function that delegates to usys clone
 function global:clone {

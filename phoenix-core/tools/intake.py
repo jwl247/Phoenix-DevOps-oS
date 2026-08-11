@@ -26,15 +26,19 @@ import json
 import os
 import sqlite3
 import sys
+import urllib.request
+import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-CLONEPOOL_DIR = Path(os.environ.get("CLONEPOOL_DIR", Path.home() / "Documents" / "clonepool"))
-CATALOG_DB    = Path(os.environ.get("CATALOG_DB",    Path.home() / ".catalog" / "catalog.db"))
-VERSION = "0.2.0"
+CLONEPOOL_DIR    = Path(os.environ.get("CLONEPOOL_DIR",    Path.home() / "Documents" / "clonepool"))
+CATALOG_DB       = Path(os.environ.get("CATALOG_DB",       Path.home() / ".catalog" / "catalog.db"))
+WORKER_URL       = os.environ.get("PHOENIX_WORKER_URL", "").rstrip("/")
+WORKER_AUTH      = os.environ.get("PHOENIX_AUTH", "")
+VERSION = "0.3.0"
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +146,14 @@ def ensure_catalog() -> sqlite3.Connection:
     CATALOG_DB.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(CATALOG_DB))
     conn.executescript(CATALOG_SCHEMA)
+    # Migrate older DBs that pre-date the hex_id column
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(packages)")}
+    if "hex_id" not in cols:
+        conn.execute("ALTER TABLE packages ADD COLUMN hex_id TEXT NOT NULL DEFAULT ''")
+        conn.execute("UPDATE packages SET hex_id = hash_sha3 WHERE hex_id = ''")
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_packages_hex_id ON packages(hex_id)"
+        )
     conn.commit()
     return conn
 
@@ -185,6 +197,95 @@ def catalog_upsert(
         ),
     )
     conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# D1 sync — best-effort POST to packages-worker
+# ---------------------------------------------------------------------------
+
+_B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+def _base58(data: bytes) -> str:
+    n = int.from_bytes(data, "big")
+    result = ""
+    while n:
+        n, r = divmod(n, 58)
+        result = _B58_ALPHABET[r] + result
+    for byte in data:
+        if byte == 0:
+            result = _B58_ALPHABET[0] + result
+        else:
+            break
+    return result
+
+
+def d1_sync(
+    hex_id: str,
+    file_path: Path,
+    sha3_hex: str,
+    blake2_hex: str,
+    clonepool_dest: Path | None,
+    sidecar: Path,
+) -> bool:
+    """
+    POST intake record to /clonepool and /custody on the packages-worker.
+    Returns True on success. Non-fatal — never raises.
+    """
+    if not WORKER_URL or not WORKER_AUTH:
+        return False
+
+    b58 = _base58(bytes.fromhex(hex_id[:16]))
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    clonepool_payload = json.dumps({
+        "hex_id":        hex_id,
+        "b58":           b58,
+        "name":          file_path.name,
+        "original_name": file_path.name,
+        "pool_path":     str(clonepool_dest) if clonepool_dest else None,
+        "sidecar_path":  str(sidecar),
+        "hash_sha3":     sha3_hex,
+        "hash_blake2":   blake2_hex,
+        "state":         "white",
+        "tier":          1,
+        "size":          file_path.stat().st_size,
+        "version":       "v1",
+    }).encode()
+
+    custody_payload = json.dumps({
+        "hex_id":  hex_id,
+        "name":    file_path.name,
+        "qr_top":  f"USYS:{b58}:HEADER",
+        "qr_bottom": f"USYS:{b58}:FOOTER:{hex_id}",
+        "state":   "white",
+        "action":  "intake",
+        "actor":   "intake.py",
+    }).encode()
+
+    headers = {
+        "Content-Type":  "application/json",
+        "Authorization": f"Bearer {WORKER_AUTH}",
+        "User-Agent":    "Phoenix-Intake/0.3.0",
+    }
+
+    for endpoint, payload in (
+        ("/clonepool", clonepool_payload),
+        ("/custody",   custody_payload),
+    ):
+        try:
+            req = urllib.request.Request(
+                f"{WORKER_URL}{endpoint}",
+                data=payload,
+                headers=headers,
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                pass  # 200 is enough — no body needed
+        except Exception as e:
+            print(f"  [warn] D1 sync {endpoint} failed: {e}")
+            return False
+
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +347,15 @@ def intake_file(file_path: Path, *, skip_clone: bool = False) -> dict:
     else:
         dest_dir = None
 
+    # 5. D1 sync (best-effort)
+    synced = d1_sync(sha3_hex, file_path, sha3_hex, blake2_hex, dest_dir, sc_path)
+    if synced:
+        print(f"  d1 sync  : ok")
+    elif WORKER_URL:
+        print(f"  d1 sync  : skipped (check PHOENIX_AUTH / PHOENIX_WORKER_URL)")
+    else:
+        print(f"  d1 sync  : offline (PHOENIX_WORKER_URL not set)")
+
     print(f"  OK hex_id={sha3_hex[:16]}...")
 
     return {
@@ -256,6 +366,7 @@ def intake_file(file_path: Path, *, skip_clone: bool = False) -> dict:
         "sidecar":    str(sc_path),
         "catalog":    str(CATALOG_DB),
         "clonepool":  str(dest_dir) if dest_dir else None,
+        "d1_synced":  synced,
     }
 
 

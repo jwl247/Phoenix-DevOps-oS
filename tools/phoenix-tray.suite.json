@@ -1,0 +1,16 @@
+{
+  "name": "phoenix-tray",
+  "version": "0.1.0",
+  "description": "Phoenix system tray app. Watches Downloads, prompts to intake new files, lets you run suites from the tray.",
+  "author": "jwl247",
+  "type": "tool",
+  "entry": "phoenix-tray.py",
+  "runtime": "python",
+  "permissions": ["filesystem:read", "filesystem:write", "network"],
+  "metadata": {
+    "category": "tool",
+    "tags": ["tray", "watcher", "intake", "ui"],
+    "deps": ["pystray", "pillow", "plyer"],
+    "install_deps": "pip install pystray pillow plyer"
+  }
+}
