@@ -4,10 +4,15 @@
 
 ## WHERE WE ARE
 
-Distro demo WORKING. `usys run debian` boots Debian 12 on Windows — no WSL, no Hyper-V.
-QEMU intaked into clonepool (no system install needed for demo).
-Downloads watcher + `usys download` built. Phoenix tray app built.
-Next: intake phoenix-tray.py, wire startup, share with Laurie/kids.
+Full PoC working. Auth unified. Tray app released. Ready for R2.
+
+- `usys run debian` — Debian 12 boots on Windows, no WSL, no Hyper-V ✅
+- QEMU in clonepool — zero system dependencies ✅
+- `usys download` + `usys watch` — auto-intake on every download ✅
+- `phoenix-tray.exe` — built, v0.1.0 released on GitHub ✅
+- Silent auth — `usys init` runs once, wires `$PROFILE`, never asked again ✅
+- `intake.py` fixed — now sends `X-Phoenix-Auth` (matches what worker checks) ✅
+- Tray app reads auth from Windows registry — works when launched by double-click ✅
 
 ---
 
@@ -143,13 +148,15 @@ THAT is the demo. Import once. Run anywhere.
 
 | File | Purpose |
 |------|---------|
-| tools/poc/qemu-system.suite.json | QEMU binary suite manifest |
-| tools/poc/debian.suite.json | Debian 12 VM suite manifest |
-| tools/poc/ubuntu.suite.json | Ubuntu 24.04 VM suite manifest |
-| tools/poc/run-debian.ps1 | Debian demo launcher script |
-| tools/poc/run-ubuntu.ps1 | Ubuntu pro demo launcher script |
-| scripts/usys.ps1 (updated) | Added: qemu runtime, Get-UsysQemu, usys distro subcommand |
-| phoenix-core/tools/intake.py (updated) | catalog.db migration for missing hex_id column |
+| `tools/phoenix-tray.py` | System tray app — watches Downloads, runs suites, prompts intake |
+| `tools/phoenix-tray.suite.json` | Suite manifest for tray app |
+| `tools/poc/qemu-system.suite.json` | QEMU binary suite manifest |
+| `tools/poc/debian.suite.json` | Debian 12 VM suite manifest |
+| `tools/poc/ubuntu.suite.json` | Ubuntu 24.04 VM suite manifest |
+| `tools/poc/run-debian.ps1` | Debian demo launcher |
+| `tools/poc/run-ubuntu.ps1` | Ubuntu demo launcher |
+| `scripts/usys.ps1` (updated) | Added: qemu runtime, `usys download`, `usys watch`, silent auth init |
+| `phoenix-core/tools/intake.py` (updated) | Fixed auth header (`X-Phoenix-Auth`), v0.3.0 |
 
 ---
 
@@ -157,47 +164,69 @@ THAT is the demo. Import once. Run anywhere.
 
 | Component | Status |
 |-----------|--------|
-| intake.py | Working — hashes, sidecar, catalog.db, clone pool, D1 sync |
-| D1 (packages-worker) | Live — packages-worker.phoenix-jwl.workers.dev |
-| clone pool (local) | Working — ~/Phoenix/clonepool |
-| usys run | Working — python, node, bash, powershell, binary, **qemu** runtimes |
-| usys pull | Working — fetches suite record from D1 by name |
-| usys distro | NEW — list / fetch-qemu / intake-qemu subcommands |
-| R2 binary sync | NOT YET — next phase after distro demo |
-| hello-phoenix in D1 | YES — b58: G5SiUQJ4zXk |
-| yt-dlp in D1 | YES — hex: 9553338972fef72a... |
-| Debian VM | READY — needs disk image in clonepool |
-| Ubuntu VM | READY — needs disk image in clonepool |
-| QEMU binary | NEEDED — download once, intake once |
+| `intake.py` | ✅ Working — hashes, sidecar, catalog.db, clonepool, D1 sync |
+| Auth header | ✅ Fixed — `X-Phoenix-Auth` everywhere (was `Authorization: Bearer`) |
+| `usys init` | ✅ One-time setup — asks for token once, wires `$PROFILE`, silent forever after |
+| D1 (packages-worker) | ✅ Live — `packages-worker.phoenix-jwl.workers.dev` |
+| clonepool (local) | ✅ Working — `~/Phoenix/clonepool` |
+| `usys run` | ✅ python, node, bash, powershell, binary, **qemu** runtimes |
+| `usys pull` | ✅ Fetches suite record from D1 by name |
+| `usys download` | ✅ Download + auto-intake in one command |
+| `usys watch` | ✅ Background watcher on `~/Downloads` — prompt or auto-intake |
+| `usys distro` | ✅ list / fetch-qemu / intake-qemu |
+| QEMU in clonepool | ✅ `clonepool/qemu-system/` — no system install needed |
+| Debian VM | ✅ Boots — `usys run debian --accel tcg` confirmed working |
+| Ubuntu VM | ⏳ Suite ready — disk image not yet downloaded |
+| `phoenix-tray.exe` | ✅ v0.1.0 released — `https://github.com/jwl247/Phoenix-DevOps-oS/releases/tag/v0.1.0` |
+| R2 binary sync | ❌ NOT YET — **next session** |
+| hello-phoenix in D1 | ✅ b58: `G5SiUQJ4zXk` |
+| yt-dlp in D1 | ✅ hex: `9553338972fef72a...` |
 
 ---
 
 ## NEXT STEPS IN ORDER
 
-1. **NOW** — Download QEMU binary, place in qemu-system suite dir, run `usys distro intake-qemu`
-2. **NOW** — Download Debian + Ubuntu cloud images, intake them, run `usys run debian`
-3. **DEMO** — `usys run ubuntu` — Ubuntu on Windows, launched by Phoenix, no WSL, no Microsoft
-4. **NEXT** — R2 binary upload so `usys pull debian` on any machine downloads the actual disk image
-5. **FUTURE** — cloud-init seed ISO for passwordless login inside the VM
-
----
-
-## CHEAPEST SECOND MACHINE OPTIONS (if current one doesn't work)
-- Oracle Cloud Free Tier — real Ubuntu/Debian VM, always free, SSH from Windows
-- Raspberry Pi 5 — ~$80, real ARM64 Debian bare metal
-- Old Android + Termux — $0, real Linux userspace, runs Python and bash
+1. **NEXT SESSION** — R2 binary sync
+   - Add `PUT /r2/:hex_id` + `GET /r2/:hex_id` to `packages-worker/index.js` (~30 lines)
+   - Add `r2_push()` to `intake.py` — streams file after D1 sync (~20 lines)
+   - Extend `usys pull` to download binary from R2 into clonepool (~15 lines)
+   - Small files first (exes, scripts) — multipart needed for Debian 330MB (later)
+2. **SOON** — Test on Laurie's machine — `usys init` → token once → silent forever
+3. **SOON** — LifeFirst MCP must-answer DO module
+4. **FUTURE** — Ollama replacing Cloudflare AI binding
+5. **FUTURE** — Ubuntu VM disk image + cloud-init seed ISO
 
 ---
 
 ## KEY FILES
-- tools/poc/hello-phoenix.py       — demo process
-- tools/poc/hello-phoenix.suite.json — manifest
-- tools/poc/yt-dlp.exe             — power demo binary
-- tools/poc/yt-dlp.suite.json      — manifest
-- phoenix-core/tools/intake.py     — intake pipeline v0.3.0
-- scripts/usys.ps1                 — global command layer (has pull + run)
-- SECTOR4/copes/src/distro_handler.py — Debian ISO cache (future phase)
-- CLAUDE.md                        — full architecture reference
+
+| File | Purpose |
+|------|---------|
+| `tools/phoenix-tray.py` | Tray app source |
+| `dist/phoenix-tray.exe` | Built exe (gitignored — rebuild with PyInstaller) |
+| `phoenix-core/tools/intake.py` | Intake pipeline v0.3.0 |
+| `scripts/usys.ps1` | Global command layer |
+| `sector3/workers/packages-worker/index.js` | Cloudflare Worker — D1 API (needs R2 routes added) |
+| `CLAUDE.md` (repo root) | Full architecture reference — read this first |
+
+---
+
+## LAURIE ONBOARDING (when ready)
+
+```powershell
+# 1. Clone repo
+git clone https://github.com/jwl247/Phoenix-DevOps-oS
+cd Phoenix-DevOps-oS
+
+# 2. One-time init — asks for token once, wires profile, silent forever
+pwsh -NoProfile -ExecutionPolicy Bypass -Command ". '.\scripts\usys.ps1'; usys init"
+
+# 3. Open new terminal — usys + auth load automatically
+usys status
+
+# OR just send her phoenix-tray.exe from the GitHub release
+# She double-clicks it — Phoenix is running, Downloads are watched
+```
 
 ---
 
