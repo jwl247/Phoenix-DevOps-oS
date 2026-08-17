@@ -17,6 +17,16 @@
       "database_name": "phoenix_dev_db",
       "database_id":   "27958687-4349-47ed-8b6a-dbc4ab29730f"
     }
+  ],
+
+  // ── R2 Binding ─────────────────────────────────────────────────────────────
+  // CLONEPOOL_BUCKET → phoenix-clonepool (the actual file bytes live here;
+  // D1's clonepool table is metadata/catalog only, R2 is the real clonepool)
+  "r2_buckets": [
+    {
+      "binding":     "CLONEPOOL_BUCKET",
+      "bucket_name": "phoenix-clonepool"
+    }
   ]
 
   // ── Secrets ────────────────────────────────────────────────────────────────

@@ -587,26 +587,53 @@ export default {
 
         await db.prepare(`
           INSERT INTO clonepool (hex_id, b58, name, original_name, pool_path, sidecar_path,
-            state, tier, size, version)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            state, tier, size, version, hash_sha3, hash_blake2, header_qr, footer_qr,
+            source_path, notes, addr_scheme)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(hex_id) DO UPDATE SET
             state = excluded.state,
             version = excluded.version,
+            hash_sha3 = COALESCE(excluded.hash_sha3, clonepool.hash_sha3),
+            hash_blake2 = COALESCE(excluded.hash_blake2, clonepool.hash_blake2),
+            header_qr = COALESCE(excluded.header_qr, clonepool.header_qr),
+            footer_qr = COALESCE(excluded.footer_qr, clonepool.footer_qr),
+            addr_scheme = excluded.addr_scheme,
             updated_at = CURRENT_TIMESTAMP
         `).bind(
           body.hex_id,
           body.b58 || body.hex_id,
           body.name,
-          body.original_name|| body.name,
+          body.original_name || body.name,
           body.pool_path || null,
           body.sidecar_path || null,
           body.state || 'white',
           body.tier || 1,
           body.size || 0,
           body.version || 'v1',
+          body.hash_sha3 || null,
+          body.hash_blake2 || null,
+          body.header_qr || null,
+          body.footer_qr || null,
+          body.source_path || null,
+          body.notes || null,
+          (body.hash_sha3 ? 'content-v2' : 'filename-hex-v1'),
         ).run();
 
         return ok({ ok: true, hex_id: body.hex_id, name: body.name });
+      }
+
+      // PUT /clonepool/:id — upload the actual file bytes to R2.
+      // This is the route intake.sh's upload_to_r2() calls. Metadata
+      // (above) and bytes (here) are separate on purpose: R2 is the
+      // clonepool, D1 is the catalog. Neither replaces the other.
+      if (path.startsWith('/clonepool/') && req.method === 'PUT') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const hex_id = decodeURIComponent(path.slice(11));
+        if (!hex_id) return err('hex_id required', 400);
+        if (!env.CLONEPOOL_BUCKET) return err('R2 bucket not bound to this worker', 500);
+        const bytes = await req.arrayBuffer();
+        await env.CLONEPOOL_BUCKET.put(hex_id, bytes);
+        return ok({ ok: true, hex_id, bytes: bytes.byteLength });
       }
 
       // GET /custody — ledger view
@@ -671,6 +698,12 @@ export default {
 
       if (path.startsWith('/clonepool/') && req.method === 'GET') {
         const id = decodeURIComponent(path.slice(11));
+        if (env.CLONEPOOL_BUCKET) {
+          const obj = await env.CLONEPOOL_BUCKET.get(id);
+          if (obj) {
+            return new Response(obj.body, { status: 200, headers: { 'Content-Type': 'application/octet-stream' } });
+          }
+        }
         const row = await db
           .prepare('SELECT * FROM clonepool WHERE hex_id = ? OR name = ?')
           .bind(id, id).first();
