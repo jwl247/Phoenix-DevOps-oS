@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS reviews (
 
 -- Index for fast vote tallying per artifact
 CREATE INDEX IF NOT EXISTS idx_reviews_hex ON reviews(submission_hex);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_submission_reviewer
+  ON reviews(submission_hex, reviewer);
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- TABLE: revocations

@@ -391,6 +391,44 @@ upload_to_r2() {
   fi
 }
 
+# ── R2 object restore — pulls file bytes back when the local ─────────
+# clonepool is missing them (e.g. after a wipe/reinstall). The worker's
+# GET /clonepool/:id returns raw bytes (Content-Type: application/
+# octet-stream) when R2 has the object, but falls back to a JSON D1
+# metadata row (Content-Type: application/json) if R2 doesn't have it —
+# we MUST check Content-Type before trusting the body, or a metadata-only
+# hit gets written to disk as a corrupt "file".
+# Returns 0 and prints the restored path on success, 1 otherwise.
+restore_from_r2() {
+  local hex="$1" dest_path="$2"
+  [[ -z "${PHOENIX_AUTH}" ]] && { log "WARN" "PHOENIX_AUTH not set — skipping R2 restore"; return 1; }
+
+  local tmp_headers; tmp_headers=$(mktemp)
+  local tmp_body; tmp_body=$(mktemp)
+  local http_code
+  http_code=$(curl -s -D "${tmp_headers}" -o "${tmp_body}" -w "%{http_code}" \
+    -H "Authorization: Bearer ${PHOENIX_AUTH}" \
+    "${WORKER_URL}/clonepool/${hex}" 2>/dev/null)
+
+  if [[ "${http_code}" != "200" ]]; then
+    log "WARN" "R2 restore failed (${http_code}) → ${hex}"
+    rm -f "${tmp_headers}" "${tmp_body}"
+    return 1
+  fi
+
+  if ! grep -qi "^content-type: application/octet-stream" "${tmp_headers}"; then
+    log "WARN" "R2 restore: ${hex} has D1 metadata but no R2 bytes — nothing to restore"
+    rm -f "${tmp_headers}" "${tmp_body}"
+    return 1
+  fi
+
+  mkdir -p "$(dirname "${dest_path}")"
+  mv "${tmp_body}" "${dest_path}"
+  rm -f "${tmp_headers}"
+  log "INFO" "R2 restore OK → ${hex} (${dest_path})"
+  return 0
+}
+
 report_clonepool() {
   # Args: hex name version state pool_path sidecar_path tier size [hash_sha3] [hash_blake2] [original_name]
   local hash_sha3="${9:-}" hash_blake2="${10:-}" original_name="${11:-${2}}"
@@ -556,9 +594,15 @@ intake_clone() {
   local pool_dir="${CLONEPOOL_DIR}/${hex}"
 
   if [[ ! -d "${pool_dir}" ]]; then
-    echo "[intake:MISS] '${name}' not found in clonepool"
-    echo "              Have you intaked it yet? Run: intake ${name}"
-    return 1
+    echo "[intake:MISS] '${name}' not in local clonepool — trying R2..."
+    if restore_from_r2 "${hex}" "${pool_dir}/v1_${name}"; then
+      custody_log_local "${hex}" "${name}" "restore_from_r2" "v1" \
+        "${WORKER_URL}/clonepool/${hex}" "${pool_dir}/v1_${name}" "white" "user"
+    else
+      echo "[intake:MISS] '${name}' not found locally OR in R2"
+      echo "              Have you intaked it yet? Run: intake ${name}"
+      return 1
+    fi
   fi
 
   local latest
