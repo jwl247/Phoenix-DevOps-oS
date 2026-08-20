@@ -1,0 +1,20 @@
+Config Collection Summary (Upgraded Scan)
+============================================================
+Scan Time: 20260124_024544
+Root Path: /home/jwl247/GII-E
+Dedicated Config Files Found: 3
+Files with In-Code Settings: 4
+
+Collected Dedicated Config Files:
+---------------------------------
+  - config.json
+  - config_scanner.py
+  - config_scanner.cpython-311.pyc
+
+
+Files with Discovered In-Code Settings:
+-----------------------------------------
+  - agnostic_layer.py (4 settings found)
+  - config.json (17 settings found)
+  - modules/Module5_Memory.py (11 settings found)
+  - modules/config_scanner.py (12 settings found)

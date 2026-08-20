@@ -1,0 +1,11 @@
+id: "@phoenix/tb-clonepool"
+metadata:
+  displayName: !extend i18n/display_name.yml
+  description: !extend i18n/description.yml
+icon: VscDatabase
+target: "@seelen/fancy-toolbar"
+plugin:
+  scopes: []
+  template: !include plugin/template.js
+  tooltip: !include plugin/tooltip.js
+  onClickV2: open("http://localhost:8765/clonepool")

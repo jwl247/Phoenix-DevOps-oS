@@ -1,0 +1,21 @@
+{
+  "name": "yt-dlp",
+  "version": "2026.07.04",
+  "description": "Download video/audio from YouTube and 1000+ sites. Single binary. No install. Runs from the Phoenix clone pool.",
+  "author": "yt-dlp team / Phoenix intake by jwl247",
+  "type": "script",
+  "entry": "yt-dlp.exe",
+  "runtime": "binary",
+  "dependencies": [],
+  "environment": {},
+  "permissions": [
+    "network",
+    "filesystem:write"
+  ],
+  "metadata": {
+    "category": "poc",
+    "tags": ["demo", "video", "binary", "no-install"],
+    "source": "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe",
+    "license": "Unlicense"
+  }
+}

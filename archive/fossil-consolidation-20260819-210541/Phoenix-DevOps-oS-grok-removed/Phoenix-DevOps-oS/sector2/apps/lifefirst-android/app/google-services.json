@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "429054035827",
+    "project_id": "lifefirstapp",
+    "storage_bucket": "lifefirstapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:429054035827:android:5fc2c5b7e22e7493e32706",
+        "android_client_info": {
+          "package_name": "com.attempt1.LifeFirstApp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCPb3STjx6I4NW8dlxwGXeqxNGKQjP7v2E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:429054035827:android:27ec055e7841ffd1e32706",
+        "android_client_info": {
+          "package_name": "com.attempt1.lifefirstapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCPb3STjx6I4NW8dlxwGXeqxNGKQjP7v2E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

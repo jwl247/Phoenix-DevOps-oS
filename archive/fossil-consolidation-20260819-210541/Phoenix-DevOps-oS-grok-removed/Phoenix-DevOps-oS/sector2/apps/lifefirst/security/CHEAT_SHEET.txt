@@ -1,0 +1,112 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                   LIFE FIRST AI - ONE PAGE CHEAT SHEET                     ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📦 TRANSFER TO SERVER
+═══════════════════════════════════════════════════════════════════════════
+From Windows:
+    scp lifefirst_complete_package.tar.gz admin@YOUR_SERVER_IP:~/
+
+Or use WinSCP/FileZilla (GUI)
+
+
+🚀 INSTALL ON SERVER (5 COMMANDS)
+═══════════════════════════════════════════════════════════════════════════
+    ssh admin@YOUR_SERVER_IP
+    mkdir -p ~/lifefirst_install && cd ~/lifefirst_install
+    tar -xzf ~/lifefirst_complete_package.tar.gz
+    chmod +x *.sh
+    sudo ./lifefirst_setup.sh
+    sudo ./deploy_modules.sh
+
+
+🔑 ADD CLAUDE API KEY (3 FILES)
+═══════════════════════════════════════════════════════════════════════════
+    sudo nano /var/www/html/lifefirst/ai/ai_schedule.php      (line 25)
+    sudo nano /var/www/html/lifefirst/ai/ai_messenger.php     (line 18)
+    sudo nano /var/www/html/lifefirst/ai/ai_notifications.php (line 19)
+
+Replace: YOUR_CLAUDE_API_KEY_HERE
+With:    sk-ant-api03-YOUR-ACTUAL-KEY
+
+
+✅ TEST IT
+═══════════════════════════════════════════════════════════════════════════
+Browser:     http://YOUR_SERVER_IP/lifefirst/
+Health:      curl http://YOUR_SERVER_IP/lifefirst/api.php?action=health
+Test:        curl http://YOUR_SERVER_IP/lifefirst/api.php?action=test
+
+
+📝 DEFAULT CREDENTIALS (CHANGE THESE!)
+═══════════════════════════════════════════════════════════════════════════
+MySQL Root:     LifeFirst2024!
+DB User:        lifefirst_user
+DB Password:    LifeFirst_DB_2024!
+API Secret:     your_secret_token_change_me_12345
+
+
+🐛 QUICK FIXES
+═══════════════════════════════════════════════════════════════════════════
+Restart Apache:     sudo systemctl restart apache2
+Restart MySQL:      sudo systemctl restart mysql
+Check logs:         sudo tail -f /var/log/apache2/error.log
+Check DB:           mysql -u root -p lifefirst
+                    (password: LifeFirst2024!)
+
+
+⏱️ TOTAL TIME: ~25 MINUTES
+═══════════════════════════════════════════════════════════════════════════
+Transfer:       2 min
+Extract:        1 min
+Setup script:   10 min
+Deploy script:  3 min
+Add API key:    5 min
+Test:           3 min
+───────────────────────────
+TOTAL:          25 min
+
+
+🎯 WHAT WORKS AFTER INSTALL
+═══════════════════════════════════════════════════════════════════════════
+✅ Schedule checking:    "Am I free at 3pm?"
+✅ Cross-phone messages: "Ask Laurie what pickles she wants"
+✅ Notifications:        Urgent escalating alerts
+✅ Calendar conflicts:   Auto-detection
+✅ Database storage:     All interactions logged
+
+
+📱 ANDROID APP CONFIG (LATER)
+═══════════════════════════════════════════════════════════════════════════
+Server URL:  http://YOUR_SERVER_IP/lifefirst/api.php
+API Token:   your_secret_token_change_me_12345
+Username:    "you" or "laurie"
+
+
+🔗 IMPORTANT URLS
+═══════════════════════════════════════════════════════════════════════════
+Web:      http://YOUR_SERVER_IP/lifefirst/
+API:      http://YOUR_SERVER_IP/lifefirst/api.php
+Health:   http://YOUR_SERVER_IP/lifefirst/api.php?action=health
+Test:     http://YOUR_SERVER_IP/lifefirst/api.php?action=test
+
+
+📂 FILE LOCATIONS
+═══════════════════════════════════════════════════════════════════════════
+Web root:    /var/www/html/lifefirst/
+API file:    /var/www/html/lifefirst/api.php
+AI modules:  /var/www/html/lifefirst/ai/
+Logs:        /var/log/apache2/error.log
+
+
+💡 PRO TIPS
+═══════════════════════════════════════════════════════════════════════════
+• Get Claude API key BEFORE starting: https://console.anthropic.com/
+• Write down your server IP immediately after Ubuntu install
+• Change API_SECRET in api.php after deployment for security
+• Use "Ctrl+Alt+Enter" for VMware full screen
+• Keep QUICK_INSTALL.md open during installation
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║  READY? Transfer the .tar.gz file and run the 5 commands above! 🚀        ║
+╚════════════════════════════════════════════════════════════════════════════╝

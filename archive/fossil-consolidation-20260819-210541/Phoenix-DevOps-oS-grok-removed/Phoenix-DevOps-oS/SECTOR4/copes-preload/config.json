@@ -1,0 +1,14 @@
+{
+  "name": "config",
+  "description": "Phoenix config file template",
+  "type": "dict",
+  "required_fields": ["name", "target_path"],
+  "fields": {
+    "name":        {"type": "str",  "required": true,  "description": "Config name"},
+    "target_path": {"type": "str",  "required": true,  "description": "Where this config lives on disk"},
+    "service":     {"type": "str",  "required": false, "description": "Associated service name"},
+    "platform":    {"type": "str",  "required": false, "description": "Target platform or 'all'"},
+    "companions":  {"type": "list", "required": false, "description": "Companion files"},
+    "meta":        {"type": "dict", "required": false, "description": "Arbitrary metadata"}
+  }
+}

@@ -1,0 +1,811 @@
+#!/usr/bin/env python3
+"""
+process_library.py — The Process Library
+Phoenix DevOps OS / Helix Lightning Kernel | jwl247 | GPL v3
+
+The closet.
+
+Every suit Frank can wear lives here.
+Pre-loaded into shared memory at boot.
+Nothing fetched at runtime. Nothing loaded on demand.
+Frank reaches in. The suit is already there.
+
+That is why Frank is fast.
+That is why there is no install.
+That is why any device becomes a Phoenix workstation.
+
+The library has three jobs:
+  1. Load all suits into shared memory at boot
+  2. Resolve the right suit for any stage packet
+  3. Register new suits without restarting
+
+One instance. Lives in Sector 4 next to Frank-core.
+The rings don't have their own library.
+They reach back to Sector 4 shared memory and grab what they need.
+Frank-core owns the closet. The clones borrow the suits.
+"""
+
+import os
+import sys
+import time
+import json
+import hashlib
+import logging
+import threading
+import importlib
+import importlib.util
+from pathlib import Path
+from dataclasses import dataclass, field
+from typing import Optional, Callable, Any
+
+from franken5 import (
+    Frank5, get_frank,
+    DataFamily, KernelSlot, FAMILY_SLOT, FAMILY_ZONE,
+    SHM_PATH, AUDIT_PATH
+)
+from frank_ring import (
+    FrankRing, SuitSpec, SuitType,
+    SECTOR_MAP, suit_for
+)
+
+LIBRARY_VERSION = "1.0.0-alpha"
+
+log = logging.getLogger("process_library")
+
+
+# =============================================================================
+# Suit registry entry
+# =============================================================================
+
+@dataclass
+class LibraryEntry:
+    """
+    A suit hanging in the closet.
+    Everything Frank needs to wear it — already resolved.
+    No I/O at runtime. No imports at runtime.
+    It is already here.
+    """
+    spec:        SuitSpec
+    loaded_at:   float        = field(default_factory=time.monotonic)
+    call_count:  int          = 0
+    last_called: float        = 0.0
+    checksum:    str          = ""
+    tags:        list         = field(default_factory=list)
+    _mod:        Any          = None    # pre-loaded Python module if SuitType.PYTHON
+
+    def touch(self):
+        self.call_count += 1
+        self.last_called = time.monotonic()
+
+    def to_dict(self) -> dict:
+        return {
+            "name":        self.spec.name,
+            "suit_type":   self.spec.suit_type.name,
+            "entry":       self.spec.entry,
+            "sector":      self.spec.sector,
+            "ring_pos":    self.spec.ring_pos,
+            "family":      self.spec.family,
+            "loaded_at":   self.loaded_at,
+            "call_count":  self.call_count,
+            "last_called": self.last_called,
+            "checksum":    self.checksum,
+            "tags":        self.tags,
+        }
+
+
+# =============================================================================
+# Process Library
+# =============================================================================
+
+class ProcessLibrary:
+    """
+    The closet.
+
+    Loaded once at boot. Stays in shared memory.
+    Frank reaches in. Suit is already there.
+
+    Three sections:
+      CORE     — the 16 sector suits (4 sectors x 4 rings)
+      SYSTEM   — OS-level suits (config_centralizer, guardian, syncthing)
+      APP      — application suits (game, LifeFirst, Office, etc.)
+    """
+
+    # Library index lives at this key in shared memory
+    # Written as JSON so all processes can read it
+    LIBRARY_INDEX_SLOT = 63   # last slot in shared memory — reserved for library
+
+    def __init__(self, frank: Optional[Frank5] = None):
+        self.frank   = frank or get_frank()
+        self._suits: dict[str, LibraryEntry] = {}
+        self._by_checksum: dict[str, str] = {}   # content hash -> suit name
+        self._lock   = threading.Lock()
+        self._loaded = False
+
+        # Suit search paths — Frank looks here for suit modules.
+        # Ordered by trust: explicit sector dirs first. Path.cwd() is
+        # deliberately excluded by default — a suit-named .py file sitting
+        # in whatever directory the kernel happens to be launched from
+        # would otherwise get imported and executed at boot with no
+        # verification. Opt in explicitly via PHOENIX_TRUST_CWD=1 only for
+        # local dev.
+        self._search_paths: list[Path] = [
+            Path(os.environ.get("PHOENIX_SUITS", "/etc/systemd/system")),
+            Path(os.environ.get("PHOENIX_SECTOR1", "/etc/systemd/system/SECTOR1")),
+            Path(os.environ.get("PHOENIX_SECTOR2", "/etc/systemd/system/SECTOR2")),
+            Path(os.environ.get("PHOENIX_SECTOR3", "/etc/systemd/system/SECTOR3")),
+            Path(os.environ.get("PHOENIX_SECTOR4", "/etc/systemd/system/SECTOR4")),
+            Path.home() / "projects/phoenix",
+        ]
+        if os.environ.get("PHOENIX_TRUST_CWD") == "1":
+            self._search_paths.append(Path.cwd())
+            log.warning("PHOENIX_TRUST_CWD=1 — current directory is a trusted suit source")
+
+        log.info(f"ProcessLibrary v{LIBRARY_VERSION} initializing")
+
+    # -------------------------------------------------------------------------
+    # Boot — load everything into shared memory
+    # -------------------------------------------------------------------------
+
+    def boot(self):
+        """
+        Load all suits at boot.
+        Called once. After this Frank reaches in and the suit is already there.
+        """
+        log.info("ProcessLibrary booting — loading suits into shared memory")
+        start = time.monotonic()
+
+        self._register_core_suits()
+        self._register_system_suits()
+        self._register_app_suits()
+        self._write_index()
+
+        elapsed = (time.monotonic() - start) * 1000
+        self._loaded = True
+
+        log.info(
+            f"ProcessLibrary ready — "
+            f"{len(self._suits)} suits loaded in {elapsed:.1f}ms"
+        )
+        self.frank._audit_record("LIBRARY_BOOT", {
+            "suits":      len(self._suits),
+            "elapsed_ms": round(elapsed, 2),
+            "version":    LIBRARY_VERSION,
+        })
+
+    def _register_core_suits(self):
+        """
+        Register the 16 core sector suits.
+        4 sectors x 4 rings = 16 suits.
+        These are always in the library. Always.
+        """
+        family_map = {
+            1: DataFamily.SYSTEM,
+            2: DataFamily.USER,
+            3: DataFamily.NETWORK,
+            4: DataFamily.SYSTEM,
+        }
+
+        for sector_num, sector_info in SECTOR_MAP.items():
+            for ring_pos, process_name in sector_info["rings"].items():
+                family = family_map.get(sector_num, DataFamily.SYSTEM)
+
+                spec = SuitSpec(
+                    name        = process_name,
+                    suit_type   = self._detect_suit_type(process_name),
+                    entry       = self._resolve_entry(process_name, sector_num),
+                    sector      = sector_num,
+                    ring_pos    = ring_pos,
+                    family      = family,
+                    description = (
+                        f"Sector {sector_num} — "
+                        f"{sector_info['name']} — "
+                        f"ring {ring_pos}"
+                    ),
+                    permissions = self._default_permissions(sector_num),
+                )
+
+                self._register(spec, tags=["core", f"sector{sector_num}"])
+
+        log.info(f"Core suits registered: {len(self._suits)}")
+
+    def _register_system_suits(self):
+        """
+        Register system-level suits.
+        config_centralizer, guardian, syncthing, helix_audit.
+        These are Phoenix OS suits — always available.
+        """
+        system_suits = [
+            SuitSpec(
+                name        = "config_centralizer",
+                suit_type   = SuitType.PYTHON,
+                entry       = self._resolve_entry("config_centralizer", 2),
+                sector      = 2,
+                ring_pos    = 0,
+                family      = DataFamily.SYSTEM,
+                description = "Config scanner, importer, desktop card writer",
+                permissions = {
+                    "read":      True,
+                    "write":     True,
+                    "clone":     False,
+                    "translate": False,
+                    "delete":    False,
+                    "kernel":    False,
+                }
+            ),
+            SuitSpec(
+                name        = "integrated_guardian",
+                suit_type   = SuitType.PYTHON,
+                entry       = self._resolve_entry("integrated_guardian", 4),
+                sector      = 4,
+                ring_pos    = 3,
+                family      = DataFamily.SYSTEM,
+                description = "REALsure security — file guardian, threat response",
+                permissions = {
+                    "read":      True,
+                    "write":     True,
+                    "clone":     False,
+                    "translate": False,
+                    "delete":    False,
+                    "kernel":    False,
+                }
+            ),
+            SuitSpec(
+                name        = "syncthing_module",
+                suit_type   = SuitType.PYTHON,
+                entry       = self._resolve_entry("syncthing_module", 4),
+                sector      = 4,
+                ring_pos    = 2,
+                family      = DataFamily.NETWORK,
+                description = "Syncthing — Frank clone sync across rings",
+                permissions = {
+                    "read":      True,
+                    "write":     True,
+                    "clone":     True,
+                    "translate": False,
+                    "delete":    False,
+                    "kernel":    False,
+                }
+            ),
+            SuitSpec(
+                name        = "helix_audit",
+                suit_type   = SuitType.SHELL,
+                entry       = self._resolve_entry("helixaudit.sh", 4),
+                sector      = 4,
+                ring_pos    = 3,
+                family      = DataFamily.SYSTEM,
+                description = "Helix audit — scans sector files for health",
+                permissions = {
+                    "read":      True,
+                    "write":     False,
+                    "clone":     False,
+                    "translate": False,
+                    "delete":    False,
+                    "kernel":    False,
+                }
+            ),
+        ]
+
+        for spec in system_suits:
+            self._register(spec, tags=["system"])
+
+        log.info(f"System suits registered: {len(system_suits)}")
+
+    def _register_app_suits(self):
+        """
+        Register APP suits — game integrations, benchmarks, entourage apps.
+        """
+        # Resolve sector2/apps/ path from PHOENIX_SECTOR2 env
+        sector2 = Path(os.environ.get("PHOENIX_SECTOR2", "/etc/systemd/system/SECTOR2"))
+        apps_dir = sector2 / "apps"
+
+        app_suits = [
+            SuitSpec(
+                name        = "warthunder",
+                suit_type   = SuitType.PYTHON,
+                entry       = str(sector2 / "frank" / "warthunder_suit.py"),
+                sector      = 2,
+                ring_pos    = 10,
+                family      = DataFamily.USER,
+                description = "War Thunder RT interface — telemetry, tactical AI, D1 session logging",
+                permissions = {
+                    "read":      True,
+                    "write":     True,
+                    "clone":     False,
+                    "translate": False,
+                    "delete":    False,
+                    "kernel":    False,
+                }
+            ),
+            SuitSpec(
+                name        = "x4_foundations",
+                suit_type   = SuitType.PYTHON,
+                entry       = str(apps_dir / "x4_foundations.py"),
+                sector      = 2,
+                ring_pos    = 11,
+                family      = DataFamily.USER,
+                description = "X4 Foundations (GOG) — save manager, mod loader, Frank session logging",
+                permissions = {
+                    "read":      True,
+                    "write":     True,
+                    "clone":     False,
+                    "translate": False,
+                    "delete":    False,
+                    "kernel":    False,
+                }
+            ),
+            SuitSpec(
+                name        = "phoronix",
+                suit_type   = SuitType.PYTHON,
+                entry       = str(apps_dir / "phoronix.py"),
+                sector      = 2,
+                ring_pos    = 20,
+                family      = DataFamily.SYSTEM,
+                description = "Phoronix Test Suite — CPU/memory/I/O/network benchmarks, D1 results",
+                permissions = {
+                    "read":      True,
+                    "write":     True,
+                    "clone":     False,
+                    "translate": False,
+                    "delete":    False,
+                    "kernel":    False,
+                }
+            ),
+        ]
+
+        for spec in app_suits:
+            self._register(spec, tags=["app"])
+
+        log.info(f"App suits registered: {len(app_suits)}")
+
+    # -------------------------------------------------------------------------
+    # Registration
+    # -------------------------------------------------------------------------
+
+    def register(self, spec: SuitSpec, tags: list = None) -> LibraryEntry:
+        """
+        Register a new suit at runtime.
+        No restart needed. Frank can wear it immediately.
+        This is how the tailor adds suits to the closet.
+        """
+        entry = self._register(spec, tags=tags or [])
+        self._write_index()
+        log.info(f"Suit registered: {spec.name} [{spec.suit_type.name}]")
+        return entry
+
+    def _register(self, spec: SuitSpec, tags: list = None) -> LibraryEntry:
+        """Internal registration — no index write."""
+        checksum = self._checksum_spec(spec)
+
+        # Pre-load Python modules — zero import time at runtime.
+        # Only executes the file if its content hash was just verified
+        # (i.e. checksum is a real sha3: content hash, not a placeholder).
+        mod = None
+        if spec.suit_type == SuitType.PYTHON and spec.entry:
+            if checksum.startswith("sha3:") and self._verify_checksum(spec, checksum):
+                mod = self._preload_python(spec)
+            elif checksum.startswith("sha3:"):
+                # _verify_checksum already logged the reason; do not exec.
+                pass
+            else:
+                log.info(f"Suit {spec.name!r} not yet on disk — deferring import until first use")
+
+        entry = LibraryEntry(
+            spec     = spec,
+            checksum = checksum,
+            tags     = tags or [],
+            _mod     = mod,
+        )
+
+        with self._lock:
+            self._suits[spec.name] = entry
+            self._by_checksum[checksum] = spec.name
+
+        return entry
+
+    def _preload_python(self, spec: SuitSpec) -> Optional[Any]:
+        """
+        Pre-load a Python module.
+        Done at boot so runtime import is instant.
+        If the module doesn't exist yet — that's OK.
+        It'll be loaded when the suit is first worn.
+        """
+        entry_path = spec.entry
+        if not entry_path:
+            return None
+
+        try:
+            # Try as module name first
+            mod = importlib.import_module(entry_path)
+            log.debug(f"Pre-loaded module: {entry_path}")
+            return mod
+        except ImportError:
+            pass
+
+        # Try as file path
+        path = Path(entry_path)
+        if path.exists() and path.suffix == ".py":
+            try:
+                spec_obj = importlib.util.spec_from_file_location(
+                    spec.name, str(path)
+                )
+                mod = importlib.util.module_from_spec(spec_obj)
+                spec_obj.loader.exec_module(mod)
+                log.debug(f"Pre-loaded from file: {entry_path}")
+                return mod
+            except Exception as e:
+                log.debug(f"Pre-load failed {entry_path}: {e}")
+
+        return None
+
+    # -------------------------------------------------------------------------
+    # Resolution — find the right suit for a stage
+    # -------------------------------------------------------------------------
+
+    def resolve(self, sector: int, ring_pos: int,
+                family: str = DataFamily.SYSTEM,
+                data: bytes = b"") -> Optional[SuitSpec]:
+        """
+        Find the right suit for a stage packet.
+        Called by frank_spawn._default_resolver.
+        Returns a SuitSpec or None.
+
+        Frank reaches in. The suit is already there.
+        """
+        with self._lock:
+            # First — exact match by sector + ring_pos
+            for entry in self._suits.values():
+                if (entry.spec.sector   == sector and
+                    entry.spec.ring_pos == ring_pos):
+                    entry.touch()
+                    return entry.spec
+
+            # Second — match by family
+            for entry in self._suits.values():
+                if entry.spec.family == family:
+                    entry.touch()
+                    return entry.spec
+
+            # Third — any core suit for this sector
+            for entry in self._suits.values():
+                if (entry.spec.sector == sector and
+                        "core" in entry.tags):
+                    entry.touch()
+                    return entry.spec
+
+        return None
+
+    def get(self, name: str) -> Optional[SuitSpec]:
+        """Get a suit by name. Direct lookup."""
+        with self._lock:
+            entry = self._suits.get(name)
+            if entry:
+                entry.touch()
+                return entry.spec
+        return None
+
+    def get_by_checksum(self, checksum: str) -> Optional[SuitSpec]:
+        """
+        Content-addressed lookup. checksum must be the full 'sha3:<hex>'
+        string produced by _checksum_spec — placeholder 'meta:' hashes are
+        never valid keys here, since they don't identify file content.
+        """
+        if not checksum.startswith("sha3:"):
+            return None
+        with self._lock:
+            name = self._by_checksum.get(checksum)
+            if not name:
+                return None
+            entry = self._suits.get(name)
+            if entry:
+                entry.touch()
+                return entry.spec
+        return None
+
+    def get_preloaded_module(self, name: str) -> Optional[Any]:
+        """
+        Get the pre-loaded Python module for a suit.
+        Zero import time. Already in memory.
+        """
+        with self._lock:
+            entry = self._suits.get(name)
+            if entry and entry._mod:
+                return entry._mod
+        return None
+
+    # -------------------------------------------------------------------------
+    # Index — written to shared memory so all processes can read it
+    # -------------------------------------------------------------------------
+
+    def _write_index(self):
+        """
+        Write the library index to shared memory slot 63.
+        Every process can read this.
+        Frank-core, rings, Helix — all see the same closet.
+        """
+        index = {
+            "version":    LIBRARY_VERSION,
+            "ts":         time.time(),
+            "suit_count": len(self._suits),
+            "suits":      {
+                name: entry.to_dict()
+                for name, entry in self._suits.items()
+            }
+        }
+
+        try:
+            raw = json.dumps(index).encode()
+            # Index may exceed one slot — write summary only to shared memory
+            summary = {
+                "version":    LIBRARY_VERSION,
+                "ts":         time.time(),
+                "suit_count": len(self._suits),
+                "suits":      list(self._suits.keys()),
+            }
+            self.frank.bus.write_stage(
+                self.LIBRARY_INDEX_SLOT,
+                json.dumps(summary).encode()[:4000]
+            )
+        except Exception as e:
+            log.error(f"Library index write failed: {e}")
+
+        # Full index to disk for inspection
+        index_path = Path(os.environ.get(
+            "PHOENIX_LIBRARY_INDEX",
+            "/tmp/phoenix_library.json"
+        ))
+        try:
+            with open(index_path, "w") as f:
+                json.dump(index, f, indent=2)
+        except Exception as e:
+            log.debug(f"Library index disk write: {e}")
+
+    # -------------------------------------------------------------------------
+    # Helpers
+    # -------------------------------------------------------------------------
+
+    def _resolve_entry(self, name: str, sector: int) -> str:
+        """
+        Find the actual file path for a suit entry.
+        Searches PHOENIX_SECTOR* paths.
+        Returns the name if not found — frank_ring handles missing suits.
+        """
+        # Try each search path
+        for base in self._search_paths:
+            # Direct match
+            for ext in ["", ".py", ".sh", ".js"]:
+                candidate = base / f"{name}{ext}"
+                if candidate.exists():
+                    return str(candidate)
+
+            # In sector subdirectory
+            sector_dir = base / f"SECTOR{sector}"
+            for ext in ["", ".py", ".sh", ".js"]:
+                candidate = sector_dir / f"{name}{ext}"
+                if candidate.exists():
+                    return str(candidate)
+
+        # Clonepool fallback — pull directly from R2 via the packages-worker.
+        #
+        # Previously this shelled out to a "lol" command. That command has
+        # never existed anywhere in this codebase — the only "lol" on disk
+        # is an uninvoked installer script under the abandoned copes/ tree
+        # that would have written a bash wrapper calling three OTHER
+        # commands (intake-package, intake-dir, egress_helix) that also
+        # don't exist. The subprocess call always failed, was caught by
+        # the broad except below, and silently fell through to "not found".
+        # This replaces it with a real HTTP GET against the worker route
+        # that actually serves R2 bytes (GET /clonepool/:id, no auth
+        # required for reads) — self-contained, no external binary needed.
+        try:
+            import urllib.request
+            import tempfile
+
+            worker_url = os.environ.get(
+                "PHOENIX_WORKER_URL",
+                "https://packages-worker.phoenix-jwl.workers.dev"
+            )
+            hex_id = name.encode("utf-8").hex()  # matches intake.sh's to_hex()
+            url = f"{worker_url}/clonepool/{hex_id}"
+
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status == 200:
+                    data = resp.read()
+                    tmp_dir = Path(tempfile.mkdtemp(prefix="phoenix_suit_"))
+                    dest = tmp_dir / name
+                    dest.write_bytes(data)
+                    log.info("R2 pull: %s → %s (%d bytes)", name, dest, len(data))
+                    return str(dest)
+        except Exception as e:
+            # Genuine network/R2 miss is expected and fine — log at debug.
+            log.debug("R2 clonepool fallback for %s: %s", name, e)
+
+        # Not found anywhere — return the name; Frank will try to import it
+        return name
+
+    def _detect_suit_type(self, name: str) -> SuitType:
+        """Detect suit type from name/extension."""
+        name_lower = name.lower()
+        if name_lower.endswith(".sh"):   return SuitType.SHELL
+        if name_lower.endswith(".js"):   return SuitType.NODE
+        if name_lower.endswith(".ps1"):  return SuitType.POWER
+        if name_lower.endswith(".py"):   return SuitType.PYTHON
+        # C files compile to binary
+        if name_lower.endswith(".c"):    return SuitType.BINARY
+        # frank3 kernel slots are C
+        if "frank3" in name_lower:       return SuitType.BINARY
+        return SuitType.PYTHON
+
+    def _default_permissions(self, sector: int) -> dict:
+        """Default permissions by sector."""
+        # Sector 1 — boot/kernel — most restricted
+        if sector == 1:
+            return {
+                "read":      True,
+                "write":     True,
+                "clone":     True,
+                "translate": False,
+                "delete":    False,
+                "kernel":    True,    # sector 1 needs kernel access
+            }
+        # Sector 3 — comms — translation allowed at boundary
+        if sector == 3:
+            return {
+                "read":      True,
+                "write":     True,
+                "clone":     True,
+                "translate": True,    # sector 3 is the translation boundary
+                "delete":    False,
+                "kernel":    False,
+            }
+        # Default
+        return {
+            "read":      True,
+            "write":     True,
+            "clone":     True,
+            "translate": False,
+            "delete":    False,
+            "kernel":    False,
+        }
+
+    def _checksum_spec(self, spec: SuitSpec) -> str:
+        """
+        Content-address a suit by hashing its actual file bytes.
+
+        Falls back to a metadata hash ONLY when the entry has no
+        resolvable file on disk yet (e.g. registered before the suit
+        file exists). That fallback is marked so callers can tell the
+        difference between "verified content hash" and "placeholder".
+        """
+        entry_path = spec.entry
+        if entry_path:
+            path = Path(entry_path)
+            if path.exists() and path.is_file():
+                try:
+                    return "sha3:" + hashlib.sha3_256(path.read_bytes()).hexdigest()
+                except OSError as e:
+                    log.warning(f"Could not read {path} for content hash: {e}")
+
+        # No file yet — placeholder hash over metadata only. NOT a content
+        # address. Never treat this as proof the suit's code is unchanged.
+        data = f"{spec.name}:{spec.entry}:{spec.sector}:{spec.ring_pos}"
+        return "meta:" + hashlib.sha3_256(data.encode()).hexdigest()[:16]
+
+    def _verify_checksum(self, spec: SuitSpec, expected: str) -> bool:
+        """
+        Re-hash the suit's file on disk right now and compare against the
+        checksum recorded at registration time. Returns False (refuse to
+        run) if the file changed, went missing, or was never content-hashed
+        in the first place.
+        """
+        if not expected.startswith("sha3:"):
+            log.warning(f"Suit {spec.name!r} has no content hash on record — refusing to execute")
+            return False
+        path = Path(spec.entry) if spec.entry else None
+        if not path or not path.exists():
+            log.warning(f"Suit {spec.name!r} entry path missing at verify time: {spec.entry}")
+            return False
+        actual = "sha3:" + hashlib.sha3_256(path.read_bytes()).hexdigest()
+        if actual != expected:
+            log.error(
+                f"Suit {spec.name!r} content hash mismatch — "
+                f"expected {expected[:20]}... got {actual[:20]}... — refusing to execute"
+            )
+            return False
+        return True
+
+    def status(self) -> dict:
+        with self._lock:
+            return {
+                "version":    LIBRARY_VERSION,
+                "loaded":     self._loaded,
+                "suit_count": len(self._suits),
+                "suits": {
+                    name: {
+                        "sector":     e.spec.sector,
+                        "ring_pos":   e.spec.ring_pos,
+                        "family":     e.spec.family,
+                        "type":       e.spec.suit_type.name,
+                        "calls":      e.call_count,
+                        "preloaded":  e._mod is not None,
+                    }
+                    for name, e in self._suits.items()
+                }
+            }
+
+    def __len__(self):
+        return len(self._suits)
+
+    def __contains__(self, name: str):
+        return name in self._suits
+
+
+# =============================================================================
+# Singleton — one library, lives in Sector 4 next to Frank-core
+# =============================================================================
+
+_library: Optional[ProcessLibrary] = None
+
+
+def get_library(frank: Optional[Frank5] = None) -> ProcessLibrary:
+    """
+    The one true process library.
+    One instance. Lives in Sector 4.
+    Frank-core owns it. The rings borrow from it.
+    """
+    global _library
+    if _library is None:
+        _library = ProcessLibrary(frank=frank or get_frank())
+    return _library
+
+
+def boot_library(frank: Optional[Frank5] = None) -> ProcessLibrary:
+    """Boot the library. Call once at Phoenix startup."""
+    lib = get_library(frank)
+    lib.boot()
+    return lib
+
+
+# =============================================================================
+# Demo
+# =============================================================================
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level   = logging.INFO,
+        format  = "%(asctime)s [LIBRARY] %(levelname)s %(message)s",
+        handlers= [logging.StreamHandler()]
+    )
+
+    frank = get_frank()
+    frank.boot()
+
+    print("\n" + "="*60)
+    print("PROCESS LIBRARY — The Closet")
+    print("="*60 + "\n")
+
+    lib = boot_library(frank)
+
+    status = lib.status()
+    print(f"Suits in closet: {status['suit_count']}\n")
+
+    print(f"{'SUIT':<25} {'SECTOR':<8} {'RING':<6} {'FAMILY':<12} {'TYPE':<12} {'PRELOADED'}")
+    print("-" * 75)
+
+    for name, info in status["suits"].items():
+        print(
+            f"{name:<25} "
+            f"{info['sector']:<8} "
+            f"{info['ring_pos']:<6} "
+            f"{info['family']:<12} "
+            f"{info['type']:<12} "
+            f"{'yes' if info['preloaded'] else 'no'}"
+        )
+
+    print("\n" + "="*60)
+    print(f"Library index written to: /tmp/phoenix_library.json")
+    print(f"All suits pre-loaded and ready.")
+    print(f"Frank reaches in. The suit is already there.")
+    print("="*60)
+
+    frank.shutdown()

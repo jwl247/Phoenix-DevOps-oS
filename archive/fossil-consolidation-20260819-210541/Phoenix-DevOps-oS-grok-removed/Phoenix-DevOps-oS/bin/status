@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# ============================================================
+# Phoenix Global Command: status
+# Linux/macOS wrapper for Phoenix Status Check
+# ============================================================
+
+set -euo pipefail
+
+# Source Phoenix environment
+[[ -f "$HOME/.phoenix_env.sh" ]] && source "$HOME/.phoenix_env.sh"
+
+# Find Phoenix root
+PHOENIX_ROOT="${PHOENIX_ROOT:-}"
+if [[ -z "$PHOENIX_ROOT" ]]; then
+    if [[ -f "$HOME/Phoenix/Phoenix-DevOps-oS/status.sh" ]]; then
+        PHOENIX_ROOT="$HOME/Phoenix/Phoenix-DevOps-oS"
+    elif [[ -f "$(dirname "$(dirname "${BASH_SOURCE[0]}")")/status.sh" ]]; then
+        PHOENIX_ROOT="$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)"
+    fi
+fi
+
+if [[ -z "$PHOENIX_ROOT" ]]; then
+    echo "[ERROR] PHOENIX_ROOT not set. Run install.sh first." >&2
+    exit 1
+fi
+
+# Find status.sh
+STATUS_SH="$PHOENIX_ROOT/status.sh"
+if [[ ! -f "$STATUS_SH" ]]; then
+    echo "[ERROR] status.sh not found at $STATUS_SH" >&2
+    exit 1
+fi
+
+# Execute status command
+exec bash "$STATUS_SH" "$@"
+
+# Made with Bob

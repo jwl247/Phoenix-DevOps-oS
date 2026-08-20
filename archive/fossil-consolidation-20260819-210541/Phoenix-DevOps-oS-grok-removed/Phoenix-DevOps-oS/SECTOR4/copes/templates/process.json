@@ -1,0 +1,15 @@
+{
+  "name": "process",
+  "description": "Generic Phoenix process template",
+  "type": "dict",
+  "required_fields": ["name", "type"],
+  "fields": {
+    "name":        {"type": "str",  "required": true,  "description": "Process name"},
+    "type":        {"type": "str",  "required": true,  "description": "service|script|config|binary|app"},
+    "version":     {"type": "str",  "required": false, "description": "Version string"},
+    "description": {"type": "str",  "required": false, "description": "Human description"},
+    "platform":    {"type": "str",  "required": false, "description": "Target platform or all"},
+    "companions":  {"type": "list", "required": false, "description": "Companion file names"},
+    "meta":        {"type": "dict", "required": false, "description": "Arbitrary metadata"}
+  }
+}

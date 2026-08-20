@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# ============================================================
+# Phoenix Global Command: get_distros
+# Linux/macOS wrapper for Phoenix Distribution Detection
+# ============================================================
+
+set -euo pipefail
+
+# Source Phoenix environment
+[[ -f "$HOME/.phoenix_env.sh" ]] && source "$HOME/.phoenix_env.sh"
+
+# Find Phoenix root
+PHOENIX_ROOT="${PHOENIX_ROOT:-}"
+if [[ -z "$PHOENIX_ROOT" ]]; then
+    if [[ -f "$HOME/Phoenix/Phoenix-DevOps-oS/tools/get_distros.sh" ]]; then
+        PHOENIX_ROOT="$HOME/Phoenix/Phoenix-DevOps-oS"
+    elif [[ -f "$(dirname "$(dirname "${BASH_SOURCE[0]}")")/tools/get_distros.sh" ]]; then
+        PHOENIX_ROOT="$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)"
+    fi
+fi
+
+if [[ -z "$PHOENIX_ROOT" ]]; then
+    echo "[ERROR] PHOENIX_ROOT not set. Run install.sh first." >&2
+    exit 1
+fi
+
+# Find get_distros.sh
+DISTROS_SH="$PHOENIX_ROOT/tools/get_distros.sh"
+if [[ ! -f "$DISTROS_SH" ]]; then
+    echo "[ERROR] get_distros.sh not found at $DISTROS_SH" >&2
+    exit 1
+fi
+
+# Execute get_distros command
+exec bash "$DISTROS_SH" "$@"
+
+# Made with Bob

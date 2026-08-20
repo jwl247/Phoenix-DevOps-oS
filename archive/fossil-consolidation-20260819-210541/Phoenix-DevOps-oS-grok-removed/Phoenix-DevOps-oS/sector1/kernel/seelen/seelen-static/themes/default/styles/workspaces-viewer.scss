@@ -1,0 +1,192 @@
+.workspaces-viewer {
+  width: 100vw;
+  height: 100vh;
+  background-color: #000c; // just in case wallpaper fails
+
+  .monitor {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-m);
+    padding: var(--spacing-2xl);
+
+    .active-wallpaper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      filter: blur(10px);
+    }
+
+    .workspaces {
+      border-radius: 10px;
+      padding: var(--spacing-m);
+
+      display: flex;
+      gap: var(--spacing-m);
+      flex-shrink: 0;
+
+      width: min-content;
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+
+      .workspace {
+        position: relative;
+        width: 230px;
+        border-radius: 10px;
+        box-shadow: var(--shadow-s);
+        padding: var(--spacing-s);
+        flex-shrink: 0;
+
+        .workspace-header {
+          display: flex;
+          margin-bottom: 10px;
+          align-items: center;
+          gap: var(--spacing-s);
+
+          .workspace-name-input {
+            flex: 1;
+            font-weight: 600;
+
+            &::placeholder {
+              color: inherit;
+            }
+          }
+        }
+
+        .workspace-preview {
+          position: relative;
+          width: 100%;
+          aspect-ratio: 16/9;
+          border-radius: 8px;
+          overflow: hidden;
+        }
+
+        &::before {
+          content: "";
+          position: absolute;
+          bottom: 0;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 60%;
+          border-radius: 4px;
+          height: 4px;
+          background-color: transparent;
+          transition: background-color 0.2s ease;
+        }
+
+        &.workspace-active {
+          &::before {
+            background-color: var(--system-accent-color);
+          }
+        }
+
+        &.workspace-viewing {
+          transform: scale(1.05);
+        }
+
+        &.workspace-drop-target {
+          outline: 2px dashed var(--system-accent-color);
+          outline-offset: 2px;
+        }
+      }
+
+      .add-workspace {
+        width: 230px;
+        flex-shrink: 0;
+
+        border-radius: 8px;
+        box-shadow: var(--shadow-s);
+
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+    }
+  }
+}
+
+.windows {
+  width: 100%;
+  flex: 1;
+
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--spacing-m);
+
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.window {
+  display: inline-flex;
+  flex-direction: column;
+  width: fit-content;
+
+  border-radius: 10px;
+  overflow: hidden;
+
+  .window-header {
+    width: 0;
+    min-width: 100%;
+
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-s);
+
+    padding: var(--spacing-2xs) var(--spacing-xs);
+    border-bottom: 1px solid var(--color-gray-200);
+
+    figure {
+      height: 1rem;
+      width: auto;
+      aspect-ratio: 1 / 1;
+    }
+
+    .window-title {
+      flex: 1;
+      min-width: 0;
+      font-weight: 600;
+      font-size: 0.9rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  &.is-dragging {
+    opacity: 0;
+  }
+
+  &.is-overlay {
+    cursor: grabbing;
+  }
+
+  .window-preview-container {
+    width: max-content;
+    max-width: 640px;
+    max-height: 360px;
+
+    .window-preview {
+      width: auto;
+      height: auto;
+    }
+
+    &:has(.window-no-preview) {
+      min-width: 160px;
+      min-height: 90px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .window-no-preview {
+      width: 30px;
+    }
+  }
+}

@@ -1,0 +1,35 @@
+[Unit]
+Description=Phoenix mega system manager — paging, port guardian, threat detection
+Documentation=https://github.com/jwl247/phoenix-devops
+After=network.target phoenix-intent-parser.service
+Requires=phoenix-intent-parser.service
+PartOf=phoenix-sector2.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/jwl247/projects/phoenix
+ExecStart=/usr/bin/env python3 /home/jwl247/projects/phoenix/sector2/mega_system_manager.py
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=3
+StartLimitIntervalSec=120
+
+Environment=PYTHONUNBUFFERED=1
+Environment=PHOENIX_SECTOR=2
+Environment=PHOENIX_DASHBOARD_PORT=8888
+Environment=PHOENIX_SECURITY_LOG=/var/log/phoenix/security.log
+EnvironmentFile=-/home/jwl247/projects/phoenix/.env
+
+# Needs root for pagefile/swap and raw socket ops
+# Hardening still applied where possible
+PrivateTmp=true
+ReadWritePaths=/var/log/phoenix /tmp /proc
+
+StandardOutput=append:/var/log/phoenix/mega-security.log
+StandardError=append:/var/log/phoenix/mega-security.error.log
+SyslogIdentifier=phoenix-mega-security
+
+[Install]
+WantedBy=phoenix-sector2.target

@@ -1,0 +1,17 @@
+# TEMPLATE — deploy-dashboard.sh generates the real version with actual ollama path.
+# Soft dependency for Phoenix Help Desk (Ollama primary, Claude fallback if down).
+
+[Unit]
+Description=Ollama local LLM for Phoenix Help Desk
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=OLLAMA_BIN serve
+Restart=on-failure
+RestartSec=5
+Environment=OLLAMA_HOST=127.0.0.1:11434
+
+[Install]
+WantedBy=default.target

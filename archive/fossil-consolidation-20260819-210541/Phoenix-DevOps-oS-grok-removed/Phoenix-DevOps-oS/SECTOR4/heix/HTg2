@@ -1,0 +1,95 @@
+"""
+Helix Translator Layer (Double Helix Blueprint)
+Stripped of conventional bloat. 
+Purpose: Maintain the 'Great Lie' and manage Global Versioning.
+"""
+
+import time
+from typing import Any, Optional, Dict
+from dataclasses import dataclass
+
+@dataclass
+class TranslationEntry:
+    """The 'Solid' Blueprint for a Versioned Memory Block"""
+    app_pointer: int          # The 'Lie' (Fake pointer for the app)
+    helix_key: str            # The 'Truth' (Helix key for raw data)
+    size: int                 
+    version_id: int           # Global Version DNA for Sync
+    thermal_state: str        # HOT (VRAM), WARM (RAM), COLD (Drive)
+    created_at: float         
+    last_access: float        
+    access_count: int = 0     
+
+    def access(self):
+        self.last_access = time.time()
+        self.access_count += 1
+
+class HelixTranslator:
+    def __init__(self, helix_backend):
+        self.helix = helix_backend
+        self.ptr_to_key: Dict[int, TranslationEntry] = {}
+        
+        # Operational Versioning
+        self.global_version = 0x0100 
+        self.next_fake_pointer = 0x10000000  
+        
+        # Thermal Configuration
+        self.cold_storage_path = "/home/jwl247/gdrive/helix_cold/" 
+
+    def translate_malloc(self, size: int) -> int:
+        """INGRESS: App requests RAM. EGRESS: Return a Versioned Lie."""
+        fake_ptr = self.next_fake_pointer
+        helix_key = f"HX_{fake_ptr:08x}"
+        
+        # Allocate in Helix Backend (Experimental Logic)
+        success = self.helix.memory.malloc(helix_key, bytearray(size))
+        
+        if not success:
+            return 0 
+        
+        # Create the 'Solid' Entry with Versioning
+        entry = TranslationEntry(
+            app_pointer=fake_ptr,
+            helix_key=helix_key,
+            size=size,
+            version_id=self.global_version, # Start the DNA
+            thermal_state="WARM",           # Initial state
+            created_at=time.time(),
+            last_access=time.time()
+        )
+        
+        self.ptr_to_key[fake_ptr] = entry
+        self.next_fake_pointer += 0x1000 
+        return fake_ptr
+
+    def translate_clone(self, source_ptr: int) -> int:
+        """The 'Double Helix' Clone: Same Data, New Version DNA."""
+        if source_ptr not in self.ptr_to_key:
+            return 0
+            
+        # Increment Version to trigger Real-Time Sync
+        self.global_version += 1 
+        clone_ptr = self.next_fake_pointer
+        
+        source_entry = self.ptr_to_key[source_ptr]
+        
+        # Create the Clone: Points to SAME Helix key, but has a NEW Version
+        clone_entry = TranslationEntry(
+            app_pointer=clone_ptr,
+            helix_key=source_entry.helix_key, 
+            size=source_entry.size,
+            version_id=self.global_version,   # The Sync Engine sees this change
+            thermal_state="HOT",              # Clones are high-priority
+            created_at=time.time(),
+            last_access=time.time()
+        )
+        
+        self.ptr_to_key[clone_ptr] = clone_entry
+        self.next_fake_pointer += 0x1000
+        return clone_ptr
+
+    def audit_map(self):
+        """Prints the table so you can see the Versioning in action"""
+        print("\n--- HELIX GLOBAL VERSION AUDIT ---")
+        for ptr, entry in self.ptr_to_key.items():
+            print(f"PTR: {hex(ptr)} | VER: {hex(entry.version_id)} | STATE: {entry.thermal_state} | KEY: {entry.helix_key}")

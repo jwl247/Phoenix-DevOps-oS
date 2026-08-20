@@ -1,0 +1,23 @@
+site_name: UnitedSys Glossary & Library
+site_url: https://example.com
+
+theme:
+  name: mkdocs
+
+markdown_extensions:
+  - toc:
+      permalink: true
+
+nav:
+  - Index: index.md
+  - Table of Contents: toc.md
+  - Glossary:
+      - A-Z Index: glossary/index.md
+      - By Category: glossary/categories.md
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/rolodex.js
+  - javascripts/glossary_search.js

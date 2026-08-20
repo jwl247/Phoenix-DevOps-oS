@@ -1,0 +1,32 @@
+{
+  "name": "debian",
+  "version": "12.5",
+  "description": "Debian 12 (Bookworm). Intaked once. Runs anywhere Phoenix runs. No installer. No wizard. Phoenix brings the OS.",
+  "author": "Debian project / Phoenix intake by jwl247",
+  "type": "distro",
+  "entry": "debian-12.5-genericcloud-amd64.qcow2",
+  "runtime": "qemu",
+  "dependencies": ["qemu-system"],
+  "environment": {
+    "PHOENIX_VM_RAM":  "512M",
+    "PHOENIX_VM_CPUS": "2",
+    "PHOENIX_VM_DISPLAY": "sdl"
+  },
+  "permissions": [
+    "network",
+    "filesystem:read",
+    "filesystem:write"
+  ],
+  "metadata": {
+    "category": "distro",
+    "tags": ["linux", "debian", "vm", "no-install", "phoenix-demo"],
+    "source": "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2",
+    "checksum_url": "https://cloud.debian.org/images/cloud/bookworm/latest/SHA512SUMS",
+    "arch": "amd64",
+    "flavor": "genericcloud",
+    "size_bytes": 400000000,
+    "login": "root",
+    "login_note": "Default cloud image — use -snapshot for ephemeral boot, add cloud-init seed for full config",
+    "license": "GPL-2.0"
+  }
+}

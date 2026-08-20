@@ -1,0 +1,19 @@
+{
+  "name": "hello-phoenix",
+  "version": "1.0.0",
+  "description": "Phoenix PoC — import once, run anywhere. Same hex ID on every OS.",
+  "author": "jwl247",
+  "type": "script",
+  "entry": "hello-phoenix.py",
+  "runtime": "python",
+  "dependencies": [],
+  "environment": {},
+  "permissions": [
+    "filesystem:write"
+  ],
+  "metadata": {
+    "category": "poc",
+    "tags": ["demo", "cross-os", "helix", "frank"],
+    "license": "GPL-3.0"
+  }
+}

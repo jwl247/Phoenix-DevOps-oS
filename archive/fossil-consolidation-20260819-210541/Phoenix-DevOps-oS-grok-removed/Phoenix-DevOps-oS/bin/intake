@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# ============================================================
+# Phoenix Global Command: intake
+# Linux/macOS wrapper for Phoenix Intake (Sector 4 vault)
+# ============================================================
+
+set -euo pipefail
+
+# Source Phoenix environment
+[[ -f "$HOME/.phoenix_env.sh" ]] && source "$HOME/.phoenix_env.sh"
+
+# Find intake.sh
+INTAKE_SH="${PHOENIX_INTAKE:-}"
+
+if [[ -z "$INTAKE_SH" ]]; then
+    # Try common locations
+    for candidate in \
+        "$HOME/Phoenix/package-handler/intake/intake.sh" \
+        "$HOME/Phoenix/Phoenix-Package_handler/intake/intake.sh" \
+        "$(dirname "$(dirname "${BASH_SOURCE[0]}")")/../package-handler/intake/intake.sh"
+    do
+        if [[ -f "$candidate" ]]; then
+            INTAKE_SH="$candidate"
+            break
+        fi
+    done
+fi
+
+if [[ -z "$INTAKE_SH" || ! -f "$INTAKE_SH" ]]; then
+    echo "[ERROR] intake.sh not found." >&2
+    echo "Set PHOENIX_INTAKE or run install.sh" >&2
+    exit 1
+fi
+
+# Execute intake command
+exec bash "$INTAKE_SH" "$@"
+
+# Made with Bob
