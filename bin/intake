@@ -15,8 +15,8 @@ INTAKE_SH="${PHOENIX_INTAKE:-}"
 if [[ -z "$INTAKE_SH" ]]; then
     # Try common locations
     for candidate in \
-        "$HOME/Phoenix/package-handler/intake/intake.sh" \
-        "$HOME/Phoenix/Phoenix-Package_handler/intake/intake.sh" \
+        "$HOME/Phoenix/package-handler/intake.sh" \
+        "$HOME/Phoenix/Phoenix-Package_handler/intake.sh" \
         "$(dirname "$(dirname "${BASH_SOURCE[0]}")")/../package-handler/intake/intake.sh"
     do
         if [[ -f "$candidate" ]]; then
