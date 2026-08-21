@@ -268,7 +268,8 @@ Import sequence:
 - [x] Claude HUD wired — subscription / API key / Ollama (three-tier, nobody excluded)
 - [x] Helix memory on both ends — helix_packet.js (JS) + ClaudeMemory (Python, QuadralingualPacket)
 - [ ] MapTiler integration (next session — paid, goes in dashboard map panel)
-- [ ] Glossary wired to D1 (glossary panel in dashboard)
+- [ ] Glossary wired to D1 (glossary panel in dashboard) — backend/API confirmed working end-to-end 2026-08-21 (see docs/GLOSSARY.md); dashboard UI panel itself still not built
+- [x] Real PS7 shell in dashboard HUD (ps7-shell.js — actual pwsh.exe spawns, not a mock; verified via live Playwright drive-through 2026-08-21) + clonepool browser + screenshot analysis panels
 - [ ] Desktop (shade UI, drawer filesystem) — dashboard transforms into this
 - [ ] Office (dual browser pane)
 - [ ] Sketchpad/Concepts
@@ -292,10 +293,13 @@ Import sequence:
 2026-06-28 — C core Helix double-strand proven (ingress + egress, D1 + R2 + local cache). packages-worker /stats endpoint live. Dashboard wired to real data. Claude HUD added — 3-tier auth (subscription/API key/Ollama, nobody excluded). Helix memory on both ends: helix_packet.js (QuadralingualPacket JS), ClaudeMemory (Python via HelixTranslationPipeline + DoubleHelixStorage). SectorID.CLAUDE added. phoenix-dashboard.service written to sector3/services/. helix_memory.py placed in SECTOR4/vault/.
 2026-06-29 — Full architecture audit. Corrected clone pool (R2+D1+cache, not JSON). Documented physical drive reality (breach_coms1-4 are labeled HDDs, Frank is hardware orchestrator, WSL is the bridge). Corrected Entourage (apps ARE the engine team — franken2/quadengine/paging/guardian/conductor). AI safety rules written into CLAUDE.md after rogue session damage history confirmed (3 PCs, 4 HDs lost). Purpose documented: Life First LLM app for Laurie. Completion revised to ~63% against full scope.
 
+2026-08-21 — Repo-wide cleanup pass: root triage (deleted superseded/stub files, archived New folder/ + SECTOR4-coms fossils), sector1 (untracked an accidental dev-VM dotfile dump without deleting it, fixed naming, confirmed sector1/kernel/ is its own separate project not a duplicate), sector2 (fixed 3 badly-named files/folders, intaked 219 files), sector3 (clean, intaked 26 files), scripts/ + tools/ intaked. Found and fixed real bugs along the way: packages-worker D1 binding mismatch (env.PHOENIX_DB vs env.DEV_DB — was silently breaking every DB endpoint) redeployed; added clonepool.sensitive D1 column + full intake.sh/worker wiring so sensitive files (auth, secrets, tokens) land in D1 flagged rather than excluded or silently unmarked; fixed a foreign-key bug in intake_directory's glossary report (missing "directory" category — every prior directory-level intake had been silently failing this); expanded intake.sh's known-extension whitelist (was silently dropping Kotlin/PHP/gradle/etc into the same bucket as binary junk); fixed 5 tools (usys.ps1, scripts/intake.ps1, tools/clone.ps1, tools/clone.sh, bin/intake) that all had stale nested intake.sh path candidates — `usys clone`/`clone` were completely broken on this repo before today. Converted sector2/package-handler from an independently-maintained copy into a real git subtree of the standalone Phoenix-Package_handler repo (caught and worked around: the script's own bugs — unconditional success messages masking real failures — and a case-insensitive-filesystem collision between SECTOR4 fossil-archive target and the live sector4/ vault code, which would have archived live code). PHOENIX_AUTH rotated (old token was stale/mismatched between local env and the Cloudflare secret, silently blocking all D1 sync). Verified dashboard's real PS7 shell + clonepool browser + screenshot-analysis panels via live Playwright-driven Electron test — all three work end-to-end, zero console errors. Everything pushed to origin/main through commit b7478e7. docs/GLOSSARY.md and tools/poc/README.md written.
+
 ## NEXT SESSION
+- docs/ reconciliation — QUICK_START.md vs GETTING_STARTED.md vs root README.md look like they may overlap, not yet audited (last item on the repo cleanup pass)
 - MapTiler map panel in dashboard (Jerry paying, integrate as desktop panel)
-- Glossary panel wired to D1 live data
-- Shade UI + drawer filesystem (desktop transformation begins)
+- Glossary dashboard UI panel (backend/API already confirmed working — see docs/GLOSSARY.md)
+- Shade UI + drawer filesystem (desktop transformation begins — real shell is now in place as a foundation piece)
 - Deploy phoenix-dashboard.service on Ubuntu 192.168.1.133
 - Start manual/phoenix_manual.md
 2026-05-03 — New canonical CLAUDE.md written. Repos audited. External Ubuntu build target established. Import method confirmed as intake strategy. Build plan phased across 7 phases.
