@@ -51,7 +51,7 @@ Cloudflare Worker — **packages-worker**. The catalog API. Serves and receives 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | /health | — | Worker health check — returns version, DB table count |
-| GET | /clonepool | — | List all files in clonepool. Filter by `?state=` (white/grey/black). Paginate with `?limit=` |
+| GET | /clonepool | — | List all files in clonepool. Filter by `?state=` (white/grey/black) or `?sensitive=1`. Paginate with `?limit=` |
 | GET | /clonepool/:id | — | Fetch single clonepool entry by hex_id or name |
 | POST | /clonepool | ✓ | Register a new file into the pool (called by intake.sh) |
 | GET | /custody | — | View custody ledger. Filter by `?hex=`. Paginate with `?limit=` |
@@ -65,6 +65,13 @@ Cloudflare Worker — **packages-worker**. The catalog API. Serves and receives 
 | GET | /packages | — | List all registered packages |
 | GET | /packages/:id | — | Fetch a single package by name or ID |
 | GET | /toc | — | Live table of contents — TOC tree + clonepool pool summary |
+
+`clonepool.sensitive` (boolean) is separate from `state` — `state` is lifecycle
+status (active/deprecated/retired), `sensitive` flags content intake.sh's
+filename heuristic caught (`*auth*`, `*secret*`, `*password*`, `*credential*`,
+`*token*`, `.env`) as needing restricted handling downstream, independent of
+whether it's active. Set automatically by intake.sh when a matching file is
+intaked and the operator confirms; not inferred by the worker.
 | GET | /versions | — | Version history. Filter by `?package=`. Paginate with `?limit=` |
 | GET | /search | — | Cross-search clonepool + glossary + packages. Requires `?q=` |
 
