@@ -16,6 +16,7 @@ INTAKE_SH="${PHOENIX_INTAKE:-}"
 
 if [[ -z "$INTAKE_SH" ]]; then
     for candidate in \
+        "$REPO_ROOT/sector2/package-handler/intake.sh" \
         "$(dirname "$REPO_ROOT")/Phoenix-Package_handler/intake/intake.sh" \
         "$HOME/Phoenix/Phoenix-Package_handler/intake/intake.sh" \
         "$REPO_ROOT/../Phoenix-Package_handler/intake/intake.sh"

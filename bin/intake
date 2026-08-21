@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # ============================================================
 # Phoenix Global Command: intake
-# Linux/macOS wrapper for Phoenix Intake (Sector 4 vault)
+# Linux/macOS wrapper for Phoenix Intake (Sector 2 clonepool — see `bin/clone`
+# for the same pipeline; Sector 4 vault intake is a separate command, `usys
+# intake`, once sector4/intake.sh exists on the target machine)
 # ============================================================
 
 set -euo pipefail
@@ -15,9 +17,10 @@ INTAKE_SH="${PHOENIX_INTAKE:-}"
 if [[ -z "$INTAKE_SH" ]]; then
     # Try common locations
     for candidate in \
+        "$(dirname "$(dirname "${BASH_SOURCE[0]}")")/sector2/package-handler/intake.sh" \
+        "$HOME/Phoenix/Phoenix-DevOps-oS/sector2/package-handler/intake.sh" \
         "$HOME/Phoenix/package-handler/intake.sh" \
-        "$HOME/Phoenix/Phoenix-Package_handler/intake.sh" \
-        "$(dirname "$(dirname "${BASH_SOURCE[0]}")")/../package-handler/intake/intake.sh"
+        "$HOME/Phoenix/Phoenix-Package_handler/intake.sh"
     do
         if [[ -f "$candidate" ]]; then
             INTAKE_SH="$candidate"
@@ -34,5 +37,3 @@ fi
 
 # Execute intake command
 exec bash "$INTAKE_SH" "$@"
-
-# Made with Bob

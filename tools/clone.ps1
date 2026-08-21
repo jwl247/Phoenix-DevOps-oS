@@ -62,6 +62,7 @@ function global:clone {
     # -- Find intake.sh
     $intakeCandidates = @(
         $env:PHOENIX_INTAKE,
+        (Join-Path (Split-Path $PSScriptRoot -Parent) "sector2\package-handler\intake.sh"),
         (Join-Path (Split-Path $PSScriptRoot -Parent) "Phoenix-Package_handler\intake\intake.sh"),
         (Join-Path $HOME "Phoenix\Phoenix-Package_handler\intake\intake.sh"),
         (Join-Path $PSScriptRoot "..\..\Phoenix-Package_handler\intake\intake.sh")

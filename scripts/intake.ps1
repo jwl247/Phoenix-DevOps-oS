@@ -91,10 +91,10 @@ function Get-IntakeSh {
     $parent = Split-Path $repo -Parent
     $candidates = @(
         $env:PHOENIX_INTAKE,
+        (Join-Path $repo 'sector2\package-handler\intake.sh'),
         (Join-Path $parent 'package-handler\intake\intake.sh'),
         (Join-Path $HOME 'Phoenix\package-handler\intake\intake.sh'),
-        (Join-Path $parent 'Phoenix-Package_handler\intake\intake.sh'),
-        (Join-Path $repo 'sector2\package-handler\intake\intake.sh')
+        (Join-Path $parent 'Phoenix-Package_handler\intake\intake.sh')
     ) | Where-Object { $_ -and (Test-Path $_) }
     return $candidates | Select-Object -First 1
 }
@@ -156,7 +156,7 @@ function Invoke-IntakeEngine {
 
     Write-Host ''
     Write-IntakeInfo "-> $($Args -join ' ')"
-    & $bash -lc $cmd
+    & $bash -lc $cmd | Out-Host
     $code = $LASTEXITCODE
     if ($code -eq 0) { Write-IntakeOk 'complete' } else { Write-IntakeErr "exited $code" }
     Write-Host ''
@@ -212,6 +212,27 @@ function Invoke-IntakeStatus {
     return Invoke-IntakeEngine -Args @('status') -DryRun:$DryRun
 }
 
+function Invoke-IntakeClone {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [string]$Name,
+
+        [switch]$DryRun
+    )
+
+    # intake.sh's intake_clone() looks the target up by hex(name) in the
+    # clonepool -- it expects a BARE FILENAME, not a path. Normal `intake
+    # <file>` takes a full path, so passing a path here is a natural mistake.
+    # Strip it down to the basename rather than failing on a lookup miss.
+    $bareName = Split-Path -Path $Name -Leaf
+    if ($bareName -ne $Name) {
+        Write-IntakeWarn "clone expects a bare filename, not a path -- using '$bareName'"
+    }
+
+    return Invoke-IntakeEngine -Args @('clone', $bareName) -DryRun:$DryRun
+}
+
 function Show-IntakeHelp {
     @"
 
@@ -220,12 +241,14 @@ function Show-IntakeHelp {
 
   Usage:
     intake <file> [backend] [notes]       Intake file into clonepool
+    intake clone <filename>               Pull a file from clonepool to cwd (local, falls back to R2)
     intake backend <pkg> <be> <ver> [path] Register backend install
     intake status                         Clonepool summary
     intake help                           This message
 
   Parameters (function mode):
     intake -Path <file> [-Backend] [-Notes] [-DryRun]
+    intake -CloneMode -CloneName <filename> [-DryRun]
     intake -Backend ... (see Invoke-IntakeBackend)
 
   Pipeline:
@@ -267,6 +290,12 @@ function global:intake {
         [Parameter(ParameterSetName = 'Status')]
         [switch]$Status,
 
+        [Parameter(ParameterSetName = 'Clone', Mandatory)]
+        [switch]$CloneMode,
+
+        [Parameter(ParameterSetName = 'Clone', Mandatory, Position = 0)]
+        [string]$CloneName,
+
         [Parameter(ParameterSetName = 'Help')]
         [switch]$Help,
 
@@ -278,6 +307,11 @@ function global:intake {
 
     if ($Status) {
         Invoke-IntakeStatus -DryRun:$DryRun
+        return
+    }
+
+    if ($CloneMode) {
+        Invoke-IntakeClone -Name $CloneName -DryRun:$DryRun
         return
     }
 
@@ -297,6 +331,10 @@ function global:intake {
         'status' { Invoke-IntakeStatus -DryRun:$DryRun; return }
         'backend' {
             Write-IntakeErr 'usage: intake backend <pkg> <backend> <version> [path]'
+            return
+        }
+        'clone' {
+            Write-IntakeErr 'usage: intake -CloneMode -CloneName <file>  (shim: intake.ps1 clone <file>)'
             return
         }
     }
@@ -328,6 +366,11 @@ if ($MyInvocation.InvocationName -ne '.' -and $MyInvocation.Line -notmatch '^\s*
         if ($a -notin '-DryRun', '--dry-run') { $filtered.Add($a) }
     }
 
+    if ($filtered.Count -eq 0) {
+        Show-IntakeHelp
+        exit 0
+    }
+
     $cmd = $filtered[0]
     if ($cmd -in 'help', '--help', '-h') {
         Show-IntakeHelp
@@ -347,6 +390,22 @@ if ($MyInvocation.InvocationName -ne '.' -and $MyInvocation.Line -notmatch '^\s*
             $code = Invoke-IntakeBackend -PackageName $filtered[1] -Backend $filtered[2] `
                 -Version $filtered[3] -InstallPath $(if ($filtered.Count -ge 5) { $filtered[4] } else { '' }) `
                 -DryRun:$dry
+            exit $(if ($null -eq $code) { 0 } else { $code })
+        }
+        'clone' {
+            if ($filtered.Count -lt 2) {
+                Write-IntakeErr 'usage: intake.ps1 clone <filename>'
+                exit 1
+            }
+            # Same backslash-split defense as the default branch below: if a
+            # full path got passed instead of a bare filename and pwsh split
+            # the drive letter off into its own arg, rejoin before stripping
+            # to basename in Invoke-IntakeClone.
+            $cloneName = $filtered[1]
+            if ($cloneName -match '^[A-Za-z]:$' -and $filtered.Count -ge 3) {
+                $cloneName = "$cloneName\$($filtered[2])"
+            }
+            $code = Invoke-IntakeClone -Name $cloneName -DryRun:$dry
             exit $(if ($null -eq $code) { 0 } else { $code })
         }
         default {

@@ -62,7 +62,8 @@ Say "--- Step 1: Backporting 08-17 fixes into the standalone repo ---"
 $backportFiles = @(
     "intake.sh",
     "worker\index.js",
-    "worker\wrangler.jsonc"
+    "worker\wrangler.jsonc",
+    "README.md"
 )
 
 Push-Location $StandalonePackageHandlerRepo
@@ -126,8 +127,8 @@ try {
     if ($diffStat) {
         Write-Host $diffStat
         if ($PSCmdlet.ShouldProcess("standalone repo", "git commit backport + cleanup")) {
-            git add -A -- intake.sh worker PATCH_NOTES.md .github intake 2>$null
-            git commit -m "fix: backport 08-17 hash verification + R2 wiring from monorepo copy`n`nThe monorepo's sector2/package-handler copy received these fixes first,`nwhich should not have been able to happen -- this repo is the original`ndev copy. Backporting now; converting the monorepo copy to a git`nsubtree of this repo in the same operational pass so it can't diverge`nagain.`n`nAlso: restored .github/workflows/deploy.yml (was an uncommitted local`ndelete, not intentional). Removed intake/intake.sh, a stale v1.2.0`nduplicate superseded by the top-level intake.sh." 2>&1 | Out-Null
+            git add -A -- intake.sh worker PATCH_NOTES.md README.md .github intake 2>$null
+            git commit -m "fix: backport 08-17 hash verification + R2 wiring from monorepo copy`n`nThe monorepo's sector2/package-handler copy received these fixes first,`nwhich should not have been able to happen -- this repo is the original`ndev copy. Backporting now; converting the monorepo copy to a git`nsubtree of this repo in the same operational pass so it can't diverge`nagain.`n`nAlso: restored .github/workflows/deploy.yml (was an uncommitted local`ndelete, not intentional). Removed intake/intake.sh, a stale v1.2.0`nduplicate superseded by the top-level intake.sh.`n`nAlso backports later intake.sh hardening (sensitive-file D1 flag,`n.wrangler/.idea/.gradle skip-dirs, expanded known-type whitelist) and`nREADME.md docs for the new clonepool.sensitive field." 2>&1 | Out-Null
             Say "  committed." "Green"
             if (-not $SkipPush) {
                 git push
@@ -202,7 +203,13 @@ try {
     Say ""
     Say "--- Step 4: Archiving confirmed fossils ---"
     $archiveRoot = Join-Path $RepoRoot "archive\fossil-consolidation-$stamp"
-    foreach ($rel in @("SECTOR4", "Phoenix-DevOps-oS-grok-removed", "website", "sector3\workers\mcps\grok_com_github", "sector1\kernel\seelen")) {
+    # NOTE: "SECTOR4" intentionally excluded here — on case-insensitive
+    # filesystems (default NTFS) it resolves to the SAME directory as the
+    # live, git-tracked "sector4/" vault code (confirmed via matching inode,
+    # 2026-08-21). It was already archived once under this exact fossil
+    # snapshot naming in a prior pass; re-matching it now would move the
+    # live vault code into archive/ and corrupt the working tree.
+    foreach ($rel in @("Phoenix-DevOps-oS-grok-removed", "website", "sector3\workers\mcps\grok_com_github", "sector1\kernel\seelen")) {
         $src = Join-Path $RepoRoot $rel
         if (-not (Test-Path $src)) { Say "  SKIP (not found): $rel" "DarkGray"; continue }
         $dst = Join-Path $archiveRoot $rel

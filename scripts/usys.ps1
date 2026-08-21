@@ -137,7 +137,7 @@ function Get-UsysCloneIntakeSh {
         $env:PHOENIX_INTAKE,
         (Join-Path $parent 'Phoenix-Package_handler\intake\intake.sh'),
         (Join-Path $HOME 'Phoenix\Phoenix-Package_handler\intake\intake.sh'),
-        (Join-Path $repo 'sector2\package-handler\intake\intake.sh')
+        (Join-Path $repo 'sector2\package-handler\intake.sh')
     ) | Where-Object { $_ -and (Test-Path $_) }
     return $candidates | Select-Object -First 1
 }

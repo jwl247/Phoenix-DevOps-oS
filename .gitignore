@@ -52,6 +52,19 @@ sector2/apps/lifefirst-android/local.properties
 # OS artifacts
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Dev VM home-directory dotfiles — accidental syncs from multipass/SSH sessions,
+# not Phoenix source. Never intentional; block re-adding anywhere in the repo.
+.bash_history
+.bash_logout
+.bashrc
+.lesshst
+.profile
+.sudo_as_admin_successful
+.gitconfig
+.ssh/
+**/.cache/motd.legal-displayed
 
 # Credential files
 SECTOR4/heix/api drive.txt
