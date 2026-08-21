@@ -1,0 +1,282 @@
+/* hud-layout-additions.css
+   Additive stylesheet for the HUD restructure. Loaded AFTER styles.css so
+   these rules win on the selectors they override. Nothing in styles.css
+   is deleted — this file only overrides what needs to change and adds
+   the new right-column / left-column structure.
+   Link it in index.html: <link rel="stylesheet" href="hud-layout-additions.css">
+   (after the existing styles.css line, not before). */
+
+/* Bird removed at the source (index.html) — the .phoenix-hero <img> tag
+   itself is gone, not just hidden here, so its PNG never loads. */
+
+/* ── Translucency pass — the four solid backgrounds flagged earlier ───── */
+/* Small physical-switch elements: kept in the switch family visually but
+   no longer flat-opaque, since these are being converted to buttons below
+   anyway — these rules are the fallback for anywhere .toggle-switch markup
+   still exists during transition. */
+.toggle-switch {
+    background: rgba(13, 13, 13, 0.55);
+    backdrop-filter: blur(6px);
+}
+.switch-light {
+    background: rgba(34, 34, 34, 0.6);
+}
+
+/* The real panel that was fully opaque black — this one mattered. */
+.operator-drawer,
+.drawer-body,
+.cli-output {
+    background: rgba(0, 0, 0, 0.55) !important;
+    backdrop-filter: blur(10px);
+}
+
+.auth-modal {
+    background: rgba(10, 14, 26, 0.72) !important;
+    backdrop-filter: blur(16px);
+}
+
+/* ── Sector switches → buttons ──────────────────────────────────────── */
+/* Reuses the .hud-nav-btn visual language already established elsewhere
+   in this file (translucent gradient, consistent border/glow) instead of
+   inventing a new component. Active state still visually obvious. */
+.sector-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 12px;
+    background: linear-gradient(180deg, rgba(40, 48, 58, 0.55) 0%, rgba(18, 22, 30, 0.65) 100%);
+    border: 1px solid rgba(100, 110, 130, 0.5);
+    border-radius: 4px;
+    color: rgba(200, 210, 220, 0.85);
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 0.6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    backdrop-filter: blur(8px);
+}
+.sector-btn:hover {
+    border-color: rgba(150, 165, 190, 0.8);
+    background: linear-gradient(180deg, rgba(50, 60, 72, 0.65) 0%, rgba(24, 30, 40, 0.75) 100%);
+}
+.sector-btn.active {
+    background: rgba(255, 40, 40, 0.18);
+    border-color: var(--red-light);
+    box-shadow: inset 0 0 8px rgba(255, 0, 0, 0.25), 0 0 12px rgba(255, 51, 51, 0.3);
+    color: #fff;
+}
+.sector-btn .sector-btn-role {
+    font-size: 9px;
+    opacity: 0.7;
+    font-weight: normal;
+}
+
+/* ── Right column — 8-slot action panel ─────────────────────────────── */
+.hud-right-column {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: rgba(12, 14, 18, 0.45);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 10px;
+    backdrop-filter: blur(14px);
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.08);
+}
+.hud-action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, rgba(40, 48, 58, 0.5) 0%, rgba(18, 22, 30, 0.6) 100%);
+    border: 1px solid rgba(100, 110, 130, 0.45);
+    border-radius: 5px;
+    color: rgba(200, 210, 220, 0.9);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 0.6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    backdrop-filter: blur(8px);
+    text-align: left;
+}
+.hud-action-btn:hover {
+    border-color: var(--primary-green);
+    box-shadow: 0 0 12px rgba(0, 255, 136, 0.25);
+}
+.hud-action-btn.open-slot {
+    opacity: 0.5;
+    border-style: dashed;
+}
+.hud-action-btn .action-sub {
+    font-size: 9px;
+    font-weight: normal;
+    opacity: 0.65;
+    letter-spacing: 0.3px;
+}
+
+/* Panel that a right-column button reveals (Telemetry, Guide, Clonepool,
+   Screenshot) — slides in below the column, same translucent language. */
+.hud-action-panel {
+    display: none;
+    margin-top: 8px;
+    padding: 12px;
+    background: rgba(8, 10, 14, 0.6);
+    border: 1px solid rgba(0, 255, 136, 0.25);
+    border-radius: 6px;
+    backdrop-filter: blur(12px);
+    max-height: 320px;
+    overflow-y: auto;
+}
+.hud-action-panel.open {
+    display: block;
+}
+
+/* ── Left column — status bar / switchers / dropdown slots ─────────── */
+.hud-left-column {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.hud-status-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    background: rgba(12, 14, 18, 0.5);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    backdrop-filter: blur(12px);
+    cursor: pointer;
+}
+.hud-status-strip .status-line {
+    font-size: 10px;
+    letter-spacing: 0.4px;
+    color: var(--text-secondary);
+}
+.hud-status-strip .status-line .status-value {
+    color: var(--primary-green);
+    font-weight: bold;
+}
+.hud-status-expand {
+    display: none;
+    margin-top: 6px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(0, 255, 136, 0.2);
+}
+.hud-status-expand.open {
+    display: block;
+}
+
+.hud-switcher-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.hud-dropdown-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.dropdown-slot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 8px 10px;
+    background: rgba(12, 14, 18, 0.5);
+    border: 1px dashed rgba(100, 110, 130, 0.5);
+    border-radius: 4px;
+    font-size: 10px;
+    color: rgba(200, 210, 220, 0.75);
+    backdrop-filter: blur(8px);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.dropdown-slot.filled {
+    border-style: solid;
+    border-color: rgba(100, 110, 130, 0.6);
+}
+.dropdown-slot.active-slot {
+    border-color: var(--primary-green);
+    background: rgba(0, 255, 136, 0.08);
+    color: var(--primary-green);
+}
+.dropdown-slot.drag-over {
+    border-color: var(--holo-cyan);
+    background: rgba(61, 232, 255, 0.12);
+}
+.dropdown-slot .slot-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+/* ── Screenshot analysis result text ─────────────────────────────────── */
+#screenshot-analysis-result {
+    color: #ff69b4;
+}
+
+/* ── PS7 embedded shell — full HUD pane, same footprint as AI CHAT ────── */
+.ps7-shell-output {
+    flex: 1;
+    min-height: 80px;
+    overflow-y: auto;
+    padding-right: 2px;
+    font-size: 11px;
+    line-height: 1.5;
+    word-break: break-word;
+}
+.ps7-shell-output::-webkit-scrollbar { width: 3px; }
+.ps7-shell-output::-webkit-scrollbar-thumb { background: rgba(0, 136, 255, 0.3); }
+.ps7-shell-prompt {
+    color: var(--holo-cyan);
+    font-weight: bold;
+}
+.ps7-shell-cmd {
+    color: #fff;
+}
+.ps7-shell-stdout {
+    color: rgba(200, 210, 220, 0.9);
+}
+.ps7-shell-stderr {
+    color: var(--red-light);
+}
+.ps7-shell-input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(100, 110, 130, 0.5);
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+.ps7-shell-cwd {
+    font-size: 12px;
+    color: var(--holo-cyan);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 45%;
+}
+.ps7-shell-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #fff;
+    font-family: inherit;
+    font-size: 14px;
+    padding: 4px 0;
+}
+.ps7-shell-input:disabled {
+    opacity: 0.5;
+}

@@ -42,9 +42,9 @@ Click any tab to switch to that view:
 1. Click the **AI CHAT** tab.
 2. Type your question in the box at the bottom.
 3. Press **Enter** or click the arrow button.
-4. The AI will reply above. It uses Ollama (local) first, then Grok, then Claude.
+4. The AI will reply above. It uses Ollama (local) first, then Claude if Ollama is unavailable.
 
-If it says "OLLAMA OFFLINE" at the top right, the AI is still working — it will switch to Grok automatically.
+If it says "OLLAMA OFFLINE" at the top right, the AI is still working — it will switch to Claude automatically.
 
 ---
 

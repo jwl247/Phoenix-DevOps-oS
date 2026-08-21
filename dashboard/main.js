@@ -1,7 +1,7 @@
 // Phoenix Dashboard - Electron Main Process
 // Handles window creation, IPC communication, and Phoenix command execution
 
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, desktopCapturer } = require('electron');
 const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -24,9 +24,10 @@ function createWindow() {
         title: 'Phoenix DevOps OS - Command Center',
         icon: path.join(__dirname, 'assets', 'icon.png'),
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
-            enableRemoteModule: true
+            preload: path.join(__dirname, 'preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true
         },
         frame: true,
         autoHideMenuBar: true
@@ -34,6 +35,10 @@ function createWindow() {
 
     // Load the dashboard
     mainWindow.loadFile('index.html');
+    mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    mainWindow.webContents.on('will-navigate', (event, targetUrl) => {
+        if (targetUrl !== mainWindow.webContents.getURL()) event.preventDefault();
+    });
 
     // Open DevTools in development (comment out for production)
     // mainWindow.webContents.openDevTools();
@@ -78,11 +83,19 @@ ipcMain.handle('run-file', async (event, { filePath, args }) => {
     if (!filePath || !fs.existsSync(filePath)) {
         return { success: false, error: `File not found: ${filePath}` };
     }
+    const actualPath = fs.realpathSync(filePath);
+    const executionRoots = [resolvePhoenixRoot(), process.env.CLONEPOOL_DIR]
+        .filter(root => root && fs.existsSync(root))
+        .map(root => fs.realpathSync(root));
+    if (!executionRoots.some(root => {
+        const relative = path.relative(root, actualPath);
+        return relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+    })) {
+        return { success: false, error: 'Only files inside PHOENIX_ROOT or CLONEPOOL_DIR can be run.' };
+    }
     const ext = path.extname(filePath).toLowerCase();
     const argStr = (args || '').trim();
     const cwd = path.dirname(filePath);
-    const quoted = `"${filePath.replace(/"/g, '\\"')}"`;
-
     let shell, shellArgs;
     if (ext === '.ps1') {
         shell = 'pwsh.exe';
@@ -100,19 +113,11 @@ ipcMain.handle('run-file', async (event, { filePath, args }) => {
         shell = 'node';
         shellArgs = [filePath];
         if (argStr) shellArgs.push(...argStr.split(/\s+/));
-    } else if (process.platform === 'win32' && ['.exe', '.cmd', '.bat', '.com'].includes(ext)) {
-        return new Promise(resolve => {
-            exec(`"${filePath}" ${argStr}`, { cwd, timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
-                (error, stdout, stderr) => {
-                    resolve({
-                        success: !error,
-                        output: stdout || '',
-                        stderr: stderr || '',
-                        error: error ? error.message : null,
-                        command: `${filePath} ${argStr}`.trim()
-                    });
-                });
-        });
+    } else if (process.platform === 'win32' && ['.exe', '.com'].includes(ext)) {
+        shell = filePath;
+        shellArgs = argStr ? argStr.split(/\s+/) : [];
+    } else if (process.platform === 'win32' && ['.cmd', '.bat'].includes(ext)) {
+        return { success: false, error: 'Batch files are not supported by the secure runner; use a PowerShell script instead.' };
     } else {
         return { success: false, error: `Unsupported file type: ${ext || '(none)'}` };
     }
@@ -206,38 +211,45 @@ ipcMain.handle('open-path', async (event, targetPath) => {
     return err ? { success: false, error: err } : { success: true, path: targetPath };
 });
 
-// Execute Phoenix usys command
+function isAllowedPhoenixCommand(command) {
+    if (typeof command !== 'string' || !command.trim()) return false;
+    if (/[\r\n;&|`$<>()[\]{}]/.test(command)) return false;
+    return command.trim() === 'help' || /^(usys|intake)(?:\s+[A-Za-z0-9_./:\\-]+)*$/i.test(command.trim());
+}
+
+// Execute only the dashboard's structured Phoenix commands. Never accept shell
+// syntax from the renderer, even though this is a local desktop application.
 ipcMain.handle('execute-command', async (event, command) => {
     return new Promise((resolve) => {
+        if (!isAllowedPhoenixCommand(command)) {
+            resolve({ success: false, error: 'Only help, usys, and intake commands with plain arguments are allowed.' });
+            return;
+        }
         const resolved = resolvePhoenixCommand(command);
         console.log(`Executing: ${resolved}`);
 
         // Determine shell based on platform
         const shellCmd = process.platform === 'win32' ? 'pwsh.exe' : 'bash';
         const shellArgs = process.platform === 'win32'
-            ? ['-NoProfile', '-Command', resolved]
+            ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', resolved]
             : ['-c', resolved];
 
-        exec(`${shellCmd} ${shellArgs.join(' ')}`, {
+        const proc = spawn(shellCmd, shellArgs, {
             cwd: resolvePhoenixRoot(),
-            timeout: 30000, // 30 second timeout
-            maxBuffer: 1024 * 1024 * 10 // 10MB buffer
-        }, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`Command error: ${error.message}`);
-                resolve({
-                    success: false,
-                    error: error.message,
-                    stderr: stderr,
-                    stdout: stdout
-                });
-            } else {
-                resolve({
-                    success: true,
-                    output: stdout,
-                    stderr: stderr
-                });
-            }
+            shell: false
+        });
+        let stdout = '';
+        let stderr = '';
+        const timeout = setTimeout(() => proc.kill(), 30000);
+        proc.stdout.on('data', data => { stdout += data; });
+        proc.stderr.on('data', data => { stderr += data; });
+        proc.on('error', error => {
+            clearTimeout(timeout);
+            resolve({ success: false, error: error.message, stderr, stdout });
+        });
+        proc.on('close', code => {
+            clearTimeout(timeout);
+            resolve({ success: code === 0, output: stdout, stderr, error: code === 0 ? null : `Command exited ${code}` });
         });
     });
 });
@@ -640,7 +652,7 @@ const PHOENIX_AUTH_FILE = path.join(PHOENIX_CONF_DIR, 'ai_auth.json');
 
 const PHOENIX_ENV_BOOT_KEYS = new Set([
     'PHOENIX_ROOT', 'PHOENIX_AI_PROVIDER', 'PHOENIX_OLLAMA_URL',
-    'PHOENIX_SKIP_AUTH_MODAL', 'XAI_API_KEY', 'PHOENIX_GROK_KEY',
+    'PHOENIX_SKIP_AUTH_MODAL',
     'CLONEPOOL_DIR', 'PHOENIX_WORKER_URL'
 ]);
 
@@ -677,15 +689,10 @@ function loadSavedAuth() {
             if (saved.key)      process.env.PHOENIX_AI_KEY      = saved.key;
             if (saved.model)    process.env.PHOENIX_AI_MODEL    = saved.model;
             if (saved.ollamaUrl) process.env.PHOENIX_OLLAMA_URL = saved.ollamaUrl;
-            if (saved.grokKey)   process.env.PHOENIX_GROK_KEY   = saved.grokKey;
-            if (saved.grokModel) process.env.PHOENIX_GROK_MODEL  = saved.grokModel;
             console.log(`[Phoenix AI] loaded saved auth — provider=${saved.provider || 'helpdesk'}`);
         }
     } catch (e) {
         console.warn('[Phoenix AI] could not load saved auth:', e.message);
-    }
-    if (!process.env.PHOENIX_GROK_KEY && process.env.XAI_API_KEY) {
-        process.env.PHOENIX_GROK_KEY = process.env.XAI_API_KEY;
     }
     if (!process.env.PHOENIX_AI_PROVIDER) {
         process.env.PHOENIX_AI_PROVIDER = 'helpdesk';
@@ -720,24 +727,20 @@ ipcMain.handle('check-claude-cli', async () => {
 ipcMain.handle('get-ai-status', async () => {
     const provider = process.env.PHOENIX_AI_PROVIDER || 'helpdesk';
     const hasKey   = !!(process.env.PHOENIX_AI_KEY || process.env.ANTHROPIC_API_KEY);
-    const hasGrokKey = !!(process.env.PHOENIX_GROK_KEY || process.env.XAI_API_KEY);
     const model    = process.env.PHOENIX_AI_MODEL || '';
     const ollamaUrl = process.env.PHOENIX_OLLAMA_URL || 'http://localhost:11434';
-    const grokModel = process.env.PHOENIX_GROK_MODEL || 'grok-3-mini';
     const savedExists = fs.existsSync(PHOENIX_AUTH_FILE);
     const skipAuthModal = process.env.PHOENIX_SKIP_AUTH_MODAL === '1' ||
                           process.env.PHOENIX_SKIP_AUTH_MODAL === 'true';
-    return { provider, hasKey, hasGrokKey, model, ollamaUrl, grokModel, savedExists, skipAuthModal };
+    return { provider, hasKey, model, ollamaUrl, savedExists, skipAuthModal };
 });
 
 // Set AI credentials at runtime (called from auth modal)
-ipcMain.handle('set-ai-auth', async (event, { provider, key, model, ollamaUrl, grokKey, grokModel, save }) => {
+ipcMain.handle('set-ai-auth', async (event, { provider, key, model, ollamaUrl, save }) => {
     process.env.PHOENIX_AI_PROVIDER = provider || 'helpdesk';
     if (key)       process.env.PHOENIX_AI_KEY      = key;
     if (model)     process.env.PHOENIX_AI_MODEL    = model;
     if (ollamaUrl) process.env.PHOENIX_OLLAMA_URL  = ollamaUrl;
-    if (grokKey)   process.env.PHOENIX_GROK_KEY    = grokKey;
-    if (grokModel) process.env.PHOENIX_GROK_MODEL   = grokModel;
 
     if (save) {
         try {
@@ -746,11 +749,9 @@ ipcMain.handle('set-ai-auth', async (event, { provider, key, model, ollamaUrl, g
             const payload = {
                 provider: provider || 'helpdesk',
                 model: model || '',
-                ollamaUrl: ollamaUrl || '',
-                grokModel: grokModel || ''
+                ollamaUrl: ollamaUrl || ''
             };
             if (key) payload.key = key;
-            if (grokKey) payload.grokKey = grokKey;
             fs.writeFileSync(PHOENIX_AUTH_FILE, JSON.stringify(payload, null, 2), { mode: 0o600 });
         } catch (e) {
             return { success: false, error: `Could not save auth file: ${e.message}` };
@@ -774,6 +775,10 @@ ipcMain.handle('clear-ai-auth', async () => {
 // Same QuadralingualPacket format as Python coms1/freewheeling.py.
 // NOSQL hot; VECTOR/RELATIONAL/TIMESERIES lazy. Push syncs to Python daemon when live.
 const { HelixMemoryJS } = require('./helix_packet');
+require('./clonepool-workdir').register({ ipcMain, dialog });
+require('./screenshot-analysis').register({ ipcMain, desktopCapturer });
+require('./hud-layout-backend').register({ ipcMain, spawn, dialog });
+require('./ps7-shell').register({ ipcMain, spawn });
 const _helixMem = new HelixMemoryJS(40);   // SectorID.CLAUDE, 40-turn rolling window
 
 const PHOENIX_MANUAL_PATH = path.join(__dirname, 'manual', 'phoenix_manual.md');
@@ -791,7 +796,7 @@ function _phoenixSystemPrompt(stats) {
         'Helix is a double-strand memory engine, quadralingual (NOSQL/VECTOR/RELATIONAL/TIMESERIES).',
         'Frank is the import authority and audit logger — never moves.',
         'The clone pool is D1-backed + R2-backed: D1 = glossary/custody, R2 = raw file bytes.',
-        'Help Desk chain: Ollama (local primary) → Grok (cloud fallback) → Claude (tertiary).',
+        'Help Desk chain: Ollama (local primary) → Claude (fallback).',
         'The operator manual is in the HUD MANUAL tab. Direct users there for reference material.',
         statsLine,
         'The user is Jerry Leftwich (jwl247), systems builder. His wife Laurie has a protected share in Phoenix.',
@@ -972,37 +977,10 @@ async function _chatOllama(systemPrompt, messages) {
     return { provider: `ollama/${model}`, reply };
 }
 
-async function _chatGrok(systemPrompt, messages) {
-    const apiKey = process.env.PHOENIX_GROK_KEY || process.env.XAI_API_KEY || '';
-    if (!apiKey) throw new Error('No Grok API key');
-    const model = process.env.PHOENIX_GROK_MODEL || 'grok-3-mini';
-    const res = await fetch('https://api.x.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            model,
-            max_tokens: 1024,
-            messages: [{ role: 'system', content: systemPrompt }, ...messages]
-        }),
-        signal: AbortSignal.timeout(120000)
-    });
-    if (!res.ok) {
-        const err = await res.text();
-        throw new Error(`Grok API ${res.status}: ${err.slice(0, 200)}`);
-    }
-    const data = await res.json();
-    const reply = data.choices?.[0]?.message?.content || '';
-    if (!reply) throw new Error('Grok returned empty response');
-    return { provider: `grok/${model}`, reply };
-}
-
 async function _chatClaudeApi(systemPrompt, messages) {
     const apiKey = process.env.PHOENIX_AI_KEY || process.env.ANTHROPIC_API_KEY || '';
     if (!apiKey) throw new Error('No Anthropic API key');
-    const model = process.env.PHOENIX_AI_MODEL || 'claude-sonnet-4-6';
+    const model = process.env.PHOENIX_AI_MODEL || 'claude-sonnet-5';
     const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -1044,10 +1022,22 @@ function _runClaudeCli(prompt) {
         const npmGlobal = path.join(os.homedir(), 'AppData', 'Roaming', 'npm', 'claude.cmd');
         const cliResolved = (isWin && fs.existsSync(npmGlobal)) ? npmGlobal : (isWin ? 'claude.cmd' : 'claude');
 
-        const args = ['--print', '--no-color'];
+        // Strip API-key auth from the child's env so this call cannot silently
+        // fall back to pay-per-token billing when the whole point of this tier
+        // is to spend subscription usage, not API credit.
+        const subscriptionOnlyEnv = { ...process.env };
+        delete subscriptionOnlyEnv.ANTHROPIC_API_KEY;
+        delete subscriptionOnlyEnv.ANTHROPIC_AUTH_TOKEN;
+
+        // Explicit no-tools: this is a chat answer, not a coding-agent turn.
+        // Nothing here should touch Bash, Write, or Edit without you asking
+        // for that separately, through a path that actually shows you what
+        // it's about to do.
+        const args = ['--print', '--no-color', '--disallowedTools', 'Bash,Write,Edit,WebFetch,WebSearch'];
+        const spawnOpts = { timeout: 60000, env: subscriptionOnlyEnv };
         const proc = isWin
-            ? spawn('cmd.exe', ['/c', cliResolved, ...args], { timeout: 60000 })
-            : spawn(cliResolved, args, { timeout: 60000 });
+            ? spawn('cmd.exe', ['/c', cliResolved, ...args], spawnOpts)
+            : spawn(cliResolved, args, spawnOpts);
 
         let stdout = '';
         let stderr = '';
@@ -1077,7 +1067,7 @@ ipcMain.handle('ai-chat', async (event, { message, history, phoenixStats }) => {
 
     const errors = [];
 
-    // ── Help Desk mode: Ollama → Grok → Claude (automatic chain) ───────────
+    // ── Help Desk mode: Ollama → Claude (automatic chain) ──────────────────
     if (provider === 'helpdesk' || provider === 'ollama') {
         try {
             const result = await _chatOllama(systemPrompt, chatMessages);
@@ -1085,26 +1075,7 @@ ipcMain.handle('ai-chat', async (event, { message, history, phoenixStats }) => {
             return { success: true, ...result, fallback: false };
         } catch (e) {
             errors.push(`ollama: ${e.message}`);
-            console.log(`[Help Desk] Ollama unavailable (${e.message}), trying Grok`);
-        }
-        try {
-            const result = await _chatGrok(systemPrompt, chatMessages);
-            _helixMem.pushTurn('assistant', result.reply);
-            return { success: true, ...result, fallback: true, fallbackFrom: 'ollama' };
-        } catch (e) {
-            errors.push(`grok: ${e.message}`);
-            console.log(`[Help Desk] Grok unavailable (${e.message}), trying Claude`);
-        }
-    }
-
-    // ── Grok-only mode ───────────────────────────────────────────────────────
-    if (provider === 'grok') {
-        try {
-            const result = await _chatGrok(systemPrompt, chatMessages);
-            _helixMem.pushTurn('assistant', result.reply);
-            return { success: true, ...result, fallback: false };
-        } catch (e) {
-            errors.push(`grok: ${e.message}`);
+            console.log(`[Help Desk] Ollama unavailable (${e.message}), trying Claude`);
         }
     }
 
@@ -1123,13 +1094,13 @@ ipcMain.handle('ai-chat', async (event, { message, history, phoenixStats }) => {
     try {
         const reply = await _runClaudeCli(fullPrompt);
         _helixMem.pushTurn('assistant', reply);
-        const usedFallback = provider === 'helpdesk' || provider === 'ollama' || provider === 'grok';
+        const usedFallback = provider === 'helpdesk' || provider === 'ollama';
         return {
             success: true,
             provider: 'claude/subscription',
             reply,
             fallback: usedFallback,
-            fallbackFrom: usedFallback ? 'ollama→grok' : undefined
+            fallbackFrom: usedFallback ? 'ollama' : undefined
         };
     } catch (e) {
         errors.push(`claude: ${e.message}`);
@@ -1140,7 +1111,7 @@ ipcMain.handle('ai-chat', async (event, { message, history, phoenixStats }) => {
         return {
             success: false,
             provider: 'helpdesk',
-            error: `All Help Desk providers unavailable.\n${errors.join('\n')}\n${claudeHint}\n\nStart Ollama (ollama serve) or set XAI_API_KEY for Grok fallback.`
+            error: `All Help Desk providers unavailable.\n${errors.join('\n')}\n${claudeHint}\n\nStart Ollama (ollama serve) or set ANTHROPIC_API_KEY for Claude.`
         };
     }
 });

@@ -5,83 +5,97 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Phoenix DevOps OS - Command Center</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="hud-layout-additions.css">
 </head>
 <body>
     <div class="dashboard-container">
-        <!-- Left Control Panel -->
+        <!-- Left Control Panel — restructured -->
         <div class="left-panel">
-            <div class="switch-panel">
-                <div class="panel-label">SECTOR CONTROL PANEL</div>
-                <div class="switch-group">
-                    <div class="switch-item">
-                        <div class="switch-label-group">
-                            <label>SECTOR 1</label>
-                            <span class="switch-role">boot · kernel</span>
+            <div class="hud-left-column">
+                <div class="hud-status-strip" id="hud-status-strip">
+                    <div class="status-line">YOU ARE HERE: <span class="status-value" id="status-you-are-here">— no active slot —</span></div>
+                    <div class="status-line">YOU WERE HERE: <span class="status-value" id="status-you-were-here">—</span></div>
+                    <div class="hud-status-expand" id="hud-status-expand">
+                        <button type="button" class="sector-btn" id="expand-cli">PHOENIX CLI</button>
+                        <!-- Original sector switches — kept fully functional, class
+                             added by hud-layout.js converts their visual style only. -->
+                        <div class="switch-group" style="margin-top:10px;">
+                            <div class="switch-item">
+                                <div class="switch-label-group">
+                                    <label>SECTOR 1</label>
+                                    <span class="switch-role">boot · kernel</span>
+                                </div>
+                                <div class="toggle-switch" data-sector="1">
+                                    <div class="switch-light"></div>
+                                </div>
+                            </div>
+                            <div class="switch-item">
+                                <div class="switch-label-group">
+                                    <label>SECTOR 2</label>
+                                    <span class="switch-role">packages · clone</span>
+                                </div>
+                                <div class="toggle-switch" data-sector="2">
+                                    <div class="switch-light"></div>
+                                </div>
+                            </div>
+                            <div class="switch-item">
+                                <div class="switch-label-group">
+                                    <label>SECTOR 3</label>
+                                    <span class="switch-role">comms · network</span>
+                                </div>
+                                <div class="toggle-switch" data-sector="3">
+                                    <div class="switch-light"></div>
+                                </div>
+                            </div>
+                            <div class="switch-item">
+                                <div class="switch-label-group">
+                                    <label>SECTOR 4</label>
+                                    <span class="switch-role">helix · frank</span>
+                                </div>
+                                <div class="toggle-switch" data-sector="4">
+                                    <div class="switch-light"></div>
+                                </div>
+                            </div>
+                            <div class="switch-item">
+                                <div class="switch-label-group">
+                                    <label>HELIX ENGINE</label>
+                                    <span class="switch-role">core engine</span>
+                                </div>
+                                <div class="toggle-switch active" data-sector="helix">
+                                    <div class="switch-light active"></div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="toggle-switch" data-sector="1">
-                            <div class="switch-light"></div>
+                        <div class="control-actions" style="margin-top:10px;">
+                            <select id="sector-action-select" class="control-dropdown" title="Action for active sector">
+                                <option value="status">status — sector health</option>
+                                <option value="open">open — sector folder</option>
+                                <option value="services">services — list units (linux)</option>
+                            </select>
+                            <button type="button" class="control-btn" id="sector-action-run">EXECUTE</button>
                         </div>
-                    </div>
-                    <div class="switch-item">
-                        <div class="switch-label-group">
-                            <label>SECTOR 2</label>
-                            <span class="switch-role">packages · clone</span>
+                        <div class="control-hint" id="sector-hint">
+                            Switches gate sector subsystems. ON = monitor + enable CLI commands for that sector.
                         </div>
-                        <div class="toggle-switch" data-sector="2">
-                            <div class="switch-light"></div>
-                        </div>
-                    </div>
-                    <div class="switch-item">
-                        <div class="switch-label-group">
-                            <label>SECTOR 3</label>
-                            <span class="switch-role">comms · network</span>
-                        </div>
-                        <div class="toggle-switch" data-sector="3">
-                            <div class="switch-light"></div>
-                        </div>
-                    </div>
-                    <div class="switch-item">
-                        <div class="switch-label-group">
-                            <label>SECTOR 4</label>
-                            <span class="switch-role">helix · frank</span>
-                        </div>
-                        <div class="toggle-switch" data-sector="4">
-                            <div class="switch-light"></div>
-                        </div>
-                    </div>
-                    <div class="switch-item">
-                        <div class="switch-label-group">
-                            <label>HELIX ENGINE</label>
-                            <span class="switch-role">core engine</span>
-                        </div>
-                        <div class="toggle-switch active" data-sector="helix">
-                            <div class="switch-light active"></div>
+                        <div class="warning-label">
+                            <span class="warning-icon">⚠</span>
+                            AUTHORIZED PERSONNEL ONLY
                         </div>
                     </div>
                 </div>
-                <div class="control-actions">
-                    <div class="panel-label">SECTOR ACTIONS</div>
-                    <select id="sector-action-select" class="control-dropdown" title="Action for active sector">
-                        <option value="status">status — sector health</option>
-                        <option value="open">open — sector folder</option>
-                        <option value="services">services — list units (linux)</option>
-                    </select>
-                    <button type="button" class="control-btn" id="sector-action-run">EXECUTE</button>
-                    <div class="control-quick-row">
-                        <button type="button" class="control-btn small" data-cmd="usys status">STATUS</button>
-                        <button type="button" class="control-btn small" data-cmd="intake status">INTAKE</button>
-                        <button type="button" class="control-btn small" data-cmd="help">HELP</button>
-                    </div>
+
+                <div class="hud-switcher-row">
+                    <button type="button" class="sector-btn" id="switcher-ps7">PS7</button>
+                    <button type="button" class="sector-btn" id="switcher-bash">BASH</button>
+                    <button type="button" class="sector-btn" id="switcher-github">GITHUB DESKTOP</button>
+                    <button type="button" class="sector-btn" id="switcher-glossary">GLOSSARY</button>
                 </div>
-                <div class="control-hint" id="sector-hint">
-                    Switches gate sector subsystems. ON = monitor + enable CLI commands for that sector.
-                </div>
-                <div class="warning-label">
-                    <span class="warning-icon">⚠</span>
-                    AUTHORIZED PERSONNEL ONLY
+                <div class="hud-action-panel" id="panel-glossary"></div>
+
+                <div class="hud-dropdown-slots" id="hud-dropdown-slots">
+                    <!-- populated by hud-layout.js -->
                 </div>
             </div>
-            
         </div>
 
         <!-- Main Center Display -->
@@ -96,7 +110,6 @@
             <div class="hud-zone" id="hud-zone">
                 <div class="holographic-display">
                     <div class="main-viewport">
-                        <img src="assets/phoenix-logo.png" alt="Phoenix" class="phoenix-hero">
                         <canvas id="main-canvas" class="phoenix-ember-canvas"></canvas>
                         <div class="holo-overlay">
                             <div class="holo-grid"></div>
@@ -124,17 +137,17 @@
                         </div>
 
                         <div class="hud-main" id="hud-main">
-                            <!-- AI CHAT — primary HUD (Ollama → Grok → Claude) -->
+                            <!-- AI CHAT — primary HUD (Ollama → Claude) -->
                             <div class="hud-nav-pane active" id="hud-pane-ai-chat" data-hud-nav="ai-chat">
                                 <div class="hud-pane-title">AI CHAT</div>
                                 <div class="hud-messages" id="hud-messages">
-                                    <div class="hud-msg hud-msg-assist">AI Chat ready. Ollama primary, Grok fallback. Use HELP CHAT tab for the operator manual.</div>
+                                    <div class="hud-msg hud-msg-assist">AI Chat ready. Ollama primary, Claude fallback. Use HELP CHAT tab for the operator manual.</div>
                                 </div>
                                 <div class="hud-input-row">
                                     <input type="text" id="hud-input" class="hud-input" placeholder="ask phoenix anything...">
                                     <button class="hud-send" id="hud-send" type="button">&#9658;</button>
                                 </div>
-                                <div class="hud-provider" id="hud-provider" title="click to change AI auth">ollama → grok → claude</div>
+                                <div class="hud-provider" id="hud-provider" title="click to change AI auth">ollama → claude</div>
                             </div>
 
                             <!-- HELP CHAT — operator manual / help reference -->
@@ -268,6 +281,16 @@
                                 <div class="hud-pane-title">GUIDE</div>
                                 <div class="manual-body" id="guide-body">loading guide...</div>
                             </div><!-- /GUIDE -->
+
+                            <!-- PS7 SHELL — embedded, unrestricted (no allowlist, unlike CODES/PHOENIX CLI) -->
+                            <div class="hud-nav-pane" id="hud-pane-ps7-shell" data-hud-nav="ps7-shell">
+                                <div class="hud-pane-title">PS7 SHELL</div>
+                                <div class="ps7-shell-output" id="ps7-shell-output"></div>
+                                <div class="ps7-shell-input-row">
+                                    <span class="ps7-shell-cwd" id="ps7-shell-cwd">&gt;</span>
+                                    <input type="text" class="ps7-shell-input" id="ps7-shell-input" autocomplete="off" spellcheck="false" placeholder="PS7 command...">
+                                </div>
+                            </div><!-- /PS7 SHELL -->
                         </div><!-- /.hud-main -->
                     </div><!-- /.hud-interface -->
                 </div><!-- /.holographic-display -->
@@ -283,62 +306,77 @@
                     <button type="button" class="hud-nav-btn" data-hud-nav="reports"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">REPORTS</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="settings"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">SETTINGS</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="codes"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">CODES</span></button>
+                    <button type="button" class="hud-nav-btn" data-hud-nav="ps7-shell"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">PS7 SHELL</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="guide"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">GUIDE</span></button>
                 </nav>
                 <div class="hud-zone-boundary" title="HUD boundary"></div>
             </div><!-- /.hud-zone -->
         </div>
 
-        <!-- Right Side Panels -->
+        <!-- Right Side Panels — restructured -->
         <div class="right-panel">
-            <!-- System Metrics -->
-            <div class="metric-display">
-                <div class="metric-label">CPU</div>
-                <div class="metric-value" id="cpu-usage">45%</div>
-                <div class="metric-bar">
-                    <div class="metric-fill" id="cpu-bar" style="width: 45%"></div>
-                </div>
+            <div class="hud-right-column">
+                <button type="button" class="hud-action-btn" id="action-telemetry">
+                    TELEMETRY
+                    <span class="action-sub">CPU / MEM / DISK / worker stats</span>
+                </button>
+                <button type="button" class="hud-action-btn" id="action-guide">
+                    PHOENIX GUIDE
+                    <span class="action-sub">ollama chat · manual · Laurie's guide</span>
+                </button>
+                <button type="button" class="hud-action-btn" id="action-venv">
+                    VENV
+                    <span class="action-sub">auto-detect in active slot</span>
+                </button>
+                <div class="hud-action-panel" id="panel-venv"></div>
+                <button type="button" class="hud-action-btn" id="action-run">
+                    RUN
+                    <span class="action-sub">opens RUNIT drawer</span>
+                </button>
+                <button type="button" class="hud-action-btn" id="action-ps7">
+                    OPEN PS7
+                </button>
+                <button type="button" class="hud-action-btn" id="action-explorer">
+                    OPEN FILE EXPLORER
+                </button>
+                <button type="button" class="hud-action-btn" id="action-clonepool">
+                    CLONEPOOL
+                    <span class="action-sub">clone / sync any intaked file</span>
+                </button>
+                <div class="hud-action-panel" id="panel-clonepool"></div>
+                <button type="button" class="hud-action-btn" id="action-screenshot">
+                    SCREENSHOT
+                    <span class="action-sub">single-shot, sent to Claude on request</span>
+                </button>
+                <div class="hud-action-panel" id="panel-screenshot"></div>
             </div>
 
-            <div class="metric-display">
-                <div class="metric-label">MEMORY</div>
-                <div class="metric-value" id="mem-usage">62%</div>
-                <div class="metric-bar">
-                    <div class="metric-fill" id="mem-bar" style="width: 62%"></div>
+            <!-- Original metrics — now toggled by the TELEMETRY button above
+                 instead of always visible. IDs unchanged, so updateMetrics()
+                 in dashboard.js keeps working without modification. -->
+            <div class="hud-telemetry-hidden" style="display:contents;">
+                <div class="metric-display">
+                    <div class="metric-label">CPU</div>
+                    <div class="metric-value" id="cpu-usage">--</div>
+                    <div class="metric-bar">
+                        <div class="metric-fill" id="cpu-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="metric-display">
+                    <div class="metric-label">MEMORY</div>
+                    <div class="metric-value" id="mem-usage">--</div>
+                    <div class="metric-bar">
+                        <div class="metric-fill" id="mem-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="metric-display">
+                    <div class="metric-label">DISK</div>
+                    <div class="metric-value" id="disk-usage">--</div>
+                    <div class="metric-bar">
+                        <div class="metric-fill" id="disk-bar" style="width: 0%"></div>
+                    </div>
                 </div>
             </div>
-
-            <div class="metric-display">
-                <div class="metric-label">DISK</div>
-                <div class="metric-value" id="disk-usage">38%</div>
-                <div class="metric-bar">
-                    <div class="metric-fill" id="disk-bar" style="width: 38%"></div>
-                </div>
-            </div>
-
-            <!-- Circular Gauges -->
-            <div class="gauge-container">
-                <div class="circular-gauge">
-                    <svg viewBox="0 0 100 100" class="gauge-svg">
-                        <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(0, 255, 136, 0.2)" stroke-width="8"/>
-                        <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(0, 255, 136, 0.8)" stroke-width="8" 
-                                stroke-dasharray="251.2" stroke-dashoffset="62.8" transform="rotate(-90 50 50)"/>
-                        <text x="50" y="50" text-anchor="middle" fill="rgba(0, 255, 136, 1)" font-size="16" font-weight="bold" dy="5">75%</text>
-                        <text x="50" y="65" text-anchor="middle" fill="rgba(0, 255, 136, 0.6)" font-size="8">UPTIME</text>
-                    </svg>
-                </div>
-
-                <div class="circular-gauge">
-                    <svg viewBox="0 0 100 100" class="gauge-svg">
-                        <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(0, 255, 136, 0.2)" stroke-width="8"/>
-                        <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(0, 255, 136, 0.8)" stroke-width="8" 
-                                stroke-dasharray="251.2" stroke-dashoffset="50.24" transform="rotate(-90 50 50)"/>
-                        <text x="50" y="50" text-anchor="middle" fill="rgba(0, 255, 136, 1)" font-size="16" font-weight="bold" dy="5">80%</text>
-                        <text x="50" y="65" text-anchor="middle" fill="rgba(0, 255, 136, 0.6)" font-size="8">HEALTH</text>
-                    </svg>
-                </div>
-            </div>
-
         </div>
     </div>
 
@@ -363,50 +401,30 @@
             <div class="auth-header">
                 <div class="auth-logo">PHX</div>
                 <div class="auth-title">HELP DESK AUTH</div>
-                <div class="auth-subtitle">ollama primary · grok fallback</div>
+                <div class="auth-subtitle">ollama primary · claude fallback</div>
             </div>
 
             <div class="auth-body">
                 <div class="auth-provider-tabs">
                     <button class="auth-tab active" id="tab-helpdesk" data-tab="helpdesk">HELP DESK</button>
-                    <button class="auth-tab" id="tab-grok" data-tab="grok">GROK</button>
                     <button class="auth-tab" id="tab-ollama" data-tab="ollama">OLLAMA</button>
                     <button class="auth-tab" id="tab-subscription" data-tab="subscription">CLAUDE</button>
                     <button class="auth-tab" id="tab-claude" data-tab="claude">API KEY</button>
                 </div>
 
-                <!-- Help Desk section (Ollama + Grok fallback — default) -->
+                <!-- Help Desk section (Ollama primary, Claude fallback — default) -->
                 <div class="auth-section" id="section-helpdesk">
-                    <div class="auth-hint" style="margin-bottom:8px;">Default mode: Ollama answers locally. Grok (xAI) takes over if Ollama is down. Claude is tertiary.</div>
+                    <div class="auth-hint" style="margin-bottom:8px;">Default mode: Ollama answers locally. Claude takes over if Ollama is down.</div>
                     <div class="auth-field-label">OLLAMA ENDPOINT</div>
                     <input type="text" id="auth-helpdesk-ollama-url" class="auth-input" value="http://localhost:11434" placeholder="http://localhost:11434">
                     <div class="auth-field-label" style="margin-top:10px;">OLLAMA MODEL</div>
                     <input type="text" id="auth-helpdesk-ollama-model" class="auth-input" value="llama3.2" placeholder="llama3.2">
-                    <div class="auth-field-label" style="margin-top:10px;">GROK API KEY (fallback)</div>
-                    <div class="auth-field-row">
-                        <input type="password" id="auth-grok-key" class="auth-input" placeholder="xai-... (or set XAI_API_KEY in env)">
-                        <button class="auth-reveal" id="auth-grok-reveal" title="show/hide">&#128065;</button>
-                    </div>
-                    <div class="auth-field-label" style="margin-top:10px;">GROK MODEL (optional)</div>
-                    <input type="text" id="auth-grok-model" class="auth-input" value="grok-3-mini" placeholder="grok-3-mini">
                     <div class="auth-cli-status" id="auth-ollama-status">
                         <span class="cli-checking">checking ollama...</span>
                     </div>
                 </div>
 
-                <!-- Grok-only section -->
-                <div class="auth-section" id="section-grok" style="display:none;">
-                    <div class="auth-field-label">XAI API KEY</div>
-                    <div class="auth-field-row">
-                        <input type="password" id="auth-grok-only-key" class="auth-input" placeholder="xai-...">
-                        <button class="auth-reveal" id="auth-grok-only-reveal" title="show/hide">&#128065;</button>
-                    </div>
-                    <div class="auth-field-label" style="margin-top:10px;">MODEL</div>
-                    <input type="text" id="auth-grok-only-model" class="auth-input" value="grok-3-mini" placeholder="grok-3-mini">
-                    <div class="auth-hint">Grok-only mode — no Ollama attempt.</div>
-                </div>
-
-                <!-- Subscription section (Claude.ai Pro/Max/Teams — tertiary fallback) -->
+                <!-- Subscription section (Claude.ai Pro/Max/Teams — fallback) -->
                 <div class="auth-section" id="section-subscription" style="display:none;">
                     <div class="auth-hint" style="margin-bottom:8px;">Uses your Claude.ai subscription via the Claude Code CLI. No API key needed.</div>
                     <div class="auth-cli-status" id="auth-cli-status">
@@ -426,7 +444,7 @@
                         <button class="auth-reveal" id="auth-reveal" title="show/hide">&#128065;</button>
                     </div>
                     <div class="auth-field-label" style="margin-top:10px;">MODEL (optional)</div>
-                    <input type="text" id="auth-model" class="auth-input" placeholder="claude-sonnet-4-6">
+                    <input type="text" id="auth-model" class="auth-input" placeholder="claude-sonnet-5">
                     <div class="auth-hint">Key stays in memory — not written to disk unless you save it.</div>
                 </div>
 
@@ -457,5 +475,6 @@
     </div>
 
     <script src="dashboard.js"></script>
+    <script src="hud-layout.js"></script>
 </body>
 </html>

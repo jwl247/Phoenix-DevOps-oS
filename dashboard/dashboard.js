@@ -3,11 +3,11 @@
 // Electron-enabled version with real Phoenix command execution
 
 // Check if running in Electron
-const isElectron = typeof require !== 'undefined' && typeof require('electron') !== 'undefined';
-let ipcRenderer;
+const isElectron = typeof window !== 'undefined' && !!window.phoenix;
+let ipcRenderer = null;
 
 if (isElectron) {
-    ipcRenderer = require('electron').ipcRenderer;
+    ipcRenderer = window.phoenix;
     console.log('Running in Electron - Real Phoenix integration enabled');
 } else {
     console.log('Running in browser - Using simulated data');
@@ -1052,7 +1052,7 @@ class PhoenixDashboard {
             el.textContent = `OLLAMA (${model})`;
             el.className = 'status-ok';
             if (provider && !this._hudBusy) {
-                provider.textContent = `ollama → grok → claude · ${model}`;
+                provider.textContent = `ollama → claude · ${model}`;
             }
         } else {
             el.textContent = 'OLLAMA OFFLINE';
@@ -1238,7 +1238,7 @@ class PhoenixAuthModal {
 
     async _init() {
         // Pre-fill from saved/env
-        let status = { provider: 'helpdesk', hasKey: false, hasGrokKey: false, model: '', ollamaUrl: 'http://localhost:11434', grokModel: 'grok-3-mini' };
+        let status = { provider: 'helpdesk', hasKey: false, model: '', ollamaUrl: 'http://localhost:11434' };
         if (isElectron && ipcRenderer) {
             status = await ipcRenderer.invoke('get-ai-status');
         }
@@ -1246,17 +1246,12 @@ class PhoenixAuthModal {
         const savedTab = status.provider === 'claude' ? 'claude'
                        : status.provider === 'subscription' ? 'subscription'
                        : status.provider === 'ollama' ? 'ollama'
-                       : status.provider === 'grok' ? 'grok'
                        : 'helpdesk';
         this._switchTab(savedTab);
 
         if (status.hasKey) {
             document.getElementById('auth-api-key').value = '••••••••••••••••';
             document.getElementById('auth-api-key').dataset.prefilled = 'true';
-        }
-        if (status.hasGrokKey) {
-            document.getElementById('auth-grok-key').value = '••••••••••••••••';
-            document.getElementById('auth-grok-key').dataset.prefilled = 'true';
         }
         if (status.model) {
             document.getElementById('auth-model').value = status.model;
@@ -1266,11 +1261,6 @@ class PhoenixAuthModal {
             document.getElementById('auth-ollama-url').value = status.ollamaUrl;
             document.getElementById('auth-helpdesk-ollama-url').value = status.ollamaUrl;
         }
-        if (status.grokModel) {
-            document.getElementById('auth-grok-model').value = status.grokModel;
-            document.getElementById('auth-grok-only-model').value = status.grokModel;
-        }
-
         document.querySelectorAll('.auth-tab').forEach(tab => {
             tab.addEventListener('click', () => this._switchTab(tab.dataset.tab));
         });
@@ -1290,28 +1280,6 @@ class PhoenixAuthModal {
             }
         });
 
-        const grokReveal = document.getElementById('auth-grok-reveal');
-        const grokKeyInput = document.getElementById('auth-grok-key');
-        if (grokReveal && grokKeyInput) {
-            grokReveal.addEventListener('click', () => {
-                grokKeyInput.type = grokKeyInput.type === 'password' ? 'text' : 'password';
-            });
-            grokKeyInput.addEventListener('focus', () => {
-                if (grokKeyInput.dataset.prefilled === 'true') {
-                    grokKeyInput.value = '';
-                    delete grokKeyInput.dataset.prefilled;
-                }
-            });
-        }
-
-        const grokOnlyReveal = document.getElementById('auth-grok-only-reveal');
-        const grokOnlyKey = document.getElementById('auth-grok-only-key');
-        if (grokOnlyReveal && grokOnlyKey) {
-            grokOnlyReveal.addEventListener('click', () => {
-                grokOnlyKey.type = grokOnlyKey.type === 'password' ? 'text' : 'password';
-            });
-        }
-
         // Skip — use whatever is already in env
         document.getElementById('auth-skip').addEventListener('click', () => this._dismiss());
 
@@ -1325,7 +1293,6 @@ class PhoenixAuthModal {
     _switchTab(tab) {
         document.querySelectorAll('.auth-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
         document.getElementById('section-helpdesk').style.display     = tab === 'helpdesk'     ? '' : 'none';
-        document.getElementById('section-grok').style.display         = tab === 'grok'         ? '' : 'none';
         document.getElementById('section-subscription').style.display = tab === 'subscription' ? '' : 'none';
         document.getElementById('section-claude').style.display       = tab === 'claude'       ? '' : 'none';
         document.getElementById('section-ollama').style.display       = tab === 'ollama'       ? '' : 'none';
@@ -1339,7 +1306,7 @@ class PhoenixAuthModal {
             const models = (result.models || []).slice(0, 3).join(', ') || 'no models listed';
             el.innerHTML = `<span class="cli-ok">&#10003; ollama online — ${models}</span>`;
         } else {
-            el.innerHTML = `<span class="cli-warn">&#9888; ollama offline — will use Grok fallback (${result.reason})</span>`;
+            el.innerHTML = `<span class="cli-warn">&#9888; ollama offline — will use Claude fallback (${result.reason})</span>`;
         }
     }
 
@@ -1373,18 +1340,10 @@ class PhoenixAuthModal {
 
         let model = '';
         let ollamaUrl = '';
-        let grokKey = '';
-        let grokModel = '';
 
         if (tab === 'helpdesk') {
             model     = document.getElementById('auth-helpdesk-ollama-model').value.trim();
             ollamaUrl = document.getElementById('auth-helpdesk-ollama-url').value.trim();
-            const gk  = document.getElementById('auth-grok-key');
-            grokKey   = (gk.dataset.prefilled !== 'true') ? gk.value.trim() : '';
-            grokModel = document.getElementById('auth-grok-model').value.trim();
-        } else if (tab === 'grok') {
-            grokKey   = document.getElementById('auth-grok-only-key').value.trim();
-            grokModel = document.getElementById('auth-grok-only-model').value.trim();
         } else if (tab === 'ollama') {
             model     = document.getElementById('auth-ollama-model')?.value.trim() || document.getElementById('auth-helpdesk-ollama-model').value.trim();
             ollamaUrl = document.getElementById('auth-ollama-url').value.trim();
@@ -1399,7 +1358,7 @@ class PhoenixAuthModal {
 
         let result = { success: true };
         if (isElectron && ipcRenderer) {
-            result = await ipcRenderer.invoke('set-ai-auth', { provider, key, model, ollamaUrl, grokKey, grokModel, save });
+            result = await ipcRenderer.invoke('set-ai-auth', { provider, key, model, ollamaUrl, save });
         }
 
         if (result.success) {

@@ -15,11 +15,6 @@ if [ -f "$ENV_FILE" ]; then
     set +a
 fi
 
-# Grok fallback: accept XAI_API_KEY as alias
-if [ -z "${PHOENIX_GROK_KEY:-}" ] && [ -n "${XAI_API_KEY:-}" ]; then
-    export PHOENIX_GROK_KEY="$XAI_API_KEY"
-fi
-
 export PHOENIX_SKIP_AUTH_MODAL="${PHOENIX_SKIP_AUTH_MODAL:-1}"
 
 exec npm start

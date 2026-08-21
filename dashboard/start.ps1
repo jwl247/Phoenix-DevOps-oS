@@ -27,9 +27,6 @@ if (Test-Path $envFile) {
     Write-Host "  [OK] Loaded $envFile" -ForegroundColor DarkGray
 }
 
-if (-not $env:PHOENIX_GROK_KEY -and $env:XAI_API_KEY) {
-    $env:PHOENIX_GROK_KEY = $env:XAI_API_KEY
-}
 if (-not $env:PHOENIX_AI_PROVIDER) {
     $env:PHOENIX_AI_PROVIDER = 'helpdesk'
 }

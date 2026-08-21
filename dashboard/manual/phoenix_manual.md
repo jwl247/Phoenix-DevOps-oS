@@ -58,7 +58,7 @@ Switch state persists in browser storage between sessions.
 - **SYSTEM STATUS** — operational state
 - **HELIX ENGINE** — core engine status
 - **THROUGHPUT** — live ops/sec from packages-worker when reachable
-- **HELP DESK** — Ollama / Grok availability
+- **HELP DESK** — Ollama availability (Claude fallback)
 
 ### Navigation bar
 Browse Phoenix root, home, documents, desktop, drives, and pinned frequent paths. Use **+ add path** to pin directories.
@@ -74,15 +74,13 @@ The Help Desk answers operator questions about Phoenix.
 
 ### Provider chain (automatic)
 1. **Ollama** (local) — primary. Requires Ollama running at `http://localhost:11434`.
-2. **Grok** (xAI cloud) — fallback when Ollama is unavailable. Requires `XAI_API_KEY` or `PHOENIX_GROK_KEY`.
-3. **Claude** (subscription or API key) — tertiary fallback.
+2. **Claude** (subscription or API key) — fallback when Ollama is unavailable.
 
 Click the provider line at the bottom of the Help Desk to change auth settings.
 
 ### Boot auth modal
 On launch, choose:
 - **OLLAMA** — local model (default for Help Desk)
-- **GROK** — set xAI API key for cloud fallback
 - **SUBSCRIPTION** — Claude Code CLI (`claude login`)
 - **API KEY** — Anthropic API key
 
@@ -113,10 +111,9 @@ Settings save to `~/.phoenix/ai_auth.json` when the save checkbox is checked.
 | `PHOENIX_ROOT` | Phoenix install root |
 | `CLONEPOOL_DIR` | Local clonepool path (default `~/Phoenix/clonepool`) |
 | `PHOENIX_WORKER_URL` | Cloudflare Worker URL for R2 + D1 sync |
-| `PHOENIX_AUTH` | Worker auth token |
+| `PHOENIX_AUTH` | Shared bearer token for protected Worker routes |
 | `PHOENIX_CACHE` | Local trimmed cache directory |
 | `PHOENIX_OLLAMA_URL` | Ollama endpoint (default `http://localhost:11434`) |
-| `PHOENIX_GROK_KEY` / `XAI_API_KEY` | Grok fallback API key |
 
 ---
 
@@ -140,6 +137,21 @@ cd phoenix-core && make intake
 ```
 
 Offline mode works without `PHOENIX_WORKER_URL` — local sidecar only.
+
+### Worker authentication
+
+Worker sync is optional. Set `PHOENIX_WORKER_URL` and `PHOENIX_AUTH` only when
+this machine should access your protected D1/R2 Worker. Phoenix uses one HTTP
+format for every protected Phoenix service:
+
+```http
+Authorization: Bearer <PHOENIX_AUTH>
+```
+
+On Windows, set both values in `~/.phoenix_env.ps1`; on Linux/macOS, set them
+in `~/.phoenix_env.sh`. Restart the terminal or dashboard after changing them.
+Never put the token in URLs, custom `X-Phoenix-Auth` headers, screenshots, or
+the dashboard AI settings. See `docs/AUTHENTICATION.md` for the full policy.
 
 ---
 
@@ -190,9 +202,9 @@ cd dashboard
 
 | Symptom | Fix |
 |---------|-----|
-| Help Desk says "AI offline" | Start Ollama: `ollama serve`. Or set Grok/Claude key in auth modal. |
+| Help Desk says "AI offline" | Start Ollama: `ollama serve`. Or set Claude key in auth modal. |
 | Throughput shows `--` | packages-worker not reachable; check Worker URL and network. |
-| Intake fails D1 sync | Set `PHOENIX_WORKER_URL` and `PHOENIX_AUTH`. Offline intake still writes local sidecar. |
+| Intake fails D1 sync | Set `PHOENIX_WORKER_URL` and `PHOENIX_AUTH`; protected requests use `Authorization: Bearer`. Offline intake still writes local sidecar. |
 | Claude CLI not found | `npm install -g @anthropic-ai/claude-code` then `claude login` |
 | Ollama model missing | `ollama pull llama3.2` (or your chosen model) |
 
