@@ -34,7 +34,7 @@ The Electron dashboard is the Phoenix desktop surface.
 | **Sector 1** | Boot/kernel — `sector1/`, frank3, GRUB |
 | **Sector 2** | Packages/clone — `intake`, clonepool (`intake status`, `usys clone`) |
 | **Sector 3** | Comms/network — `sector3/services/`, dashboard systemd units |
-| **Sector 4** | Helix/Frank — `SECTOR4/`, vault (`usys search`) |
+| **Sector 4** | Helix/Frank — `sector4/`, vault (`usys search`) |
 | **Helix Engine** | C-core — `phoenix-core/` ingress/egress |
 
 **Sector actions** (dropdown + EXECUTE):
@@ -148,8 +148,11 @@ format for every protected Phoenix service:
 Authorization: Bearer <PHOENIX_AUTH>
 ```
 
-On Windows, set both values in `~/.phoenix_env.ps1`; on Linux/macOS, set them
-in `~/.phoenix_env.sh`. Restart the terminal or dashboard after changing them.
+On Windows, run `usys init` — prompts once, stores both values as your Windows
+user-scope environment variables, and wires your PowerShell profile to load
+them silently in every new terminal. Don't hand-edit `~/.phoenix_env.ps1` —
+`usys init`'s values are the canonical copy. On Linux/macOS, set them in
+`~/.phoenix_env.sh`. Restart the terminal or dashboard after changing them.
 Never put the token in URLs, custom `X-Phoenix-Auth` headers, screenshots, or
 the dashboard AI settings. See `docs/AUTHENTICATION.md` for the full policy.
 

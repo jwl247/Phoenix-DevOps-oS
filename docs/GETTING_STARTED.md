@@ -167,8 +167,6 @@ Full detail: [`GLOBAL_COMMANDS.md`](./GLOBAL_COMMANDS.md)
 
 ## Environment variables
 
-Set these in `~/.phoenix_env.ps1` (Windows) or `~/.phoenix_env.sh` (Linux/macOS).
-
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `PHOENIX_ROOT` | Phoenix install root | `~/Phoenix/Phoenix-DevOps-oS` |
@@ -177,6 +175,15 @@ Set these in `~/.phoenix_env.ps1` (Windows) or `~/.phoenix_env.sh` (Linux/macOS)
 | `PHOENIX_AUTH` | Worker auth token | *(unset)* |
 | `PHOENIX_OLLAMA_URL` | Ollama endpoint | `http://localhost:11434` |
 | `PHOENIX_GROK_KEY` | xAI Grok API key | *(unset)* |
+
+**Windows:** run `usys init` — prompts once for `PHOENIX_WORKER_URL`/`PHOENIX_AUTH`
+(skips anything already set), stores them as your Windows user-scope environment
+variables, and wires your PowerShell profile to load them silently in every new
+terminal. Don't hand-edit a `.phoenix_env.ps1` file — `usys init`'s variables
+are the canonical copy.
+
+**Linux/macOS:** set these in `~/.phoenix_env.sh`, which is sourced automatically
+by every Phoenix command.
 
 Without `PHOENIX_WORKER_URL` Phoenix works fully offline — intake writes local sidecars only and skips D1 sync.
 
@@ -226,7 +233,7 @@ Phoenix-DevOps-oS/
 ├── sector1/          Boot, kernel, auth, concierge
 ├── sector2/          Package handler, frank, clone pool, propagator
 ├── sector3/          Translator, romeo/juliet, quadengine, services
-├── SECTOR4/          Helix engine, Frank vault
+├── sector4/          Helix engine, Frank vault
 ├── phoenix-core/     C-core Helix ingress/egress
 ├── dashboard/        Electron desktop
 ├── docs/             All documentation (you are here)
@@ -295,8 +302,8 @@ sidecar only — this is normal offline operation, not an error.
 |----------|---------|
 | [`QUICK_START.md`](./QUICK_START.md) | Condensed install + first commands |
 | [`GLOBAL_COMMANDS.md`](./GLOBAL_COMMANDS.md) | Full command reference with examples |
-| [`dashboard/manual/phoenix_manual.md`](../dashboard/manual/phoenix_manual.md) | Operator manual (also in the HUD) |
-| [`dashboard/manual/laurie_guide.md`](../dashboard/manual/laurie_guide.md) | Plain-English guide, no technical knowledge needed |
+| [`dashboard/manual/PHOENIX_MANUAL.md`](../dashboard/manual/PHOENIX_MANUAL.md) | Master operator manual (also in the HUD) |
+| [`dashboard/manual/LAURIE_GUIDE.md`](../dashboard/manual/LAURIE_GUIDE.md) | Plain-English guide, no technical knowledge needed |
 | [`CLAUDE.md`](../CLAUDE.md) | Architecture master reference |
 
 ---
