@@ -27,7 +27,7 @@ import ctypes
 import math
 from datetime import datetime
 from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Dict, Optional, List, Tuple
 from collections import deque, defaultdict
 from enum import Enum
@@ -83,6 +83,31 @@ class SystemConfig:
     # Paths
     control_file:             str   = "/var/lib/ai-paging/control.json"
     log_file:                 str   = "/var/log/ai-paging-manager.log"
+
+    def __post_init__(self):
+        """
+        Override any field via PHOENIX_PAGING_<FIELD_NAME> (uppercase),
+        matching Phoenix's PHOENIX_* env-var convention used everywhere
+        else (usys, intake.py, etc.) instead of hardcoding one machine's
+        hardware into the defaults above. bool/float/int fields are cast
+        from the field's own type; str fields pass through as-is.
+
+        Example: PHOENIX_PAGING_NVME_MOUNT=/root PHOENIX_PAGING_MAX_SWAP_GB=1.5
+        """
+        for f in fields(self):
+            env_name = f"PHOENIX_PAGING_{f.name.upper()}"
+            raw = os.environ.get(env_name)
+            if raw is None:
+                continue
+            if f.type is bool or isinstance(getattr(self, f.name), bool):
+                value = raw.strip().lower() in ("1", "true", "yes", "on")
+            elif f.type is float or isinstance(getattr(self, f.name), float):
+                value = float(raw)
+            elif f.type is int or isinstance(getattr(self, f.name), int):
+                value = int(raw)
+            else:
+                value = raw
+            setattr(self, f.name, value)
 
 
 # ============================================================================

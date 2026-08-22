@@ -8,8 +8,8 @@
   "runtime": "qemu",
   "dependencies": ["qemu-system"],
   "environment": {
-    "PHOENIX_VM_RAM":  "512M",
-    "PHOENIX_VM_CPUS": "2",
+    "PHOENIX_VM_RAM":  "2048M",
+    "PHOENIX_VM_CPUS": "3",
     "PHOENIX_VM_DISPLAY": "sdl"
   },
   "permissions": [
@@ -25,8 +25,8 @@
     "arch": "amd64",
     "flavor": "genericcloud",
     "size_bytes": 400000000,
-    "login": "root",
-    "login_note": "Default cloud image — use -snapshot for ephemeral boot, add cloud-init seed for full config",
+    "login": "phoenix",
+    "login_note": "Root password login is blocked by Debian's default sshd config regardless of account state. Cloud-init (tools/poc/debian-seed/) creates a sudo-capable 'phoenix' user (password 'phoenix') instead -- see PHOENIX_MANUAL.md #4 'Running a full distro'. ssh -p 2222 phoenix@127.0.0.1 once booted.",
     "license": "GPL-2.0"
   }
 }
