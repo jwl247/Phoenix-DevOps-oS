@@ -174,6 +174,45 @@ Without `PHOENIX_WORKER_URL`, Phoenix works fully offline — intake writes
 local sidecars only and skips D1 sync. See §11 for how to set
 `PHOENIX_AUTH`/`PHOENIX_WORKER_URL` correctly per platform.
 
+### Running a full distro (`usys run <distro>`)
+
+`run` isn't limited to scripts — a `runtime: qemu` suite (see
+`tools/poc/debian.suite.json`) boots a full disk image via QEMU. No
+installer, no WSL, no Hyper-V required; Phoenix brings the OS. Confirmed
+working: `usys run debian` boots Debian 12 (Bookworm) from the clone pool.
+
+**One-time setup** (suite + disk image aren't bundled in git — too large):
+1. `usys distro fetch-qemu` for instructions, or `winget install
+   SoftwareFreedomConservancy.QEMU` then copy the install directory's
+   contents into the `qemu-system` suite folder in your clone pool
+2. Download the distro image into its suite folder (e.g.
+   `clonepool/debian/debian-12.5-genericcloud-amd64.qcow2` from
+   `cloud.debian.org` — verify against the published `SHA512SUMS` first)
+3. Copy `tools/poc/debian-seed/` to `clonepool/debian/seed/` — this is the
+   cloud-init login (see below)
+
+**Run it:** `usys run debian --accel tcg` (or `--accel hyperv` on Windows
+with the Hypervisor Platform feature enabled, for near-native speed instead
+of software emulation)
+
+**Login:** cloud disk images ship with no usable console password —
+`root`'s password login is blocked by Debian's default sshd config
+regardless of what's set. `usys run` auto-detects a `seed/user-data` folder
+next to the suite's image and serves it over a local HTTP server
+(`127.0.0.1:8000`, reachable from the guest at `10.0.2.2` — QEMU user-mode
+networking's standard host mapping) via a `-smbios` cloud-init hint. No ISO
+tooling needed. This seeds a sudo-capable `phoenix` user (password
+`phoenix`), reachable once booted via:
+```bash
+ssh -p 2222 phoenix@127.0.0.1
+```
+(`hostfwd=tcp::2222-:22` is added to the VM's networking automatically
+whenever a seed is detected.)
+
+To add a new distro suite, copy `tools/poc/debian.suite.json` as a
+template and drop a `seed/user-data`+`seed/meta-data` pair (standard
+cloud-init NoCloud format) next to the new image.
+
 ---
 
 ## 5. Desktop Command Center

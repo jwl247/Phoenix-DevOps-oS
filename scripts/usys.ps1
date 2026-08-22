@@ -945,15 +945,42 @@ function Invoke-UsysRun {
                     Write-UsysInfo '  → For full speed run: usys run debian --accel hyperv'
                 }
 
+                # ── Cloud-init seed (convention: a 'seed/user-data' dir next to
+                #    the suite's disk image) — no ISO tooling needed. Serves the
+                #    seed over HTTP on loopback; QEMU's user-mode network maps
+                #    that to 10.0.2.2 inside the guest. See PHOENIX_MANUAL.md
+                #    "Distro demo" section for the story behind this.
+                $seedDir = Join-Path $suite.Path 'seed'
+                $netArgs = @('-net', 'nic,model=virtio', '-net', 'user')
+                if (Test-Path (Join-Path $seedDir 'user-data')) {
+                    $seedPort = 8000
+                    $listening = Get-NetTCPConnection -LocalPort $seedPort -State Listen -ErrorAction SilentlyContinue
+                    if (-not $listening) {
+                        $pythonCmd = if (Get-Command python -ErrorAction SilentlyContinue) { (Get-Command python).Source }
+                                     elseif (Get-Command python3 -ErrorAction SilentlyContinue) { (Get-Command python3).Source }
+                                     else { $null }
+                        if ($pythonCmd) {
+                            Start-Process -FilePath $pythonCmd -ArgumentList @('-m','http.server',"$seedPort",'--bind','127.0.0.1') `
+                                -WorkingDirectory $seedDir -WindowStyle Hidden
+                            Write-UsysInfo "Cloud-init seed server started on 127.0.0.1:$seedPort ($seedDir)"
+                            Start-Sleep -Milliseconds 500
+                        } else {
+                            Write-UsysWarn 'python not found — cannot serve cloud-init seed. VM will boot with no login.'
+                        }
+                    }
+                    $netArgs = @('-net', "user,hostfwd=tcp::2222-:22", '-net', 'nic,model=virtio')
+                    $smbiosArg = @('-smbios', "type=1,serial=ds=nocloud-net;s=http://10.0.2.2:$seedPort/")
+                    Write-UsysInfo "Cloud-init: user 'phoenix' / password 'phoenix' (sudo, no key needed) — SSH: ssh -p 2222 phoenix@127.0.0.1"
+                }
+
                 # ── Build QEMU argument list ──────────────────────────────
                 $qemuArgs = @(
                     '-m',       $ram,
                     '-smp',     $cpus,
                     '-display', $display,
-                    '-drive',   "file=$entryPath,format=qcow2,if=virtio",
-                    '-net',     'nic,model=virtio',
-                    '-net',     'user'
-                )
+                    '-drive',   "file=$entryPath,format=qcow2,if=virtio"
+                ) + $netArgs
+                if ($smbiosArg) { $qemuArgs += $smbiosArg }
 
                 # Accelerator args — hyperv gets the full enlightenment set
                 # These tell the guest kernel to use Hyper-V hypercalls instead of

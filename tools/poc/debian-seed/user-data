@@ -1,0 +1,11 @@
+#cloud-config
+hostname: phoenix-debian
+ssh_pwauth: true
+users:
+  - name: phoenix
+    plain_text_passwd: phoenix
+    lock_passwd: false
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+chpasswd:
+  expire: false
