@@ -1,5 +1,5 @@
 'use strict';
-// helix_packet.js — JS QuadralingualPacket / Helix memory (SectorID.CLAUDE)
+// helix-packet.js — JS QuadralingualPacket / Helix memory (SectorID.CLAUDE)
 // Mirrors coms1/freewheeling.py packet format. NOSQL computed hot; rest lazy.
 // Phoenix DevOps OS / jwl247 / GPL v3
 

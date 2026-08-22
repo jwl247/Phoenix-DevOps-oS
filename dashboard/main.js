@@ -771,10 +771,10 @@ ipcMain.handle('clear-ai-auth', async () => {
 });
 
 // ── Claude / Ollama AI Chat ───────────────────────────────────────────────────
-// JS-side Helix memory — HelixMemoryJS (helix_packet.js).
+// JS-side Helix memory — HelixMemoryJS (helix-packet.js).
 // Same QuadralingualPacket format as Python coms1/freewheeling.py.
 // NOSQL hot; VECTOR/RELATIONAL/TIMESERIES lazy. Push syncs to Python daemon when live.
-const { HelixMemoryJS } = require('./helix_packet');
+const { HelixMemoryJS } = require('./helix-packet');
 require('./clonepool-workdir').register({ ipcMain, dialog });
 require('./screenshot-analysis').register({ ipcMain, desktopCapturer });
 require('./hud-layout-backend').register({ ipcMain, spawn, dialog });
