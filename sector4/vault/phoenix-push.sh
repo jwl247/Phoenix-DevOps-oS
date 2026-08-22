@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 # =============================================================================
-# phoenix_push.sh -- Phoenix DevOps Vault Push
+# phoenix-push.sh -- Phoenix DevOps Vault Push
 # Author:  jwl247 / Phoenix DevOps LLC
 # Sector:  4 (breach_coms4 / master vault)
 # Role:    Pushes files or directories INTO breach_coms4 CLONEPOOL via rsync.
@@ -14,7 +14,7 @@ VAULT="/mnt/g"
 CLONEPOOL="${VAULT}/CLONEPOOL"
 CATALOG_DB="${HOME}/.catalog/catalog.db"
 LOG_DIR="${HOME}/.unitedsys/logs"
-LOG_FILE="${LOG_DIR}/phoenix_push.log"
+LOG_FILE="${LOG_DIR}/phoenix-push.log"
 VERSION="0.1.0"
 
 mkdir -p "${LOG_DIR}"
@@ -68,7 +68,7 @@ cmd_push() {
 }
 
 cmd_status() {
-    echo "phoenix_push.sh v${VERSION}"
+    echo "phoenix-push.sh v${VERSION}"
     echo ""
     echo "-- Vault --"
     [[ -d "${VAULT}" ]] && echo "  [OK] ${VAULT} (breach_coms4)" || echo "  [!!] NOT MOUNTED: ${VAULT}"
@@ -85,12 +85,12 @@ cmd_status() {
 }
 
 cmd_help() {
-    echo "phoenix_push.sh v${VERSION} -- push files to breach_coms4 vault"
+    echo "phoenix-push.sh v${VERSION} -- push files to breach_coms4 vault"
     echo ""
     echo "Usage:"
-    echo "  phoenix_push.sh push <file|dir> [...]   push to CLONEPOOL (never overwrites)"
-    echo "  phoenix_push.sh status                  vault mount + recent pushes"
-    echo "  phoenix_push.sh help                    this message"
+    echo "  phoenix-push.sh push <file|dir> [...]   push to CLONEPOOL (never overwrites)"
+    echo "  phoenix-push.sh status                  vault mount + recent pushes"
+    echo "  phoenix-push.sh help                    this message"
     echo ""
     echo "Vault:     ${VAULT} (breach_coms4)"
     echo "Clonepool: ${CLONEPOOL}"
@@ -102,10 +102,10 @@ cmd_help() {
 case "${1:-help}" in
     push)
         shift
-        [[ $# -ge 1 ]] || die "Usage: phoenix_push.sh push <file|dir> [...]"
+        [[ $# -ge 1 ]] || die "Usage: phoenix-push.sh push <file|dir> [...]"
         cmd_push "$@"
         ;;
     status) cmd_status ;;
     help)   cmd_help ;;
-    *)      die "Unknown command: $1 -- run: phoenix_push.sh help" ;;
+    *)      die "Unknown command: $1 -- run: phoenix-push.sh help" ;;
 esac

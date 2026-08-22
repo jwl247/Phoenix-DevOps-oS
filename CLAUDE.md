@@ -100,7 +100,7 @@ sector3/
 
 sector4/
   intake/            intake.sh
-  vault/             phoenix_push.sh, download.sh
+  vault/             phoenix-push.sh, download.sh
   helix/             Helix engine (double strand, 300k+ ops/sec, 100% hit rate)
   frank/             Frank (environment orchestrator, audit logger, never moves)
 ```

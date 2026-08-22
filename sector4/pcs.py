@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # =============================================================================
 # pcs.py — Proximity Control String
-# Phoenix-DevOps-oS // SECTOR4
+# Phoenix-DevOps-oS // sector4
 # Author: jwl247 / Phoenix DevOps LLC
 # License: GPL-3.0
 #
