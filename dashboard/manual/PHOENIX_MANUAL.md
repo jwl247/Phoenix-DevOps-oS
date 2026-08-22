@@ -599,10 +599,24 @@ Then remove the Phoenix block from `~/.bashrc` and `~/.zshrc`.
 Python "sector4 Helix" (`freewheeling.py`, `helix_memory.py`) as a live
 in-process memory engine running alongside the C line. Neither file exists
 outside `archive/fossil-consolidation-20260819-210541/` anymore — they were
-archived as fossils in the 2026-08-21 repo cleanup and this note was never
-updated at the time. Live `sector4/` today only contains `intake/`,
-`pcs.py`, and `vault/`. If a Python-side Helix engine is rebuilt, document
-its real location here rather than reviving this stale reference.
+archived as fossils in the 2026-08-21 repo cleanup. Live `sector4/` today
+only contains `intake/`, `pcs.py`, `vault/`, and `paging.py`/
+`paging_windows.py` (see §4, revived from archive same session).
+
+**But** a *different*, real Python Helix memory engine does exist live at
+`sector1/helix/helix_complete_stack.py` — `HelixCache`/`HelixMemoryManager`/
+`HelixFS`/`HelixSystem`, real L1/L2/L3 tiering with compression and
+promotion/demotion, zero external deps, 883 lines. Verified working this
+session with a real stress test
+(`sector1/helix/helix_stack_stress_test.py`) that forces actual tiering
+pressure — 360 demotions, 170 compressions, 40 promotions, all genuine.
+Its own demo() is misleading (test data too small to ever trigger tiering,
+looks broken when it isn't) — trust the stress test's numbers over the
+demo's. What's genuinely still missing: OS-level transparency — only code
+that explicitly calls `helix.memory.malloc()` benefits today. The file's
+own roadmap comments already scope the options (LD_PRELOAD malloc
+interception, or a kernel module) — not undertaken yet, a real scope
+decision for a future session, not a small addition.
 
 ---
 
