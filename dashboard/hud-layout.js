@@ -202,27 +202,16 @@
     });
 
     // 7. Clonepool browser
-    document.getElementById('action-clonepool')?.addEventListener('click', async () => {
-        const panel = document.getElementById('panel-clonepool');
-        if (!panel) return;
-        panel.classList.toggle('open');
-        if (!panel.classList.contains('open')) return;
-        panel.innerHTML = 'loading clonepool...';
-        const result = await invoke('list-clonepool-files');
-        if (!result.success) {
-            panel.innerHTML = `<span style="color:var(--red-light)">${result.error}</span>`;
-            return;
-        }
-        if (!result.files.length) {
-            panel.innerHTML = 'Clonepool is empty.';
-            return;
-        }
-        panel.innerHTML = '';
+    let clonepoolSearchTimer = null;
+
+    function renderClonepoolRows(panel, result) {
+        const list = document.createElement('div');
         result.files.forEach(file => {
             const row = document.createElement('div');
             row.style.cssText = 'display:flex;justify-content:space-between;gap:6px;padding:4px 0;font-size:10px;border-bottom:1px solid rgba(255,255,255,0.06);';
             const name = document.createElement('span');
             name.textContent = file.relPath;
+            name.title = file.relPath;
             name.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;';
             const cloneBtn = document.createElement('button');
             cloneBtn.textContent = 'CLONE';
@@ -252,8 +241,54 @@
             row.appendChild(name);
             row.appendChild(cloneBtn);
             row.appendChild(syncBtn);
-            panel.appendChild(row);
+            list.appendChild(row);
         });
+        return list;
+    }
+
+    async function loadClonepool(panel, query) {
+        const status = panel.querySelector('.clonepool-status');
+        const listSlot = panel.querySelector('.clonepool-list');
+        if (status) status.textContent = 'loading...';
+        const result = await invoke('list-clonepool-files', { query });
+        if (!result.success) {
+            if (status) status.textContent = '';
+            listSlot.innerHTML = `<span style="color:var(--red-light)">${result.error}</span>`;
+            return;
+        }
+        if (!result.files.length) {
+            if (status) status.textContent = query ? `no matches for "${query}"` : 'clonepool is empty';
+            listSlot.innerHTML = '';
+            return;
+        }
+        if (status) {
+            status.textContent = result.truncated
+                ? `showing ${result.files.length} of ${result.matched}${query ? ` matching "${query}"` : ''} (${result.total} total — narrow with search)`
+                : `${result.files.length}${query ? ` matching "${query}"` : ''} of ${result.total} total`;
+        }
+        listSlot.innerHTML = '';
+        listSlot.appendChild(renderClonepoolRows(panel, result));
+    }
+
+    document.getElementById('action-clonepool')?.addEventListener('click', async () => {
+        const panel = document.getElementById('panel-clonepool');
+        if (!panel) return;
+        panel.classList.toggle('open');
+        if (!panel.classList.contains('open')) return;
+
+        panel.innerHTML = `
+            <input type="text" class="clonepool-search" placeholder="filter by path..."
+                   style="width:100%;box-sizing:border-box;margin-bottom:6px;padding:4px 6px;font-size:10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:inherit;">
+            <div class="clonepool-status" style="font-size:9px;opacity:0.6;margin-bottom:4px;"></div>
+            <div class="clonepool-list"></div>
+        `;
+        const searchInput = panel.querySelector('.clonepool-search');
+        searchInput.addEventListener('input', () => {
+            clearTimeout(clonepoolSearchTimer);
+            clonepoolSearchTimer = setTimeout(() => loadClonepool(panel, searchInput.value), 250);
+        });
+
+        await loadClonepool(panel, '');
     });
 
     // 8. Screenshot — single-shot capture + optional Claude analysis

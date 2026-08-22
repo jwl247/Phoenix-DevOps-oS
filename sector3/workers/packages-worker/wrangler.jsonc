@@ -13,5 +13,11 @@
       "database_name": "phoenix-catalog",
       "database_id":   "0514d761-1db4-4e4f-8d1b-e5657909c0c0"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding":     "CLONEPOOL_BUCKET",
+      "bucket_name": "phoenix-clonepool"
+    }
   ]
 }

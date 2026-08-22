@@ -52,22 +52,32 @@ function isInside(parentDir, targetPath) {
     }
 }
 
-// Recursive clonepool listing, depth-bounded so a huge pool can't hang the UI.
-function walkClonepool(dir, baseDir, depth, maxDepth, out) {
+// Recursive clonepool listing. Depth-bounded (doesn't help much once a pool
+// is wide rather than deep — see below) AND async: every fs call goes
+// through fs.promises so each await yields back to Electron's event loop.
+// The clonepool crossed 15k files after a large intake pass and the old
+// fs.readdirSync/statSync version blocked the ENTIRE app (not just this
+// panel) for ~2s per open — this fixes the freeze, not just this panel's
+// slowness. Still walks every file to sort by recency, so still takes a
+// couple seconds on a large pool, but the rest of the app stays responsive
+// while it runs.
+const fsp = fs.promises;
+
+async function walkClonepool(dir, baseDir, depth, maxDepth, out) {
     if (depth > maxDepth) return;
     let entries;
     try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
+        entries = await fsp.readdir(dir, { withFileTypes: true });
     } catch (_) {
         return;
     }
     for (const entry of entries) {
         const abs = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-            walkClonepool(abs, baseDir, depth + 1, maxDepth, out);
+            await walkClonepool(abs, baseDir, depth + 1, maxDepth, out);
         } else if (entry.isFile()) {
             let stats;
-            try { stats = fs.statSync(abs); } catch (_) { continue; }
+            try { stats = await fsp.stat(abs); } catch (_) { continue; }
             out.push({
                 relPath: path.relative(baseDir, abs),
                 absPath: abs,
@@ -81,15 +91,32 @@ function walkClonepool(dir, baseDir, depth, maxDepth, out) {
 
 function register({ ipcMain, dialog }) {
     // List everything currently in the clonepool, real filesystem read, no cache.
-    ipcMain.handle('list-clonepool-files', async () => {
+    // `query` filters by substring on relPath before capping — so searching
+    // for an older file still finds it even though the unfiltered list only
+    // shows the most-recent LIST_CAP files. `limit` overrides LIST_CAP.
+    const LIST_CAP = 200;
+    ipcMain.handle('list-clonepool-files', async (event, { query, limit } = {}) => {
         const clonepoolDir = resolveClonepoolDir();
         if (!fs.existsSync(clonepoolDir)) {
             return { success: false, error: `Clonepool not found at ${clonepoolDir}`, files: [] };
         }
         const out = [];
-        walkClonepool(clonepoolDir, clonepoolDir, 0, 6, out);
-        out.sort((a, b) => a.relPath.localeCompare(b.relPath));
-        return { success: true, clonepoolDir, files: out };
+        await walkClonepool(clonepoolDir, clonepoolDir, 0, 6, out);
+
+        const q = (query || '').trim().toLowerCase();
+        const matched = q ? out.filter(f => f.relPath.toLowerCase().includes(q)) : out;
+        matched.sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+        const cap = limit || LIST_CAP;
+        const files = matched.slice(0, cap);
+        return {
+            success: true,
+            clonepoolDir,
+            files,
+            total: out.length,
+            matched: matched.length,
+            truncated: matched.length > files.length
+        };
     });
 
     // Native directory picker — the target-selection gate. No hardcoded destination.
