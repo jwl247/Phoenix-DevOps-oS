@@ -98,15 +98,25 @@ Each needs a worker session to finish. Notation for each.
 - Worker: replace entirely with a proper bootstrap script
 - Notation: `setupsec4.py` runs once on fresh deploy, idempotent
 
-**SECTOR4/coms1/franken.py** — SKETCH LEVEL
-- Has imports and ProcessManager stub but no functional bodies
-- This is the Franken2 LEAD for coms ring 1 — load balancer, PCS stage,
-  overflow handler, medic
-- _kali_import/franken2.py is the better version (has real bodies)
-- BUT franken2.py has circular import bug (tries to import from itself line 34)
-- Worker: merge kali_import/franken2.py logic into SECTOR4/coms1/franken.py,
-  fix circular import (the import block should pull from helix_api + freewheeling)
-- Notation: franken.py is LEAD of coms ring team
+**franken.py / franken2.py — merge target no longer exists, needs re-scoping**
+- Was: `SECTOR4/coms1/franken.py` (sketch-level Franken2 LEAD for coms
+  ring 1 — load balancer, PCS stage, overflow handler, medic) with a
+  fuller version at `_kali_import/franken2.py` (real bodies, but a
+  circular import bug — tries to import from itself at line 34; real
+  Frank RAM manager, 8GB → 16GB+ via zlib compression).
+- **Neither `SECTOR4/coms1/franken.py` nor `helix_api.py` exist in the
+  live tree anymore** — both were archived as fossils in the 2026-08-21
+  cleanup, along with the whole Python-side Helix engine (see
+  `dashboard/manual/PHOENIX_MANUAL.md` §17). The old merge plan ("pull
+  franken2.py's real bodies into SECTOR4/coms1/franken.py, fix the
+  circular import to pull from helix_api + freewheeling") has no live
+  target left to merge into.
+- `_kali_import/` itself was a stale one-time recovery dump (not live
+  code — see its own IMPORT_NOTES.md), archived 2026-08-22 to
+  `archive/kali-import-consolidation-20260822-113129/franken2.py`.
+- This needs a fresh decision, not a bug fix: rebuild Frank's RAM-tier
+  management fresh against current sector2/4 code, or leave franken2.py
+  archived as reference-only.
 
 **phoenix-core/src/helix_core.c** — STUB
 - Only helix_generate_hex_id() defined (SHA256 of input string)
@@ -145,16 +155,21 @@ Each needs a worker session to finish. Notation for each.
 - Worker: create dir + write clone_pool_index.json schema
 - Notation: index maps hex_id → R2 key → tier → state → version history
 
-**_kali_import/dblhelix.py** — needs numpy removed
-- Original DoubleHelixStorage with numpy dependency
-- freewheeling.py (coms1) already replaced it with pure Python
-- Worker: verify coms1/freewheeling.py is the canonical version, archive dblhelix.py
-- Notation: dblhelix.py is reference only, not for production use
+**dblhelix.py — DONE, was blocking on stale context**
+- Original DoubleHelixStorage with numpy dependency. Task used to say
+  "verify coms1/freewheeling.py is canonical, then archive dblhelix.py" —
+  but coms1/freewheeling.py no longer exists anywhere in the live tree
+  (archived as a fossil in the 2026-08-21 cleanup, along with the whole
+  Python-side Helix engine — see PHOENIX_MANUAL.md §17 Architecture Notes).
+  Nothing left to verify against.
+- Resolved 2026-08-22: `_kali_import/` itself was a stale one-time
+  recovery dump (not live code, see its own IMPORT_NOTES.md), so the whole
+  folder was archived to
+  `archive/kali-import-consolidation-20260822-113129/`. dblhelix.py is
+  there now — reference only, not for production use.
 
-**_kali_import/franken2.py** — circular import
-- Tries to import from itself at line 34
-- Real Frank RAM manager (8GB → 16GB+ via zlib compression)
-- Worker: fix import block — should import from helix_api.py not self
+**franken2.py** — see the fuller "franken.py / franken2.py" entry in
+PRIORITY 1 above (2026-08-22: merge target archived, needs re-scoping).
 - Notation: this is the Frank that manages physical RAM tiers, runs as daemon
 
 ---
@@ -320,7 +335,7 @@ PRIORITY 1 — import method
 [ ] Define 4 missing classes in helix_memory.py
 
 PRIORITY 2 — pipeline wiring
-[ ] Fix circular import in franken2.py, merge into SECTOR4/coms1/franken.py
+[ ] Re-scope franken.py/franken2.py — merge target archived 2026-08-22, see PART 2.1
 [ ] Complete helix_core.c (helix_create_sidecar, helix_log_event)
 [ ] Complete helix_ingress.c (sidecar write + R2 upload + D1 POST)
 [ ] Write setupsec4.py (proper bootstrap, replace chat log)
