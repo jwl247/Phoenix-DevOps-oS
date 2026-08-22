@@ -1038,28 +1038,48 @@ class PhoenixDashboard {
 
     async _refreshHelpDeskStatus() {
         if (!isElectron || !ipcRenderer) return;
+
+        // This status line only means something for the helpdesk/ollama
+        // provider — pinging Ollama and showing its state when a different
+        // provider (claude / subscription) is actually configured just
+        // shows a stale "OLLAMA" label that has nothing to do with what's
+        // really answering. Check the configured provider first.
+        const authStatus = await ipcRenderer.invoke('get-ai-status').catch(() => null);
+        const provider = (authStatus?.provider || 'helpdesk').toLowerCase();
+
+        if (provider === 'claude') {
+            this._updateProviderIndicator('status-ok', `CLAUDE API (${authStatus.model || 'claude-sonnet-5'})`, 'claude (api key)',
+                'AI Chat ready — Claude API. Use HELP CHAT tab for the operator manual.');
+            return;
+        }
+        if (provider === 'subscription') {
+            this._updateProviderIndicator('status-ok', 'CLAUDE (subscription)', 'claude (subscription) — full tool access',
+                'AI Chat ready — Claude (subscription, full tool access, no Ollama). Use HELP CHAT tab for the operator manual.');
+            return;
+        }
+
         await ipcRenderer.invoke('ensure-ollama').catch(() => {});
         const status = await ipcRenderer.invoke('check-ollama').catch(() => ({ online: false }));
         this._updateHelpDeskStatus(status);
     }
 
-    _updateHelpDeskStatus(status) {
+    _updateProviderIndicator(statusClass, statusText, providerText, welcomeText) {
         const el = document.getElementById('helpdesk-status');
         const provider = document.getElementById('hud-provider');
-        if (!el) return;
+        const welcome = document.getElementById('hud-welcome-msg');
+        if (el) { el.textContent = statusText; el.className = statusClass; }
+        if (provider && !this._hudBusy) provider.textContent = providerText;
+        if (welcome && welcomeText) welcome.textContent = welcomeText;
+    }
+
+    _updateHelpDeskStatus(status) {
         if (status?.online) {
             const model = status.model || (status.models && status.models[0]) || 'llama3.2';
-            el.textContent = `OLLAMA (${model})`;
-            el.className = 'status-ok';
-            if (provider && !this._hudBusy) {
-                provider.textContent = `ollama → claude · ${model}`;
-            }
+            this._updateProviderIndicator('status-ok', `OLLAMA (${model})`, `ollama → claude · ${model}`,
+                'AI Chat ready. Ollama primary, Claude fallback. Use HELP CHAT tab for the operator manual.');
         } else {
-            el.textContent = 'OLLAMA OFFLINE';
-            el.className = 'status-warn';
-            if (provider && !this._hudBusy) {
-                provider.textContent = `ollama offline — ${status?.reason || 'start Ollama app'}`;
-            }
+            this._updateProviderIndicator('status-warn', 'OLLAMA OFFLINE', `ollama offline — ${status?.reason || 'start Ollama app'}`,
+                'AI Chat ready. Ollama primary, Claude fallback. Use HELP CHAT tab for the operator manual.');
         }
     }
 
@@ -1135,6 +1155,27 @@ class PhoenixDashboard {
         this._hudHistory.push({ role: 'user', content: message });
 
         const thinking = this._hudAppend('connecting to Ollama (first reply may take ~15s)...', 'hud-msg-thinking');
+        const box = document.getElementById('hud-messages');
+
+        // Streamed reply support: a chunk means Claude API streaming is
+        // actually in flight for this turn, so swap the "thinking" line
+        // for a live-growing message div on the FIRST delta. Ollama/
+        // subscription paths never send chunks, so `streamDiv` stays
+        // null and the old wait-for-full-response flow below still runs.
+        let streamDiv = null;
+        let streamText = '';
+        let unsubscribe = null;
+        if (isElectron && ipcRenderer && window.phoenix?.onStream) {
+            unsubscribe = window.phoenix.onStream('ai-chat-stream-chunk', ({ delta }) => {
+                if (!streamDiv) {
+                    thinking.remove();
+                    streamDiv = this._hudAppend('', 'hud-msg-assist');
+                }
+                streamText += delta;
+                streamDiv.textContent = streamText;
+                box.scrollTop = box.scrollHeight;
+            });
+        }
 
         let result;
         if (isElectron && ipcRenderer) {
@@ -1146,16 +1187,25 @@ class PhoenixDashboard {
         } else {
             result = { success: false, error: 'AI chat requires Electron runtime.' };
         }
+        if (unsubscribe) unsubscribe();
 
-        thinking.remove();
+        if (!streamDiv) thinking.remove();
 
         if (result.success) {
-            this._hudAppend(result.reply, 'hud-msg-assist');
+            if (streamDiv) {
+                // Streamed text already rendered incrementally — just make
+                // sure the final text matches exactly (in case a delta was
+                // still in flight when the invoke resolved).
+                streamDiv.textContent = result.reply;
+            } else {
+                this._hudAppend(result.reply, 'hud-msg-assist');
+            }
             this._hudHistory.push({ role: 'assistant', content: result.reply });
             const fb = result.fallback ? ` (fallback from ${result.fallbackFrom || 'ollama'})` : '';
             document.getElementById('hud-provider').textContent = `${result.provider}${fb}`;
             if (this._hudHistory.length > 40) this._hudHistory = this._hudHistory.slice(-40);
         } else {
+            if (streamDiv) streamDiv.remove();
             const err = (result.error || 'Help Desk unavailable.').replace(/\n/g, ' · ');
             this._hudAppend(err, 'hud-msg-error');
             document.getElementById('hud-provider').textContent = 'help desk offline — Ollama app must be running';

@@ -21,6 +21,24 @@ function resolvePs7Exe() {
     return process.platform === 'win32' ? 'pwsh.exe' : 'pwsh';
 }
 
+// Global commands (usys, clone, intake) live in scripts/usys.ps1, loaded
+// normally via $PROFILE on a real PS7 window. This shell runs -NoProfile
+// (deliberately — loading a user's full profile on every single command
+// would be slow and unpredictable), which means those commands were
+// silently missing here even though the module's own header claims "usys,
+// git, intake — runs exactly as it would in a real PS7 window." Dot-source
+// just usys.ps1 itself instead of the whole profile: same commands
+// available, none of the profile's other side effects, and it's a no-op
+// beyond defining functions (its "direct invocation" block only runs when
+// NOT dot-sourced, so this is safe to prepend silently every time).
+// tools/clone.ps1 has a second, conflicting `global:clone` — usys.ps1's is
+// the maintained one (explicitly "back-compat" wrapper over Invoke-UsysClone)
+// so only that one gets sourced, avoiding the shadow.
+function resolveUsysScript() {
+    const candidate = path.join(__dirname, '..', 'scripts', 'usys.ps1');
+    return fs.existsSync(candidate) ? candidate : null;
+}
+
 function register({ ipcMain, spawn }) {
     // One tracked cwd per dashboard session — starts wherever the process
     // itself started (matches opening a real PS7 window from Explorer).
@@ -49,9 +67,19 @@ function register({ ipcMain, spawn }) {
 
         return new Promise((resolve) => {
             const ps7Exe = resolvePs7Exe();
-            const proc = spawn(ps7Exe, ['-NoProfile', '-NoLogo', '-Command', trimmed], {
+            const usysScript = resolveUsysScript();
+            const fullCommand = usysScript
+                ? `. "${usysScript}" *> $null; ${trimmed}`
+                : trimmed;
+            const proc = spawn(ps7Exe, ['-NoProfile', '-NoLogo', '-Command', fullCommand], {
                 cwd,
-                shell: false
+                shell: false,
+                // Explicitly closed (not just unwritten) stdin. Left as an
+                // open-but-silent pipe, CLIs that check for piped input (e.g.
+                // `claude -p`) have to wait out a multi-second timeout
+                // guessing whether input is coming; closed gives them an
+                // immediate EOF instead.
+                stdio: ['ignore', 'pipe', 'pipe']
             });
             let stdout = '';
             let stderr = '';

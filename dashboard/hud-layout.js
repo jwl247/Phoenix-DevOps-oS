@@ -315,6 +315,45 @@
         });
     });
 
+    // 8b. Live Monitor — periodic capture only, no per-tick API call. Writes
+    // to a separate overwritten file (live/latest.png), not the watched
+    // hud-screenshots/ folder the manual SCREENSHOT button uses — see
+    // screenshot-analysis.js's LIVE_DIR comment for why mixing those would
+    // spam a Claude-side file watcher with one event per tick.
+    document.getElementById('action-live-monitor')?.addEventListener('click', async () => {
+        const panel = document.getElementById('panel-live-monitor');
+        if (!panel) return;
+        panel.classList.toggle('open');
+        if (!panel.classList.contains('open')) return;
+
+        const renderPanel = (status) => {
+            panel.innerHTML = status.running
+                ? `<div style="font-size:10px;color:var(--green,#4ade80);margin-bottom:6px;">● live — capturing every ${status.intervalMs / 1000}s</div>
+                   <button id="live-monitor-stop" class="hud-action-btn">Stop</button>`
+                : `<div style="font-size:10px;opacity:0.7;margin-bottom:6px;">not running</div>
+                   <label style="font-size:10px;display:block;margin-bottom:4px;">interval: <span id="live-monitor-interval-val">10s</span></label>
+                   <input type="range" id="live-monitor-interval" min="5" max="60" step="5" value="10" style="width:100%;margin-bottom:6px;">
+                   <button id="live-monitor-start" class="hud-action-btn">Start</button>`;
+
+            document.getElementById('live-monitor-stop')?.addEventListener('click', async () => {
+                await invoke('live-capture-stop');
+                renderPanel({ running: false });
+            });
+            const slider = document.getElementById('live-monitor-interval');
+            slider?.addEventListener('input', () => {
+                document.getElementById('live-monitor-interval-val').textContent = `${slider.value}s`;
+            });
+            document.getElementById('live-monitor-start')?.addEventListener('click', async () => {
+                const intervalMs = (parseInt(slider?.value || '10', 10)) * 1000;
+                const result = await invoke('live-capture-start', { intervalMs });
+                renderPanel({ running: true, intervalMs: result.intervalMs || intervalMs });
+            });
+        };
+
+        const current = await invoke('live-capture-status').catch(() => ({ running: false }));
+        renderPanel(current);
+    });
+
     // 9. PS7 SHELL — embedded, unrestricted (unlike the gated PHOENIX CLI)
     let ps7ShellHistory = [];
     let ps7ShellHistoryPos = 0;

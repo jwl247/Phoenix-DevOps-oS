@@ -113,7 +113,16 @@ function register({ ipcMain, spawn, dialog }) {
             };
         }
         try {
-            const proc = spawn(app.exe, app.args || [], { detached: true, stdio: 'ignore' });
+            // Console-subsystem apps (pwsh.exe, bash.exe) spawned directly with
+            // stdio:'ignore' get a closed/NUL stdin — they read immediate EOF
+            // and exit right away instead of opening as an interactive window.
+            // `cmd /c start` is the standard Windows way to actually detach a
+            // new, independent console window; the literal empty '""' is
+            // required as start's window-title argument, otherwise start
+            // misparses a quoted target path AS the title and launches nothing.
+            const proc = process.platform === 'win32'
+                ? spawn('cmd.exe', ['/c', 'start', '""', app.exe, ...(app.args || [])], { detached: true, stdio: 'ignore' })
+                : spawn(app.exe, app.args || [], { detached: true, stdio: 'ignore' });
             proc.unref();
             return { success: true };
         } catch (e) {

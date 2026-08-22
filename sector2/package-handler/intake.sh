@@ -30,8 +30,16 @@ PHOENIX_AUTH="${PHOENIX_AUTH:-}"
 
 # ── Python detection ──────────────────────────────────────────
 _find_python() {
+  # `command -v` only proves a name resolves in PATH — on Windows, the
+  # Microsoft Store's "python3"/"python" execution-alias stubs satisfy that
+  # even when running them does nothing but pop up a Store install prompt.
+  # Actually invoking --version (with a timeout, in case a stub hangs
+  # instead of erroring) is the only way to tell a real interpreter from
+  # one of those. This bit twice already this session before the check
+  # existed here.
   for cmd in python3 python python3.13 python3.12 python3.11 python3.10; do
-    command -v "${cmd}" &>/dev/null && { echo "${cmd}"; return 0; }
+    command -v "${cmd}" &>/dev/null || continue
+    timeout 5 "${cmd}" --version &>/dev/null && { echo "${cmd}"; return 0; }
   done
   if [[ "$(uname -s)" == MINGW* ]] || [[ "$(uname -s)" == MSYS* ]]; then
     local win_user
@@ -340,6 +348,33 @@ post_to_d1() {
     || log "WARN" "D1 failed (${http_code}) → ${endpoint}: ${body}"
 }
 
+# ── R2 uploader — actual file bytes, not just D1 metadata ──────
+# R2 was documented as the canonical content store from the start, but
+# nothing in this pipeline ever uploaded to it — D1 held pointers to a
+# pool_path that only exists on this one machine's disk. This closes that
+# gap going forward. Not fatal on failure (same posture as post_to_d1):
+# a stalled R2 upload shouldn't abort an otherwise-successful local intake.
+R2_MAX_BYTES=$((100 * 1024 * 1024))  # Workers request-body ceiling, conservative
+upload_to_r2() {
+  local hex="$1" filepath="$2"
+  [[ -z "${PHOENIX_AUTH}" ]] && { log "WARN" "PHOENIX_AUTH not set — skipping R2 upload"; return 0; }
+  [[ ! -f "${filepath}" ]] && { log "WARN" "R2 upload: file not found: ${filepath}"; return 0; }
+  local size; size=$(get_size "${filepath}")
+  if (( size > R2_MAX_BYTES )); then
+    log "WARN" "R2 upload skipped — ${filepath} is $(( size / 1024 / 1024 ))MB, over the $(( R2_MAX_BYTES / 1024 / 1024 ))MB cap"
+    return 0
+  fi
+  local http_code
+  http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X PUT \
+    -H "Authorization: Bearer ${PHOENIX_AUTH}" \
+    --data-binary "@${filepath}" \
+    "${WORKER_URL}/clonepool/${hex}" 2>/dev/null)
+  [[ "${http_code}" == "200" ]] \
+    && log "INFO" "R2 OK → ${hex} (${size} bytes)" \
+    || log "WARN" "R2 upload failed (${http_code}) → ${hex}"
+}
+
 report_clonepool() {
   local sensitive="${9:-false}"
   post_to_d1 "/clonepool" \
@@ -373,6 +408,7 @@ self_register() {
     "${self_path}" "${dir}/v1_${SCRIPT_NAME}" "white" "intake"
   report_clonepool "${SCRIPT_HEX}" "${SCRIPT_NAME}" "v1" "white" "${dir}" \
     "${dir}/${SCRIPT_HEX}.sidecar.json" "1" "${size}"
+  upload_to_r2 "${SCRIPT_HEX}" "${dir}/v1_${SCRIPT_NAME}"
   report_custody  "${SCRIPT_HEX}" "${SCRIPT_NAME}" "self_register" "white" "intake"
   report_glossary "${SCRIPT_HEX}" "${SCRIPT_NAME}" \
     "Intake script: registers new software into the glossary and clonepool" \
@@ -479,6 +515,7 @@ intake_file() {
     "${filepath}" "${pool_dir}/${version}_${orig}" "white" "${backend}"
   report_clonepool "${hex}" "${orig}" "${version}" "white" \
     "${pool_dir}" "${sidecar}" "1" "${size}" "${sensitive}"
+  upload_to_r2 "${hex}" "${pool_dir}/${version}_${orig}"
   report_custody  "${hex}" "${orig}" "intake" "white" "${backend}"
   report_glossary "${hex}" "${orig}" "Intaked via ${backend}: ${filetype}" \
     "${category_hex}" "${version}" "${size}" "${pool_dir}"
@@ -965,6 +1002,7 @@ intake_directory() {
       "white" "${backend}"
     report_clonepool "${file_hex}" "${file_orig}" "${file_version}" "white" \
       "${file_pool}" "${sidecar}" "1" "${size}" "${file_sensitive}"
+    upload_to_r2 "${file_hex}" "${file_pool}/${file_version}_${file_orig}"
     report_custody "${file_hex}" "${file_orig}" "dir_intake" "white" "${backend}"
 
     # Auto evict old versions

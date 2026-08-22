@@ -141,7 +141,7 @@
                             <div class="hud-nav-pane active" id="hud-pane-ai-chat" data-hud-nav="ai-chat">
                                 <div class="hud-pane-title">AI CHAT</div>
                                 <div class="hud-messages" id="hud-messages">
-                                    <div class="hud-msg hud-msg-assist">AI Chat ready. Ollama primary, Claude fallback. Use HELP CHAT tab for the operator manual.</div>
+                                    <div class="hud-msg hud-msg-assist" id="hud-welcome-msg">AI Chat ready. Use HELP CHAT tab for the operator manual.</div>
                                 </div>
                                 <div class="hud-input-row">
                                     <input type="text" id="hud-input" class="hud-input" placeholder="ask phoenix anything...">
@@ -349,6 +349,11 @@
                     <span class="action-sub">single-shot, sent to Claude on request</span>
                 </button>
                 <div class="hud-action-panel" id="panel-screenshot"></div>
+                <button type="button" class="hud-action-btn" id="action-live-monitor">
+                    LIVE MONITOR
+                    <span class="action-sub">periodic capture — Claude watches via file, no per-frame API cost</span>
+                </button>
+                <div class="hud-action-panel" id="panel-live-monitor"></div>
             </div>
 
             <!-- Original metrics — now toggled by the TELEMETRY button above
