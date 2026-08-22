@@ -142,7 +142,7 @@ PHX-OK 'Directories ready.'
 # ── Clone or copy OS repo ───────────────────────────────────
 if ($LocalRepo -and (Test-Path $LocalRepo)) {
     PHX-Info "Local repo install from $LocalRepo ..."
-    if ($Force -or -not (Test-Path (Join-Path $OS_DIR 'construct.md'))) {
+    if ($Force -or -not (Test-Path (Join-Path $OS_DIR 'CLAUDE.md'))) {
         if (Test-Path $OS_DIR) { Remove-Item $OS_DIR -Recurse -Force -ErrorAction SilentlyContinue }
         Copy-Item $LocalRepo $OS_DIR -Recurse -Force
         PHX-OK "Copied local repo to $OS_DIR"
