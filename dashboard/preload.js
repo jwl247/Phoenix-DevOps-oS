@@ -18,7 +18,9 @@ const ALLOWED_CHANNELS = new Set([
   'open-exe-dialog', 'set-active-slot', 'set-dropdown-slot',
   'set-external-app-path',
   // ps7-shell.js
-  'ps7-shell-get-cwd', 'ps7-shell-run'
+  'ps7-shell-get-cwd', 'ps7-shell-run',
+  // pagefile management
+  'get-pagefile-status', 'move-pagefile', 'delete-pagefile'
 ]);
 
 contextBridge.exposeInMainWorld('phoenix', {

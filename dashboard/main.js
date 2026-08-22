@@ -645,6 +645,98 @@ ipcMain.handle('get-os-metrics', async () => {
     };
 });
 
+// ── Pagefile management (sector4/paging_windows.py's WMI approach, exposed
+//    to the dashboard so pagefile placement lives in Phoenix's own UI
+//    instead of a separate standalone HTTP server) ─────────────────────────
+function runPowerShell(script, timeoutMs = 30000) {
+    return new Promise((resolve) => {
+        const proc = spawn('pwsh.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], { shell: false });
+        let stdout = '', stderr = '';
+        const timeout = setTimeout(() => proc.kill(), timeoutMs);
+        proc.stdout.on('data', d => { stdout += d; });
+        proc.stderr.on('data', d => { stderr += d; });
+        proc.on('error', error => { clearTimeout(timeout); resolve({ success: false, error: error.message, stdout, stderr }); });
+        proc.on('close', code => { clearTimeout(timeout); resolve({ success: code === 0, output: stdout.trim(), stderr: stderr.trim(), error: code === 0 ? null : `Exited ${code}` }); });
+    });
+}
+
+async function isElevated() {
+    const r = await runPowerShell(
+        `([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)`
+    );
+    return r.success && r.output.trim().toLowerCase() === 'true';
+}
+
+// Read-only — safe to call anytime, no elevation needed.
+// Uses Get-CimInstance, not Get-WmiObject -- the latter only exists in
+// legacy Windows PowerShell 5.1, not pwsh (PowerShell 7), which is what
+// this dashboard shells out to everywhere else. Caught by testing this
+// standalone before wiring it up -- Get-WmiObject silently errored under
+// pwsh and would have made every one of these handlers a no-op.
+ipcMain.handle('get-pagefile-status', async () => {
+    const script = `
+$auto = (Get-CimInstance -ClassName Win32_ComputerSystem).AutomaticManagedPagefile
+$settings = Get-CimInstance -ClassName Win32_PageFileSetting | Select-Object Name, InitialSize, MaximumSize
+$usage = Get-CimInstance -ClassName Win32_PageFileUsage | Select-Object Name, AllocatedBaseSize, CurrentUsage
+[PSCustomObject]@{ automaticManaged = $auto; settings = $settings; usage = $usage } | ConvertTo-Json -Depth 4 -Compress
+`;
+    const r = await runPowerShell(script);
+    if (!r.success) return { success: false, error: r.error || r.stderr };
+    try { return { success: true, ...JSON.parse(r.output) }; }
+    catch (e) { return { success: false, error: `Could not parse WMI output: ${e.message}` }; }
+});
+
+// Moves the pagefile to a different drive. Consequential + needs a reboot
+// to fully apply (same caveat as paging_windows.py) — requires Administrator
+// and an explicit confirm:true from the caller. Does not run unattended.
+ipcMain.handle('move-pagefile', async (event, { targetDrive, sizeGB, confirm }) => {
+    if (!confirm) return { success: false, error: 'Refused: confirm:true required for a pagefile move.' };
+    if (!targetDrive || !/^[A-Za-z]:$/.test(targetDrive)) return { success: false, error: 'targetDrive must look like "D:"' };
+    if (!(await isElevated())) return { success: false, error: 'Requires Administrator — relaunch the dashboard elevated.' };
+    const sizeMB = Math.round((sizeGB || 4) * 1024);
+    const script = `
+$targetName = "${targetDrive}\\pagefile.sys"
+Get-CimInstance -ClassName Win32_ComputerSystem | Set-CimInstance -Property @{ AutomaticManagedPagefile = $false }
+Get-CimInstance -ClassName Win32_PageFileSetting | Where-Object { $_.Name -ne $targetName } | Remove-CimInstance
+$existing = Get-CimInstance -ClassName Win32_PageFileSetting | Where-Object { $_.Name -eq $targetName }
+if ($existing) {
+    $existing | Set-CimInstance -Property @{ InitialSize = ${sizeMB}; MaximumSize = ${sizeMB} }
+} else {
+    New-CimInstance -ClassName Win32_PageFileSetting -Property @{ Name = $targetName; InitialSize = ${sizeMB}; MaximumSize = ${sizeMB} } | Out-Null
+}
+"OK"
+`;
+    const r = await runPowerShell(script, 45000);
+    return r.success
+        ? { success: true, message: `Pagefile moved to ${targetDrive}\\pagefile.sys (${sizeGB}GB) — reboot required to fully apply.` }
+        : { success: false, error: r.error || r.stderr };
+});
+
+// Removes an explicit pagefile setting for one drive. If nothing else is
+// configured afterward, re-enables Windows' automatic management as a
+// safety net rather than leaving the system with no pagefile at all and
+// no auto-manage. Requires Administrator + explicit confirm:true.
+ipcMain.handle('delete-pagefile', async (event, { targetDrive, confirm }) => {
+    if (!confirm) return { success: false, error: 'Refused: confirm:true required to delete a pagefile.' };
+    if (!targetDrive || !/^[A-Za-z]:$/.test(targetDrive)) return { success: false, error: 'targetDrive must look like "D:"' };
+    if (!(await isElevated())) return { success: false, error: 'Requires Administrator — relaunch the dashboard elevated.' };
+    const script = `
+$targetName = "${targetDrive}\\pagefile.sys"
+Get-CimInstance -ClassName Win32_PageFileSetting | Where-Object { $_.Name -eq $targetName } | Remove-CimInstance
+$remaining = Get-CimInstance -ClassName Win32_PageFileSetting
+if (-not $remaining) {
+    Get-CimInstance -ClassName Win32_ComputerSystem | Set-CimInstance -Property @{ AutomaticManagedPagefile = $true }
+    "OK: no pagefile settings remained, re-enabled automatic management"
+} else {
+    "OK"
+}
+`;
+    const r = await runPowerShell(script, 45000);
+    return r.success
+        ? { success: true, message: `${r.output} — reboot required to fully apply.` }
+        : { success: false, error: r.error || r.stderr };
+});
+
 // ── Phoenix env + AI auth ─────────────────────────────────────────────────────
 const PHOENIX_CONF_DIR  = path.join(os.homedir(), '.phoenix');
 const PHOENIX_ENV_FILE  = path.join(PHOENIX_CONF_DIR, 'phoenix.env');
