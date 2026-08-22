@@ -19,8 +19,8 @@ hex identity, searchable by name or category. It's one of the Entourage apps
 
 ## Prerequisites
 
-- `PHOENIX_WORKER_URL` and `PHOENIX_AUTH` set (see `docs/GLOBAL_COMMANDS.md` /
-  `usys init`). Reads are public; writes (`POST`, `PUT`, `DELETE`) require the
+- `PHOENIX_WORKER_URL` and `PHOENIX_AUTH` set (see `dashboard/manual/PHOENIX_MANUAL.md`
+  §8, or run `usys init`). Reads are public; writes (`POST`, `PUT`, `DELETE`) require the
   `Authorization: Bearer $PHOENIX_AUTH` header and must match the worker's
   deployed secret — `usys status` shows what's set locally, but that's no
   guarantee it matches the Cloudflare secret. If writes 401, the two are out
