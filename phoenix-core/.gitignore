@@ -1,0 +1,6 @@
+# Build artifacts — regenerate with `make`
+*.o
+*.a
+*.exe
+__pycache__/
+test-cache/
