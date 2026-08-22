@@ -8,7 +8,7 @@ set -euo pipefail
 
 SECTOR3="/etc/systemd/system/translator.sh"
 SECTOR2="/etc/systemd/translator.sh"
-SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/translator/translator.sh"
+SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/sector3/translator/translator.sh"
 
 echo "[PHOENIX] Deploying translator to sector3 and sector2..."
 
