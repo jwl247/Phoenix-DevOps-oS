@@ -40,7 +40,8 @@ bash install.sh
 ✅ **Global Commands** - 6 commands accessible from anywhere  
 ✅ **Environment Setup** - Automatic PATH and environment configuration  
 ✅ **Package Handler** - Sector 2 clonepool intake system  
-✅ **USys Integration** - United Systems command layer  
+✅ **USys Integration** - United Systems command layer
+✅ **Desktop Launcher (Windows)** - A `Phoenix Dashboard` shortcut on your Desktop
 
 ---
 
@@ -62,6 +63,11 @@ After installation, these commands are available **globally** in any terminal:
 ---
 
 ## First Steps
+
+### Launch from the Desktop (Windows)
+
+Double-click **Phoenix Dashboard** on your Desktop. On its first run it checks
+Node.js and installs the dashboard dependencies if needed.
 
 ### 1. Verify Installation
 
@@ -108,7 +114,7 @@ intake --help
 Phoenix uses these environment variables (automatically set during installation):
 
 - `PHOENIX_ROOT` - Installation directory
-- `PHOENIX_AUTH` - Authentication token (optional, for D1 sync)
+- `PHOENIX_AUTH` - Shared bearer token for protected Worker routes (optional; enables D1/R2 sync)
 - `PHOENIX_WORKER_URL` - Cloudflare Worker endpoint
 - `CLONEPOOL_DIR` - Clonepool storage location
 
@@ -124,16 +130,45 @@ Get-Content $HOME\.phoenix_env.ps1
 cat ~/.phoenix_env.sh
 ```
 
-### Set PHOENIX_AUTH (Optional)
+### Set Worker Authentication (Optional)
 
-For D1 database sync features:
+Phoenix works offline without a Worker token. To enable protected D1/R2 sync,
+Phoenix needs `PHOENIX_WORKER_URL` and `PHOENIX_AUTH`. Each platform has one
+canonical place to set them — don't hand-edit multiple files with the token.
 
-1. Get your auth token from Cloudflare Worker settings
-2. Edit environment file:
-   - Windows: `~/.phoenix_env.ps1`
-   - Linux/macOS: `~/.phoenix_env.sh`
-3. Add: `export PHOENIX_AUTH="your-token-here"`
-4. Restart terminal
+**Windows:**
+
+```powershell
+usys init
+```
+
+Prompts once for the worker URL and token (skips any value already set),
+then stores them as your Windows user-scope environment variables — the
+same store `install.ps1` writes to, visible under System Properties →
+Environment Variables, not a plaintext file — and wires your PowerShell
+profile (`$PROFILE`) so every new terminal loads them silently from there.
+Re-running `usys init` any time is safe.
+
+**Linux/macOS:**
+
+Re-run the installer to be prompted again, or edit `~/.phoenix_env.sh`
+directly (this file *is* the canonical source on Linux/macOS) and open a
+new terminal:
+
+```bash
+export PHOENIX_WORKER_URL="https://your-worker.example.workers.dev"
+export PHOENIX_AUTH="your-token-here"
+```
+
+Phoenix sends this token only in the standard HTTP header:
+
+```http
+Authorization: Bearer <PHOENIX_AUTH>
+```
+
+Do not put the token in a URL, a custom `X-Phoenix-Auth` header, source code,
+screenshots, or dashboard fields. See [AUTHENTICATION.md](./AUTHENTICATION.md)
+for the full protocol.
 
 ---
 

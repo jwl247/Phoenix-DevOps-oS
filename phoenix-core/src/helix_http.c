@@ -10,7 +10,7 @@
  *   POST /custody            — append intake event to D1 custody ledger
  *   GET  /clonepool/:hex_id  — fetch content from R2
  *
- * Auth: X-Phoenix-Auth: <PHOENIX_AUTH> header on every request.
+ * Auth: Authorization: Bearer <PHOENIX_AUTH> header on every request.
  */
 
 #include "../include/helix_http.h"

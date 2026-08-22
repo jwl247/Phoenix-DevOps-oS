@@ -36,8 +36,13 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 CLONEPOOL_DIR    = Path(os.environ.get("CLONEPOOL_DIR",    Path.home() / "Documents" / "clonepool"))
 CATALOG_DB       = Path(os.environ.get("CATALOG_DB",       Path.home() / ".catalog" / "catalog.db"))
-WORKER_URL       = os.environ.get("PHOENIX_WORKER_URL", "").rstrip("/")
-WORKER_AUTH      = os.environ.get("PHOENIX_AUTH", "")
+_raw_worker_url  = os.environ.get("PHOENIX_WORKER_URL", "").strip()
+if _raw_worker_url.upper().startswith("PHOENIX_WORKER_URL="):
+    _raw_worker_url = _raw_worker_url.split("=", 1)[1].strip()
+WORKER_URL       = _raw_worker_url.rstrip("/")
+WORKER_AUTH      = os.environ.get("PHOENIX_AUTH", "").strip()
+if WORKER_AUTH.upper().startswith("PHOENIX_AUTH="):
+    WORKER_AUTH  = WORKER_AUTH.split("=", 1)[1].strip()
 VERSION = "0.3.0"
 
 
@@ -264,7 +269,7 @@ def d1_sync(
 
     headers = {
         "Content-Type": "application/json",
-        "X-Phoenix-Auth": WORKER_AUTH,
+        "Authorization":    f"Bearer {WORKER_AUTH}",
         "User-Agent":    "Phoenix-Intake/0.3.0",
     }
 

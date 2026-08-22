@@ -272,7 +272,7 @@ EOF
     
     if command -v curl &>/dev/null; then
         response=$(curl -s -w "\n%{http_code}" -X POST "$WORKER_URL/installed/register" \
-            -H "X-Phoenix-Auth: $PHOENIX_AUTH" \
+            -H "Authorization: Bearer $PHOENIX_AUTH" \
             -H "Content-Type: application/json" \
             -d "$reg_body" 2>/dev/null || echo "000")
         

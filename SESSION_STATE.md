@@ -11,7 +11,7 @@ Full PoC working. Auth unified. Tray app released. Ready for R2.
 - `usys download` + `usys watch` — auto-intake on every download ✅
 - `phoenix-tray.exe` — built, v0.1.0 released on GitHub ✅
 - Silent auth — `usys init` runs once, wires `$PROFILE`, never asked again ✅
-- `intake.py` fixed — now sends `X-Phoenix-Auth` (matches what worker checks) ✅
+- `intake.py` uses `Authorization: Bearer` (the project HTTP auth standard) ✅
 - Tray app reads auth from Windows registry — works when launched by double-click ✅
 
 ---
@@ -156,7 +156,7 @@ THAT is the demo. Import once. Run anywhere.
 | `tools/poc/run-debian.ps1` | Debian demo launcher |
 | `tools/poc/run-ubuntu.ps1` | Ubuntu demo launcher |
 | `scripts/usys.ps1` (updated) | Added: qemu runtime, `usys download`, `usys watch`, silent auth init |
-| `phoenix-core/tools/intake.py` (updated) | Fixed auth header (`X-Phoenix-Auth`), v0.3.0 |
+| `phoenix-core/tools/intake.py` (updated) | Uses standard `Authorization: Bearer` auth, v0.3.0 |
 
 ---
 
@@ -165,7 +165,7 @@ THAT is the demo. Import once. Run anywhere.
 | Component | Status |
 |-----------|--------|
 | `intake.py` | ✅ Working — hashes, sidecar, catalog.db, clonepool, D1 sync |
-| Auth header | ✅ Fixed — `X-Phoenix-Auth` everywhere (was `Authorization: Bearer`) |
+| Auth header | ✅ Standardized — `Authorization: Bearer` everywhere |
 | `usys init` | ✅ One-time setup — asks for token once, wires `$PROFILE`, silent forever after |
 | D1 (packages-worker) | ✅ Live — `packages-worker.phoenix-jwl.workers.dev` |
 | clonepool (local) | ✅ Working — `~/Phoenix/clonepool` |

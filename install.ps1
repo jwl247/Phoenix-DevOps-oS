@@ -367,7 +367,7 @@ if ($env:PHOENIX_AUTH) {
     } | ConvertTo-Json
     try {
         $reg = Invoke-WebRequest -Uri "$WORKER_URL/installed/register" -Method POST `
-            -Headers @{ 'X-Phoenix-Auth' = $env:PHOENIX_AUTH; 'Content-Type' = 'application/json' } `
+            -Headers @{ 'Authorization' = "Bearer $($env:PHOENIX_AUTH)"; 'Content-Type' = 'application/json' } `
             -Body $regBody -UseBasicParsing -TimeoutSec 15
         if ($reg.StatusCode -in 200, 201) { PHX-OK 'Machine registered.' }
     } catch {
@@ -377,6 +377,35 @@ if ($env:PHOENIX_AUTH) {
 
 # ── Cleanup ─────────────────────────────────────────────────
 Remove-Item -Recurse -Force $TEMP_DIR -ErrorAction SilentlyContinue
+
+# ── Desktop launcher ─────────────────────────────────────────
+function Install-PhoenixDashboardShortcut {
+    $dashboardDir = Join-Path $OS_DIR 'dashboard'
+    $launcher = Join-Path $dashboardDir 'start.ps1'
+    if (-not (Test-Path $launcher)) {
+        PHX-Warn "Dashboard launcher not found at $launcher — desktop shortcut skipped."
+        return
+    }
+
+    try {
+        $desktop = [Environment]::GetFolderPath('Desktop')
+        $shortcutPath = Join-Path $desktop 'Phoenix Dashboard.lnk'
+        $pwsh = (Get-Command pwsh -ErrorAction Stop).Source
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($shortcutPath)
+        $shortcut.TargetPath = $pwsh
+        $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$launcher`""
+        $shortcut.WorkingDirectory = $dashboardDir
+        $shortcut.Description = 'Launch Phoenix DevOps OS Dashboard'
+        $shortcut.IconLocation = "$pwsh,0"
+        $shortcut.Save()
+        PHX-OK "Desktop shortcut created: $shortcutPath"
+    } catch {
+        PHX-Warn "Could not create Phoenix Dashboard desktop shortcut: $_"
+    }
+}
+
+Install-PhoenixDashboardShortcut
 
 # ── Done ────────────────────────────────────────────────────
 Write-Host ''

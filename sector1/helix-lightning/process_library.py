@@ -30,7 +30,9 @@ import sys
 import time
 import json
 import hashlib
+import hmac
 import logging
+import re
 import threading
 import importlib
 import importlib.util
@@ -117,10 +119,17 @@ class ProcessLibrary:
     def __init__(self, frank: Optional[Frank5] = None):
         self.frank   = frank or get_frank()
         self._suits: dict[str, LibraryEntry] = {}
+        self._by_checksum: dict[str, str] = {}   # content hash -> suit name
         self._lock   = threading.Lock()
         self._loaded = False
 
-        # Suit search paths — Frank looks here for suit modules
+        # Suit search paths — Frank looks here for suit modules.
+        # Ordered by trust: explicit sector dirs first. Path.cwd() is
+        # deliberately excluded by default — a suit-named .py file sitting
+        # in whatever directory the kernel happens to be launched from
+        # would otherwise get imported and executed at boot with no
+        # verification. Opt in explicitly via PHOENIX_TRUST_CWD=1 only for
+        # local dev.
         self._search_paths: list[Path] = [
             Path(os.environ.get("PHOENIX_SUITS", "/etc/systemd/system")),
             Path(os.environ.get("PHOENIX_SECTOR1", "/etc/systemd/system/SECTOR1")),
@@ -128,8 +137,10 @@ class ProcessLibrary:
             Path(os.environ.get("PHOENIX_SECTOR3", "/etc/systemd/system/SECTOR3")),
             Path(os.environ.get("PHOENIX_SECTOR4", "/etc/systemd/system/SECTOR4")),
             Path.home() / "projects/phoenix",
-            Path.cwd(),
         ]
+        if os.environ.get("PHOENIX_TRUST_CWD") == "1":
+            self._search_paths.append(Path.cwd())
+            log.warning("PHOENIX_TRUST_CWD=1 — current directory is a trusted suit source")
 
         log.info(f"ProcessLibrary v{LIBRARY_VERSION} initializing")
 
@@ -367,10 +378,18 @@ class ProcessLibrary:
         """Internal registration — no index write."""
         checksum = self._checksum_spec(spec)
 
-        # Pre-load Python modules — zero import time at runtime
+        # Pre-load Python modules — zero import time at runtime.
+        # Only executes the file if its content hash was just verified
+        # (i.e. checksum is a real sha3: content hash, not a placeholder).
         mod = None
         if spec.suit_type == SuitType.PYTHON and spec.entry:
-            mod = self._preload_python(spec)
+            if checksum.startswith("sha3:") and self._verify_checksum(spec, checksum):
+                mod = self._preload_python(spec)
+            elif checksum.startswith("sha3:"):
+                # _verify_checksum already logged the reason; do not exec.
+                pass
+            else:
+                log.info(f"Suit {spec.name!r} not yet on disk — deferring import until first use")
 
         entry = LibraryEntry(
             spec     = spec,
@@ -381,6 +400,7 @@ class ProcessLibrary:
 
         with self._lock:
             self._suits[spec.name] = entry
+            self._by_checksum[checksum] = spec.name
 
         return entry
 
@@ -459,6 +479,24 @@ class ProcessLibrary:
     def get(self, name: str) -> Optional[SuitSpec]:
         """Get a suit by name. Direct lookup."""
         with self._lock:
+            entry = self._suits.get(name)
+            if entry:
+                entry.touch()
+                return entry.spec
+        return None
+
+    def get_by_checksum(self, checksum: str) -> Optional[SuitSpec]:
+        """
+        Content-addressed lookup. checksum must be the full 'sha3:<hex>'
+        string produced by _checksum_spec — placeholder 'meta:' hashes are
+        never valid keys here, since they don't identify file content.
+        """
+        if not checksum.startswith("sha3:"):
+            return None
+        with self._lock:
+            name = self._by_checksum.get(checksum)
+            if not name:
+                return None
             entry = self._suits.get(name)
             if entry:
                 entry.touch()
@@ -548,21 +586,60 @@ class ProcessLibrary:
                 if candidate.exists():
                     return str(candidate)
 
-        # Clonepool fallback — pull via lol
-        import subprocess, tempfile
+        # Clonepool fallback is disabled unless an operator explicitly opts in
+        # and pins the expected SHA3-256 hash. A post-download hash alone does
+        # not establish provenance and must never authorize imported code.
+        #
+        # Previously this shelled out to a "lol" command. That command has
+        # never existed anywhere in this codebase — the only "lol" on disk
+        # is an uninvoked installer script under the abandoned copes/ tree
+        # that would have written a bash wrapper calling three OTHER
+        # commands (intake-package, intake-dir, egress_helix) that also
+        # don't exist. The subprocess call always failed, was caught by
+        # the broad except below, and silently fell through to "not found".
+        # The worker read route requires PHOENIX_AUTH. Remote loading remains
+        # opt-in because transport authentication is not code provenance.
+        expected_hash = os.environ.get(
+            "PHOENIX_SUIT_HASH_" + re.sub(r"[^A-Z0-9]", "_", name.upper())
+        )
+        if os.environ.get("PHOENIX_ALLOW_REMOTE_SUITS") != "1" or not expected_hash:
+            log.debug("Remote suit %s not fetched: opt-in and pinned hash required", name)
+            return name
+        auth_token = os.environ.get("PHOENIX_AUTH")
+        if not auth_token:
+            log.warning("Remote suit %s not fetched: PHOENIX_AUTH is required", name)
+            return name
+
         try:
-            tmp = Path(tempfile.mkdtemp(prefix="phoenix_suit_"))
-            result = subprocess.run(
-                ["lol", f"{name}.lol"],
-                cwd=str(tmp), capture_output=True, text=True, timeout=10
+            import urllib.request
+            import tempfile
+
+            worker_url = os.environ.get(
+                "PHOENIX_WORKER_URL",
+                "https://packages-worker.phoenix-jwl.workers.dev"
             )
-            if result.returncode == 0:
-                matches = list(tmp.glob(f"{name}*"))
-                if matches:
-                    log.info("Clonepool pull: %s → %s", name, matches[0])
-                    return str(matches[0])
+            hex_id = name.encode("utf-8").hex()  # matches intake.sh's to_hex()
+            url = f"{worker_url}/clonepool/{hex_id}"
+
+            req = urllib.request.Request(
+                url, method="GET", headers={"Authorization": f"Bearer {auth_token}"}
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status == 200:
+                    data = resp.read()
+                    actual_hash = hashlib.sha3_256(data).hexdigest()
+                    if not hmac.compare_digest(actual_hash, expected_hash.removeprefix("sha3:")):
+                        log.error("R2 suit %s hash mismatch — refusing download", name)
+                        return name
+                    tmp_dir = Path(tempfile.mkdtemp(prefix="phoenix_suit_"))
+                    dest = tmp_dir / name
+                    dest.write_bytes(data)
+                    dest.chmod(0o600)
+                    log.info("R2 pull: %s → %s (%d bytes)", name, dest, len(data))
+                    return str(dest)
         except Exception as e:
-            log.debug("lol fallback for %s: %s", name, e)
+            # Genuine network/R2 miss is expected and fine — log at debug.
+            log.debug("R2 clonepool fallback for %s: %s", name, e)
 
         # Not found anywhere — return the name; Frank will try to import it
         return name
@@ -613,9 +690,50 @@ class ProcessLibrary:
         }
 
     def _checksum_spec(self, spec: SuitSpec) -> str:
-        """Checksum a suit spec for integrity."""
+        """
+        Content-address a suit by hashing its actual file bytes.
+
+        Falls back to a metadata hash ONLY when the entry has no
+        resolvable file on disk yet (e.g. registered before the suit
+        file exists). That fallback is marked so callers can tell the
+        difference between "verified content hash" and "placeholder".
+        """
+        entry_path = spec.entry
+        if entry_path:
+            path = Path(entry_path)
+            if path.exists() and path.is_file():
+                try:
+                    return "sha3:" + hashlib.sha3_256(path.read_bytes()).hexdigest()
+                except OSError as e:
+                    log.warning(f"Could not read {path} for content hash: {e}")
+
+        # No file yet — placeholder hash over metadata only. NOT a content
+        # address. Never treat this as proof the suit's code is unchanged.
         data = f"{spec.name}:{spec.entry}:{spec.sector}:{spec.ring_pos}"
-        return hashlib.sha3_256(data.encode()).hexdigest()[:16]
+        return "meta:" + hashlib.sha3_256(data.encode()).hexdigest()[:16]
+
+    def _verify_checksum(self, spec: SuitSpec, expected: str) -> bool:
+        """
+        Re-hash the suit's file on disk right now and compare against the
+        checksum recorded at registration time. Returns False (refuse to
+        run) if the file changed, went missing, or was never content-hashed
+        in the first place.
+        """
+        if not expected.startswith("sha3:"):
+            log.warning(f"Suit {spec.name!r} has no content hash on record — refusing to execute")
+            return False
+        path = Path(spec.entry) if spec.entry else None
+        if not path or not path.exists():
+            log.warning(f"Suit {spec.name!r} entry path missing at verify time: {spec.entry}")
+            return False
+        actual = "sha3:" + hashlib.sha3_256(path.read_bytes()).hexdigest()
+        if actual != expected:
+            log.error(
+                f"Suit {spec.name!r} content hash mismatch — "
+                f"expected {expected[:20]}... got {actual[:20]}... — refusing to execute"
+            )
+            return False
+        return True
 
     def status(self) -> dict:
         with self._lock:

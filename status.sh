@@ -1,31 +1,49 @@
-#!/usr/bin/env zsh
-# Phoenix DevOps — Session Status Check
-# Run this at the start of every Claude Code session
+#!/usr/bin/env bash
+# =============================================================================
+# Phoenix DevOps OS — Session Status Check
+# =============================================================================
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "=== PHOENIX STATUS === $(date)"
 echo ""
-echo "── Sector tree ──"
-for s in sector1 sector2 sector3 sector4; do
-  count=$(find ~/projects/phoenix-devops/$s -type f 2>/dev/null | wc -l)
-  echo "  $s: $count files"
+echo "── Sector tree (${REPO_ROOT}) ──"
+for s in sector1 sector2 sector3 sector4 phoenix-core scripts tools dashboard; do
+  if [[ -d "${REPO_ROOT}/${s}" ]]; then
+    count=$(find "${REPO_ROOT}/${s}" -type f 2>/dev/null | wc -l)
+    echo "  ${s}: ${count} files"
+  else
+    echo "  ${s}: NOT FOUND"
+  fi
 done
 echo ""
 echo "── breach_coms mounts ──"
 for m in g f e d; do
-  [[ -d /mnt/$m ]] && echo "  /mnt/$m : MOUNTED" || echo "  /mnt/$m : NOT MOUNTED"
+  [[ -d "/mnt/${m}" ]] && echo "  /mnt/${m} : MOUNTED" || echo "  /mnt/${m} : NOT MOUNTED (WSL/Bare metal)"
 done
 echo ""
-echo "── systemd ──"
-systemctl --user is-system-running 2>/dev/null || echo "  SYSTEMD: degraded or not running"
+echo "── systemd (Linux) ──"
+if command -v systemctl &>/dev/null; then
+  systemctl --user is-system-running 2>/dev/null || echo "  SYSTEMD: degraded or not running"
+else
+  echo "  SYSTEMD: Windows host (managed via usys / tray)"
+fi
 echo ""
-echo "── UnitedSys ──"
-cd ~/projects/unitedsys && python3 -m core.us list 2>/dev/null | head -5 || echo "  US: not functional"
+echo "── UnitedSys / USys ──"
+if [[ -f "${REPO_ROOT}/sector2/unitedsys/core/us.py" ]]; then
+  echo "  US: operational in sector2/unitedsys"
+else
+  echo "  US: not found"
+fi
 echo ""
-echo "── Catalog ──"
-sqlite3 ~/.catalog/catalog.db "SELECT COUNT(*) || ' packages' FROM packages;" 2>/dev/null
-sqlite3 ~/.catalog/glossary.db "SELECT COUNT(*) || ' glossary entries' FROM glossary;" 2>/dev/null
+echo "── Catalog (SQLite) ──"
+if [[ -f "${HOME}/.catalog/catalog.db" ]]; then
+  sqlite3 "${HOME}/.catalog/catalog.db" "SELECT COUNT(*) || ' packages' FROM packages;" 2>/dev/null || echo "  Catalog: database present"
+else
+  echo "  Catalog: uninitialized (runs on first intake)"
+fi
 echo ""
 echo "── Git ──"
-git -C ~/projects/phoenix-devops remote -v 2>/dev/null || echo "  phoenix-devops: no remote (create jwl247/phoenix-devops)"
-git -C ~/projects/unitedsys remote -v 2>/dev/null
+git -C "${REPO_ROOT}" remote -v 2>/dev/null || echo "  phoenix-devops: git error"
 echo ""
 echo "=== END STATUS ==="

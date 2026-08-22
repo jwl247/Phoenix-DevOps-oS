@@ -86,7 +86,7 @@ file/package/config → intake.sh → hex ID + sidecar.json (metadata, companion
 - States: white/grey/black (QR header)
 - Tiers: T1 primary (breach_coms4) → T2/T3/T4 mirrors
 
-**Worker:** packages-worker (Cloudflare) — full CRUD on clonepool/custody/glossary/packages/versions/installed. Auth via PHOENIX_AUTH / X-Phoenix-Auth header. Health at /health.
+**Worker:** packages-worker (Cloudflare) — full CRUD on clonepool/custody/glossary/packages/versions/installed. Auth via `Authorization: Bearer $PHOENIX_AUTH`. Health at /health.
 
 ### Corridor & Translator
 S1→S2→S3 (translator boundary — output only)→S4  
