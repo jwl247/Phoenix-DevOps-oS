@@ -18,6 +18,8 @@ drops in the real binary/image, and after that `usys run <name>` just works.
 |---|---|---|
 | `run-debian.ps1` | launcher | Demo 1 — boots Debian 12 via `usys run debian` |
 | `run-ubuntu.ps1` | launcher | Demo 2 (pro) — boots Ubuntu 24.04 via `usys run ubuntu`, `-Hyperv` for Act 2 |
+| `demo-collab.sh` | demo (Debian side) | Collaboration demo — writes + runs a Python script to the shared FS |
+| `demo-collab.ps1` | demo (Windows side) | Collaboration demo — intakes Debian's output, promotes it, runs it on Windows |
 | `debian.suite.json` | suite manifest | Debian 12 (Bookworm) cloud image, QEMU runtime |
 | `ubuntu.suite.json` | suite manifest | Ubuntu 24.04.2 LTS (Noble) cloud image, QEMU runtime |
 | `qemu-system.suite.json` | suite manifest | QEMU binary itself — the VM engine both distros run on |
@@ -143,6 +145,61 @@ Check what's actually staged at any time:
 ```powershell
 usys list-suites
 usys status
+```
+
+---
+
+## Collaboration demo — Debian writes, Windows ships
+
+This is the proof. Two OSes. One filesystem. One pipeline.
+
+**Debian side** (inside your SSH session):
+```bash
+# Copy the script into the shared FS first
+cp /phoenix/Projects/demo-collab.sh /phoenix/Projects/  # already there if you mounted before booting
+bash /phoenix/Projects/demo-collab.sh
+```
+
+If the script isn't there yet, paste it from `tools/poc/demo-collab.sh` in the repo, or:
+```bash
+# From inside Debian with network access:
+curl -o /tmp/demo-collab.sh \
+  https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/main/tools/poc/demo-collab.sh
+bash /tmp/demo-collab.sh
+```
+
+Debian will:
+1. Write `hello-phoenix.py` to `/phoenix/Projects/` (your `F:\Phoenix\Projects\`)
+2. Run it — output lands in `/phoenix/Projects/output.txt`
+3. Write `demo-collab.ready` as the handoff signal
+
+**Windows side** (PS7, after Debian finishes):
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools\poc\demo-collab.ps1
+```
+
+Windows will:
+1. Detect Debian's ready signal
+2. Show you `output.txt` — the file Debian wrote, read directly off the shared FS
+3. Intake `hello-phoenix.py` through Phoenix — hex ID, QR strings, D1 record, R2 upload
+4. Promote it as a runnable suite
+5. Run it on Windows — same script, same bytes, different OS
+
+**What you see at the end:**
+```
+  Written on Debian.  Shared via QEMU.
+  Intaked on Windows. Hex ID issued. D1 record created.
+  Ran on Windows.     Same script. Same bytes.
+
+  No install. No wizard. No WSL.
+  Phoenix brought the OS. Phoenix ran the script.
+```
+
+After the demo:
+```powershell
+usys list-suites          # hello-phoenix is in the pool
+usys run hello-phoenix    # run it any time on Windows
+phx-ls Projects           # see everything Debian left in the share
 ```
 
 ---
