@@ -1,0 +1,50 @@
+{
+  "name": "helix-poc",
+  "version": "1.0.0-alpha",
+  "description": "Double Helix PoC. Helix-I ingress (Strand A channels 1-4) + snapshot writer. Frank5 conductor. helix_complete_stack.py as the cache backend. paging.py (Linux) watches both strands via shared FS.",
+  "author": "jwl247",
+  "type": "poc",
+  "entry": "tools/poc/true_double_helix.py",
+  "runtime": "python",
+  "launch_windows": "tools/poc/run-helix-poc.ps1",
+  "launch_debian": "tools/poc/run-helix-poc.sh",
+  "dependencies": ["py-3"],
+  "environment": {
+    "PHOENIX_SUITS":          "auto:repo-root",
+    "PHOENIX_HELIX_PAGE_DIR": "F:\\Phoenix\\helix-pages",
+    "PHOENIX_SECTOR1":        "auto:repo-root/sector1",
+    "PHOENIX_SECTOR2":        "auto:repo-root/sector2",
+    "PHOENIX_SECTOR3":        "auto:repo-root/sector3"
+  },
+  "permissions": [
+    "filesystem:read",
+    "filesystem:write",
+    "network:loopback"
+  ],
+  "metadata": {
+    "category": "kernel-poc",
+    "tags": ["helix", "double-helix", "frank5", "paging", "poc", "cross-platform"],
+    "kernel": "sector1/helix-lightning/",
+    "cache_backend": "sector1/helix/helix_complete_stack.py",
+    "paging_brain_windows": "sector4/paging_windows.py",
+    "paging_brain_linux": "sector4/paging.py",
+    "shared_fs": [
+      {
+        "windows": "F:\\Phoenix\\helix-pages",
+        "debian":  "/phoenix/helix-pages",
+        "purpose": "L5 .page files + windows_snapshot.json cross-platform paging feed"
+      }
+    ],
+    "strands": {
+      "A": "channels 1-4 — Helix-I ingress — Windows executing",
+      "B": "channels 5-8 — Helix-E egress — Debian prefetching / flushing"
+    },
+    "ports": {
+      "helix_i": "7701-7704",
+      "helix_e": "7805-7808"
+    },
+    "plan": "tools/poc/DOUBLE-HELIX-PLAN.md",
+    "session_notes": "BOB.md — session record",
+    "license": "GPL-3.0"
+  }
+}

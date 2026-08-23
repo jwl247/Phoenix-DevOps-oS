@@ -1,5 +1,5 @@
 # Phoenix Session State
-# Updated: 2026-08-23
+# Updated: 2026-08-24
 # READ THIS AT THE START OF NEXT SESSION
 
 ## WHERE WE ARE
@@ -21,6 +21,42 @@ Shared filesystem is real end to end — proven live 2026-08-23.
   - F:\Phoenix\ hosted on Windows, mounted at /phoenix inside Debian
   - Bridge: SMB over QEMU user-net (10.0.2.2), credentials file
   - No WSL. No virtfs. No Hyper-V. No install. Phoenix brought the OS.
+- Double Helix PoC wired end-to-end ✅
+  - Helix Lightning Kernel confirmed in sector1/helix-lightning/ (cpython-314 present)
+  - true_double_helix.py: path-fixed, snapshot writer added
+  - helix_suit_override.py: parents index fixed (parents[1]→parents[2])
+  - paging.py: attach_helix() + attach_snapshot_path() + _read_snapshot_json() wired
+  - Launchers: run-helix-poc.ps1 (Windows) + run-helix-poc.sh (Debian)
+  - Suite registered: helix-poc.suite.json
+  - Plan: tools/poc/DOUBLE-HELIX-PLAN.md
+
+## WHAT WAS BUILT THIS SESSION (2026-08-24)
+
+### Double Helix PoC — kernel wired end-to-end
+
+- `tools/poc/true_double_helix.py` — path fix (sys.path insert for sector1/helix-lightning/),
+  snapshot writer added: `attach_helix_system()`, `_snapshot_writer_loop()`, `page_dir` param.
+  Writes `windows_snapshot.json` atomically every 5s to `PHOENIX_HELIX_PAGE_DIR`.
+- `sector1/helix-lightning/helix_suit_override.py` — `parents[1]` → `parents[2]` fix.
+  Was always pointing at sector1/ (wrong). Now points at repo root. helix_complete_stack.py
+  wires as suit for all 13 core rings correctly when PHOENIX_SUITS is not set.
+- `sector4/paging.py` — `attach_helix()`, `attach_snapshot_path()`, `_read_snapshot_json()`,
+  3-tier snapshot priority, `helix_paging` signal in monitor loop, shrink gated on
+  `not helix_paging`, `_log_helix_status()`, `helix_source` in status dict, auto-reads
+  `PHOENIX_PAGING_SNAPSHOT_PATH` env var at start.
+- `tools/poc/run-helix-poc.ps1` — Windows launcher. Sets PHOENIX_SUITS, PHOENIX_HELIX_PAGE_DIR,
+  PYTHONPATH. Creates F:\Phoenix\helix-pages\. Runs py -3 true_double_helix.py.
+- `tools/poc/run-helix-poc.sh` — Debian launcher. Verifies SMB mount. Sets env. Runs
+  paging.py start with snapshot path. Re-execs with sudo if not root.
+- `tools/poc/helix-poc.suite.json` — suite registration. usys run helix-poc.
+- `tools/poc/DOUBLE-HELIX-PLAN.md` — plan file (renamed from HELIX-DOUBLE-STRAND-PLAN.md).
+- `tools/poc/install-helix-autostart.ps1` — Windows autostart installer. Method A: Task
+  Scheduler (run as Admin once). Method B: Startup folder fallback (zero elevation, installed).
+  Startup shortcut confirmed: `%APPDATA%\...\Startup\Phoenix-HelixLightningKernel.cmd`
+- `sector3/services/phoenix-helix-kernel.service` — Debian systemd service for paging brain.
+  Auto-starts after network + SMB mount. `ExecStartPre` guards on `/phoenix/helix-pages/`.
+- `tools/poc/HELIX-LIGHTNING-GUIDE.md` — complete standalone guide: architecture, running,
+  persistence, troubleshooting, environment variables, ports, connections to all sectors.
 
 ## WHAT WAS BUILT THIS SESSION (2026-08-23)
 
@@ -62,16 +98,19 @@ Shared filesystem is real end to end — proven live 2026-08-23.
 
 ## NEXT STEPS IN ORDER
 
-1. **Glossary dashboard UI panel** — next up, backend/API already confirmed
-   working (see docs/GLOSSARY.md). Build the panel now.
-2. Write SHARED-FS-TEST.md — detailed instructions doc for this test
-   (Jerry requested, covers full setup + both distros + troubleshooting)
-3. Make SMB mount automatic on boot — update fstab/credentials in running VM
-   (current VM needs manual mount; new boots use updated seed automatically)
-4. MapTiler map panel in dashboard
-5. Shade UI + drawer filesystem
-6. Deploy phoenix-dashboard.service on Ubuntu 192.168.1.133
-7. Start manual/phoenix_manual.md
+1. **Run Debian paging brain** — SSH into Debian, run `run-helix-poc.sh`.
+   Verify `[SNAPSHOT]` tier lines appear in paging.py logs.
+   Windows snapshot confirmed writing ✅ (timestamp fresh, all fields present).
+   Windows autostart confirmed installed ✅ (Startup folder .cmd).
+2. **Deploy Debian systemd service** — copy `phoenix-helix-kernel.service` to
+   `/etc/systemd/system/`, enable + start. Requires SMB fstab entry for auto-mount.
+3. **Glossary dashboard UI panel** — backend/API already confirmed working.
+4. Write SHARED-FS-TEST.md — detailed setup + troubleshooting doc.
+5. Make SMB mount automatic on boot.
+6. MapTiler map panel in dashboard.
+7. Shade UI + drawer filesystem.
+8. Deploy phoenix-dashboard.service on Ubuntu 192.168.1.133.
+9. Start manual/phoenix_manual.md.
 
 ## KEY FILES
 

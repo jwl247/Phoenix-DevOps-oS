@@ -804,6 +804,9 @@ class AIPagingManager:
         self.vp           = VirtualProcessor(
             config, self.monitor, self.swap_manager, self.control)
 
+        self._helix         = None
+        self._snapshot_path = None
+
         self.running    = False
         self.start_time = datetime.now()
         self.stats      = {
@@ -812,6 +815,7 @@ class AIPagingManager:
             'ai_decisions':        0,
             'threshold_decisions': 0,
             'holds':               0,
+            'helix_snapshots':     0,
         }
 
         self._setup_logging()
@@ -846,12 +850,76 @@ class AIPagingManager:
                 logging.error(f"[DASH] {e}")
         threading.Thread(target=run, daemon=True).start()
 
+    def attach_helix(self, helix) -> None:
+        """Wire in a live HelixSystem for real tier data."""
+        self._helix = helix
+        logging.info("[PAGING] Helix tier feed attached (local)")
+
+    def attach_snapshot_path(self, path: str) -> None:
+        """Wire in the shared snapshot JSON written by the Windows strand."""
+        self._snapshot_path = path
+        logging.info(f"[PAGING] Snapshot path set: {path}")
+
+    def _read_snapshot_json(self, path: str) -> Optional[TierSnapshot]:
+        """
+        Read windows_snapshot.json from the shared SMB mount.
+        Returns None if the file is missing, unreadable, malformed, or older
+        than 30 seconds (writer runs every 5s; 30s = 6 missed cycles).
+        """
+        try:
+            p = Path(path)
+            if not p.exists():
+                return None
+            raw = p.read_text()
+            data = json.loads(raw)
+            age = time.time() - data.get('timestamp', 0)
+            if age > 30:
+                logging.debug(f"[PAGING] Snapshot stale ({age:.0f}s) — ignoring")
+                return None
+            return TierSnapshot(
+                timestamp  = data['timestamp'],
+                hot_mb     = float(data.get('hot_mb',     0)),
+                warm_mb    = float(data.get('warm_mb',    0)),
+                cold_mb    = float(data.get('cold_mb',    0)),
+                frozen_mb  = float(data.get('frozen_mb',  0)),
+                hit_rate   = float(data.get('hit_rate',   0)),
+                promotions = int(data.get('promotions',   0)),
+                demotions  = int(data.get('demotions',    0)),
+                evictions  = int(data.get('evictions',    0)),
+            )
+        except Exception as e:
+            logging.debug(f"[PAGING] Snapshot read error: {e}")
+            return None
+
     def _get_vrram_snapshot(self) -> TierSnapshot:
         """
-        Hook for helix_vrram.py integration.
-        Wire in real HelixMemoryManager.get_stats() here when Frank comes online.
-        Standalone: derives tier approximation from /proc/meminfo.
+        Tier snapshot with three-level priority:
+          1. Live HelixSystem attached (local) — real L1/L2/L3/L5 data
+          2. windows_snapshot.json on shared FS — Windows strand data via SMB
+          3. Fallback — /proc/meminfo ratio approximation (unchanged)
         """
+        if self._helix is not None:
+            snap = self._helix.get_tier_snapshot()
+            self.stats['helix_snapshots'] += 1
+            return TierSnapshot(
+                timestamp  = snap['timestamp'],
+                hot_mb     = snap['hot_mb'],
+                warm_mb    = snap['warm_mb'],
+                cold_mb    = snap['cold_mb'],
+                frozen_mb  = snap['frozen_mb'],
+                hit_rate   = snap['hit_rate'],
+                promotions = snap['promotions'],
+                demotions  = snap['demotions'],
+                evictions  = snap['evictions'],
+            )
+
+        if self._snapshot_path is not None:
+            snap = self._read_snapshot_json(self._snapshot_path)
+            if snap is not None:
+                self.stats['helix_snapshots'] += 1
+                return snap
+
+        # Fallback: derive approximate tier pressure from /proc/meminfo.
         mem  = self.monitor.virtual_memory()
         swap = self.monitor.swap_memory()
         used_mb = mem['used_gb'] * 1000
@@ -878,6 +946,11 @@ class AIPagingManager:
         sw_gb = self.swap_manager.get_current_swap_gb()
         up    = datetime.now() - self.start_time
         ups   = f"{up.days}d {up.seconds//3600}h {(up.seconds%3600)//60}m"
+        helix_source = (
+            'helix-local'  if self._helix else
+            self._snapshot_path if self._snapshot_path else
+            'proc-meminfo-fallback'
+        )
 
         return {
             'control': self.control.get_state(),
@@ -899,6 +972,7 @@ class AIPagingManager:
             'virtual_processor':self.vp.get_stats(),
             'stats':            self.stats,
             'uptime':           ups,
+            'helix_source':     helix_source,
         }
 
     def _log_cycle(self, mem: Dict, swap: Dict,
@@ -911,8 +985,23 @@ class AIPagingManager:
             f"{action.upper()}({amount:.1f}GB) [{reason}]"
         )
 
+    def _log_helix_status(self, snap: TierSnapshot):
+        """Log Helix tier data when a real source is active."""
+        source = "helix" if self._helix else "snapshot"
+        logging.info(
+            f"[{source.upper()}] "
+            f"L1/L2/L3/L5: {snap.hot_mb:.0f}/{snap.warm_mb:.0f}/"
+            f"{snap.cold_mb:.0f}/{snap.frozen_mb:.0f} MB  "
+            f"hit={snap.hit_rate:.1f}%"
+        )
+
     def monitor_and_adapt(self):
-        logging.info("[START] Monitoring loop active")
+        helix_source = (
+            "helix-local" if self._helix else
+            f"snapshot:{self._snapshot_path}" if self._snapshot_path else
+            "proc-meminfo-fallback"
+        )
+        logging.info(f"[START] Monitoring loop active — tier source: {helix_source}")
 
         while self.running:
             try:
@@ -926,6 +1015,15 @@ class AIPagingManager:
 
                 self.engine.record(snap, swap['percent'], mem['percent'])
 
+                # Helix disk-paging signal: frozen_mb > 0 means Helix is actively
+                # writing .page files — RAM tiers are exhausted. Expand proactively.
+                helix_paging = snap.frozen_mb > 0 and (
+                    self._helix is not None or self._snapshot_path is not None
+                )
+
+                if self._helix or self._snapshot_path:
+                    self._log_helix_status(snap)
+
                 # Thermal check
                 temp = self.monitor.cpu_temperature()
                 if temp and temp > self.config.thermal_throttle_temp:
@@ -933,7 +1031,12 @@ class AIPagingManager:
                     time.sleep(self.config.monitoring_interval); continue
 
                 # Decision
-                if self.control.is_ai_mode():
+                if helix_paging:
+                    action = 'expand'
+                    amount = 4.0
+                    reason = 'helix_disk_pressure'
+                    self.stats['ai_decisions'] += 1
+                elif self.control.is_ai_mode():
                     action, amount, reason = self.engine.decide(
                         swap['percent'], mem['percent'], sw_gb)
                     self.stats['ai_decisions'] += 1
@@ -956,7 +1059,7 @@ class AIPagingManager:
                             self.stats['pagefile_expansions'] += 1
                             self._log_cycle(mem, swap, 'expand', safe, reason)
 
-                elif action == 'shrink' and amount > 0:
+                elif action == 'shrink' and amount > 0 and not helix_paging:
                     if sw_gb - amount >= self.config.min_swap_gb:
                         if self.swap_manager.shrink(amount):
                             self.stats['pagefile_shrinks'] += 1
@@ -975,7 +1078,13 @@ class AIPagingManager:
 
     def start(self):
         self.running = True
-        logging.info(f"[INIT] Initializing swapfile on NVMe...")
+
+        # Auto-wire snapshot path from env if not already set via attach_snapshot_path()
+        snap_env = os.environ.get('PHOENIX_PAGING_SNAPSHOT_PATH')
+        if snap_env and self._snapshot_path is None:
+            self.attach_snapshot_path(snap_env)
+
+        logging.info("[INIT] Initializing swapfile on NVMe...")
 
         if not self.swap_manager.initialize():
             logging.error("[INIT] Swap initialization failed — check NVMe mount")

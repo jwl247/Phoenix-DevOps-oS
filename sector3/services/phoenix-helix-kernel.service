@@ -1,0 +1,51 @@
+# phoenix-helix-kernel.service
+# Helix Lightning Kernel — Debian side (paging brain)
+#
+# Starts paging.py pointed at the Windows snapshot JSON on the shared FS.
+# Requires the SMB mount (/phoenix/) to be live before starting.
+#
+# Deploy:
+#   sudo cp phoenix-helix-kernel.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable phoenix-helix-kernel.service
+#   sudo systemctl start  phoenix-helix-kernel.service
+#
+# Or use install-units.sh in this directory.
+#
+# Check status:
+#   sudo systemctl status phoenix-helix-kernel
+#   sudo journalctl -u phoenix-helix-kernel -f
+
+[Unit]
+Description=Phoenix Helix Lightning Kernel (paging brain — Debian side)
+Documentation=file:///phoenix/Phoenix-DevOps-oS/tools/poc/HELIX-LIGHTNING-GUIDE.md
+After=network-online.target phoenix-smb-mount.service
+Wants=network-online.target
+# If the SMB mount has a dedicated unit, add it here:
+# Requires=phoenix-smb-mount.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/phoenix/Phoenix-DevOps-oS
+
+# Environment — paths relative to the shared FS mount
+Environment=PHOENIX_HELIX_PAGE_DIR=/phoenix/helix-pages
+Environment=PHOENIX_PAGING_SNAPSHOT_PATH=/phoenix/helix-pages/windows_snapshot.json
+Environment=PHOENIX_PAGING_NVME_MOUNT=/mnt/nvme
+Environment=PHOENIX_PAGING_SWAPFILE_PATH=/mnt/nvme/swapfile
+
+ExecStartPre=/bin/bash -c 'test -d /phoenix/helix-pages || (echo "[HELIX] /phoenix not mounted" && exit 1)'
+ExecStart=/usr/bin/python3 /phoenix/Phoenix-DevOps-oS/sector4/paging.py start
+
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=phoenix-helix-kernel
+
+[Install]
+WantedBy=multi-user.target
