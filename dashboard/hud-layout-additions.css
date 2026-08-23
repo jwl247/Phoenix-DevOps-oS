@@ -293,10 +293,49 @@
     font-size: 10px;
     margin-top: 2px;
 }
+.glossary-entry-connections {
+    color: #a0c4ff;
+    font-size: 10px;
+    margin-top: 2px;
+}
 .glossary-entry-meta {
     color: var(--text-dim);
     font-size: 9px;
     margin-top: 2px;
+}
+.glossary-history-btn {
+    margin-top: 4px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 9px;
+    cursor: pointer;
+    padding: 0;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+.glossary-history-btn:hover { color: var(--holo-cyan); }
+.glossary-entry-history {
+    margin-top: 4px;
+    padding: 4px 6px;
+    background: rgba(0,0,0,0.25);
+    border-left: 2px solid rgba(100,110,130,0.4);
+    font-size: 9px;
+}
+.glossary-custody-row {
+    padding: 2px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    line-height: 1.5;
+}
+.glossary-custody-action { color: var(--primary-green); font-weight: bold; }
+.glossary-custody-actor  { color: var(--text-secondary); }
+.glossary-custody-date   { color: var(--text-dim); }
+.glossary-qr {
+    display: block;
+    color: #5a8a9f;
+    font-size: 8px;
+    word-break: break-all;
+    margin-top: 1px;
 }
 
 /* ── PS7 embedded shell — full HUD pane, same footprint as AI CHAT ────── */

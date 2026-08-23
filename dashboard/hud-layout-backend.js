@@ -224,6 +224,21 @@ function register({ ipcMain, spawn, dialog }) {
         }
     });
 
+    ipcMain.handle('get-custody', async (event, { hex, limit } = {}) => {
+        const workerUrl = process.env.PHOENIX_WORKER_URL || 'https://packages-worker.phoenix-jwl.workers.dev';
+        const params = new URLSearchParams();
+        if (hex)   params.set('hex', hex);
+        if (limit) params.set('limit', String(limit));
+        try {
+            const res = await fetch(`${workerUrl}/custody?${params.toString()}`);
+            if (!res.ok) return { success: false, error: `Worker returned ${res.status} for /custody` };
+            const data = await res.json();
+            return { success: true, ...data };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
     ipcMain.handle('get-categories', async () => {
         const workerUrl = process.env.PHOENIX_WORKER_URL || 'https://packages-worker.phoenix-jwl.workers.dev';
         try {
