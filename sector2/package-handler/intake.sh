@@ -15,10 +15,13 @@
 
 set -euo pipefail
 
-VERSION="1.6.0"
+VERSION="1.7.0"
 SCRIPT_NAME="intake"
 SCRIPT_HEX="737363726970747332f696e74616b65"
-EVICT_DAYS=3
+MAX_VERSIONS=7   # keep 7 versions per file — a new intake bumps the oldest out
+                 # the 3-day figure is the rollback window (how long you have to
+                 # act before a new intake can displace an old version), not a
+                 # forced deletion timer. nothing is ever deleted just for being old.
 
 # ── Config ────────────────────────────────────────────────────
 CLONEPOOL_DIR="${CLONEPOOL_DIR:-${HOME}/Phoenix/clonepool}"
@@ -244,6 +247,10 @@ check_duplicate() {
 }
 
 # ── Evict old versions for one file ──────────────────────────
+# Rule: keep MAX_VERSIONS most recent versions, evict the rest.
+# Latest version is always protected regardless of count.
+# A version is never deleted just because it is old — only when
+# a new intake pushes the count past MAX_VERSIONS.
 evict_old_versions() {
   local pool_dir="$1"
   local name="$2"
@@ -254,21 +261,36 @@ evict_old_versions() {
   latest=$(get_latest_file "${pool_dir}" "${name}" || true)
   [[ -z "${latest}" ]] && return 0
 
-  local evicted=0
+  # Collect all versions sorted by version number ascending
+  local all_versions=()
   while IFS= read -r f; do
     [[ -z "${f}" ]] && continue
-    [[ "${f}" == "${latest}" ]] && continue  # never evict latest
+    all_versions+=("${f}")
+  done < <(ls "${pool_dir}"/v*_"${name}" 2>/dev/null \
+    | while read -r f; do
+        num=$(basename "${f}" | grep -o 'v[0-9]*' | grep -o '[0-9]*')
+        echo "${num} ${f}"
+      done \
+    | sort -n | awk '{print $2}' || true)
 
-    local age; age=$(file_age_days "${f}")
-    if (( age > EVICT_DAYS )); then
+  local total="${#all_versions[@]}"
+  (( total <= MAX_VERSIONS )) && return 0  # within limit — nothing to do
+
+  local evicted=0
+  local keep_from=$(( total - MAX_VERSIONS ))  # evict the oldest beyond the limit
+  local idx=0
+  for f in "${all_versions[@]}"; do
+    if (( idx < keep_from )); then
+      [[ "${f}" == "${latest}" ]] && { (( idx++ )) || true; continue; }  # safety: never latest
       rm -f "${f}"
-      log "INFO" "evicted: $(basename "${f}") (${age} days old)"
+      log "INFO" "evicted: $(basename "${f}") (version count exceeded ${MAX_VERSIONS})"
       (( evicted++ )) || true
     fi
-  done < <(ls "${pool_dir}"/v*_"${name}" 2>/dev/null || true)
+    (( idx++ )) || true
+  done
 
   if [[ "${silent}" != "true" ]] && (( evicted > 0 )); then
-    echo "[intake:PRUNE] ${name} — evicted ${evicted} old version(s)"
+    echo "[intake:PRUNE] ${name} — evicted ${evicted} old version(s) (kept ${MAX_VERSIONS})"
   fi
 }
 
@@ -622,6 +644,29 @@ intake_file() {
   # ── Auto evict old versions for this file ─────────────────
   evict_old_versions "${pool_dir}" "${orig}" "true"
 
+  # ── Suite auto-registration ────────────────────────────────
+  # If this is a .suite.json manifest, place it at clonepool/<name>/.suite.json
+  # so `usys run <name>` can find it immediately. No manual clone step needed.
+  if [[ "${orig}" == *.suite.json ]]; then
+    local suite_name=""
+    if command -v jq &>/dev/null; then
+      suite_name=$(jq -r '.name // empty' "${filepath}" 2>/dev/null)
+    fi
+    if [[ -z "${suite_name}" ]]; then
+      suite_name=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "${filepath}" 2>/dev/null \
+        | head -1 | sed 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+    fi
+    if [[ -n "${suite_name}" && "${suite_name}" != */* && "${suite_name}" != *\\* ]]; then
+      local suite_dir="${CLONEPOOL_DIR}/${suite_name}"
+      mkdir -p "${suite_dir}"
+      # Re-resolve latest after eviction — copy the surviving version
+      local suite_latest; suite_latest=$(get_latest_file "${pool_dir}" "${orig}" || true)
+      [[ -z "${suite_latest}" ]] && suite_latest="${pool_dir}/${version}_${orig}"
+      cp "${suite_latest}" "${suite_dir}/.suite.json"
+      echo "[intake:SUITE] ${suite_name} → clonepool/${suite_name}/ — runnable: usys run ${suite_name}"
+    fi
+  fi
+
   echo "[intake:OK] ${orig} → clonepool ${version}"
   echo "[intake:OK] hex:      ${hex}"
   echo "[intake:OK] type:     ${filetype}"
@@ -636,10 +681,12 @@ intake_file() {
 # ══════════════════════════════════════════════════════════════
 intake_clone() {
   local name="${1:-}"
+  local req_version="${2:-latest}"  # optional: specific version e.g. v2
 
   if [[ -z "${name}" ]]; then
-    echo "[intake] Usage: intake clone <filename>"
+    echo "[intake] Usage: intake clone <filename> [version]"
     echo "         e.g.:  intake clone myfile.py"
+    echo "         e.g.:  intake clone myfile.py v2"
     return 1
   fi
 
@@ -654,18 +701,32 @@ intake_clone() {
     return 1
   fi
 
-  local latest
-  latest=$(get_latest_file "${pool_dir}" "${name}")
-
-  if [[ -z "${latest}" ]]; then
-    echo "[intake:MISS] No versioned files found for '${name}' in clonepool"
-    return 1
+  # Resolve the target file — latest or specific version
+  local target
+  if [[ "${req_version}" == "latest" ]]; then
+    target=$(get_latest_file "${pool_dir}" "${name}")
+    if [[ -z "${target}" ]]; then
+      echo "[intake:MISS] No versioned files found for '${name}' in clonepool"
+      return 1
+    fi
+  else
+    target="${pool_dir}/${req_version}_${name}"
+    if [[ ! -f "${target}" ]]; then
+      echo "[intake:MISS] Version '${req_version}' of '${name}' not found in clonepool"
+      echo "  Available versions:"
+      ls "${pool_dir}"/v*_"${name}" 2>/dev/null \
+        | while read -r f; do
+            num=$(basename "${f}" | grep -o '^v[0-9]*')
+            echo "    ${num}"
+          done || echo "    (none)"
+      return 1
+    fi
   fi
 
-  local version; version=$(basename "${latest}" | grep -o '^v[0-9]*')
+  local version; version=$(basename "${target}" | grep -o '^v[0-9]*')
   local dest="${PWD}/${name}"
 
-  local verify_result; verify_result=$(verify_clonepool_copy "${hex}" "${latest}")
+  local verify_result; verify_result=$(verify_clonepool_copy "${hex}" "${target}")
   case "${verify_result}" in
     CORRUPT)
       echo ""
@@ -673,7 +734,7 @@ intake_clone() {
       echo " ⚠  its recorded hash. Refusing to clone a corrupted or altered file."
       echo " ⚠  Re-intake ${name} from a trusted source to fix this."
       echo ""
-      log "WARN" "clone out BLOCKED (hash mismatch): ${name}"
+      log "WARN" "clone out BLOCKED (hash mismatch): ${name} ${version}"
       return 1
       ;;
     no_baseline)
@@ -688,15 +749,19 @@ intake_clone() {
     echo "[intake:WARN] '${name}' already exists here — overwriting with ${version}"
   fi
 
-  cp "${latest}" "${dest}"
+  cp "${target}" "${dest}"
 
   log "INFO" "clone out: ${name} ${version} → ${dest}"
   custody_log_local "${hex}" "${name}" "clone_out" "${version}" \
-    "${latest}" "${dest}" "white" "user"
+    "${target}" "${dest}" "white" "user"
   report_custody "${hex}" "${name}" "clone_out" "white" "user"
 
   echo "[intake:OK] ${name} ${version} → ${PWD}/"
-  echo "[intake:OK] This is the latest version — ready to use"
+  if [[ "${req_version}" == "latest" ]]; then
+    echo "[intake:OK] This is the latest version — ready to use"
+  else
+    echo "[intake:OK] Version ${version} restored"
+  fi
   return 0
 }
 
@@ -705,7 +770,7 @@ intake_clone() {
 # ══════════════════════════════════════════════════════════════
 intake_prune() {
   echo ""
-  echo " Scanning clonepool for versions older than ${EVICT_DAYS} days..."
+  echo " Scanning clonepool — evicting versions beyond ${MAX_VERSIONS} per file..."
   echo ""
 
   local total_evicted=0
@@ -747,10 +812,10 @@ intake_prune() {
   echo " ╔══════════════════════════════════════╗"
   echo " ║         PRUNE COMPLETE               ║"
   echo " ╚══════════════════════════════════════╝"
-  echo " Files checked : ${files_checked}"
+  echo " Files checked    : ${files_checked}"
   echo " Versions evicted : ${total_evicted}"
-  echo " Retention    : ${EVICT_DAYS} days"
-  echo " Latest versions : always kept"
+  echo " Retention        : ${MAX_VERSIONS} versions per file"
+  echo " Latest version   : always kept"
   echo ""
 }
 
@@ -811,7 +876,7 @@ intake_status() {
   [[ -n "${PYTHON_CMD}" ]] \
     && echo " Python  : ${PYTHON_CMD}" \
     || echo " Python  : not found (non-critical)"
-  echo " Retention: ${EVICT_DAYS} days"
+  echo " Retention: ${MAX_VERSIONS} versions per file"
   echo " Total   : ${total}"
   echo " White   : ${white} (active)"
   echo " Grey    : ${grey} (deprecated)"
@@ -845,11 +910,12 @@ show_help() {
   OUT (clonepool → your current directory):
     intake clone <file>              Pull latest file version here
     intake clone <dir>               Pull latest directory snapshot here
-    intake clone <dir> v2            Pull specific version here
+    intake clone <file> v2           Pull specific file version here
+    intake clone <dir> v2            Pull specific directory snapshot here
     intake clone <file.lol>          Short syntax works too
 
   MAINTENANCE:
-    intake prune                     Evict old versions (>${EVICT_DAYS} days) across pool
+    intake prune                     Evict versions beyond ${MAX_VERSIONS} per file across pool
     intake status                    Show clonepool status
     intake help                      This screen
 
@@ -858,9 +924,12 @@ show_help() {
     intake asks: keep existing / replace / keep both
 
   Version eviction:
-    Old non-latest versions evict automatically after ${EVICT_DAYS} days
-    Latest version is always kept — no matter how old
-    Single-version files are never evicted
+    Phoenix keeps the ${MAX_VERSIONS} most recent versions of each file
+    A version is displaced only when a new intake pushes the count past ${MAX_VERSIONS}
+    Latest version is always kept — never evicted
+    Files with only one version are never evicted
+    3 days is the rollback window — the time you have to roll back before a
+    new intake can displace an older version. Not a deletion timer.
 
   Pipeline IN:   file → dup check → hex → sidecar → clonepool → custody → D1
   Pipeline OUT:  name → hex → clonepool latest → \$PWD → custody → D1
@@ -879,7 +948,7 @@ EOF
 
 # ── Skip patterns for directory intake ───────────────────────
 SKIP_DIRS=("node_modules" ".git" "__pycache__" ".svn" "vendor" "dist" "build" ".next" ".nuxt" "venv" ".venv" "env" ".tox" "coverage" ".nyc_output" "target" "out" ".wrangler" ".idea" ".gradle" "clonepool" "archive")
-SKIP_EXTENSIONS=(".jpg" ".jpeg" ".png" ".gif" ".webp" ".svg" ".ico" ".bmp" ".tiff" ".mp4" ".mp3" ".wav" ".avi" ".mov" ".zip" ".tar" ".gz" ".rar" ".7z" ".exe" ".dll" ".so" ".dylib" ".bin" ".dat" ".db" ".sqlite" ".lock")
+SKIP_EXTENSIONS=(".jpg" ".jpeg" ".png" ".gif" ".webp" ".svg" ".ico" ".bmp" ".tiff" ".mp4" ".mp3" ".wav" ".avi" ".mov" ".zip" ".tar" ".gz" ".rar" ".7z" ".exe" ".dll" ".so" ".dylib" ".bin" ".dat" ".db" ".sqlite" ".lock" ".qcow2" ".img")
 
 is_skip_dir() {
   local dir="$1"
@@ -1032,14 +1101,21 @@ intake_directory() {
     echo ""
   fi
 
-  echo "  [1] Proceed — intake all files"
-  echo "  [2] Exclude .env and sensitive files"
-  echo "  [3] Cancel"
-  echo ""
-  read -rp "  Choice [1/2/3]: " choice
+  # INTAKE_YES=1 bypasses the interactive prompt (used by intake_project)
+  local choice
+  if [[ "${INTAKE_YES:-0}" == "1" ]]; then
+    choice="1"
+    log "INFO" "dir intake: non-interactive mode (INTAKE_YES=1)"
+  else
+    echo "  [1] Proceed — intake all files"
+    echo "  [2] Exclude .env and sensitive files"
+    echo "  [3] Cancel"
+    echo ""
+    read -rp "  Choice [1/2/3]: " choice
+  fi
 
   case "${choice}" in
-    1) log "INFO" "dir intake: user chose full intake" ;;
+    1) log "INFO" "dir intake: proceeding with full intake" ;;
     2)
       log "INFO" "dir intake: user excluded sensitive files"
       local filtered=()
@@ -1128,8 +1204,10 @@ intake_directory() {
 
     manifest_entries+="  {\"hex\":\"${file_hex}\",\"name\":\"${file_orig}\",\"path\":\"${rel}\",\"version\":\"${file_version}\",\"checksum\":\"${checksum}\"},"
     (( success++ )) || true
-    echo "  [OK] ${rel}"
+    # Phoenix progress line — single in-place update, no per-file scroll
+    printf "\r  Phoenix  %d / %d  %-60s" "${success}" "${#known_files[@]}" "${rel}"
   done
+  echo ""  # terminate the progress line
 
   # ── Write directory sidecar ───────────────────────────────
   local dir_sidecar="${pool_dir}/${hex}.sidecar.json"
@@ -1183,6 +1261,12 @@ DIRSIDECAR
   echo ""
   echo "  To restore: intake clone ${dirname}"
   echo ""
+
+  # Machine-readable output for intake_project() caller
+  if [[ "${INTAKE_YES:-0}" == "1" ]]; then
+    echo "[intake:DIR:HEX] ${hex}"
+    echo "[intake:DIR:VER] ${version}"
+  fi
 }
 
 # ── Directory clone out ───────────────────────────────────────
@@ -1282,9 +1366,14 @@ case "${1:-help}" in
     shift
     name="${1:-}"; version="${2:-latest}"
     [[ "${name}" == *.lol ]] && name="${name%.lol}"
-    # Try directory clone first, fall back to file clone
-    intake_clone_directory "${name}" "${version}" 2>/dev/null \
-      || intake_clone "${name}"
+    # project clone takes priority, then directory, then single file
+    if [[ "${name}" == "project" ]]; then
+      shift
+      intake_clone_project "$@"
+    else
+      intake_clone_directory "${name}" "${version}" 2>/dev/null \
+        || intake_clone "${name}" "${version}"
+    fi
     ;;
   prune)          intake_prune ;;
   backend)        shift; intake_from_backend "$@" ;;

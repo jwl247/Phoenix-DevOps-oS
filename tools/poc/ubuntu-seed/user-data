@@ -1,0 +1,49 @@
+#cloud-config
+hostname: phoenix-ubuntu
+ssh_pwauth: true
+users:
+  - name: phoenix
+    plain_text_passwd: phoenix
+    lock_passwd: false
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    groups: [adm, sudo]
+chpasswd:
+  expire: false
+
+# Disable the default ubuntu user's password lock so SSH works cleanly.
+# The phoenix user above is the operative account.
+system_info:
+  default_user:
+    name: phoenix
+
+# 9p kernel modules are in-tree on Ubuntu 24.04 HWE kernel.
+# plan9-utils provides mount.9p on Ubuntu (equivalent to plan9-fs-utils on Debian).
+packages:
+  - plan9-utils
+
+# Create /phoenix mount points and inject fstab entries.
+# noauto,x-systemd.automount — mounts on first access, never stalls boot
+# if QEMU was launched without --share.
+runcmd:
+  - mkdir -p /phoenix/Desktop
+  - mkdir -p /phoenix/Documents
+  - mkdir -p /phoenix/Downloads
+  - mkdir -p /phoenix/Projects
+  - mkdir -p /phoenix/Vault
+  - >
+    echo 'phoenix-desktop  /phoenix/Desktop   9p  trans=virtio,version=9p2000.L,noauto,x-systemd.automount  0  0'
+    | tee -a /etc/fstab
+  - >
+    echo 'phoenix-documents  /phoenix/Documents  9p  trans=virtio,version=9p2000.L,noauto,x-systemd.automount  0  0'
+    | tee -a /etc/fstab
+  - >
+    echo 'phoenix-downloads  /phoenix/Downloads  9p  trans=virtio,version=9p2000.L,noauto,x-systemd.automount  0  0'
+    | tee -a /etc/fstab
+  - >
+    echo 'phoenix-projects  /phoenix/Projects  9p  trans=virtio,version=9p2000.L,noauto,x-systemd.automount  0  0'
+    | tee -a /etc/fstab
+  - >
+    echo 'phoenix-vault  /phoenix/Vault  9p  trans=virtio,version=9p2000.L,noauto,x-systemd.automount  0  0'
+    | tee -a /etc/fstab
+  - systemctl daemon-reload

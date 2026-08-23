@@ -650,10 +650,10 @@ function binNotes(notes, ticksPerMeasure) {
   for (const note of notes) {
     current.push({ ...note });
     measureTicks += note.durTicks;
-    while (measureTicks >= ticksPerMeasure) {
+    if (measureTicks >= ticksPerMeasure) {
       measures.push(current);
       current = [];
-      measureTicks -= ticksPerMeasure;
+      measureTicks = measureTicks % ticksPerMeasure;
     }
   }
   if (current.length > 0) measures.push(current);
@@ -813,31 +813,25 @@ function drawMeasureNotes(ctx, inst, notes, measX, measW, staffY, ticksPerMeasur
 
 function drawNote(ctx, inst, note, x, y, staffY) {
   const dur = note.durTicks;
-  const filled = dur <= 48;
+  const filled = dur < 48;  // half note (48) is open, not filled
   const color  = inst.color;
 
   // ── Ledger lines ──
   ctx.strokeStyle = '#333';
   ctx.lineWidth   = 1;
-  // Check if outside staff
   const topLine    = staffY;
   const bottomLine = staffY + STAFF_HEIGHT;
-  const halfStep   = STAFF_SPACING / 2;
-  // Lines above staff
+  // Lines above staff (note is above top line when y < topLine)
   let ly = topLine - STAFF_SPACING;
   while (y <= ly + 1) {
     ctx.beginPath(); ctx.moveTo(x - 8, ly); ctx.lineTo(x + 8, ly); ctx.stroke();
     ly -= STAFF_SPACING;
   }
-  // Lines below staff
+  // Lines below staff (note is below bottom line when y > bottomLine)
   ly = bottomLine + STAFF_SPACING;
   while (y >= ly - 1) {
     ctx.beginPath(); ctx.moveTo(x - 8, ly); ctx.lineTo(x + 8, ly); ctx.stroke();
     ly += STAFF_SPACING;
-  }
-  // Middle C ledger (C4 in treble)
-  if (Math.abs(y - (staffY + STAFF_HEIGHT + STAFF_SPACING)) < 2) {
-    ctx.beginPath(); ctx.moveTo(x - 8, y); ctx.lineTo(x + 8, y); ctx.stroke();
   }
 
   // ── Note head ──
@@ -874,7 +868,8 @@ function drawNote(ctx, inst, note, x, y, staffY) {
   // ── Stem ──
   if (dur < 96) {
     const stemDir = y < staffY + STAFF_HEIGHT / 2 ? 1 : -1; // down if above middle, up if below
-    const stemX   = stemDir > 0 ? x + NOTE_R * 0.85 : x - NOTE_R * 0.85;
+    // down-stem: right side of notehead; up-stem: right side too (conventional)
+    const stemX   = stemDir > 0 ? x - NOTE_R * 0.85 : x + NOTE_R * 0.85;
     const stemLen = STAFF_SPACING * 3;
     ctx.strokeStyle = color;
     ctx.lineWidth   = 1.5;

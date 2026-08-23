@@ -15,7 +15,7 @@ const ALLOWED_CHANNELS = new Set([
   'live-capture-start', 'live-capture-stop', 'live-capture-status', 'live-capture-get-latest',
   // hud-layout-backend.js
   'activate-venv', 'detect-venv', 'get-dropdown-slots',
-  'get-external-app-paths', 'get-glossary', 'launch-external-app',
+  'get-categories', 'get-external-app-paths', 'get-glossary', 'launch-external-app',
   'open-exe-dialog', 'set-active-slot', 'set-dropdown-slot',
   'set-external-app-path',
   // ps7-shell.js

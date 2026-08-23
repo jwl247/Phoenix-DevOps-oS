@@ -4,7 +4,7 @@
   "description": "Debian 12 (Bookworm). Intaked once. Runs anywhere Phoenix runs. No installer. No wizard. Phoenix brings the OS.",
   "author": "Debian project / Phoenix intake by jwl247",
   "type": "distro",
-  "entry": "debian-12.5-genericcloud-amd64.qcow2",
+  "entry": "debian-12-genericcloud-amd64.qcow2",
   "runtime": "qemu",
   "dependencies": ["qemu-system"],
   "environment": {
@@ -27,6 +27,14 @@
     "size_bytes": 400000000,
     "login": "phoenix",
     "login_note": "Root password login is blocked by Debian's default sshd config regardless of account state. Cloud-init (tools/poc/debian-seed/) creates a sudo-capable 'phoenix' user (password 'phoenix') instead -- see PHOENIX_MANUAL.md #4 'Running a full distro'. ssh -p 2222 phoenix@127.0.0.1 once booted.",
-    "license": "GPL-2.0"
+    "license": "GPL-2.0",
+    "shared_fs": [
+      { "windows": "F:\\Phoenix\\Desktop",   "tag": "phoenix-desktop",   "debian": "/phoenix/Desktop"   },
+      { "windows": "F:\\Phoenix\\Documents",  "tag": "phoenix-documents",  "debian": "/phoenix/Documents"  },
+      { "windows": "F:\\Phoenix\\Downloads",  "tag": "phoenix-downloads",  "debian": "/phoenix/Downloads"  },
+      { "windows": "F:\\Phoenix\\Projects",   "tag": "phoenix-projects",   "debian": "/phoenix/Projects"   },
+      { "windows": "F:\\Phoenix\\Vault",      "tag": "phoenix-vault",      "debian": "/phoenix/Vault"      }
+    ],
+    "shared_fs_note": "Pass --share to 'usys run debian' to enable. Requires setup-shared-fs.ps1 run once on Windows. Debian auto-mounts via cloud-init + 9p fstab entries (noauto,x-systemd.automount). security_model=mapped-xattr — no elevation required."
   }
 }

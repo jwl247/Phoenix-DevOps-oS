@@ -797,7 +797,14 @@ export default {
         const cat = url.searchParams.get('category');
         const params = [];
         const conditions = [];
-        let query = 'SELECT g.*, c.name AS category FROM glossary g LEFT JOIN categories c ON c.hex = g.category_hex';
+        // tier/qr_valid live on clonepool (the footer QR's own payload is
+        // {"role":"location","tier":N} — see intake.sh), not on glossary —
+        // joined in here by hex so the dashboard can show real location
+        // without a second round trip per entry.
+        let query = `SELECT g.*, c.name AS category, cp.tier AS tier, cp.qr_valid AS qr_valid
+                      FROM glossary g
+                      LEFT JOIN categories c ON c.hex = g.category_hex
+                      LEFT JOIN clonepool cp ON cp.hex_id = g.hex`;
 
         if (search) { conditions.push('g.name LIKE ?'); params.push(`%${search}%`); }
         if (cat) { conditions.push('c.name = ?'); params.push(cat); }

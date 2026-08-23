@@ -199,7 +199,7 @@ of software emulation)
 `root`'s password login is blocked by Debian's default sshd config
 regardless of what's set. `usys run` auto-detects a `seed/user-data` folder
 next to the suite's image and serves it over a local HTTP server
-(`127.0.0.1:8000`, reachable from the guest at `10.0.2.2` — QEMU user-mode
+(`127.0.0.1:8000`, reachable from the Debian side at `10.0.2.2` — QEMU user-mode
 networking's standard host mapping) via a `-smbios` cloud-init hint. No ISO
 tooling needed. This seeds a sudo-capable `phoenix` user (password
 `phoenix`), reachable once booted via:

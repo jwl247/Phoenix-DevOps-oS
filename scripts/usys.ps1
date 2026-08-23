@@ -38,6 +38,12 @@ $script:UsysConfig      = Join-Path $script:UsysHome 'config.json'
 $script:UsysLogDir      = Join-Path $script:UsysHome 'log'
 $script:UsysMagicExts   = @('.lol', '.phx')
 
+# Shared FS — F: drive canonical root and directory names.
+# All phx- wrappers and virtio-9p argument builder reference these; change
+# the drive letter here and every sub-system updates automatically.
+$script:PhxSharedRoot   = 'F:\Phoenix'
+$script:PhxSharedDirs   = @('Desktop', 'Documents', 'Downloads', 'Projects', 'Vault')
+
 # =============================================================================
 # OUTPUT HELPERS — consistent banner style across all commands
 # =============================================================================
@@ -117,6 +123,20 @@ function ConvertTo-GitBashPath([string]$WindowsPath) {
         return "/$($Matches[1].ToLower())$($Matches[2])"
     }
     return $p
+}
+
+function ConvertTo-QemuHostPath([string]$WindowsPath) {
+    # C:\Users\jerry\Phoenix -> C:/Users/jerry/Phoenix
+    # F:\Phoenix\Desktop     -> F:/Phoenix/Desktop
+    # Drive letter and colon preserved — QEMU on Windows accepts this form for -virtfs path=
+    return $WindowsPath.Replace([char]92, [char]47)
+}
+
+function Write-PhxFsBanner {
+    # Two-line contract statement — appears at setup, run --share, and phx-ls.
+    # No color prose, no ASCII art. States the deal.
+    Write-Host "  Phoenix FS  Windows reliable  Debian fast  QEMU bridges" -ForegroundColor Cyan
+    Write-Host "  $($script:PhxSharedDirs -join '  ')" -ForegroundColor White
 }
 
 function Get-UsysIntakeSh {
@@ -797,6 +817,12 @@ function Invoke-UsysRun {
         [ValidateSet('auto','tcg','whpx','hyperv','kvm')]
         [string]$Accel = 'auto',
 
+        # -Share: expose F:\Phoenix\{Desktop,Documents,Downloads,Projects,Vault}
+        # to Debian via QEMU virtio-9p passthrough.
+        # Default off — 'usys run debian' is unchanged without this flag.
+        # Requires security_model=mapped-xattr (no elevation needed).
+        [switch]$Share,
+
         [Parameter(ValueFromRemainingArguments = $true)]
         [string[]]$Arguments
     )
@@ -948,7 +974,7 @@ function Invoke-UsysRun {
                 # ── Cloud-init seed (convention: a 'seed/user-data' dir next to
                 #    the suite's disk image) — no ISO tooling needed. Serves the
                 #    seed over HTTP on loopback; QEMU's user-mode network maps
-                #    that to 10.0.2.2 inside the guest. See PHOENIX_MANUAL.md
+                #    that to 10.0.2.2 on the Debian side. See PHOENIX_MANUAL.md
                 #    "Distro demo" section for the story behind this.
                 $seedDir = Join-Path $suite.Path 'seed'
                 $netArgs = @('-net', 'nic,model=virtio', '-net', 'user')
@@ -973,17 +999,46 @@ function Invoke-UsysRun {
                     Write-UsysInfo "Cloud-init: user 'phoenix' / password 'phoenix' (sudo, no key needed) — SSH: ssh -p 2222 phoenix@127.0.0.1"
                 }
 
+                # ── Shared FS virtio-9p arguments ─────────────────────────
+                # Only appended when -Share is passed. Each directory becomes
+                # a separate -virtfs tag. security_model=mapped-xattr works
+                # without QEMU running as admin (passthrough needs admin).
+                $virtfsArgs = @()
+                if ($Share) {
+                    Write-PhxFsBanner
+                    Write-Host ''
+                    $mountedDirs = @()
+                    foreach ($dir in $script:PhxSharedDirs) {
+                        $winPath = Join-Path $script:PhxSharedRoot $dir
+                        if (Test-Path $winPath) {
+                            $qemuPath = ConvertTo-QemuHostPath $winPath
+                            $tag      = "phoenix-$($dir.ToLower())"
+                            $virtfsArgs += @('-virtfs',
+                                "local,path=$qemuPath,mount_tag=$tag,security_model=mapped-xattr,readonly=off")
+                            $mountedDirs += $dir
+                        } else {
+                            Write-UsysWarn "Shared dir not found on host, skipping: $winPath"
+                        }
+                    }
+                    if ($mountedDirs.Count -gt 0) {
+                        Write-UsysInfo "Shared dirs mounted: $($mountedDirs -join ', ')"
+                        Write-UsysInfo "Mount tags: phoenix-<dir> — see /phoenix/ inside Debian"
+                    }
+                    Write-Host ''
+                }
+
                 # ── Build QEMU argument list ──────────────────────────────
                 $qemuArgs = @(
                     '-m',       $ram,
                     '-smp',     $cpus,
                     '-display', $display,
-                    '-drive',   "file=$entryPath,format=qcow2,if=virtio"
+                    '-drive',   "file=$entryPath,format=$(if ($entryPath -like '*.img') { 'raw' } else { 'qcow2' }),if=virtio"
                 ) + $netArgs
-                if ($smbiosArg) { $qemuArgs += $smbiosArg }
+                if ($smbiosArg)         { $qemuArgs += $smbiosArg }
+                if ($virtfsArgs.Count)  { $qemuArgs += $virtfsArgs }
 
                 # Accelerator args — hyperv gets the full enlightenment set
-                # These tell the guest kernel to use Hyper-V hypercalls instead of
+                # These tell the Debian kernel to use Hyper-V hypercalls instead of
                 # emulated hardware for timers, spinlocks, APIC, etc.
                 # Result: boot time drops from minutes to seconds.
                 if ($resolvedAccel -eq 'hyperv') {
@@ -998,7 +1053,8 @@ function Invoke-UsysRun {
                 if ($snapshot) { $qemuArgs += $snapshot }
 
                 # Pass any extra user args through (e.g. -cdrom seed.iso for cloud-init)
-                $extraArgs = $Arguments | Where-Object { $_ -ne '-Persist' }
+                # Strip internal Phoenix switches that must not reach QEMU
+                $extraArgs = $Arguments | Where-Object { $_ -notin '-Persist', '--share', '-Share' }
                 if ($extraArgs) { $qemuArgs += $extraArgs }
 
                 & $qemu @qemuArgs
@@ -1051,6 +1107,106 @@ function Invoke-UsysListSuites {
     Write-Host ''
 }
 
+# =============================================================================
+# SUITE PROMOTE — wrap any intaked file as a runnable suite
+# =============================================================================
+function Get-UsysRuntimeForExt {
+    # Maps file extension to runtime string — mirrors detect_filetype() in intake.sh
+    param([string]$Filename)
+    $ext = [System.IO.Path]::GetExtension($Filename).ToLowerInvariant().TrimStart('.')
+    switch ($ext) {
+        'py'    { return 'python' }
+        'sh'    { return 'bash' }
+        'bash'  { return 'bash' }
+        'zsh'   { return 'bash' }
+        'ps1'   { return 'powershell' }
+        'js'    { return 'node' }
+        'mjs'   { return 'node' }
+        'cjs'   { return 'node' }
+        'qcow2' { return 'qemu' }
+        'img'   { return 'qemu' }
+        default { return 'binary' }
+    }
+}
+
+function Invoke-UsysSuitePromote {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [string]$Name,
+
+        [string]$Desc = ''
+    )
+
+    $clonepoolDir = Get-UsysClonepoolDir
+
+    # Find the latest versioned file matching this name in the clonepool
+    $target = $null
+    $targetVersion = 'v1'
+    Get-ChildItem -Path $clonepoolDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+        $candidate = Get-ChildItem -Path $_.FullName -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^v\d+_' -and $_.BaseName -replace '^v\d+_','' -eq $Name } |
+            Sort-Object { [int]($_.Name -replace '^v(\d+)_.*','$1') } |
+            Select-Object -Last 1
+        if ($candidate -and (-not $target -or [int]($candidate.Name -replace '^v(\d+)_.*','$1') -gt [int]($target.Name -replace '^v(\d+)_.*','$1'))) {
+            $target = $candidate
+        }
+    }
+
+    if (-not $target) {
+        Write-UsysErr "No intaked file named '$Name' found in clonepool"
+        Write-UsysInfo "Intake it first: usys clone <file> or usys intake <file>"
+        return
+    }
+
+    $entryFilename  = $target.Name -replace '^v\d+_',''
+    $targetVersion  = $target.Name -replace '^(v\d+)_.*','$1'
+    $runtime        = Get-UsysRuntimeForExt -Filename $entryFilename
+    $hexId          = Split-Path $target.DirectoryName -Leaf
+    $description    = if ($Desc) { $Desc } else { "Phoenix suite — promoted from $entryFilename" }
+
+    $manifest = [ordered]@{
+        name         = $Name
+        version      = $targetVersion
+        description  = $description
+        author       = 'phoenix'
+        type         = 'script'
+        entry        = $entryFilename
+        runtime      = $runtime
+        dependencies = @()
+        environment  = @{}
+        permissions  = @('filesystem:read')
+        metadata     = [ordered]@{
+            category = 'promoted'
+            tags     = @('promoted', 'no-install', 'phoenix')
+            hex_id   = $hexId
+        }
+    }
+
+    # Write to temp, then intake through Invoke-UsysClone so it gets
+    # hex identity, QR strings, hash baseline, D1 record, R2 upload.
+    # The .suite.json auto-registration hook in intake.sh then fires
+    # and places it at clonepool/<name>/.suite.json automatically.
+    $tmpDir  = Join-Path ([System.IO.Path]::GetTempPath()) "phoenix-promote-$Name"
+    $tmpFile = Join-Path $tmpDir "$Name.suite.json"
+    New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+    $manifest | ConvertTo-Json -Depth 6 | Set-Content $tmpFile -Encoding UTF8
+
+    Write-Host ''
+    Write-UsysInfo "Promoting '$Name' ($entryFilename) as runtime: $runtime"
+    Write-UsysInfo "Intaking generated manifest through Phoenix pipeline..."
+    Write-Host ''
+
+    Invoke-UsysClone -Path $tmpFile
+
+    # Clean up temp
+    Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+
+    Write-Host ''
+    Write-UsysOk "Suite promoted: $Name v$targetVersion — runnable: usys run $Name"
+    Write-Host ''
+}
+
 function Invoke-UsysLoad {
     [CmdletBinding()]
     param(
@@ -1088,6 +1244,229 @@ function Invoke-UsysLoad {
     # Return suite object for further use
     return $suite
 }
+
+# =============================================================================
+# SHARED FS — enforcement boundary between Windows host and Debian (QEMU peer)
+# =============================================================================
+
+function Test-PhxSharedPath([string]$Path) {
+    # Returns true only if Path resolves under $script:PhxSharedRoot.
+    # Called by every phx- wrapper before acting — no raw FS access bypasses this.
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    $norm = $Path.TrimEnd('\', '/')
+    $root = $script:PhxSharedRoot.TrimEnd('\', '/')
+    return $norm.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Invoke-PhxImport {
+    # phx-import <path>
+    # Direction: shared FS → clonepool
+    # Validates path is inside PhxSharedRoot, then calls Invoke-UsysClone
+    # so the file gets hex ID, QR, hash baseline, D1 record.
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [string]$Path,
+        [switch]$DryRun
+    )
+
+    if (-not (Test-PhxSharedPath $Path)) {
+        Write-UsysErr "phx-import: path must be inside $script:PhxSharedRoot — got: $Path"
+        return
+    }
+    if (-not (Test-Path $Path)) {
+        Write-UsysErr "phx-import: path not found: $Path"
+        return
+    }
+
+    Write-UsysInfo "phx-import: $Path → clonepool"
+    Invoke-UsysClone -Path $Path -Category 'shared-fs' -DryRun:$DryRun
+}
+Set-Alias -Name phx-import -Value Invoke-PhxImport -Scope Global -Force -ErrorAction SilentlyContinue
+
+function Invoke-PhxExport {
+    # phx-export <hex-or-name> <destination-dir>
+    # Direction: clonepool → shared FS
+    # Copies the latest versioned file from the pool into a named shared directory.
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [string]$NameOrHex,
+
+        [Parameter(Mandatory, Position = 1)]
+        [string]$DestDir,
+
+        [switch]$DryRun
+    )
+
+    if (-not (Test-PhxSharedPath $DestDir)) {
+        Write-UsysErr "phx-export: destination must be inside $script:PhxSharedRoot — got: $DestDir"
+        return
+    }
+
+    $pool = Get-UsysClonepoolDir
+    # Find the named suite directory first
+    $suiteDir = Join-Path $pool $NameOrHex
+    $sourceFile = $null
+
+    if (Test-Path $suiteDir) {
+        # Named suite — find the latest versioned payload file (not .suite.json sidecar)
+        $sourceFile = Get-ChildItem -Path $suiteDir -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notlike '.suite.json' -and $_.Name -notlike '*.sidecar.json' } |
+            Sort-Object Name -Descending | Select-Object -First 1
+    }
+
+    if (-not $sourceFile) {
+        # Fall back: search hex bucket directories
+        Get-ChildItem -Path $pool -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            if (-not $sourceFile) {
+                $f = Get-ChildItem -Path $_.FullName -File -ErrorAction SilentlyContinue |
+                    Where-Object { $_.BaseName -replace '^v\d+_','' -eq $NameOrHex } |
+                    Sort-Object Name -Descending | Select-Object -First 1
+                if ($f) { $sourceFile = $f }
+            }
+        }
+    }
+
+    if (-not $sourceFile) {
+        Write-UsysErr "phx-export: '$NameOrHex' not found in clonepool"
+        return
+    }
+
+    if (-not (Test-Path $DestDir)) {
+        if ($DryRun) {
+            Write-Host "  [DRY RUN] Would create: $DestDir" -ForegroundColor Cyan
+        } else {
+            New-Item -ItemType Directory -Path $DestDir -Force | Out-Null
+        }
+    }
+
+    $destPath = Join-Path $DestDir $sourceFile.Name
+    Write-UsysInfo "phx-export: $($sourceFile.FullName) → $destPath"
+
+    if ($DryRun) {
+        Write-Host "  [DRY RUN] Would copy: $($sourceFile.FullName)" -ForegroundColor Cyan
+        Write-Host "         → $destPath" -ForegroundColor Cyan
+    } else {
+        Copy-Item -Path $sourceFile.FullName -Destination $destPath -Force
+        Write-UsysOk "Exported to: $destPath"
+    }
+}
+Set-Alias -Name phx-export -Value Invoke-PhxExport -Scope Global -Force -ErrorAction SilentlyContinue
+
+function Invoke-PhxSync {
+    # phx-sync <dir>
+    # Direction: shared FS dir → clonepool (import only, never destructive)
+    # Walks every file in the named shared dir; imports anything not yet in the pool.
+    # Checks by calling Invoke-PhxImport — idempotent (intake.sh duplicate-detection
+    # skips files already registered).
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [string]$Dir,
+
+        [switch]$DryRun
+    )
+
+    # Accept short name ("Desktop") or full path ("F:\Phoenix\Desktop")
+    $fullPath = if (Test-PhxSharedPath $Dir) {
+        $Dir
+    } else {
+        Join-Path $script:PhxSharedRoot $Dir
+    }
+
+    if (-not (Test-PhxSharedPath $fullPath)) {
+        Write-UsysErr "phx-sync: path must be inside $script:PhxSharedRoot — got: $fullPath"
+        return
+    }
+    if (-not (Test-Path $fullPath)) {
+        Write-UsysErr "phx-sync: directory not found: $fullPath"
+        return
+    }
+
+    Write-UsysInfo "phx-sync: scanning $fullPath"
+    $files = Get-ChildItem -Path $fullPath -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -notlike '_PHOENIX_DIR.txt' }
+
+    if ($files.Count -eq 0) {
+        Write-UsysInfo "phx-sync: directory is empty — nothing to import"
+        return
+    }
+
+    Write-UsysInfo "phx-sync: found $($files.Count) file(s)"
+    $imported = 0
+    foreach ($f in $files) {
+        Write-UsysInfo "  → $($f.FullName)"
+        if (-not $DryRun) {
+            Invoke-PhxImport -Path $f.FullName
+            $imported++
+        }
+    }
+    if ($DryRun) {
+        Write-Host "  [DRY RUN] Would import $($files.Count) file(s)" -ForegroundColor Cyan
+    } else {
+        Write-UsysOk "phx-sync complete: $imported file(s) processed"
+    }
+}
+Set-Alias -Name phx-sync -Value Invoke-PhxSync -Scope Global -Force -ErrorAction SilentlyContinue
+
+function Invoke-PhxLs {
+    # phx-ls [dir]
+    # Read-only: lists shared FS directories and their clonepool registration status.
+    [CmdletBinding()]
+    param(
+        [Parameter(Position = 0)]
+        [string]$Dir = ''
+    )
+
+    Write-Host ''
+    Write-PhxFsBanner
+    Write-Host ''
+
+    $workerUrl  = $env:PHOENIX_WORKER_URL
+    $workerAuth = $env:PHOENIX_AUTH
+    $pool       = Get-UsysClonepoolDir
+
+    $dirsToList = if ($Dir) { @($Dir) } else { $script:PhxSharedDirs }
+
+    foreach ($d in $dirsToList) {
+        $fullPath = if (Test-PhxSharedPath $d) { $d } else { Join-Path $script:PhxSharedRoot $d }
+        $exists   = Test-Path $fullPath
+        $label    = if ($exists) { $d } else { "$d (missing)" }
+        Write-Host "  $label" -ForegroundColor $(if ($exists) { 'Cyan' } else { 'DarkGray' })
+
+        if ($exists) {
+            $files = Get-ChildItem -Path $fullPath -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -notlike '_PHOENIX_DIR.txt' }
+            if ($files.Count -eq 0) {
+                Write-Host "    (empty)" -ForegroundColor DarkGray
+            } else {
+                foreach ($f in $files) {
+                    # Check whether this file has a matching entry in the local clonepool.
+                    # We detect by looking for any versioned file with the same name in any hex bucket.
+                    $registered = $false
+                    Get-ChildItem -Path $pool -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+                        if (-not $registered) {
+                            $hit = Get-ChildItem -Path $_.FullName -File -ErrorAction SilentlyContinue |
+                                Where-Object { $_.Name -replace '^v\d+_','' -eq $f.Name } |
+                                Select-Object -First 1
+                            if ($hit) { $registered = $true }
+                        }
+                    }
+                    $status = if ($registered) { '[pool]' } else { '[new] ' }
+                    $color  = if ($registered) { 'Green' } else { 'Yellow' }
+                    Write-Host "    $status  $($f.Name)" -ForegroundColor $color
+                }
+            }
+        }
+        Write-Host ''
+    }
+    Write-Host "  Shared root : $script:PhxSharedRoot"
+    Write-Host "  Clonepool   : $pool"
+    Write-Host "  Import new  : phx-import <path>   Sync all: phx-sync <dir>" -ForegroundColor DarkGray
+    Write-Host ''
+}
+Set-Alias -Name phx-ls -Value Invoke-PhxLs -Scope Global -Force -ErrorAction SilentlyContinue
 
 # =============================================================================
 # COMMAND: help
@@ -1137,6 +1516,29 @@ function Show-UsysHelp {
     run ubuntu                   Boot Ubuntu 24.04 VM (auto accelerator)
     run debian --accel tcg       Act 1: pure software emulation, no HW required
     run debian --accel hyperv    Act 2: WHPX + Hyper-V enlightenments, near-native speed
+    run debian --share           Boot with shared FS (F:\Phoenix\* → /phoenix/*)
+    run debian --accel hyperv --share   Full speed + shared FS
+
+  Shared FS (Windows hosts F:\Phoenix\*, Debian mounts /phoenix/* via QEMU):
+    usys fs-init                 One-time setup: create F:\Phoenix\{dirs}, wire profile
+    usys fs-ls [dir]             List shared dirs + pool registration status
+    usys fs-import <path>        Import a shared-FS file into the clonepool
+    usys fs-export <name> <dir>  Export a pool item into a shared dir
+    usys fs-sync <dir>           Sync all files in a shared dir into the pool
+
+    phx-import <path>            Same as usys fs-import (profile alias)
+    phx-export <name> <dir>      Same as usys fs-export (profile alias)
+    phx-sync <dir>               Same as usys fs-sync (profile alias)
+    phx-ls [dir]                 Same as usys fs-ls (profile alias)
+
+    Rule: ALL operations against F:\Phoenix\ go through these wrappers.
+          No raw path access. No bypass. The profile enforces this.
+
+  Suites:
+    suite-promote <name>             Wrap an intaked file as a runnable suite
+    suite-promote <name> -Desc "x"  Same with a custom description
+    suite-list                       List all runnable suites in clonepool
+    list-suites                      Alias for suite-list
 
   Registry (requires ~/.usys/usys.sh):
     register <file> <name>       Register callable file
@@ -1271,8 +1673,9 @@ function global:usys {
         }
 
         'run' {
-            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys run <suite> [--accel auto|tcg|whpx|hyperv|kvm] [args...]'; return }
+            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys run <suite> [--accel auto|tcg|whpx|hyperv|kvm] [--share] [args...]'; return }
             $dry       = $Rest -contains '-DryRun' -or $Rest -contains '--dry-run'
+            $share     = $Rest -contains '--share' -or $Rest -contains '-Share'
             $accel     = 'auto'
             $suiteName = $Rest[0]
             $version   = ''
@@ -1289,10 +1692,10 @@ function global:usys {
             foreach ($token in ($Rest | Select-Object -Skip 1)) {
                 if ($skipNext) { $skipNext = $false; continue }
                 if ($token -eq '--accel' -or $token -eq '-accel') {
-                    # next token is the value — peek by re-iterating with index below
                     $skipNext = $true
                     continue
                 }
+                if ($token -in '--share', '-Share') { continue }
                 $filteredRest.Add($token)
             }
             # Second pass for --accel=value and value-after-flag
@@ -1305,7 +1708,7 @@ function global:usys {
             }
 
             $passArgs = $filteredRest | Where-Object { $_ -notin '-DryRun', '--dry-run' }
-            Invoke-UsysRun -SuiteName $suiteName -Version $version -Accel $accel -DryRun:$dry -Arguments $passArgs
+            Invoke-UsysRun -SuiteName $suiteName -Version $version -Accel $accel -Share:$share -DryRun:$dry -Arguments $passArgs
         }
 
         'pull' {
@@ -1323,6 +1726,20 @@ function global:usys {
                 if ($Rest[$i] -eq '--runtime' -and $i + 1 -lt $Rest.Count) { $runtime = $Rest[++$i] }
             }
             Invoke-UsysListSuites -Type $type -Runtime $runtime
+        }
+
+        'suite-list' {
+            Invoke-UsysListSuites
+        }
+
+        'suite-promote' {
+            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys suite-promote <name> [-Desc "description"]'; return }
+            $name = $Rest[0]
+            $desc = ''
+            for ($i = 1; $i -lt $Rest.Count; $i++) {
+                if ($Rest[$i] -in '-Desc','--desc' -and $i + 1 -lt $Rest.Count) { $desc = $Rest[++$i] }
+            }
+            Invoke-UsysSuitePromote -Name $name -Desc $desc
         }
 
         'load' {
@@ -1405,6 +1822,43 @@ function global:usys {
                     Write-Host ''
                 }
             }
+        }
+
+        'fs-init' {
+            # Bootstrap the shared directories (delegate to setup-shared-fs logic inline)
+            $repoRoot = Get-UsysRepoRoot
+            $setupScript = Join-Path $repoRoot 'tools\poc\setup-shared-fs.ps1'
+            if (Test-Path $setupScript) {
+                & pwsh -NoProfile -ExecutionPolicy Bypass -File $setupScript
+            } else {
+                Write-UsysErr "setup-shared-fs.ps1 not found. Expected at: $setupScript"
+                Write-UsysInfo "Run: pwsh tools\poc\setup-shared-fs.ps1 directly from the repo root"
+            }
+        }
+
+        'fs-ls' {
+            $dir = if ($Rest.Count -ge 1) { $Rest[0] } else { '' }
+            Invoke-PhxLs -Dir $dir
+        }
+
+        'fs-import' {
+            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys fs-import <path>'; return }
+            $dry = $Rest -contains '-DryRun' -or $Rest -contains '--dry-run'
+            $path = $Rest | Where-Object { $_ -notin '-DryRun','--dry-run' } | Select-Object -First 1
+            Invoke-PhxImport -Path $path -DryRun:$dry
+        }
+
+        'fs-export' {
+            if ($Rest.Count -lt 2) { Write-UsysErr 'usage: usys fs-export <name-or-hex> <dest-dir>'; return }
+            $dry = $Rest -contains '-DryRun' -or $Rest -contains '--dry-run'
+            Invoke-PhxExport -NameOrHex $Rest[0] -DestDir $Rest[1] -DryRun:$dry
+        }
+
+        'fs-sync' {
+            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys fs-sync <dir>'; return }
+            $dry = $Rest -contains '-DryRun' -or $Rest -contains '--dry-run'
+            $dir = $Rest | Where-Object { $_ -notin '-DryRun','--dry-run' } | Select-Object -First 1
+            Invoke-PhxSync -Dir $dir -DryRun:$dry
         }
 
         { $_ -in @('register', 'call', 'swap', 'rollback', 'list', 'info', 'remove', 'where', 'sync') } {
