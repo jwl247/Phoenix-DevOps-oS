@@ -156,15 +156,18 @@ if (Test-Path $Snapshot) {
 # ---------------------------------------------------------------------------
 # COPY test script to share so Debian can run it without the repo mounted
 # ---------------------------------------------------------------------------
-$ShScript   = Join-Path $PSScriptRoot 'test-double-helix.sh'
-$ShareDest  = Join-Path $PageDir 'test-double-helix.sh'
-
-if (Test-Path $ShScript) {
-    try {
-        Copy-Item -Force -Path $ShScript -Destination $ShareDest
-        Info "Copied test-double-helix.sh -> $ShareDest"
-    } catch {
-        Info "Could not copy .sh to share: $_  (non-fatal)"
+# Copy both Debian-side scripts to the share so they're always reachable at
+# /phoenix/helix-pages/ without the repo being present on the share.
+foreach ($sh in @('test-double-helix.sh', 'persist-smb-mount.sh')) {
+    $src  = Join-Path $PSScriptRoot $sh
+    $dest = Join-Path $PageDir $sh
+    if (Test-Path $src) {
+        try {
+            Copy-Item -Force -Path $src -Destination $dest
+            Info "Copied $sh -> $dest"
+        } catch {
+            Info "Could not copy ${sh}: $_  (non-fatal)"
+        }
     }
 }
 
