@@ -440,42 +440,120 @@
         });
     }
 
-    // Footer QR's own payload is {"role":"location","tier":N} (intake.sh) —
-    // tier maps to a physical breach_coms drive per CLAUDE.md's drive table.
-    const TIER_LOCATION = {
-        1: 'T1 · breach_coms4 · master vault',
-        2: 'T2 · breach_coms3 · day-1 mirror',
-        3: 'T3 · breach_coms2 · day-2 mirror (clonepool primary)',
-        4: 'T4 · breach_coms1 · day-3 mirror'
+    // ── Sector derivation from pool_path ─────────────────────────────────
+    // pool_path looks like "/c/Users/jwlef/Phoenix/clonepool/<hex>" or
+    // "/home/jwlef/Phoenix/clonepool/<hex>". Category + description give
+    // the connection to the sector it lives in.
+    const SECTOR_CONNECTIONS = {
+        'subsystem': 'Sector 1 — boot/kernel',
+        'scripts':   'Sector 2 — intake/clone',
+        'comms':     'Sector 3 — comms/network',
+        'database':  'Sector 4 — helix/vault',
+        'directory': 'Sector 2 — clonepool snapshot',
+        'media':     'Sector 2 — docs/media',
+        'distro':    'Sector 2 — distro suite',
+        'infrastructure': 'Sector 2 — infrastructure'
     };
 
+    function deriveLocation(g) {
+        // Show the clonepool path shortened to the last two segments.
+        // pool_path: /c/Users/jwlef/Phoenix/clonepool/<hex>
+        if (!g.pool_path) return null;
+        const parts = g.pool_path.replace(/\\/g, '/').split('/').filter(Boolean);
+        const last2 = parts.slice(-2).join('/');
+        return `clonepool/${last2}`;
+    }
+
     function renderGlossaryEntry(g) {
-        const stateWord = g.state || 'white';
-        const location = TIER_LOCATION[g.tier] || (g.tier ? `T${g.tier}` : null);
-        const qrBadge = g.qr_valid === 1 ? 'verified' : (g.qr_valid === 0 ? 'unverified' : null);
-        const meta = [g.category, g.version, g.platform, g.size ? `${g.size}b` : null, g.intaked_at]
-            .filter(Boolean).join('  ·  ');
+        const stateWord  = g.state || 'white';
+        const location   = deriveLocation(g);
+        const sector     = SECTOR_CONNECTIONS[g.category] || null;
+        const address    = g.b58 || (g.hex ? g.hex.slice(0, 16) + '…' : null);
+        const amended    = g.amended ? ' · amended' : '';
+        const sizeStr    = g.size ? formatBytes(g.size) : null;
+        const dateStr    = g.intaked_at ? g.intaked_at.slice(0, 10) : null;
+
+        // Meta row: category · version · size · date · amended flag
+        const meta = [g.category, g.version, sizeStr, dateStr].filter(Boolean).join('  ·  ') + amended;
+
+        // Connections row: sector + b58 address
+        const conn = [sector, address ? `TAV:${address}` : null].filter(Boolean).join('  ·  ');
+
         return `
-            <div class="glossary-entry">
+            <div class="glossary-entry" data-hex="${escapeHtml(g.hex || '')}" data-name="${escapeHtml(g.name)}">
                 <div class="glossary-entry-head">
                     <span class="glossary-entry-name">${escapeHtml(g.name)}</span>
                     <span class="glossary-state glossary-state-${escapeHtml(stateWord)}">${escapeHtml(stateWord)}</span>
                 </div>
                 ${g.description ? `<div class="glossary-entry-desc">${escapeHtml(g.description)}</div>` : ''}
-                ${location ? `<div class="glossary-entry-location">📍 ${escapeHtml(location)}${qrBadge ? ` · QR ${qrBadge}` : ''}</div>` : ''}
-                ${meta ? `<div class="glossary-entry-meta">${escapeHtml(meta)}</div>` : ''}
+                ${location   ? `<div class="glossary-entry-location">&#x1f4c1; ${escapeHtml(location)}</div>` : ''}
+                ${conn       ? `<div class="glossary-entry-connections">&#x1f517; ${escapeHtml(conn)}</div>` : ''}
+                ${meta       ? `<div class="glossary-entry-meta">${escapeHtml(meta)}</div>` : ''}
+                <div class="glossary-entry-history" style="display:none;"></div>
+                <button class="glossary-history-btn" data-hex="${escapeHtml(g.hex || '')}" title="show version history">&#x25BC; history</button>
             </div>`;
     }
 
+    function formatBytes(b) {
+        if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+        if (b >= 1024)    return (b / 1024).toFixed(1) + ' KB';
+        return b + ' B';
+    }
+
+    // Expand/collapse version history on click
+    document.getElementById('glossary-list')?.addEventListener('click', async e => {
+        const btn = e.target.closest('.glossary-history-btn');
+        if (!btn) return;
+        const hex = btn.dataset.hex;
+        if (!hex) return;
+        const entry   = btn.closest('.glossary-entry');
+        const histDiv = entry?.querySelector('.glossary-entry-history');
+        if (!histDiv) return;
+
+        if (histDiv.style.display !== 'none') {
+            histDiv.style.display = 'none';
+            btn.innerHTML = '&#x25BC; history';
+            return;
+        }
+
+        btn.innerHTML = '&#x25BA; loading…';
+        histDiv.style.display = 'block';
+        histDiv.innerHTML = '<span style="color:var(--text-dim)">fetching…</span>';
+
+        const result = await invoke('get-custody', { hex }).catch(e => ({ success: false, error: e.message }));
+        if (!result.success) {
+            histDiv.innerHTML = `<span style="color:var(--red-light)">${escapeHtml(result.error)}</span>`;
+            btn.innerHTML = '&#x25BC; history';
+            return;
+        }
+
+        const rows = result.custody || [];
+        if (!rows.length) {
+            histDiv.innerHTML = '<span style="color:var(--text-dim)">no custody records</span>';
+        } else {
+            histDiv.innerHTML = rows.map(r => {
+                const qr   = r.qr_top  ? `<span class="glossary-qr">${escapeHtml(r.qr_top)}</span>` : '';
+                const tick = r.validated ? ' ✓' : '';
+                return `<div class="glossary-custody-row">
+                    <span class="glossary-custody-action">${escapeHtml(r.action)}${tick}</span>
+                    <span class="glossary-custody-actor"> · ${escapeHtml(r.actor || '—')}</span>
+                    <span class="glossary-custody-date"> · ${escapeHtml((r.intaked_at || '').slice(0, 16))}</span>
+                    ${qr}
+                </div>`;
+            }).join('');
+        }
+        btn.innerHTML = '&#x25BC; history';
+    });
+
     async function loadGlossaryResults() {
-        const listEl = document.getElementById('glossary-list');
+        const listEl  = document.getElementById('glossary-list');
         const countEl = document.getElementById('glossary-count');
         if (!listEl) return;
-        const q = document.getElementById('glossary-search')?.value.trim() || '';
+        const q        = document.getElementById('glossary-search')?.value.trim() || '';
         const category = document.getElementById('glossary-category')?.value || '';
-        const state = document.getElementById('glossary-state')?.value || '';
+        const state    = document.getElementById('glossary-state')?.value || '';
 
-        listEl.innerHTML = '<div class="place-loading">loading glossary...</div>';
+        listEl.innerHTML = '<div class="place-loading">loading glossary…</div>';
         const result = await invoke('get-glossary', { q, category }).catch(e => ({ success: false, error: e.message }));
         if (!result.success) {
             listEl.innerHTML = `<span style="color:var(--red-light)">${escapeHtml(result.error)}</span>`;
@@ -484,8 +562,10 @@
         }
 
         let entries = result.glossary || [];
-        // Worker doesn't filter by state server-side — do it here.
+        // State filter is client-side — worker doesn't support it server-side.
         if (state) entries = entries.filter(g => (g.state || 'white') === state);
+        // Alphabetical — worker returns insertion order by default.
+        entries.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
         if (countEl) {
             countEl.textContent = `${entries.length}${entries.length !== result.count ? ` of ${result.count}` : ''} entr${entries.length === 1 ? 'y' : 'ies'}`;
