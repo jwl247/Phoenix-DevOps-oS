@@ -12,7 +12,10 @@ def apply(library):
     from frank_ring import SuitSpec, SuitType
     from franken5 import DataFamily
 
-    repo = Path(os.environ.get("PHOENIX_SUITS", Path(__file__).parents[1]))
+    # parents[0] = sector1/helix-lightning/
+    # parents[1] = sector1/             (wrong — missing sector1 prefix for sub-paths)
+    # parents[2] = Phoenix-DevOps-oS/   (repo root — correct)
+    repo = Path(os.environ.get("PHOENIX_SUITS", Path(__file__).parents[2]))
     s1 = Path(os.environ.get("PHOENIX_SECTOR1", repo / "sector1"))
     s2 = Path(os.environ.get("PHOENIX_SECTOR2", repo / "sector2"))
     s3 = Path(os.environ.get("PHOENIX_SECTOR3", repo / "sector3"))

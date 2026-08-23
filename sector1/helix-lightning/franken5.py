@@ -254,9 +254,13 @@ class RingState(IntEnum):
     DEAD      = auto()
 
 
+# SIGUSR1/SIGUSR2 are POSIX-only. On Windows use SIGBREAK as the interrupt
+# signal and SIGTERM as the done signal — only one custom signal available.
+_ON_WINDOWS = not hasattr(signal, 'SIGUSR1')
+
 class FrankSignal(IntEnum):
-    STAGE_READY   = signal.SIGUSR1   # Helix-I fires this
-    RING_DONE     = signal.SIGUSR2   # Frank-ring fires this on exit
+    STAGE_READY   = signal.SIGBREAK if _ON_WINDOWS else signal.SIGUSR1
+    RING_DONE     = signal.SIGTERM  if _ON_WINDOWS else signal.SIGUSR2
     SHUTDOWN      = signal.SIGTERM
 
 
