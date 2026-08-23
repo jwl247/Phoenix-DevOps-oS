@@ -401,19 +401,28 @@ setInterval(update,5000);update();
 ################################################################################
 
 class AIPagingManagerWindows:
-    def __init__(self, config: SystemConfig):
+    def __init__(self, config: SystemConfig, helix=None):
         self.config = config
         self.monitor = WindowsSystemMonitor()
         self.pagefile_manager = WindowsPagefileManager(config)
         self.control = ControlSystem(config.control_file)
-        
+
+        # Optional HelixSystem reference.
+        # When set, _get_vrram_snapshot() reads real L1/L2/L3/L5 tier data
+        # from Helix instead of estimating from Windows API memory counters.
+        # Attach after construction:
+        #   manager = AIPagingManagerWindows(config)
+        #   manager.attach_helix(helix_system_instance)
+        self._helix = helix
+
         self.running = False
         self.start_time = datetime.now()
         self.stats = {
             'pagefile_expansions': 0,
             'pagefile_shrinks': 0,
             'thermal_throttle_events': 0,
-            'emergency_stops': 0
+            'emergency_stops': 0,
+            'helix_snapshots': 0,
         }
         
         log_file = Path("C:\\ProgramData\\ai-paging-manager.log")
@@ -443,6 +452,51 @@ class AIPagingManagerWindows:
         
         threading.Thread(target=run_server, daemon=True).start()
     
+    def attach_helix(self, helix) -> None:
+        """
+        Wire in a live HelixSystem so _get_vrram_snapshot() reads real
+        tier data. Call this after both objects are constructed.
+        """
+        self._helix = helix
+        logging.info("[PAGING] Helix tier feed attached")
+
+    def _get_vrram_snapshot(self) -> dict:
+        """
+        Returns tier pressure data for the monitoring loop.
+
+        If a HelixSystem is attached, reads real L1/L2/L3/L5 sizes and
+        hit rates directly. Otherwise falls back to estimating from the
+        Windows memory API (less accurate — no tier visibility).
+
+        Return keys are a superset of paging.py TierSnapshot fields so
+        both platforms share the same downstream logic.
+        """
+        if self._helix is not None:
+            snap = self._helix.get_tier_snapshot()
+            self.stats['helix_snapshots'] += 1
+            return snap
+
+        # Fallback: derive approximate tier pressure from Windows API.
+        # Hot = top 40% of used RAM, Warm = next 30%, Cold = next 20%,
+        # Frozen = pagefile in use. No real tier visibility here.
+        memory = self.monitor.virtual_memory()
+        swap   = self.monitor.swap_memory()
+        used_mb  = (memory.used  / (1024**2))
+        swap_mb  = (swap.used    / (1024**2))
+        return {
+            'timestamp':  datetime.now().timestamp(),
+            'hot_mb':     used_mb * 0.40,
+            'warm_mb':    used_mb * 0.30,
+            'cold_mb':    used_mb * 0.20,
+            'frozen_mb':  swap_mb,
+            'hit_rate':   max(0.0, 100.0 - memory.percent),
+            'promotions': 0,
+            'demotions':  0,
+            'evictions':  int(swap_mb / 10),
+            'pages_on_disk':      0,
+            'disk_bytes_written': 0,
+        }
+
     def check_thermal_status(self):
         cpu_temp = self.monitor.get_cpu_temperature()
         return {
@@ -491,36 +545,50 @@ class AIPagingManagerWindows:
         }
     
     def monitor_and_adapt(self):
-        logging.info("🚀 Starting monitoring")
-        
+        logging.info("Starting monitoring loop")
+        helix_source = "helix" if self._helix else "windows-api-estimate"
+        logging.info(f"[PAGING] Tier snapshot source: {helix_source}")
+
         while self.running:
             try:
                 if not self.control.is_enabled():
-                    logging.info("⏸️  Disabled")
                     time.sleep(30)
                     continue
-                
+
                 load = self.get_system_load()
-                
-                # Expand if needed
-                if load['swap_percent'] > self.config.expand_threshold_percent:
+                snap = self._get_vrram_snapshot()
+
+                # Tier-aware expansion: act on Helix pressure if available.
+                # frozen_mb > 0 means Helix is actively paging to disk — that
+                # is the real signal that RAM tiers are exhausted.
+                helix_paging = snap['frozen_mb'] > 0 and self._helix is not None
+                swap_high    = load['swap_percent'] > self.config.expand_threshold_percent
+                swap_low     = load['swap_percent'] < self.config.shrink_threshold_percent
+
+                if helix_paging or swap_high:
                     current = self.pagefile_manager.get_current_pagefile_size()
                     if current < self.config.max_pagefile_gb:
-                        logging.info(f"📈 High usage ({load['swap_percent']:.1f}%) - expanding")
+                        reason = "helix_disk_pressure" if helix_paging else "swap_threshold"
+                        logging.info(
+                            f"[EXPAND] {reason}  swap={load['swap_percent']:.1f}%"
+                            f"  frozen={snap['frozen_mb']:.1f}MB"
+                        )
                         if self.pagefile_manager.expand_pagefile(4.0):
                             self.stats['pagefile_expansions'] += 1
-                
-                # Shrink if possible
-                elif load['swap_percent'] < self.config.shrink_threshold_percent:
+
+                elif swap_low and not helix_paging:
                     current = self.pagefile_manager.get_current_pagefile_size()
                     if current > self.config.min_pagefile_gb:
-                        logging.info(f"📉 Low usage ({load['swap_percent']:.1f}%) - shrinking")
+                        logging.info(
+                            f"[SHRINK] swap={load['swap_percent']:.1f}%"
+                            f"  frozen={snap['frozen_mb']:.1f}MB"
+                        )
                         if self.pagefile_manager.shrink_pagefile(2.0):
                             self.stats['pagefile_shrinks'] += 1
-                
+
                 self.log_status(load)
                 time.sleep(self.config.monitoring_interval_seconds)
-                
+
             except KeyboardInterrupt:
                 self.running = False
                 break
@@ -530,21 +598,22 @@ class AIPagingManagerWindows:
     
     def log_status(self, load):
         pagefile_size = self.pagefile_manager.get_current_pagefile_size()
-        
-        status = f"""
-        ═══════════════════════════════════════
-        AI PAGING - {datetime.now().strftime('%H:%M:%S')}
-        ═══════════════════════════════════════
-        RAM: {load['ram_percent']:.1f}% ({load['ram_available_gb']:.2f}GB free)
-        Pagefile: {load['swap_percent']:.1f}% ({load['swap_used_gb']:.2f}GB used)
-        CPU: {load['cpu_percent']:.1f}%
-        
-        Pagefile Size: {pagefile_size:.2f}GB
-        Expansions: {self.stats['pagefile_expansions']}
-        Shrinks: {self.stats['pagefile_shrinks']}
-        ═══════════════════════════════════════
-        """
-        logging.info(status)
+        snap = self._get_vrram_snapshot()
+        helix_line = (
+            f"  Helix L1/L2/L3/L5: {snap['hot_mb']:.0f}/"
+            f"{snap['warm_mb']:.0f}/{snap['cold_mb']:.0f}/"
+            f"{snap['frozen_mb']:.0f} MB  "
+            f"pages={snap['pages_on_disk']}  hit={snap['hit_rate']:.1f}%"
+            if self._helix else "  Helix: not attached"
+        )
+        logging.info(
+            f"RAM:{load['ram_percent']:.1f}%({load['ram_available_gb']:.2f}GB free) "
+            f"PF:{load['swap_percent']:.1f}%({load['swap_used_gb']:.2f}GB) "
+            f"CPU:{load['cpu_percent']:.1f}%  "
+            f"PF_size:{pagefile_size:.2f}GB  "
+            f"exp:{self.stats['pagefile_expansions']} shr:{self.stats['pagefile_shrinks']}"
+        )
+        logging.info(helix_line)
     
     def start(self):
         self.running = True
