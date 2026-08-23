@@ -68,10 +68,16 @@ function register({ ipcMain, spawn }) {
         return new Promise((resolve) => {
             const ps7Exe = resolvePs7Exe();
             const usysScript = resolveUsysScript();
-            const fullCommand = usysScript
-                ? `. "${usysScript}" *> $null; ${trimmed}`
-                : trimmed;
-            const proc = spawn(ps7Exe, ['-NoProfile', '-NoLogo', '-Command', fullCommand], {
+            // Load the real user profile so usys, MCP server, skills, and all
+            // env vars set by `usys init` are available in the embedded shell.
+            // Dot-source usys.ps1 after the profile in case the profile already
+            // loads it (the second dot-source is a no-op — functions are just
+            // redefined with identical bodies, safe to do every time).
+            const preamble = usysScript
+                ? `. "${usysScript}" *> $null; `
+                : '';
+            const fullCommand = `${preamble}${trimmed}`;
+            const proc = spawn(ps7Exe, ['-NoLogo', '-Command', fullCommand], {
                 cwd,
                 shell: false,
                 // Explicitly closed (not just unwritten) stdin. Left as an
