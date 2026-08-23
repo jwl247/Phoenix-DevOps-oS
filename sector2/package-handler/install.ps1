@@ -298,7 +298,7 @@ try {
     $reg = Invoke-WebRequest `
         -Uri "$WORKER_URL/installed/register" `
         -Method POST `
-        -Headers @{ "X-Phoenix-Auth" = $env:PHOENIX_AUTH; "Content-Type" = "application/json" } `
+        -Headers @{ "Authorization" = "Bearer $($env:PHOENIX_AUTH)"; "Content-Type" = "application/json" } `
         -Body $regBody -UseBasicParsing -TimeoutSec 15
     if ($reg.StatusCode -in @(200,201)) { PHX-OK "Machine registered." }
     else { PHX-Warn "Registration HTTP $($reg.StatusCode)." }
@@ -310,7 +310,7 @@ try {
 PHX-Info "Fetching package glossary..."
 try {
     $g = Invoke-RestMethod -Uri "$WORKER_URL/glossary" `
-        -Headers @{ "X-Phoenix-Auth" = $env:PHOENIX_AUTH } -TimeoutSec 10
+        -Headers @{ "Authorization" = "Bearer $($env:PHOENIX_AUTH)" } -TimeoutSec 10
     $pkgs = if ($g.results) { $g.results } elseif ($g.glossary) { $g.glossary } else { @() }
     PHX-OK "Glossary loaded — $($pkgs.Count) packages available."
 } catch {

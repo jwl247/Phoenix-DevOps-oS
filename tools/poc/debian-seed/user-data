@@ -9,3 +9,30 @@ users:
     shell: /bin/bash
 chpasswd:
   expire: false
+
+# cifs-utils provides mount.cifs for SMB/CIFS mounting.
+# Windows hosts F:\Phoenix as \\10.0.2.2\Phoenix — QEMU user-net maps
+# the Windows host to 10.0.2.2 from inside the VM.
+packages:
+  - cifs-utils
+
+# Mount the Windows SMB share at /phoenix.
+# Credentials are written to /etc/phoenix-cifs.creds (root-readable only)
+# so the password is not visible in /proc/mounts or ps output.
+# 10.0.2.2 = Windows host via QEMU user-mode network (always reachable).
+# uid/gid 1000 = phoenix user — full read/write ownership inside Debian.
+# nofail,_netdev = never stall boot if share is unreachable.
+runcmd:
+  - mkdir -p /phoenix
+  - |
+    cat > /etc/phoenix-cifs.creds << 'EOF'
+    username=jwlef
+    password=wtfover1A?
+    domain=
+    EOF
+  - chmod 600 /etc/phoenix-cifs.creds
+  - mount -t cifs //10.0.2.2/Phoenix /phoenix -o credentials=/etc/phoenix-cifs.creds,uid=1000,gid=1000,iocharset=utf8,vers=3.0,nofail || true
+  - >
+    echo '//10.0.2.2/Phoenix  /phoenix  cifs  credentials=/etc/phoenix-cifs.creds,uid=1000,gid=1000,iocharset=utf8,vers=3.0,nofail,_netdev  0  0'
+    | tee -a /etc/fstab
+  - systemctl daemon-reload

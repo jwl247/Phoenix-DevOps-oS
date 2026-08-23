@@ -127,18 +127,10 @@
     document.getElementById('switcher-bash')?.addEventListener('click', (e) => launchExternal('bash', e.currentTarget));
     document.getElementById('switcher-github')?.addEventListener('click', (e) => launchExternal('githubDesktop', e.currentTarget));
 
-    document.getElementById('switcher-glossary')?.addEventListener('click', async () => {
-        const panel = document.getElementById('panel-glossary');
-        if (!panel) return;
-        panel.classList.toggle('open');
-        if (!panel.classList.contains('open')) return;
-        panel.innerHTML = 'loading glossary from D1...';
-        const result = await invoke('get-glossary');
-        if (!result.success) {
-            panel.innerHTML = `<span style="color:var(--red-light)">${result.error}</span>`;
-            return;
-        }
-        panel.innerHTML = `<pre style="white-space:pre-wrap;font-size:10px;">${JSON.stringify(result, null, 2)}</pre>`;
+    // GLOSSARY now lives as a full HUD nav pane — this switcher is just a
+    // shortcut into it, same pattern as PS7 SHELL.
+    document.getElementById('switcher-glossary')?.addEventListener('click', () => {
+        window.phoenixDashboard?._hudNavSwitch('glossary');
     });
 
     // ── Right column actions ─────────────────────────────────────────────
@@ -421,6 +413,102 @@
             ps7ShellAppend(`<span class="ps7-shell-stderr">${esc(result.error).replace(/\n/g, '<br>')}</span>`);
         }
     });
+
+    // 10. GLOSSARY — searchable TOC/index over the clonepool + D1.
+    // Backend (get-glossary/get-categories) confirmed working end-to-end
+    // against the live worker (docs/GLOSSARY.md) — this just replaces the
+    // old raw-JSON-dump popout with an actual searchable list.
+    let glossaryCategoriesLoaded = false;
+    let glossarySearchTimer = null;
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    async function loadGlossaryCategories() {
+        const select = document.getElementById('glossary-category');
+        if (!select || glossaryCategoriesLoaded) return;
+        const result = await invoke('get-categories').catch(e => ({ success: false, error: e.message }));
+        if (!result.success || !result.categories) return; // filter still works without it
+        glossaryCategoriesLoaded = true;
+        result.categories.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            select.appendChild(opt);
+        });
+    }
+
+    // Footer QR's own payload is {"role":"location","tier":N} (intake.sh) —
+    // tier maps to a physical breach_coms drive per CLAUDE.md's drive table.
+    const TIER_LOCATION = {
+        1: 'T1 · breach_coms4 · master vault',
+        2: 'T2 · breach_coms3 · day-1 mirror',
+        3: 'T3 · breach_coms2 · day-2 mirror (clonepool primary)',
+        4: 'T4 · breach_coms1 · day-3 mirror'
+    };
+
+    function renderGlossaryEntry(g) {
+        const stateWord = g.state || 'white';
+        const location = TIER_LOCATION[g.tier] || (g.tier ? `T${g.tier}` : null);
+        const qrBadge = g.qr_valid === 1 ? 'verified' : (g.qr_valid === 0 ? 'unverified' : null);
+        const meta = [g.category, g.version, g.platform, g.size ? `${g.size}b` : null, g.intaked_at]
+            .filter(Boolean).join('  ·  ');
+        return `
+            <div class="glossary-entry">
+                <div class="glossary-entry-head">
+                    <span class="glossary-entry-name">${escapeHtml(g.name)}</span>
+                    <span class="glossary-state glossary-state-${escapeHtml(stateWord)}">${escapeHtml(stateWord)}</span>
+                </div>
+                ${g.description ? `<div class="glossary-entry-desc">${escapeHtml(g.description)}</div>` : ''}
+                ${location ? `<div class="glossary-entry-location">📍 ${escapeHtml(location)}${qrBadge ? ` · QR ${qrBadge}` : ''}</div>` : ''}
+                ${meta ? `<div class="glossary-entry-meta">${escapeHtml(meta)}</div>` : ''}
+            </div>`;
+    }
+
+    async function loadGlossaryResults() {
+        const listEl = document.getElementById('glossary-list');
+        const countEl = document.getElementById('glossary-count');
+        if (!listEl) return;
+        const q = document.getElementById('glossary-search')?.value.trim() || '';
+        const category = document.getElementById('glossary-category')?.value || '';
+        const state = document.getElementById('glossary-state')?.value || '';
+
+        listEl.innerHTML = '<div class="place-loading">loading glossary...</div>';
+        const result = await invoke('get-glossary', { q, category }).catch(e => ({ success: false, error: e.message }));
+        if (!result.success) {
+            listEl.innerHTML = `<span style="color:var(--red-light)">${escapeHtml(result.error)}</span>`;
+            if (countEl) countEl.textContent = '';
+            return;
+        }
+
+        let entries = result.glossary || [];
+        // Worker doesn't filter by state server-side — do it here.
+        if (state) entries = entries.filter(g => (g.state || 'white') === state);
+
+        if (countEl) {
+            countEl.textContent = `${entries.length}${entries.length !== result.count ? ` of ${result.count}` : ''} entr${entries.length === 1 ? 'y' : 'ies'}`;
+        }
+        if (!entries.length) {
+            listEl.innerHTML = '<div class="place-loading">no matching entries</div>';
+            return;
+        }
+        listEl.innerHTML = entries.map(renderGlossaryEntry).join('');
+    }
+
+    document.querySelector('.hud-nav-btn[data-hud-nav="glossary"]')?.addEventListener('click', async () => {
+        await loadGlossaryCategories();
+        loadGlossaryResults();
+    });
+
+    document.getElementById('glossary-search')?.addEventListener('input', () => {
+        clearTimeout(glossarySearchTimer);
+        glossarySearchTimer = setTimeout(loadGlossaryResults, 300);
+    });
+    document.getElementById('glossary-category')?.addEventListener('change', loadGlossaryResults);
+    document.getElementById('glossary-state')?.addEventListener('change', loadGlossaryResults);
+    document.getElementById('glossary-refresh')?.addEventListener('click', loadGlossaryResults);
 
     // ── Boot ──────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', () => {

@@ -25,8 +25,16 @@
     "arch": "amd64",
     "flavor": "server-cloudimg",
     "size_bytes": 650000000,
-    "login": "ubuntu",
-    "login_note": "Ubuntu cloud image — boots to login prompt. Add cloud-init seed ISO for passwordless login.",
-    "license": "Various"
+    "login": "phoenix",
+    "login_note": "Cloud-init seed (tools/poc/ubuntu-seed/) creates a sudo-capable 'phoenix' user (password 'phoenix'). SSH: ssh -p 2222 phoenix@127.0.0.1 once booted. Image format is raw (.img) — usys run handles this automatically.",
+    "license": "Various",
+    "shared_fs": [
+      { "windows": "F:\\Phoenix\\Desktop",   "tag": "phoenix-desktop",   "debian": "/phoenix/Desktop"   },
+      { "windows": "F:\\Phoenix\\Documents",  "tag": "phoenix-documents",  "debian": "/phoenix/Documents"  },
+      { "windows": "F:\\Phoenix\\Downloads",  "tag": "phoenix-downloads",  "debian": "/phoenix/Downloads"  },
+      { "windows": "F:\\Phoenix\\Projects",   "tag": "phoenix-projects",   "debian": "/phoenix/Projects"   },
+      { "windows": "F:\\Phoenix\\Vault",      "tag": "phoenix-vault",      "debian": "/phoenix/Vault"      }
+    ],
+    "shared_fs_note": "Pass --share to 'usys run ubuntu' to enable. Same mount tags as Debian — both distros share the same F:\\Phoenix\\ tree. security_model=mapped-xattr — no elevation required."
   }
 }

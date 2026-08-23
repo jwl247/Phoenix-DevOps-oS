@@ -147,6 +147,92 @@ usys status
 
 ---
 
+## Shared filesystem — Windows ↔ Debian
+
+Debian and Windows share the same directories on `F:\Phoenix\` — no sync, no
+copy, no WSL. QEMU's virtio-9p passthrough bridges them. The PS7 wrappers
+(`phx-import`, `phx-export`, `phx-sync`, `phx-ls`) are the only legal
+operations against the shared area. The profile loads them on every terminal open.
+
+### One-time setup (Windows side)
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools\poc\setup-shared-fs.ps1
+```
+
+This creates `F:\Phoenix\{Desktop,Documents,Downloads,Projects,Vault}`, stamps
+each with a `_PHOENIX_DIR.txt` marker, prints the mount table, and wires the
+profile. Safe to run more than once — nothing is overwritten destructively.
+
+Or via usys after `usys init`:
+
+```powershell
+usys fs-init
+```
+
+### Running Debian with the shared FS
+
+```powershell
+usys run debian --share                       # Act 1 (TCG) + shared FS
+usys run debian --accel hyperv --share        # Act 2 (near-native) + shared FS
+```
+
+Without `--share`: standard boot, unchanged. The shared directories are opt-in.
+
+### Debian side (first boot with updated cloud-init seed)
+
+On first boot after setup, cloud-init installs `plan9-fs-utils` and injects
+fstab entries with `noauto,x-systemd.automount`. Each directory mounts
+automatically on first access — a missing tag never stalls boot.
+
+```bash
+# Inside Debian — directories are live when booted with --share:
+ls /phoenix/Desktop
+ls /phoenix/Documents
+ls /phoenix/Downloads
+ls /phoenix/Projects
+ls /phoenix/Vault
+```
+
+### PS7 wrappers — the enforcement layer
+
+| Command | Direction | What it does |
+|---------|-----------|--------------|
+| `phx-import <path>` | shared FS → clonepool | Intakes a file from the shared area; gives it hex ID + D1 registration |
+| `phx-export <name> <dir>` | clonepool → shared FS | Copies a pool item into a named shared directory |
+| `phx-sync <dir>` | shared FS dir → clonepool | Imports every file in a shared dir not yet in the pool (idempotent) |
+| `phx-ls [dir]` | read-only | Lists shared dirs and their pool registration status |
+
+All four are also available as `usys fs-import`, `usys fs-export`,
+`usys fs-sync`, `usys fs-ls`.
+
+**Rule:** ALL operations against `F:\Phoenix\` go through these wrappers.
+No raw path access. No bypass. The profile enforces this.
+
+```powershell
+# Examples
+phx-ls                              # show all five dirs + pool status
+phx-ls Desktop                     # show one dir
+phx-import F:\Phoenix\Desktop\report.pdf    # intake a shared file
+phx-sync Downloads                  # import everything new in Downloads\
+phx-export my-script F:\Phoenix\Projects\  # copy pool item into Projects\
+```
+
+### Mount tag reference
+
+| Windows path | virtio-9p tag | Debian path |
+|---|---|---|
+| `F:\Phoenix\Desktop` | `phoenix-desktop` | `/phoenix/Desktop` |
+| `F:\Phoenix\Documents` | `phoenix-documents` | `/phoenix/Documents` |
+| `F:\Phoenix\Downloads` | `phoenix-downloads` | `/phoenix/Downloads` |
+| `F:\Phoenix\Projects` | `phoenix-projects` | `/phoenix/Projects` |
+| `F:\Phoenix\Vault` | `phoenix-vault` | `/phoenix/Vault` |
+
+The mount tag is the stable QEMU contract — the Windows host path can move
+without touching Debian's `/etc/fstab`.
+
+---
+
 ## Troubleshooting
 
 - **`Suite not found: debian`** — the manifest hasn't been cloned into

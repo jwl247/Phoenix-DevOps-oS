@@ -90,7 +90,6 @@
                     <button type="button" class="sector-btn" id="switcher-github">GITHUB DESKTOP</button>
                     <button type="button" class="sector-btn" id="switcher-glossary">GLOSSARY</button>
                 </div>
-                <div class="hud-action-panel" id="panel-glossary"></div>
 
                 <div class="hud-dropdown-slots" id="hud-dropdown-slots">
                     <!-- populated by hud-layout.js -->
@@ -291,6 +290,26 @@
                                     <input type="text" class="ps7-shell-input" id="ps7-shell-input" autocomplete="off" spellcheck="false" placeholder="PS7 command...">
                                 </div>
                             </div><!-- /PS7 SHELL -->
+
+                            <!-- GLOSSARY — searchable TOC/index over the clonepool + D1 -->
+                            <div class="hud-nav-pane" id="hud-pane-glossary" data-hud-nav="glossary">
+                                <div class="hud-pane-title">GLOSSARY</div>
+                                <div class="glossary-toolbar">
+                                    <input type="text" id="glossary-search" class="glossary-search" placeholder="search by name..." autocomplete="off">
+                                    <select id="glossary-category" class="glossary-select" title="filter by category">
+                                        <option value="">all categories</option>
+                                    </select>
+                                    <select id="glossary-state" class="glossary-select" title="filter by lifecycle state">
+                                        <option value="">all states</option>
+                                        <option value="white">white — active</option>
+                                        <option value="grey">grey — deprecated</option>
+                                        <option value="black">black — retired</option>
+                                    </select>
+                                    <button type="button" class="drawer-btn secondary" id="glossary-refresh">REFRESH</button>
+                                </div>
+                                <div class="glossary-count" id="glossary-count"></div>
+                                <div class="glossary-list" id="glossary-list"><div class="place-loading">loading glossary...</div></div>
+                            </div><!-- /GLOSSARY -->
                         </div><!-- /.hud-main -->
                     </div><!-- /.hud-interface -->
                 </div><!-- /.holographic-display -->
@@ -307,6 +326,7 @@
                     <button type="button" class="hud-nav-btn" data-hud-nav="settings"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">SETTINGS</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="codes"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">CODES</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="ps7-shell"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">PS7 SHELL</span></button>
+                    <button type="button" class="hud-nav-btn" data-hud-nav="glossary"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">GLOSSARY</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="guide"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">GUIDE</span></button>
                 </nav>
                 <div class="hud-zone-boundary" title="HUD boundary"></div>

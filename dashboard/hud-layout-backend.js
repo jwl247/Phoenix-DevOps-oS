@@ -200,18 +200,36 @@ function register({ ipcMain, spawn, dialog }) {
     });
 
     // ── Glossary — real fetch against the worker, honest on failure ───────
-    ipcMain.handle('get-glossary', async () => {
+    // Reads are public (no auth needed) per docs/GLOSSARY.md — only
+    // POST/PUT/DELETE require the Bearer token, and this dashboard panel
+    // is read-only.
+    ipcMain.handle('get-glossary', async (event, { q, category } = {}) => {
         const workerUrl = process.env.PHOENIX_WORKER_URL || 'https://packages-worker.phoenix-jwl.workers.dev';
-        const auth = process.env.PHOENIX_AUTH || '';
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        if (category) params.set('category', category);
+        const qs = params.toString();
         try {
-            const res = await fetch(`${workerUrl}/glossary`, {
-                headers: auth ? { 'Authorization': `Bearer ${auth}` } : {}
-            });
+            const res = await fetch(`${workerUrl}/glossary${qs ? `?${qs}` : ''}`);
             if (!res.ok) {
                 return {
                     success: false,
                     error: `Worker returned ${res.status} for /glossary — that route may not be deployed yet.`
                 };
+            }
+            const data = await res.json();
+            return { success: true, ...data };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('get-categories', async () => {
+        const workerUrl = process.env.PHOENIX_WORKER_URL || 'https://packages-worker.phoenix-jwl.workers.dev';
+        try {
+            const res = await fetch(`${workerUrl}/categories`);
+            if (!res.ok) {
+                return { success: false, error: `Worker returned ${res.status} for /categories.` };
             }
             const data = await res.json();
             return { success: true, ...data };
