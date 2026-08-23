@@ -57,6 +57,32 @@ _find_python() {
 }
 PYTHON_CMD="${PHOENIX_PYTHON:-$(_find_python)}"
 
+# ── Base58 (for QR header/footer strings) ──────────────────────
+# Matches phoenix-core/tools/intake.py's _base58() exactly — that Python
+# pipeline is the one place this ever actually worked (generates real
+# USYS:<b58>:HEADER / :FOOTER:<hex> strings, stored in D1 custody.qr_top/
+# qr_bottom). This bash pipeline never had it; reusing the proven
+# algorithm via Python rather than reimplementing bignum division in bash.
+_base58_from_hex() {
+  local hex16="$1"
+  [[ -z "${PYTHON_CMD}" ]] && { echo ""; return; }
+  "${PYTHON_CMD}" -c "
+alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+data = bytes.fromhex('${hex16}')
+n = int.from_bytes(data, 'big')
+result = ''
+while n:
+    n, r = divmod(n, 58)
+    result = alphabet[r] + result
+for byte in data:
+    if byte == 0:
+        result = alphabet[0] + result
+    else:
+        break
+print(result)
+" 2>/dev/null
+}
+
 # ── Bootstrap ─────────────────────────────────────────────────
 mkdir -p "${LOG_DIR}" "${CLONEPOOL_DIR}" "$(dirname "${CATALOG_DB}")"
 
@@ -375,14 +401,87 @@ upload_to_r2() {
     || log "WARN" "R2 upload failed (${http_code}) → ${hex}"
 }
 
+# stored_filepath (10th, optional) is the actual bytes on disk — content
+# hash baseline for the "validated" integrity check (clone-to-workdir and
+# hot-swap must never hand out a corrupted/incorrect copy). Package installs
+# and directory summaries have no single file to hash, so it's optional;
+# omitted, hash_sha3/hash_blake2 stay null and COALESCE on the D1 side
+# leaves any prior value alone.
 report_clonepool() {
+  local hex="${1}"
   local sensitive="${9:-false}"
+  local stored_filepath="${10:-}"
+  local b58; b58=$(_base58_from_hex "${hex:0:16}")
+  local header_qr="" footer_qr=""
+  if [[ -n "${b58}" ]]; then
+    header_qr="USYS:${b58}:HEADER"
+    footer_qr="USYS:${b58}:FOOTER:${hex}"
+  fi
+  local hash_sha3="" hash_blake2=""
+  if [[ -n "${stored_filepath}" && -f "${stored_filepath}" ]]; then
+    hash_sha3=$(openssl dgst -sha3-512 -r "${stored_filepath}" 2>/dev/null | awk '{print $1}')
+    hash_blake2=$(openssl dgst -blake2b512 -r "${stored_filepath}" 2>/dev/null | awk '{print $1}')
+  fi
   post_to_d1 "/clonepool" \
-    "{\"hex_id\":\"${1}\",\"b58\":\"${1}\",\"name\":\"${2}\",\"version\":\"${3}\",\"state\":\"${4}\",\"pool_path\":\"${5}\",\"sidecar_path\":\"${6}\",\"tier\":${7},\"size\":${8},\"sensitive\":${sensitive}}"
+    "{\"hex_id\":\"${hex}\",\"b58\":\"${b58:-${hex}}\",\"name\":\"${2}\",\"version\":\"${3}\",\"state\":\"${4}\",\"pool_path\":\"${5}\",\"sidecar_path\":\"${6}\",\"tier\":${7},\"size\":${8},\"sensitive\":${sensitive},\"header_qr\":\"${header_qr}\",\"footer_qr\":\"${footer_qr}\",\"hash_sha3\":\"${hash_sha3}\",\"hash_blake2\":\"${hash_blake2}\"}"
 }
 report_custody() {
+  local hex="${1}"
+  local b58; b58=$(_base58_from_hex "${hex:0:16}")
+  local qr_top="" qr_bottom=""
+  if [[ -n "${b58}" ]]; then
+    qr_top="USYS:${b58}:HEADER"
+    qr_bottom="USYS:${b58}:FOOTER:${hex}"
+  fi
   post_to_d1 "/custody" \
-    "{\"hex_id\":\"${1}\",\"name\":\"${2}\",\"action\":\"${3}\",\"state\":\"${4}\",\"actor\":\"${5}\"}"
+    "{\"hex_id\":\"${hex}\",\"name\":\"${2}\",\"action\":\"${3}\",\"state\":\"${4}\",\"actor\":\"${5}\",\"qr_top\":\"${qr_top}\",\"qr_bottom\":\"${qr_bottom}\"}"
+}
+# ── Integrity check — clone-to-workdir / hot-swap gate ────────
+# The local clonepool copy is what's actually handed to the working
+# directory; the hash recorded in D1 at intake time is the trusted
+# baseline. Nothing corrupted or altered should ever come out the other
+# end of `intake clone`. Prints one of: valid | CORRUPT | no_baseline
+# (older, pre-hash-fix intakes have no baseline yet — allowed through
+# with a warning rather than hard-blocked, since refusing every legacy
+# file until the backfill runs would just break normal use).
+verify_clonepool_copy() {
+  local hex="$1" filepath="$2"
+  [[ -z "${PHOENIX_AUTH}" || ! -f "${filepath}" ]] && { echo "no_baseline"; return; }
+  local meta
+  meta=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
+  local baseline_sha3
+  baseline_sha3=$(echo "${meta}" | grep -o '"hash_sha3":"[^"]*"' | head -1 | sed -E 's/.*:"([^"]*)"/\1/')
+  [[ -z "${baseline_sha3}" ]] && { echo "no_baseline"; return; }
+
+  local actual_sha3
+  actual_sha3=$(openssl dgst -sha3-512 -r "${filepath}" 2>/dev/null | awk '{print $1}')
+  if [[ -n "${actual_sha3}" && "${actual_sha3}" == "${baseline_sha3}" ]]; then
+    curl -s -o /dev/null -X POST -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "Content-Type: application/json" \
+      -d "{\"hash_sha3\":\"${actual_sha3}\"}" "${WORKER_URL}/clonepool/${hex}/validate" 2>/dev/null
+    echo "valid"
+  else
+    echo "CORRUPT"
+  fi
+}
+# Same check, looped over every file in a restored directory snapshot — each
+# file also has its own independent hex/baseline from dir_intake's per-file
+# loop, so this is just verify_clonepool_copy applied per file. Prints
+# "corrupt|verified|unverified" counts.
+verify_directory_snapshot() {
+  local snapshot="$1"
+  local corrupt=0 verified=0 unverified=0
+  local f fname fhex result
+  while IFS= read -r -d '' f; do
+    fname=$(basename "${f}")
+    fhex=$(to_hex "${fname}")
+    result=$(verify_clonepool_copy "${fhex}" "${f}")
+    case "${result}" in
+      CORRUPT)     corrupt=$((corrupt+1)); echo "  [CORRUPT] ${fname}" >&2 ;;
+      valid)       verified=$((verified+1)) ;;
+      no_baseline) unverified=$((unverified+1)) ;;
+    esac
+  done < <(find "${snapshot}" -type f -print0)
+  echo "${corrupt}|${verified}|${unverified}"
 }
 report_glossary() {
   post_to_d1 "/glossary" \
@@ -407,7 +506,7 @@ self_register() {
   custody_log_local "${SCRIPT_HEX}" "${SCRIPT_NAME}" "self_register" "v1" \
     "${self_path}" "${dir}/v1_${SCRIPT_NAME}" "white" "intake"
   report_clonepool "${SCRIPT_HEX}" "${SCRIPT_NAME}" "v1" "white" "${dir}" \
-    "${dir}/${SCRIPT_HEX}.sidecar.json" "1" "${size}"
+    "${dir}/${SCRIPT_HEX}.sidecar.json" "1" "${size}" "false" "${dir}/v1_${SCRIPT_NAME}"
   upload_to_r2 "${SCRIPT_HEX}" "${dir}/v1_${SCRIPT_NAME}"
   report_custody  "${SCRIPT_HEX}" "${SCRIPT_NAME}" "self_register" "white" "intake"
   report_glossary "${SCRIPT_HEX}" "${SCRIPT_NAME}" \
@@ -514,7 +613,7 @@ intake_file() {
   custody_log_local "${hex}" "${orig}" "intake" "${version}" \
     "${filepath}" "${pool_dir}/${version}_${orig}" "white" "${backend}"
   report_clonepool "${hex}" "${orig}" "${version}" "white" \
-    "${pool_dir}" "${sidecar}" "1" "${size}" "${sensitive}"
+    "${pool_dir}" "${sidecar}" "1" "${size}" "${sensitive}" "${pool_dir}/${version}_${orig}"
   upload_to_r2 "${hex}" "${pool_dir}/${version}_${orig}"
   report_custody  "${hex}" "${orig}" "intake" "white" "${backend}"
   report_glossary "${hex}" "${orig}" "Intaked via ${backend}: ${filetype}" \
@@ -565,6 +664,25 @@ intake_clone() {
 
   local version; version=$(basename "${latest}" | grep -o '^v[0-9]*')
   local dest="${PWD}/${name}"
+
+  local verify_result; verify_result=$(verify_clonepool_copy "${hex}" "${latest}")
+  case "${verify_result}" in
+    CORRUPT)
+      echo ""
+      echo " ⚠  INTEGRITY FAILURE — clonepool copy of '${name}' does not match"
+      echo " ⚠  its recorded hash. Refusing to clone a corrupted or altered file."
+      echo " ⚠  Re-intake ${name} from a trusted source to fix this."
+      echo ""
+      log "WARN" "clone out BLOCKED (hash mismatch): ${name}"
+      return 1
+      ;;
+    no_baseline)
+      echo "[intake:WARN] No integrity baseline yet for '${name}' — cloning unverified"
+      ;;
+    valid)
+      echo "[intake:OK] Integrity verified — matches D1 baseline"
+      ;;
+  esac
 
   if [[ -f "${dest}" ]]; then
     echo "[intake:WARN] '${name}' already exists here — overwriting with ${version}"
@@ -760,7 +878,7 @@ EOF
 # to be merged into intake.sh v1.5.0 → v1.6.0
 
 # ── Skip patterns for directory intake ───────────────────────
-SKIP_DIRS=("node_modules" ".git" "__pycache__" ".svn" "vendor" "dist" "build" ".next" ".nuxt" "venv" ".venv" "env" ".tox" "coverage" ".nyc_output" "target" "out" ".wrangler" ".idea" ".gradle")
+SKIP_DIRS=("node_modules" ".git" "__pycache__" ".svn" "vendor" "dist" "build" ".next" ".nuxt" "venv" ".venv" "env" ".tox" "coverage" ".nyc_output" "target" "out" ".wrangler" ".idea" ".gradle" "clonepool" "archive")
 SKIP_EXTENSIONS=(".jpg" ".jpeg" ".png" ".gif" ".webp" ".svg" ".ico" ".bmp" ".tiff" ".mp4" ".mp3" ".wav" ".avi" ".mov" ".zip" ".tar" ".gz" ".rar" ".7z" ".exe" ".dll" ".so" ".dylib" ".bin" ".dat" ".db" ".sqlite" ".lock")
 
 is_skip_dir() {
@@ -1001,7 +1119,7 @@ intake_directory() {
       "${file_version}" "${f}" "${file_pool}/${file_version}_${file_orig}" \
       "white" "${backend}"
     report_clonepool "${file_hex}" "${file_orig}" "${file_version}" "white" \
-      "${file_pool}" "${sidecar}" "1" "${size}" "${file_sensitive}"
+      "${file_pool}" "${sidecar}" "1" "${size}" "${file_sensitive}" "${file_pool}/${file_version}_${file_orig}"
     upload_to_r2 "${file_hex}" "${file_pool}/${file_version}_${file_orig}"
     report_custody "${file_hex}" "${file_orig}" "dir_intake" "white" "${backend}"
 
@@ -1109,6 +1227,21 @@ intake_clone_directory() {
 
   local ver; ver=$(basename "${snapshot}" | grep -o '^v[0-9]*')
   local dest="${PWD}/${name}"
+
+  echo "[intake] Verifying snapshot integrity..."
+  local vresult; vresult=$(verify_directory_snapshot "${snapshot}")
+  local v_corrupt v_verified v_unverified
+  IFS='|' read -r v_corrupt v_verified v_unverified <<< "${vresult}"
+  if (( v_corrupt > 0 )); then
+    echo ""
+    echo " ⚠  INTEGRITY FAILURE — ${v_corrupt} file(s) in '${name}' ${ver} do not match"
+    echo " ⚠  their recorded hash. Refusing to clone a corrupted or altered snapshot."
+    echo " ⚠  Re-intake ${name}/ from a trusted source to fix this."
+    echo ""
+    log "WARN" "dir clone out BLOCKED (${v_corrupt} hash mismatches): ${name}"
+    return 1
+  fi
+  echo "[intake:OK] Integrity verified — ${v_verified} matched, ${v_unverified} unverified (no baseline yet)"
 
   if [[ -d "${dest}" ]]; then
     echo "[intake:WARN] '${name}' already exists here — overwriting with ${ver}"

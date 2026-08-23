@@ -212,6 +212,22 @@ intake status
 
 ---
 
+### `intake clone <name>` / `intake clone <dir>`
+
+Pulls a file (or, for directory snapshots, a whole restored directory) back out of the clonepool into the current working directory — the reverse of `intake <file>`. Directory detection is automatic: if the hex has a directory-type sidecar, `intake clone` restores the snapshot; otherwise it clones the latest single-file version.
+
+Before copying anything, it hashes the local clonepool copy (SHA3-512) and compares it against the baseline recorded in D1 at intake time. A mismatch refuses the clone outright rather than handing back a corrupted or altered file — this is what gates hot-swap and clone-to-workdir. Files intaked before this check existed have no baseline yet and clone through with a warning instead of a hard block.
+
+```bash
+intake clone nginx.conf
+intake clone myproject           # restores the latest directory snapshot
+intake clone myproject v2        # restores a specific version
+```
+
+See [Integrity Verification](#integrity-verification) below for what the pass/fail output means.
+
+---
+
 ### `intake help`
 
 Prints full usage information and available commands.
@@ -324,6 +340,26 @@ Every file in the clonepool carries two QR codes:
   - Black = compromised/retired
 - **Bottom QR** → location pointer
   - T1/T2/T3/T4 — max 4 folders deep
+
+---
+
+## Integrity Verification
+
+Every file gets a SHA3-512 and BLAKE2b hash computed at intake time and stored on its `clonepool` D1 row (`hash_sha3`, `hash_blake2`) — the trusted baseline for that hex.
+
+`intake clone` re-hashes the local clonepool copy against that baseline every time it's used, before the file ever reaches your working directory:
+
+- **Match** → clone proceeds, and a `POST /clonepool/:hex/validate` call flips `qr_valid`/`verified_at` on the D1 row.
+- **Mismatch** → clone is refused with an `INTEGRITY FAILURE` message. Re-intake the file from a trusted source to clear it.
+- **No baseline** (older intakes, from before this check existed) → clone proceeds with a warning; the baseline gets set the next time that file is re-intaked.
+
+Directory snapshots (`intake clone <dir>`) verify every file inside the restored snapshot the same way — one mismatch anywhere in the directory blocks the whole restore.
+
+```bash
+# Check a hex's stored baseline directly
+curl -H "Authorization: Bearer $PHOENIX_AUTH" \
+  "https://packages-worker.phoenix-jwl.workers.dev/clonepool/<hex>?meta=true"
+```
 
 ---
 

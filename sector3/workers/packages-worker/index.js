@@ -706,7 +706,12 @@ export default {
         if (path.startsWith('/clonepool/') && req.method === 'GET') {
           if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const id = decodeURIComponent(path.slice(11));
-        if (env.CLONEPOOL_BUCKET) {
+        // ?meta=true forces the D1 row (hash baseline, qr_valid, etc.) even
+        // when R2 also has the bytes — otherwise there's no way to fetch the
+        // integrity baseline for a hex that's already uploaded, which is
+        // every hex, which is the whole point of the validate flow below.
+        const wantsMeta = url.searchParams.get('meta') === 'true';
+        if (env.CLONEPOOL_BUCKET && !wantsMeta) {
           const obj = await env.CLONEPOOL_BUCKET.get(id);
           if (obj) {
             return new Response(obj.body, { status: 200, headers: { 'Content-Type': 'application/octet-stream' } });
@@ -727,6 +732,35 @@ export default {
           if (env.CLONEPOOL_BUCKET) await env.CLONEPOOL_BUCKET.delete(id);
           await db.prepare('DELETE FROM clonepool WHERE hex_id = ? OR name = ?').bind(id, id).run();
         return ok({ ok: true, deleted: id });
+      }
+
+      // POST /clonepool/:hex/validate — integrity check at point of use.
+      // Called by the clone-to-workdir / hot-swap path right after it
+      // fetches bytes: it hashes what it actually received (SHA3-512 +
+      // BLAKE2b — Workers' Web Crypto has neither, so this has to happen
+      // client-side) and reports the result here. The row's hash_sha3/
+      // hash_blake2 (set at intake time) is the trusted baseline; a match
+      // flips qr_valid on and stamps verified_at, a mismatch flips it off
+      // so nothing downstream mistakes a stale/corrupted copy for a good
+      // one. Same bearer-auth trust model as the rest of this worker.
+      if (path.startsWith('/clonepool/') && path.endsWith('/validate') && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const hex_id = decodeURIComponent(path.slice(11, -'/validate'.length));
+        if (!hex_id) return err('hex_id required', 400);
+        const body = await req.json();
+        const row = await db.prepare('SELECT hash_sha3, hash_blake2 FROM clonepool WHERE hex_id = ?').bind(hex_id).first();
+        if (!row) return err('not found', 404);
+
+        const hasBaseline = !!(row.hash_sha3 || row.hash_blake2);
+        const sha3Match = !row.hash_sha3 || row.hash_sha3 === body.hash_sha3;
+        const blake2Match = !row.hash_blake2 || row.hash_blake2 === body.hash_blake2;
+        const valid = hasBaseline && sha3Match && blake2Match;
+
+        await db.prepare(
+          'UPDATE clonepool SET qr_valid = ?, verified_at = CURRENT_TIMESTAMP WHERE hex_id = ?'
+        ).bind(valid ? 1 : 0, hex_id).run();
+
+        return ok({ ok: true, hex_id, valid, has_baseline: hasBaseline });
       }
 
 
