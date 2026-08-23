@@ -29,6 +29,12 @@ $Snapshot    = Join-Path $PageDir 'windows_snapshot.json'
 $HelixScript = Join-Path $PSScriptRoot 'true_double_helix.py'
 $LightningDir = Join-Path $RepoRoot 'sector1\helix-lightning'
 
+# franken5.py reads PHOENIX_AUDIT and PHOENIX_SHM at import time.
+# Both default to /tmp/ paths which don't exist on Windows.
+# Set them to valid Windows temp paths before any py -3 subprocess runs.
+$env:PHOENIX_AUDIT = Join-Path $env:TEMP 'phoenix_audit.log'
+$env:PHOENIX_SHM   = Join-Path $env:TEMP 'phoenix_shm'
+
 $PASS = 0
 $FAIL = 0
 
@@ -55,7 +61,7 @@ Write-Host ''
 Info 'Test 1: franken5 import resolution'
 
 $importResult = & py -3 -c @"
-import sys
+import sys, os
 from pathlib import Path
 _L = Path(r'$LightningDir')
 sys.path.insert(0, str(_L))

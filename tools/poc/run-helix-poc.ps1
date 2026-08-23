@@ -44,6 +44,11 @@ $env:PHOENIX_SECTOR1         = Join-Path $RepoRoot 'sector1'
 $env:PHOENIX_SECTOR2         = Join-Path $RepoRoot 'sector2'
 $env:PHOENIX_SECTOR3         = Join-Path $RepoRoot 'sector3'
 
+# franken5.py reads these at import time; defaults are /tmp/ paths that don't
+# exist on Windows. Point them at %TEMP% so import never fails.
+$env:PHOENIX_AUDIT           = Join-Path $env:TEMP 'phoenix_audit.log'
+$env:PHOENIX_SHM             = Join-Path $env:TEMP 'phoenix_shm'
+
 # Add helix-lightning to PYTHONPATH so imports resolve if running outside poc/
 $existing = $env:PYTHONPATH
 if ($existing) {
