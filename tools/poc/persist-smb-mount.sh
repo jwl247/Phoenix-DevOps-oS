@@ -108,27 +108,39 @@ pass "Mount point exists: $MOUNT_POINT"
 # ---------------------------------------------------------------------------
 if grep -q "${SHARE_HOST}/${SHARE_NAME}" /etc/fstab 2>/dev/null; then
     EXISTING_LINE=$(grep "${SHARE_HOST}/${SHARE_NAME}" /etc/fstab)
-    pass "fstab entry already present:"
-    echo ""
-    echo "    $EXISTING_LINE"
-    echo ""
 
-    # Check if it has _netdev (required for boot-time mount ordering)
+    # Determine if the existing entry is correct — must have credentials=, _netdev, nofail
+    # and must NOT use guest (guest auth ignores the credentials file and fails on reboot).
+    NEEDS_UPDATE=0
+    if ! echo "$EXISTING_LINE" | grep -q "credentials="; then
+        warn "fstab entry missing credentials= (has 'guest'?) — replacing"
+        NEEDS_UPDATE=1
+    fi
     if ! echo "$EXISTING_LINE" | grep -q "_netdev"; then
-        warn "fstab entry missing _netdev — updating it"
-        # Remove old entry, add correct one
-        sed -i "\\|${SHARE_HOST}/${SHARE_NAME}|d" /etc/fstab
-        echo "$FSTAB_ENTRY" >> /etc/fstab
-        pass "fstab entry updated with _netdev"
+        warn "fstab entry missing _netdev — replacing"
+        NEEDS_UPDATE=1
+    fi
+    if ! echo "$EXISTING_LINE" | grep -q "nofail"; then
+        warn "fstab entry missing nofail — replacing"
+        NEEDS_UPDATE=1
+    fi
+    if echo "$EXISTING_LINE" | grep -q "guest"; then
+        warn "fstab entry uses guest auth — replacing with credentials"
+        NEEDS_UPDATE=1
     fi
 
-    # Check if it has nofail (prevents boot stall if share unreachable)
-    CURRENT=$(grep "${SHARE_HOST}/${SHARE_NAME}" /etc/fstab)
-    if ! echo "$CURRENT" | grep -q "nofail"; then
-        warn "fstab entry missing nofail — updating it"
+    if [[ "$NEEDS_UPDATE" == "1" ]]; then
         sed -i "\\|${SHARE_HOST}/${SHARE_NAME}|d" /etc/fstab
         echo "$FSTAB_ENTRY" >> /etc/fstab
-        pass "fstab entry updated with nofail"
+        pass "fstab entry replaced with correct credentials entry"
+        echo ""
+        echo "    $FSTAB_ENTRY"
+        echo ""
+    else
+        pass "fstab entry correct:"
+        echo ""
+        echo "    $EXISTING_LINE"
+        echo ""
     fi
 else
     echo "$FSTAB_ENTRY" >> /etc/fstab
