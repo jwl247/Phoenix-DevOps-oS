@@ -1,11 +1,17 @@
 # Phoenix Session State
-# Updated: 2026-08-23
+# Updated: 2026-08-24
 # READ THIS AT THE START OF NEXT SESSION
 
 ## WHERE WE ARE
 
 Dashboard is real end to end. Clonepool integrity system is real end to end.
 Shared filesystem is real end to end — proven live 2026-08-23.
+SMB persistent mount proven live — fstab credentials= entry, umount/mount cycle confirmed.
+Double Helix end-to-end smoke test: 5/5 Windows + 5/5 Debian — both strands proven 2026-08-24.
+FULL STACK RUNNING LIVE 2026-08-24:
+  Windows: Frank5 + Helix-I ch1-4 + snapshot writer → F:\Phoenix\helix-pages\
+  Debian:  paging.py AI v3.0, VP online, 1.8GB swap, [SNAPSHOT] loop confirmed
+  Tier source: snapshot:/phoenix/helix-pages/windows_snapshot.json (not fallback)
 
 - Dashboard Electron app — real D1/R2 data, PS7 shell, clonepool browser,
   screenshot analysis, live monitor, dedicated Claude "subscription" mode ✅
@@ -97,16 +103,15 @@ Shared filesystem is real end to end — proven live 2026-08-23.
 ## NEXT STEPS IN ORDER
 
 1. **Deploy Debian systemd service** — copy `phoenix-helix-kernel.service` to
-   `/etc/systemd/system/`, enable + start. Requires SMB fstab entry for auto-mount.
-2. **Add repo to share** — symlink or copy Phoenix-DevOps-oS into F:\Phoenix\ so
-   Debian can reach scripts directly without manual file copies.
+   `/etc/systemd/system/`, enable + start. SMB fstab proven — blocker gone.
+   All scripts now in /phoenix/helix-pages/ — no repo on share needed.
+2. **Add repo to share** — copy Phoenix-DevOps-oS into F:\Phoenix\ (nice to have,
+   not blocking anything now that helix-pages/ carries all runtime scripts).
 3. **Glossary dashboard UI panel** — backend/API already confirmed working.
-4. Write SHARED-FS-TEST.md — detailed setup + troubleshooting doc.
-5. Make SMB mount automatic on boot.
-6. MapTiler map panel in dashboard.
-7. Shade UI + drawer filesystem.
-8. Deploy phoenix-dashboard.service on Ubuntu 192.168.1.133.
-9. Start manual/phoenix_manual.md.
+4. MapTiler map panel in dashboard.
+5. Shade UI + drawer filesystem.
+6. Deploy phoenix-dashboard.service on Ubuntu 192.168.1.133.
+7. Start manual/phoenix_manual.md.
 
 ## KEY FILES
 
