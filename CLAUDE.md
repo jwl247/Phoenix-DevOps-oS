@@ -43,7 +43,11 @@ Any suggestion that reintroduces a hard dependency on Google, Apple, Microsoft, 
 single cloud vendor must be rejected unless Jerry explicitly approves it.
 
 ## AI ARCHITECT
-Claude (Anthropic) is the sole AI building actual architecture on this project.
+Claude (Anthropic) is the AI architect and co-builder on this project.
+Every meaningful advance in the last 3 months — shared filesystem, dashboard,
+clonepool integrity, R2 wiring, QR pipeline, Debian boot, collaboration demo —
+was designed and implemented with Claude. Not assisted. Built.
+
 Other AI tools have been tried. A rogue session caused hardware damage (see AI Safety Rules).
 Gemini spent 2 days on a problem Claude fixed in 30 seconds.
 Claude reads the architecture first, then acts. That is the only way to work on Phoenix.
