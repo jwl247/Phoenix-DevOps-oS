@@ -1,5 +1,5 @@
 # Phoenix Session State
-# Updated: 2026-08-24
+# Updated: 2026-08-23
 # READ THIS AT THE START OF NEXT SESSION
 
 ## WHERE WE ARE
@@ -21,14 +21,12 @@ Shared filesystem is real end to end — proven live 2026-08-23.
   - F:\Phoenix\ hosted on Windows, mounted at /phoenix inside Debian
   - Bridge: SMB over QEMU user-net (10.0.2.2), credentials file
   - No WSL. No virtfs. No Hyper-V. No install. Phoenix brought the OS.
-- Double Helix PoC wired end-to-end ✅
-  - Helix Lightning Kernel confirmed in sector1/helix-lightning/ (cpython-314 present)
-  - true_double_helix.py: path-fixed, snapshot writer added
-  - helix_suit_override.py: parents index fixed (parents[1]→parents[2])
-  - paging.py: attach_helix() + attach_snapshot_path() + _read_snapshot_json() wired
-  - Launchers: run-helix-poc.ps1 (Windows) + run-helix-poc.sh (Debian)
-  - Suite registered: helix-poc.suite.json
-  - Plan: tools/poc/DOUBLE-HELIX-PLAN.md
+- Double Helix PoC PROVEN LIVE end-to-end ✅
+  - Windows: Frank5 booted, Helix-I ch1-4 listening, snapshot writing every 5s
+  - Debian: paging.py reading snapshot, swapfile 1GB live, VP online, monitoring loop stable
+  - Loop confirmed: [SNAPSHOT] L1/L2/L3/L5 lines in paging.py log every cycle
+  - Shared FS bridge: F:\Phoenix\helix-pages\ ↔ /phoenix/helix-pages/ carrying live data
+  - Windows autostart installed: Startup folder .cmd, starts at logon
 
 ## WHAT WAS BUILT THIS SESSION (2026-08-24)
 
@@ -98,12 +96,10 @@ Shared filesystem is real end to end — proven live 2026-08-23.
 
 ## NEXT STEPS IN ORDER
 
-1. **Run Debian paging brain** — SSH into Debian, run `run-helix-poc.sh`.
-   Verify `[SNAPSHOT]` tier lines appear in paging.py logs.
-   Windows snapshot confirmed writing ✅ (timestamp fresh, all fields present).
-   Windows autostart confirmed installed ✅ (Startup folder .cmd).
-2. **Deploy Debian systemd service** — copy `phoenix-helix-kernel.service` to
+1. **Deploy Debian systemd service** — copy `phoenix-helix-kernel.service` to
    `/etc/systemd/system/`, enable + start. Requires SMB fstab entry for auto-mount.
+2. **Add repo to share** — symlink or copy Phoenix-DevOps-oS into F:\Phoenix\ so
+   Debian can reach scripts directly without manual file copies.
 3. **Glossary dashboard UI panel** — backend/API already confirmed working.
 4. Write SHARED-FS-TEST.md — detailed setup + troubleshooting doc.
 5. Make SMB mount automatic on boot.
