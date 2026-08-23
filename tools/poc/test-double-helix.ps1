@@ -11,8 +11,10 @@
 #      is fresh (< 30s old -- the same staleness gate paging.py uses)
 #   4. The snapshot file is visible on the SMB share path so Debian can read it
 #
-# Usage (from repo root):
-#   pwsh -NoProfile -ExecutionPolicy Bypass -File tools\poc\test-double-helix.ps1
+# Usage -- run from anywhere:
+#   Double-click test-double-helix.cmd   (easiest)
+#   -- OR --
+#   pwsh -NoProfile -ExecutionPolicy Bypass -File "C:\path\to\repo\tools\poc\test-double-helix.ps1"
 #
 # Run run-helix-poc.ps1 first to get the kernel running, or let this test
 # launch a short-lived instance itself (it will if the snapshot does not
@@ -152,6 +154,21 @@ if (Test-Path $Snapshot) {
 }
 
 # ---------------------------------------------------------------------------
+# COPY test script to share so Debian can run it without the repo mounted
+# ---------------------------------------------------------------------------
+$ShScript   = Join-Path $PSScriptRoot 'test-double-helix.sh'
+$ShareDest  = Join-Path $PageDir 'test-double-helix.sh'
+
+if (Test-Path $ShScript) {
+    try {
+        Copy-Item -Force -Path $ShScript -Destination $ShareDest
+        Info "Copied test-double-helix.sh -> $ShareDest"
+    } catch {
+        Info "Could not copy .sh to share: $_  (non-fatal)"
+    }
+}
+
+# ---------------------------------------------------------------------------
 # SUMMARY
 # ---------------------------------------------------------------------------
 Write-Host ''
@@ -166,5 +183,5 @@ if ($FAIL -eq 0) {
 Write-Host ''
 Write-Host '  To verify the bridge from Debian:'
 Write-Host '    ssh -p 2222 phoenix@127.0.0.1'
-Write-Host '    bash /phoenix/Phoenix-DevOps-oS/tools/poc/test-double-helix.sh'
+Write-Host '    bash /phoenix/helix-pages/test-double-helix.sh'
 Write-Host ''
