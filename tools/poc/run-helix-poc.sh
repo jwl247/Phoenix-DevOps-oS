@@ -23,8 +23,17 @@ set -euo pipefail
 SHARE="/phoenix"
 SNAPSHOT="$SHARE/helix-pages/windows_snapshot.json"
 REPO="$SHARE/Phoenix-DevOps-oS"
-PAGING="$REPO/sector4/paging.py"
 PAGE_DIR="$SHARE/helix-pages"
+
+# paging.py location: prefer repo copy, fall back to helix-pages/ copy
+# (Windows test script copies paging.py to helix-pages/ automatically)
+if [[ -f "$REPO/sector4/paging.py" ]]; then
+    PAGING="$REPO/sector4/paging.py"
+elif [[ -f "$PAGE_DIR/paging.py" ]]; then
+    PAGING="$PAGE_DIR/paging.py"
+else
+    PAGING=""
+fi
 
 # -- Banner -------------------------------------------------------------------
 echo ""
@@ -45,13 +54,18 @@ if ! mountpoint -q "$SHARE" 2>/dev/null && ! mount | grep -q "$SHARE"; then
     exit 1
 fi
 
-if [[ ! -d "$REPO" ]]; then
-    echo "  [ERROR] Repo not found at $REPO"
-    echo "  Check that Phoenix-DevOps-oS is in F:\\Phoenix\\ on Windows."
+echo "  [OK]  Shared FS mounted: $SHARE"
+
+if [[ -z "$PAGING" ]]; then
+    echo "  [ERROR] paging.py not found."
+    echo "  Expected at: $REPO/sector4/paging.py"
+    echo "          or: $PAGE_DIR/paging.py"
+    echo ""
+    echo "  Run test-double-helix.cmd on Windows to copy paging.py to the share."
     exit 1
 fi
 
-echo "  [OK]  Shared FS mounted: $SHARE"
+echo "  [OK]  paging.py: $PAGING"
 
 # -- Verify snapshot exists (Windows side must be running) --------------------
 if [[ ! -f "$SNAPSHOT" ]]; then

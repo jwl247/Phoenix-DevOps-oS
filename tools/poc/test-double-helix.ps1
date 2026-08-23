@@ -160,11 +160,10 @@ if (Test-Path $Snapshot) {
 }
 
 # ---------------------------------------------------------------------------
-# COPY test script to share so Debian can run it without the repo mounted
+# COPY scripts to share so Debian can run them without the repo mounted
 # ---------------------------------------------------------------------------
-# Copy both Debian-side scripts to the share so they're always reachable at
-# /phoenix/helix-pages/ without the repo being present on the share.
-foreach ($sh in @('test-double-helix.sh', 'persist-smb-mount.sh')) {
+# Shell scripts from tools/poc/
+foreach ($sh in @('test-double-helix.sh', 'persist-smb-mount.sh', 'run-helix-poc.sh')) {
     $src  = Join-Path $PSScriptRoot $sh
     $dest = Join-Path $PageDir $sh
     if (Test-Path $src) {
@@ -174,6 +173,18 @@ foreach ($sh in @('test-double-helix.sh', 'persist-smb-mount.sh')) {
         } catch {
             Info "Could not copy ${sh}: $_  (non-fatal)"
         }
+    }
+}
+
+# paging.py from sector4/ — needed by run-helix-poc.sh when repo not on share
+$pagingSrc  = Join-Path $RepoRoot 'sector4\paging.py'
+$pagingDest = Join-Path $PageDir 'paging.py'
+if (Test-Path $pagingSrc) {
+    try {
+        Copy-Item -Force -Path $pagingSrc -Destination $pagingDest
+        Info "Copied paging.py -> $pagingDest"
+    } catch {
+        Info "Could not copy paging.py: $_  (non-fatal)"
     }
 }
 
