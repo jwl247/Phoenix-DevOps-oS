@@ -113,16 +113,20 @@ function register({ ipcMain, spawn, dialog }) {
             };
         }
         try {
-            // Console-subsystem apps (pwsh.exe, bash.exe) spawned directly with
-            // stdio:'ignore' get a closed/NUL stdin — they read immediate EOF
-            // and exit right away instead of opening as an interactive window.
-            // `cmd /c start` is the standard Windows way to actually detach a
-            // new, independent console window; the literal empty '""' is
-            // required as start's window-title argument, otherwise start
-            // misparses a quoted target path AS the title and launches nothing.
-            const proc = process.platform === 'win32'
-                ? spawn('cmd.exe', ['/c', 'start', '""', app.exe, ...(app.args || [])], { detached: true, stdio: 'ignore' })
-                : spawn(app.exe, app.args || [], { detached: true, stdio: 'ignore' });
+            // For PS7: launch with the user's real profile so usys, MCP server,
+            // skills, and all env vars from usys init are available immediately.
+            // `-NoExit` keeps the window open after the profile loads.
+            // For other apps: plain launch via cmd /c start (detached console).
+            let proc;
+            if (key === 'ps7') {
+                proc = process.platform === 'win32'
+                    ? spawn('cmd.exe', ['/c', 'start', '""', app.exe, '-NoExit', '-NoLogo'], { detached: true, stdio: 'ignore' })
+                    : spawn(app.exe, ['-NoExit', '-NoLogo'], { detached: true, stdio: 'ignore' });
+            } else {
+                proc = process.platform === 'win32'
+                    ? spawn('cmd.exe', ['/c', 'start', '""', app.exe, ...(app.args || [])], { detached: true, stdio: 'ignore' })
+                    : spawn(app.exe, app.args || [], { detached: true, stdio: 'ignore' });
+            }
             proc.unref();
             return { success: true };
         } catch (e) {
