@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-true_double_helix.py — Helix Ingress (Double Helix PoC)
+helix_i.py — Helix Ingress
 Phoenix DevOps OS | jwl247 | GPL v3
 
 Helix-I is the left lung.
@@ -16,22 +16,12 @@ Helix-I does NOT know what Frank will do with it.
 She pulls. She signals. She's done.
 Frank rides the lightning from there.
 
-Strand A — channels 1, 2  (primary ingress — Windows executing)
-Strand B — channels 3, 4  (overflow + priority — prefetch path)
-
-Snapshot writer: writes windows_snapshot.json to PHOENIX_HELIX_PAGE_DIR
-every 5 seconds so paging.py (Linux) can watch both strands.
+Strand A — channels 1, 2  (primary ingress)
+Strand B — channels 3, 4  (overflow + priority)
 """
 
-# Wire sector1/helix-lightning/ onto the path so franken5 resolves.
-# tools/poc/ -> tools/ -> Phoenix-DevOps-oS/ -> sector1/helix-lightning/
-import sys
-from pathlib import Path as _Path
-_LIGHTNING = _Path(__file__).parent.parent.parent / "sector1" / "helix-lightning"
-if str(_LIGHTNING) not in sys.path:
-    sys.path.insert(0, str(_LIGHTNING))
-
 import os
+import sys
 import time
 import signal
 import select
@@ -93,8 +83,7 @@ class HelixI:
     Frank wakes up. Frank rides. Helix-I is already pulling the next stage.
     """
 
-    def __init__(self, frank: Optional[Frank5] = None,
-                 page_dir: Optional[str] = None):
+    def __init__(self, frank: Optional[Frank5] = None):
         self.frank    = frank or get_frank()
         self.bus      = self.frank.bus
         self._alive   = True
@@ -114,69 +103,7 @@ class HelixI:
         }
 
         self._stage_callbacks: list[Callable] = []
-
-        # Snapshot writer — writes windows_snapshot.json to the shared page dir
-        # every 5 seconds so paging.py (Linux) can watch both strands.
-        self._helix_system = None
-        self._page_dir: Optional[Path] = None
-        _pd = page_dir or os.environ.get("PHOENIX_HELIX_PAGE_DIR")
-        if _pd:
-            self._page_dir = Path(_pd)
-            self._page_dir.mkdir(parents=True, exist_ok=True)
-            _t = threading.Thread(
-                target=self._snapshot_writer_loop,
-                daemon=True,
-                name="helix-i-snapshot-writer"
-            )
-            _t.start()
-            log.info(f"Helix-I snapshot writer started — {self._page_dir}")
-
         log.info(f"Helix-I v{HELIX_I_VERSION} — strands A+B — channels {ALL_CHANNELS}")
-
-    def attach_helix_system(self, helix) -> None:
-        """
-        Wire in a live HelixSystem so the snapshot writer reports real
-        L1/L2/L3/L5 tier data instead of zeros.
-        """
-        self._helix_system = helix
-        log.info("Helix-I snapshot writer: HelixSystem attached")
-
-    def _snapshot_writer_loop(self):
-        """
-        Background thread. Writes windows_snapshot.json to the shared page dir
-        every 5 seconds. Atomic write (tmp + rename) so paging.py never reads
-        a half-written file.
-        """
-        import json as _json
-        snap_path = self._page_dir / "windows_snapshot.json"
-        tmp_path  = self._page_dir / "windows_snapshot.json.tmp"
-
-        while self._alive:
-            try:
-                if self._helix_system is not None:
-                    data = self._helix_system.get_tier_snapshot()
-                else:
-                    data = {
-                        'timestamp':    time.time(),
-                        'hot_mb':       0.0,
-                        'warm_mb':      0.0,
-                        'cold_mb':      0.0,
-                        'frozen_mb':    0.0,
-                        'hit_rate':     0.0,
-                        'promotions':   0,
-                        'demotions':    0,
-                        'evictions':    0,
-                        'pages_on_disk': 0,
-                    }
-                    data['timestamp'] = time.time()
-
-                tmp_path.write_text(_json.dumps(data))
-                os.replace(str(tmp_path), str(snap_path))
-                log.debug(f"Snapshot written — frozen={data['frozen_mb']:.1f} MB")
-            except Exception as e:
-                log.error(f"Snapshot writer error: {e}")
-
-            time.sleep(5)
 
     def on_stage_ready(self, cb: Callable):
         """Register a callback fired after each stage lands in shared memory."""
@@ -344,7 +271,6 @@ class HelixI:
 
     def stop(self):
         self._alive = False
-        # snapshot writer thread is daemon — exits automatically once _alive=False
         for ch in self.channels.values():
             if ch._sock:
                 try:
