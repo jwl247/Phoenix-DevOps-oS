@@ -10,29 +10,60 @@ users:
 chpasswd:
   expire: false
 
-# cifs-utils provides mount.cifs for SMB/CIFS mounting.
-# Windows hosts F:\Phoenix as \\10.0.2.2\Phoenix — QEMU user-net maps
-# the Windows host to 10.0.2.2 from inside the VM.
 packages:
   - cifs-utils
 
-# Mount the Windows SMB share at /phoenix.
-# Credentials are written to /etc/phoenix-cifs.creds (root-readable only)
-# so the password is not visible in /proc/mounts or ps output.
-# 10.0.2.2 = Windows host via QEMU user-mode network (always reachable).
-# uid/gid 1000 = phoenix user — full read/write ownership inside Debian.
-# nofail,_netdev = never stall boot if share is unreachable.
+write_files:
+  - path: /etc/phoenix-cifs.creds
+    permissions: '0600'
+    owner: root:root
+    content: |
+      username=jwlef
+      password=wtfover1A?
+      domain=
+
+  - path: /etc/systemd/system/phoenix-helix-kernel.service
+    permissions: '0644'
+    owner: root:root
+    content: |
+      [Unit]
+      Description=Phoenix Helix Lightning Kernel (paging brain — Debian side)
+      After=network-online.target
+      Wants=network-online.target
+      StartLimitBurst=5
+      StartLimitIntervalSec=120
+
+      [Service]
+      Type=simple
+      User=root
+      Environment=PHOENIX_HELIX_PAGE_DIR=/phoenix/helix-pages
+      Environment=PHOENIX_PAGING_SNAPSHOT_PATH=/phoenix/helix-pages/windows_snapshot.json
+      Environment=PHOENIX_PAGING_NVME_MOUNT=/phoenix/swap
+      Environment=PHOENIX_PAGING_SWAPFILE_PATH=/var/swap/swapfile
+      Environment=PHOENIX_PAGING_INITIAL_SWAP_GB=1.0
+      Environment=PHOENIX_PAGING_MIN_SWAP_GB=0.5
+      Environment=PHOENIX_PAGING_MAX_SWAP_GB=8.0
+      ExecStartPre=/bin/bash -c 'test -d /phoenix/helix-pages || (echo "[HELIX] /phoenix not mounted" && exit 1)'
+      ExecStart=/usr/bin/python3 /phoenix/helix-pages/paging.py start
+      Restart=on-failure
+      RestartSec=10
+      StandardOutput=journal
+      StandardError=journal
+      SyslogIdentifier=phoenix-helix-kernel
+
+      [Install]
+      WantedBy=multi-user.target
+
 runcmd:
-  - mkdir -p /phoenix
-  - |
-    cat > /etc/phoenix-cifs.creds << 'EOF'
-    username=jwlef
-    password=wtfover1A?
-    domain=
-    EOF
-  - chmod 600 /etc/phoenix-cifs.creds
-  - mount -t cifs //10.0.2.2/Phoenix /phoenix -o credentials=/etc/phoenix-cifs.creds,uid=1000,gid=1000,iocharset=utf8,vers=3.0,nofail || true
-  - >
-    echo '//10.0.2.2/Phoenix  /phoenix  cifs  credentials=/etc/phoenix-cifs.creds,uid=1000,gid=1000,iocharset=utf8,vers=3.0,nofail,_netdev  0  0'
-    | tee -a /etc/fstab
+  - mkdir -p /phoenix /var/swap
+  - sed -i '/10.0.2.2\/Phoenix/d' /etc/fstab
+  - echo '//10.0.2.2/Phoenix  /phoenix  cifs  credentials=/etc/phoenix-cifs.creds,uid=1000,gid=1000,iocharset=utf8,vers=3.0,nofail,_netdev  0  0' >> /etc/fstab
   - systemctl daemon-reload
+  - mount /phoenix || true
+  - dd if=/dev/zero of=/var/swap/swapfile bs=1M count=200 status=none
+  - chmod 600 /var/swap/swapfile
+  - mkswap /var/swap/swapfile
+  - swapon /var/swap/swapfile
+  - systemctl daemon-reload
+  - systemctl enable phoenix-helix-kernel.service
+  - systemctl start phoenix-helix-kernel.service || true

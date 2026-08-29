@@ -1,5 +1,5 @@
 # Phoenix Session State
-# Updated: 2026-08-24
+# Updated: 2026-08-29
 # READ THIS AT THE START OF NEXT SESSION
 
 ## WHERE WE ARE
@@ -8,9 +8,10 @@ Dashboard is real end to end. Clonepool integrity system is real end to end.
 Shared filesystem is real end to end — proven live 2026-08-23.
 SMB persistent mount proven live — fstab credentials= entry, umount/mount cycle confirmed.
 Double Helix end-to-end smoke test: 5/5 Windows + 5/5 Debian — both strands proven 2026-08-24.
-FULL STACK RUNNING LIVE 2026-08-24:
+phoenix-helix-kernel.service deployed and running as systemd service — 2026-08-29.
+FULL STACK RUNNING LIVE 2026-08-29:
   Windows: Frank5 + Helix-I ch1-4 + snapshot writer → F:\Phoenix\helix-pages\
-  Debian:  paging.py AI v3.0, VP online, 1.8GB swap, [SNAPSHOT] loop confirmed
+  Debian:  paging.py AI v3.0, phoenix-helix-kernel.service enabled+running, [SNAPSHOT] loop confirmed
   Tier source: snapshot:/phoenix/helix-pages/windows_snapshot.json (not fallback)
 
 - Dashboard Electron app — real D1/R2 data, PS7 shell, clonepool browser,
@@ -29,60 +30,73 @@ FULL STACK RUNNING LIVE 2026-08-24:
   - No WSL. No virtfs. No Hyper-V. No install. Phoenix brought the OS.
 - Double Helix PoC PROVEN LIVE end-to-end ✅
   - Windows: Frank5 booted, Helix-I ch1-4 listening, snapshot writing every 5s
-  - Debian: paging.py reading snapshot, swapfile 1GB live, VP online, monitoring loop stable
+  - Debian: paging.py reading snapshot, swapfile live, VP online, monitoring loop stable
   - Loop confirmed: [SNAPSHOT] L1/L2/L3/L5 lines in paging.py log every cycle
   - Shared FS bridge: F:\Phoenix\helix-pages\ ↔ /phoenix/helix-pages/ carrying live data
   - Windows autostart installed: Startup folder .cmd, starts at logon
+- phoenix-helix-kernel.service DEPLOYED ✅
+  - systemd service enabled, auto-restarts on failure
+  - Service file: /etc/systemd/system/phoenix-helix-kernel.service
+  - Swapfile: /var/swap/swapfile (200MB, pre-created manually — see boot sequence below)
+  - SMB credentials: /etc/phoenix-cifs.creds (root:600)
+  - fstab: credentials=/etc/phoenix-cifs.creds,vers=3.0
 
-## WHAT WAS BUILT THIS SESSION (2026-08-24)
+## WHAT WAS BUILT THIS SESSION (2026-08-29)
 
-### Double Helix PoC — kernel wired end-to-end
+### Debian systemd service deployed
+- Diagnosed SMB mount failure: cloud-init image boots with stale `guest` fstab entry
+- Fixed: /etc/phoenix-cifs.creds created (username=jwlef, password=wtfover1A?, domain=)
+- Fixed: fstab updated to credentials=/etc/phoenix-cifs.creds,vers=3.0,nofail,_netdev
+- Fixed: swapfile — Linux blocks swapon on CIFS mount; pre-created 200MB at /var/swap/swapfile
+- Deployed phoenix-helix-kernel.service with PHOENIX_PAGING_NVME_MOUNT=/phoenix/swap,
+  PHOENIX_PAGING_INITIAL_SWAP_GB=1.0 — paging.py sees existing swap and skips init
+- Service running: active(running), [SNAPSHOT] loop every 5s confirmed in journalctl
+- D: drive was full (Steam/War Thunder) — removed Steam from D:, 109GB now free
 
-- `tools/poc/true_double_helix.py` — path fix (sys.path insert for sector1/helix-lightning/),
-  snapshot writer added: `attach_helix_system()`, `_snapshot_writer_loop()`, `page_dir` param.
-  Writes `windows_snapshot.json` atomically every 5s to `PHOENIX_HELIX_PAGE_DIR`.
-- `sector1/helix-lightning/helix_suit_override.py` — `parents[1]` → `parents[2]` fix.
-  Was always pointing at sector1/ (wrong). Now points at repo root. helix_complete_stack.py
-  wires as suit for all 13 core rings correctly when PHOENIX_SUITS is not set.
-- `sector4/paging.py` — `attach_helix()`, `attach_snapshot_path()`, `_read_snapshot_json()`,
-  3-tier snapshot priority, `helix_paging` signal in monitor loop, shrink gated on
-  `not helix_paging`, `_log_helix_status()`, `helix_source` in status dict, auto-reads
-  `PHOENIX_PAGING_SNAPSHOT_PATH` env var at start.
-- `tools/poc/run-helix-poc.ps1` — Windows launcher. Sets PHOENIX_SUITS, PHOENIX_HELIX_PAGE_DIR,
-  PYTHONPATH. Creates F:\Phoenix\helix-pages\. Runs py -3 true_double_helix.py.
-- `tools/poc/run-helix-poc.sh` — Debian launcher. Verifies SMB mount. Sets env. Runs
-  paging.py start with snapshot path. Re-execs with sudo if not root.
-- `tools/poc/helix-poc.suite.json` — suite registration. usys run helix-poc.
-- `tools/poc/DOUBLE-HELIX-PLAN.md` — plan file (renamed from HELIX-DOUBLE-STRAND-PLAN.md).
-- `tools/poc/install-helix-autostart.ps1` — Windows autostart installer. Method A: Task
-  Scheduler (run as Admin once). Method B: Startup folder fallback (zero elevation, installed).
-  Startup shortcut confirmed: `%APPDATA%\...\Startup\Phoenix-HelixLightningKernel.cmd`
-- `sector3/services/phoenix-helix-kernel.service` — Debian systemd service for paging brain.
-  Auto-starts after network + SMB mount. `ExecStartPre` guards on `/phoenix/helix-pages/`.
-- `tools/poc/HELIX-LIGHTNING-GUIDE.md` — complete standalone guide: architecture, running,
-  persistence, troubleshooting, environment variables, ports, connections to all sectors.
+## KNOWN ISSUES — MUST FIX NEXT SESSION
 
-## WHAT WAS BUILT THIS SESSION (2026-08-23)
+### cloud-init seed not updated
+Every VM reboot wipes /etc/phoenix-cifs.creds and reverts fstab to `guest`.
+The service will fail to start after reboot until the manual sequence below is run.
+Fix: update `tools/poc/debian-seed/user-data` to bake in all three changes.
 
-### Shared Filesystem — Windows ↔ Debian (PROVEN LIVE)
-- `tools/poc/setup-shared-fs.ps1` — one-time bootstrap, creates F:\Phoenix\*
-- `scripts/usys.ps1` — PhxSharedRoot, ConvertTo-QemuHostPath, Write-PhxFsBanner,
-  phx-import/export/sync/ls wrappers, Test-PhxSharedPath, usys fs-* dispatcher,
-  -Share switch on Invoke-UsysRun, auto format=raw/.img detection
-- `tools/poc/debian-seed/user-data` — cifs-utils, credentials file, fstab entry
-- `tools/poc/ubuntu-seed/user-data` + `meta-data` — NEW, same pattern for Ubuntu
-- `tools/poc/debian.suite.json` — entry filename fixed, shared_fs metadata
-- `tools/poc/ubuntu.suite.json` — shared_fs metadata, login corrected to phoenix
-- `tools/poc/README.md` — full shared filesystem section
+## MANUAL BOOT SEQUENCE (run after every VM reboot until seed is fixed)
 
-### Key discoveries
-- QEMU on Windows (both official installer and MSYS2 mingw64) ships with
-  virtfs DISABLED — compile-time flag, WinFsp does not fix it
-- SMB over QEMU user-net (10.0.2.2) is the working bridge — same result,
-  no virtfs needed, works on every QEMU build
-- Windows guest SMB auth is blocked by default since Win10 1709 — requires
-  real credentials even for Everyone shares
-- PS7 is required — PS5.1 intercepts `ssh -p` as Get-Process parameter
+```bash
+# 1. Credentials + fstab
+sudo bash -c "printf 'username=jwlef\npassword=wtfover1A?\ndomain=\n' > /etc/phoenix-cifs.creds"
+sudo chmod 600 /etc/phoenix-cifs.creds
+sudo sed -i '/10.0.2.2\/Phoenix/d' /etc/fstab
+echo '//10.0.2.2/Phoenix  /phoenix  cifs  credentials=/etc/phoenix-cifs.creds,uid=1000,gid=1000,iocharset=utf8,vers=3.0,nofail,_netdev  0  0' | sudo tee -a /etc/fstab
+sudo systemctl daemon-reload
+sudo mount /phoenix
+
+# 2. Pre-create swap (root disk is 2.8GB, ~92% full — only ~200MB available)
+sudo mkdir -p /var/swap
+sudo dd if=/dev/zero of=/var/swap/swapfile bs=1M count=200
+sudo chmod 600 /var/swap/swapfile
+sudo mkswap /var/swap/swapfile
+sudo swapon /var/swap/swapfile
+
+# 3. Start service
+sudo systemctl start phoenix-helix-kernel
+sudo journalctl -u phoenix-helix-kernel -f --no-pager
+```
+
+## NEXT STEPS IN ORDER
+
+1. **Fix cloud-init seed** — `tools/poc/debian-seed/user-data` needs:
+   - Pre-create 200MB swapfile at `/var/swap/swapfile` + swapon in runcmd
+   - Write `/etc/phoenix-cifs.creds` (username=jwlef, password=wtfover1A?)
+   - fstab entry with `credentials=/etc/phoenix-cifs.creds,vers=3.0` (not guest)
+   - Copy + enable `phoenix-helix-kernel.service` via runcmd
+   Without this, every VM reboot requires the manual sequence above.
+2. **Add repo to share** — copy Phoenix-DevOps-oS into F:\Phoenix\ (nice to have).
+3. **Glossary dashboard UI panel** — backend/API already confirmed working.
+4. MapTiler map panel in dashboard.
+5. Shade UI + drawer filesystem.
+6. Deploy phoenix-dashboard.service on Ubuntu 192.168.1.133.
+7. Start manual/phoenix_manual.md.
 
 ## KNOWN LOOSE ENDS (not urgent, not forgotten)
 
@@ -99,19 +113,8 @@ FULL STACK RUNNING LIVE 2026-08-24:
   duplicate-detection path and true hot-swap don't check hashes yet.
 - HUD visual translucency — scoped to visual-only, not yet implemented.
 - 3 redundant PS7 buttons in the dashboard UI — not yet consolidated.
-
-## NEXT STEPS IN ORDER
-
-1. **Deploy Debian systemd service** — copy `phoenix-helix-kernel.service` to
-   `/etc/systemd/system/`, enable + start. SMB fstab proven — blocker gone.
-   All scripts now in /phoenix/helix-pages/ — no repo on share needed.
-2. **Add repo to share** — copy Phoenix-DevOps-oS into F:\Phoenix\ (nice to have,
-   not blocking anything now that helix-pages/ carries all runtime scripts).
-3. **Glossary dashboard UI panel** — backend/API already confirmed working.
-4. MapTiler map panel in dashboard.
-5. Shade UI + drawer filesystem.
-6. Deploy phoenix-dashboard.service on Ubuntu 192.168.1.133.
-7. Start manual/phoenix_manual.md.
+- cloud-init seed `debian-seed/user-data` does not survive VM reboots —
+  credentials/fstab/swap/service all need baking in (see NEXT STEPS #1).
 
 ## KEY FILES
 
@@ -123,6 +126,8 @@ FULL STACK RUNNING LIVE 2026-08-24:
 | `sector3/workers/packages-worker/index.js` | Cloudflare Worker — D1 + R2 API |
 | `scripts/usys.ps1` | Global command layer (PowerShell) |
 | `dashboard/main.js` | Electron main process — D1/R2/Claude/Ollama wiring |
+| `sector3/services/phoenix-helix-kernel.service` | Debian systemd service for paging brain |
+| `tools/poc/debian-seed/user-data` | cloud-init seed — NEEDS UPDATE (see NEXT STEPS #1) |
 
 ## WHY THIS EXISTS
 Life First app for Laurie. Local LLM, no vendor, no subscription, no lock-in.
