@@ -470,10 +470,11 @@
 }
 .laurie-msg-thinking {
     align-self: flex-start;
-    opacity: 0.55;
-    font-size: 18px;
-    letter-spacing: 3px;
+    opacity: 0.5;
+    font-style: italic;
+    animation: lauriePulse 1.4s ease-in-out infinite;
 }
+@keyframes lauriePulse { 0%,100% { opacity: 0.35; } 50% { opacity: 0.7; } }
 .laurie-msg-plain {
     align-self: stretch;
     max-width: 100%;
@@ -526,3 +527,8 @@
     padding: 2px;
 }
 .laurie-plain-link:hover { color: rgba(255, 255, 255, 0.7); }
+
+.laurie-msg-follow {
+    border-left: 3px solid rgba(61, 232, 255, 0.55);
+    border-radius: 6px 14px 14px 6px;
+}

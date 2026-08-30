@@ -942,8 +942,10 @@ function _laurieGuidePrompt() {
         '',
         'HOW YOU TALK TO HER:',
         '- Warm, calm, and plain. No jargon. If a technical word is unavoidable, explain it in one short line.',
-        '- Give her ONE next step at a time. Never a wall of text, never a numbered list longer than 4 short steps.',
-        '- Be concrete: name the exact tab, the exact button, what she will see happen.',
+        '- Give her exactly ONE thing to do, then stop and wait. Never a numbered list of steps.',
+        '  Say the one click, name what she will see, and end. She will do it and you will see her do it — then you give the next one.',
+        '- Be concrete: the exact tab name, the exact button or folder name, what appears when she does it.',
+        '- Only name things that actually exist on her screen. If you are not sure it is there, say "look for a folder called X" rather than "click X".',
         '- Reassure often and mean it: nothing she clicks or asks can break Phoenix. Say so when it fits.',
         '- Work the phrase "it\'s easier than it sounds" in naturally when something looks intimidating — because it is true.',
         '- If she seems stuck, frustrated, or unsure, slow down, shrink the step, and tell her she is doing fine.',
@@ -1239,7 +1241,11 @@ function _findClaudeCli() {
 
 // Run Claude Code CLI — spawn so we can write the full prompt to stdin
 // NOTE: child_process.exec() ignores the `input` option; spawn is required.
-function _runClaudeCli(prompt) {
+// `onChunk` (optional) gets stdout text as it arrives so the reply can
+// stream into the UI instead of landing as one wall after a long wait —
+// this matters for Laurie's Guide, where a 25-second blank pause reads as
+// "broken" and she won't come back.
+function _runClaudeCli(prompt, onChunk) {
     return new Promise((resolve, reject) => {
         const isWin = process.platform === 'win32';
         const npmGlobal = path.join(os.homedir(), 'AppData', 'Roaming', 'npm', 'claude.cmd');
@@ -1264,7 +1270,11 @@ function _runClaudeCli(prompt) {
 
         let stdout = '';
         let stderr = '';
-        proc.stdout.on('data', d => { stdout += d; });
+        proc.stdout.on('data', d => {
+            const text = d.toString('utf8');
+            stdout += text;
+            if (onChunk) { try { onChunk(text); } catch (_) {} }
+        });
         proc.stderr.on('data', d => { stderr += d; });
         proc.on('error', reject);
         proc.on('close', code => {
@@ -1319,10 +1329,15 @@ function _runClaudeCliFull(prompt, onChunk) {
     });
 }
 
-ipcMain.handle('ai-chat', async (event, { message, history, phoenixStats, mode }) => {
+ipcMain.handle('ai-chat', async (event, { message, history, phoenixStats, mode, context }) => {
     const provider = (process.env.PHOENIX_AI_PROVIDER || 'helpdesk').toLowerCase();
     const isLaurie = mode === 'laurie';
-    const systemPrompt = isLaurie ? _laurieGuidePrompt() : _phoenixSystemPrompt(phoenixStats);
+    let systemPrompt = isLaurie ? _laurieGuidePrompt() : _phoenixSystemPrompt(phoenixStats);
+    // Ground Laurie's guide in where she actually is right now, so it can
+    // follow her through a hunt for a specific file instead of guessing.
+    if (isLaurie && context) {
+        systemPrompt += `\n\nWHERE SHE IS RIGHT NOW: ${context}\nUse this — refer to what she can actually see, and give the next step from here.`;
+    }
 
     _helixMem.pushTurn('user', message);
     const chatMessages = _helixMem.getHistory(20);
@@ -1346,9 +1361,11 @@ ipcMain.handle('ai-chat', async (event, { message, history, phoenixStats, mode }
             errors.push(`ollama: ${e.message}`);
         }
         try {
-            const reply = await _runClaudeCli(fullPrompt);
+            const reply = await _runClaudeCli(fullPrompt, (chunk) => {
+                event.sender.send('ai-chat-stream-chunk', { delta: chunk });
+            });
             _helixMem.pushTurn('assistant', reply);
-            return { success: true, provider: 'claude', reply, guide: 'laurie' };
+            return { success: true, provider: 'claude', reply, guide: 'laurie', streamed: true };
         } catch (e) {
             return {
                 success: false,
