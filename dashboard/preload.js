@@ -21,13 +21,17 @@ const ALLOWED_CHANNELS = new Set([
   // ps7-shell.js
   'ps7-shell-get-cwd', 'ps7-shell-run',
   // pagefile management
-  'get-pagefile-status', 'move-pagefile', 'delete-pagefile'
+  'get-pagefile-status', 'move-pagefile', 'delete-pagefile',
+  // hud-mode.js
+  'hud-set-mode', 'hud-get-mode', 'hud-toggle',
+  // google-launcher.js
+  'launch-google', 'get-google-status'
 ]);
 
 // Main → renderer push events (streaming chat deltas). Separate allowlist
 // from invoke's request/response channels — these are one-way and don't
 // take a renderer-supplied argument, so the surface is narrower by design.
-const ALLOWED_EVENTS = new Set(['ai-chat-stream-chunk']);
+const ALLOWED_EVENTS = new Set(['ai-chat-stream-chunk', 'hud-mode-changed']);
 
 contextBridge.exposeInMainWorld('phoenix', {
   invoke(channel, ...args) {

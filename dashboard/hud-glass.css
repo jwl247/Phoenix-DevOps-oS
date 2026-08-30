@@ -67,3 +67,38 @@ html, body {
     border-radius: 3px;
 }
 *::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Click-through: empty glass regions pass mouse to desktop ──────── */
+/* The window itself is setIgnoreMouseEvents(true) in hud-mode.js; these
+   rules make the *visible* panels re-capture the pointer when hovered. */
+.hud-action-btn,
+.hud-action-panel.open,
+.hud-right-column,
+.hud-left-column,
+.hud-interface,
+.phoenix-desktop-dock,
+.operator-drawer,
+.auth-modal {
+    pointer-events: auto;
+}
+
+/* Anything not listed above is pointer-events:none by default in HUD,
+   so clicks fall through to whatever is behind the glass. */
+.hud-zone,
+.holographic-display,
+.main-viewport,
+.holo-overlay,
+.hud-reticle {
+    pointer-events: none;
+}
+
+/* ── No opaque fallbacks: if a panel has no content, stay see-through ─ */
+.hud-action-panel:empty { display: none; }
+
+/* ── HUD mode body: force full transparency so DWM acrylic shows ───── */
+body.hud-mode,
+body.hud-mode .dashboard-container,
+body.hud-mode .hud-zone,
+body.hud-mode .holographic-display {
+    background: transparent !important;
+}
