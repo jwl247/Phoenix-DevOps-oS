@@ -1,10 +1,19 @@
 # Phoenix Session State
-# Updated: 2026-08-29
+# Updated: 2026-08-30
 # READ THIS AT THE START OF NEXT SESSION
 
 ## WHERE WE ARE
 
-Dashboard is real end to end. Clonepool integrity system is real end to end.
+Dashboard is the blocker to shipping. As of 2026-08-30 it has: a REAL
+terminal (SHELL pane — ConPTY pwsh/bash), a CLAUDE hotline (CLAUDE pane —
+interactive Claude Code in the HUD, on the subscription), a unified working
+directory (active folder slot drives shell + Claude cwd), HUD-mode glass
+toggle, a declarative button generator + PoC buttons, and a Google/Chrome
+launcher. Still needs the HUD overlay retool (map/game full-bleed base,
+panels floating as glass) and HELP CHAT / GUIDE folded into AI CHAT.
+origin/main is at commit 5323d9c.
+
+Clonepool integrity system is real end to end.
 Shared filesystem is real end to end — proven live 2026-08-23.
 SMB persistent mount proven live — fstab credentials= entry, umount/mount cycle confirmed.
 Double Helix end-to-end smoke test: 5/5 Windows + 5/5 Debian — both strands proven 2026-08-24.
