@@ -597,6 +597,17 @@ class PhoenixDashboard {
                 const box = this._makePlaceBox(`— ${files.length} file${files.length > 1 ? 's' : ''}`, null, files);
                 container.appendChild(box);
             }
+
+            // Laurie's Guide watches where she is in the file browser so it
+            // can walk her through a hunt for a specific file.
+            this._laurieNav = {
+                path: dirPath,
+                dirs: dirs.slice(0, 40).map(d => d.name),
+                files: files.slice(0, 40).map(f => f.name)
+            };
+            if (this._laurieMode) {
+                this._laurieFollow(`She is now looking in "${dirPath}". Folders here: ${this._laurieNav.dirs.join(', ') || 'none'}. Files here: ${this._laurieNav.files.join(', ') || 'none'}.`);
+            }
         } catch (e) {
             container.innerHTML = `<div class="place-loading">error: ${e.message}</div>`;
         }
@@ -1001,6 +1012,15 @@ class PhoenixDashboard {
         document.querySelectorAll('.hud-nav-pane[data-hud-nav]').forEach(pane => {
             pane.classList.toggle('active', pane.dataset.hudNav === nav);
         });
+        // Laurie's Guide follows her: when she switches tabs after it gave
+        // her a step, it notices and nudges the next one. MAP has its own,
+        // richer trigger (navigateTo, with the folder list) — don't fire the
+        // bare tab-switch follow for it and consume the armed flag first.
+        if (this._laurieMode && this._hudCurrentNav && nav !== this._hudCurrentNav
+            && nav !== 'guide' && nav !== 'map') {
+            this._laurieFollow(`She just opened the ${nav.replace('-', ' ').toUpperCase()} tab.`);
+        }
+        this._hudCurrentNav = nav;
         if (nav === 'help-chat' && !this._manualRaw) this._loadManual();
         if (nav === 'sector-map') this._renderSectorMap();
         if (nav === 'ai-chat') document.getElementById('hud-input')?.focus();
@@ -1098,29 +1118,110 @@ class PhoenixDashboard {
         input?.focus();
     }
 
+    // Light touch: render **bold** and `code`, escape everything else.
+    // Keeps her replies clean without a full markdown engine.
+    _laurieFmt(text) {
+        return String(text || '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>');
+    }
+
     _laurieAppend(text, cls) {
         const box = document.getElementById('laurie-messages');
         if (!box) return null;
         const div = document.createElement('div');
         div.className = `laurie-msg ${cls}`;
-        // Light touch: render **bold** and `code`, escape everything else.
-        // Keeps her replies clean without a full markdown engine.
-        const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        div.innerHTML = esc(text)
-            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-            .replace(/`([^`]+)`/g, '<code>$1</code>');
+        div.innerHTML = this._laurieFmt(text);
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
         return div;
     }
 
+    // A short description of where Laurie is right now, so the guide's
+    // answers are grounded in what she's actually looking at.
+    _laurieContext() {
+        const bits = [];
+        const tab = this._hudCurrentNav || 'guide';
+        bits.push(`Laurie is on the ${tab.replace('-', ' ').toUpperCase()} tab.`);
+        if (this._laurieNav && (tab === 'map')) {
+            bits.push(`In the file browser she is at "${this._laurieNav.path}".`);
+            if (this._laurieNav.dirs.length) bits.push(`Folders visible: ${this._laurieNav.dirs.join(', ')}.`);
+            if (this._laurieNav.files.length) bits.push(`Files visible: ${this._laurieNav.files.join(', ')}.`);
+        }
+        return bits.join(' ');
+    }
+
+    // What she seems to be hunting for — keywords from her recent messages.
+    _laurieHuntTerms() {
+        const stop = new Set(['the','a','an','my','me','i','to','find','open','where','is','are','how','do','can','you','help','get','see','look','for','it','that','this','in','on','of','and','please','need','want','folder','file','files']);
+        return this._laurieHistory
+            .filter(m => m.role === 'user')
+            .slice(-3)
+            .flatMap(m => m.content.toLowerCase().match(/[a-z0-9]+/g) || [])
+            .filter(w => w.length > 2 && !stop.has(w));
+    }
+
+    // Follows her through a task: after the guide gives her a step and she
+    // does something (opens a tab, opens a folder), this fires ONE gentle
+    // next-step nudge. One per step — never a stream of chatter.
+    _laurieFollow(whatHappened) {
+        if (!this._laurieFollowArmed || this._laurieBusy) return;
+        this._laurieFollowArmed = false;
+        clearTimeout(this._laurieFollowTimer);
+        this._laurieFollowTimer = setTimeout(async () => {
+            if (this._laurieBusy) return;
+
+            // Deterministic first: if what she's hunting for is right there on
+            // screen, just point at it — no model, no delay, no hallucination.
+            const terms = this._laurieHuntTerms();
+            const visible = [...(this._laurieNav?.dirs || []), ...(this._laurieNav?.files || [])];
+            const hit = visible.find(name => terms.some(t => name.toLowerCase().includes(t)));
+            if (hit && this._hudCurrentNav === 'map') {
+                const div = this._laurieAppend(`There it is — click **${hit}**.`, 'laurie-msg-assist');
+                if (div) div.classList.add('laurie-msg-follow');
+                this._laurieHistory.push({ role: 'assistant', content: `There it is — click ${hit}.` });
+                return;
+            }
+
+            this._laurieBusy = true;
+            const box = document.getElementById('laurie-messages');
+            const thinking = this._laurieAppend('…', 'laurie-msg-thinking');
+            const prompt = `${this._laurieContext()} ${whatHappened} `
+                + `Tell her the ONE next thing to click — and if it's a folder or button on screen, use its EXACT name from what she can see. `
+                + `If what she is looking for is not visible in that list, tell her which item in the list to open to get closer. `
+                + `Never name something that isn't in the list. 1–2 short sentences. Do not repeat steps she has already done.`;
+            let result = { success: false };
+            if (isElectron && ipcRenderer) {
+                result = await ipcRenderer.invoke('ai-chat', {
+                    message: prompt, history: this._laurieHistory, mode: 'laurie',
+                    context: this._laurieContext()
+                }).catch(() => ({ success: false }));
+            }
+            thinking.remove();
+            if (result.success && result.reply) {
+                const div = this._laurieAppend(result.reply, 'laurie-msg-assist');
+                if (div) div.classList.add('laurie-msg-follow');
+                this._laurieHistory.push({ role: 'assistant', content: result.reply });
+                box.scrollTop = box.scrollHeight;
+            }
+            this._laurieBusy = false;
+        }, 700);
+    }
+
+    _laurieArmFollow(reply) {
+        // Only follow if the last answer actually told her to go somewhere.
+        this._laurieFollowArmed = /\b(click|open|go to|tap|press|look for|find|choose|select)\b/i.test(reply || '');
+    }
+
     async _laurieSend(message) {
         this._laurieBusy = true;
+        this._laurieFollowArmed = false;
         document.getElementById('laurie-send').disabled = true;
         this._laurieAppend(message, 'laurie-msg-user');
         this._laurieHistory.push({ role: 'user', content: message });
 
-        const thinking = this._laurieAppend('…', 'laurie-msg-thinking');
+        const thinking = this._laurieAppend('thinking…', 'laurie-msg-thinking');
         const box = document.getElementById('laurie-messages');
 
         let streamDiv = null, streamText = '';
@@ -1129,7 +1230,7 @@ class PhoenixDashboard {
             unsub = window.phoenix.onStream('ai-chat-stream-chunk', ({ delta }) => {
                 if (!streamDiv) { thinking.remove(); streamDiv = this._laurieAppend('', 'laurie-msg-assist'); }
                 streamText += delta;
-                streamDiv.textContent = streamText;
+                streamDiv.textContent = streamText;   // fast path while streaming
                 box.scrollTop = box.scrollHeight;
             });
         }
@@ -1137,16 +1238,19 @@ class PhoenixDashboard {
         let result = { success: false, error: 'The guide needs the Phoenix desktop to run.' };
         if (isElectron && ipcRenderer) {
             result = await ipcRenderer.invoke('ai-chat', {
-                message, history: this._laurieHistory, mode: 'laurie'
+                message, history: this._laurieHistory, mode: 'laurie',
+                context: this._laurieContext()
             }).catch(e => ({ success: false, error: e.message }));
         }
         if (unsub) unsub();
         if (!streamDiv) thinking.remove();
 
         if (result.success) {
-            if (streamDiv) streamDiv.textContent = result.reply;
-            else this._laurieAppend(result.reply, 'laurie-msg-assist');
-            this._laurieHistory.push({ role: 'assistant', content: result.reply });
+            const reply = (result.reply || streamText).trim();
+            if (streamDiv) streamDiv.innerHTML = this._laurieFmt(reply);   // re-render with bold/code once done
+            else this._laurieAppend(reply, 'laurie-msg-assist');
+            this._laurieHistory.push({ role: 'assistant', content: reply });
+            this._laurieArmFollow(reply);   // if it gave her a step, follow her into it
         } else {
             this._laurieAppend(result.error || 'Something went wrong — wait a moment and try again. Nothing is broken.', 'laurie-msg-assist');
         }
