@@ -34,14 +34,15 @@ if (-not $env:PHOENIX_SKIP_AUTH_MODAL) {
     $env:PHOENIX_SKIP_AUTH_MODAL = '1'
 }
 
-# GPU fix for junction / network-share launches.
-# error_code=18 is SBOX_ERROR_CREATE_PROCESS: the GPU child never spawns when
-# Electron runs from a junction (Favorites\) or mapped drive. --disable-gpu-sandbox
-# alone still fails because the child process is never created at all.
-# --in-process-gpu runs the GPU inside the main process, bypassing CreateProcess
-# entirely. Confirmed fix across Electron issues 36698 and 31659.
-# Keep software-rasterizer off so acrylic/mica glass still has a compositor.
-$env:ELECTRON_EXTRA_LAUNCH_ARGS = "--in-process-gpu --disable-software-rasterizer"
+# GPU fix for junction / network-share launches (Favorites\ path).
+# error_code=18 = SBOX_ERROR_CREATE_PROCESS: the GPU child never spawns when
+# Electron runs from a junction or mapped drive. --disable-gpu-sandbox is the
+# confirmed fix (Electron issues 36698, 31659; open-webui#110).
+# Do NOT combine with --in-process-gpu + --disable-software-rasterizer:
+# that trio crashes with 'Validating command decoder is not supported'
+# (Electron issue 42688). Keep software rasterizer ON so acrylic/mica glass
+# still has a compositor to blur against.
+$env:ELECTRON_EXTRA_LAUNCH_ARGS = "--disable-gpu-sandbox"
 
 Write-Host ""
 Write-Host "  +---------------------------------------+" -ForegroundColor Cyan
