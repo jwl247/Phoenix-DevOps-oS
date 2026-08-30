@@ -17,10 +17,11 @@ let currentMode = 'app';
 
 function install({ app, BrowserWindow, ipcMain }) {
     // Capture the window once created (main.js calls createWindow).
-    const _origReady = app.whenReady.bind(app);
-    // We hook after createWindow by listening for the first window.
     app.on('browser-window-created', (_e, win) => {
         if (!mainWindow) mainWindow = win;
+        // Apply glass material as soon as the window exists so the first
+        // paint is already translucent instead of flashing opaque.
+        applyGlass(win);
     });
 
     ipcMain.handle('hud-set-mode', async (_e, { mode } = {}) => {
@@ -34,8 +35,37 @@ function install({ app, BrowserWindow, ipcMain }) {
 
     ipcMain.handle('hud-get-mode', async () => ({ mode: currentMode }));
 
+    // Convenience toggle — flips between app and hud.
+    ipcMain.handle('hud-toggle', async () => {
+        if (!mainWindow || mainWindow.isDestroyed()) {
+            return { success: false, error: 'No window yet.' };
+        }
+        return currentMode === 'hud' ? enterApp(mainWindow) : enterHud(mainWindow);
+    });
+
     // Default: start in app mode. User flips to HUD from the dashboard.
-    return { enterHud, enterApp };
+    return { enterHud, enterApp, applyGlass };
+}
+
+// ── Glass material ───────────────────────────────────────────────────────
+// On Windows 11 22H2+ we use the native DWM acrylic/mica backdrop so the
+// blur is real (not a CSS approximation) and the window stays click-through
+// on transparent pixels. On older Windows we fall back to transparent:true
+// + CSS backdrop-filter (hud-glass.css).
+function applyGlass(win) {
+    if (!win || win.isDestroyed()) return;
+    try {
+        if (typeof win.setBackgroundMaterial === 'function') {
+            // acrylic = transient overlay feel; mica = long-lived. Acrylic
+            // reads more like a HUD floating over the desktop.
+            win.setBackgroundMaterial('acrylic');
+        }
+    } catch (e) {
+        console.warn('[hud-mode] setBackgroundMaterial failed:', e.message);
+    }
+    try {
+        win.setBackgroundColor('#00000000');
+    } catch (_) {}
 }
 
 function enterHud(win) {
@@ -48,6 +78,7 @@ function enterHud(win) {
     win.setSkipTaskbar(false);
     win.setHasShadow(false);
     win.setBackgroundColor('#00000000');
+    applyGlass(win);
     // Frameless + transparent = real glass over the desktop.
     // (Electron requires frame:false for transparent to work on Windows.)
     try { win.setWindowButtonVisibility(false); } catch (_) {}
@@ -80,4 +111,4 @@ function enterApp(win) {
     return { success: true, mode: 'app' };
 }
 
-module.exports = { install, enterHud, enterApp };
+module.exports = { install, enterHud, enterApp, applyGlass };
