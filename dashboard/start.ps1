@@ -34,12 +34,14 @@ if (-not $env:PHOENIX_SKIP_AUTH_MODAL) {
     $env:PHOENIX_SKIP_AUTH_MODAL = '1'
 }
 
-# GPU sandbox fix — must be set BEFORE electron starts, not after.
-# error_code=18 (SBOX_ERROR_CREATE_PROCESS) means the GPU child never spawned.
-# ELECTRON_DISABLE_GPU alone is not enough: Chromium still launches a GPU
-# process that then fatals with "GPU process isn't usable. Goodbye."
-# --disable-gpu-sandbox is the flag that actually stops the crash loop.
-$env:ELECTRON_EXTRA_LAUNCH_ARGS = "--disable-gpu-sandbox --disable-gpu --disable-software-rasterizer"
+# GPU fix for junction / network-share launches.
+# error_code=18 is SBOX_ERROR_CREATE_PROCESS: the GPU child never spawns when
+# Electron runs from a junction (Favorites\) or mapped drive. --disable-gpu-sandbox
+# alone still fails because the child process is never created at all.
+# --in-process-gpu runs the GPU inside the main process, bypassing CreateProcess
+# entirely. Confirmed fix across Electron issues 36698 and 31659.
+# Keep software-rasterizer off so acrylic/mica glass still has a compositor.
+$env:ELECTRON_EXTRA_LAUNCH_ARGS = "--in-process-gpu --disable-software-rasterizer"
 
 Write-Host ""
 Write-Host "  +---------------------------------------+" -ForegroundColor Cyan
