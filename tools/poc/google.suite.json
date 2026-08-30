@@ -1,0 +1,31 @@
+{
+  "name": "google",
+  "version": "1.0.0",
+  "description": "Google Chrome browser via Phoenix. Opens google.com (or any URL) in a real Chrome window. No install on the host — Chrome is the runtime, Phoenix is the launcher.",
+  "author": "jwl247",
+  "type": "app",
+  "entry": "chrome.exe",
+  "runtime": "external",
+  "dependencies": [],
+  "environment": {},
+  "permissions": [
+    "network",
+    "display"
+  ],
+  "metadata": {
+    "category": "poc",
+    "tags": ["browser", "google", "chrome", "web", "no-install"],
+    "source": "https://www.google.com",
+    "license": "Proprietary (Google Chrome)"
+  },
+  "launch": {
+    "windows": {
+      "exe_candidates": [
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
+      ],
+      "args": ["https://www.google.com"],
+      "fallback_url": "https://www.google.com"
+    }
+  }
+}
