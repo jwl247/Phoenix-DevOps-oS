@@ -1,0 +1,69 @@
+/* hud-glass.css
+   Full translucent glass pass for the Phoenix HUD.
+   Loaded LAST so it wins. Uses backdrop-filter blur over the live
+   desktop behind the frameless transparent Electron window.
+   Target: a real HUD floating over your desktop, not an opaque app. */
+
+/* ── Root: let the desktop show through ─────────────────────────────── */
+html, body {
+    background: transparent !important;
+}
+
+.dashboard-container {
+    background: transparent !important;
+}
+
+/* ── Panels: frosted glass ──────────────────────────────────────────── */
+.hud-right-column,
+.hud-left-column,
+.hud-status-strip,
+.hud-action-panel,
+.operator-drawer,
+.drawer-body,
+.cli-output,
+.auth-modal,
+.dropdown-slot,
+.sector-btn,
+.hud-action-btn,
+.glossary-entry,
+.ps7-shell-input-row {
+    background: rgba(12, 16, 22, 0.42) !important;
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border-color: rgba(120, 140, 170, 0.35) !important;
+}
+
+/* Stronger glass on the main HUD interface */
+.hud-interface,
+.holographic-display {
+    background: rgba(6, 10, 16, 0.30) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+/* Phoenix canvas stays visible but dimmed so glass reads over it */
+.phoenix-ember-canvas {
+    opacity: 0.55;
+}
+
+/* Dock: translucent bar */
+.phoenix-desktop-dock {
+    background: rgba(8, 12, 18, 0.45) !important;
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    border-top: 1px solid rgba(120, 140, 170, 0.3);
+}
+
+/* Hover glow stays, just on glass */
+.hud-action-btn:hover,
+.sector-btn:hover {
+    background: rgba(30, 40, 55, 0.55) !important;
+}
+
+/* Scrollbars thin + glass-tinted */
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-thumb {
+    background: rgba(120, 140, 170, 0.35);
+    border-radius: 3px;
+}
+*::-webkit-scrollbar-track { background: transparent; }
