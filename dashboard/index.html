@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="hud-layout-additions.css">
     <link rel="stylesheet" href="hud-glass.css">
+    <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css">
 </head>
 <body>
     <div class="dashboard-container">
@@ -215,15 +216,15 @@
 
                             <div class="hud-nav-pane" id="hud-pane-prev-task" data-hud-nav="prev-task">
                                 <div class="hud-pane-title">PREV. TASK</div>
-                                <div class="hud-stub-body">No previous task logged.</div>
+                                <div class="hud-stub-body coming-soon-body">Task history — <strong>coming soon.</strong><br>Will show what you last worked on and let you jump back to it.</div>
                             </div>
-                            <div class="hud-nav-pane" id="hud-pane-next-task" data-hud-nav="prev-task">
+                            <div class="hud-nav-pane" id="hud-pane-next-task" data-hud-nav="next-task">
                                 <div class="hud-pane-title">NEXT TASK</div>
-                                <div class="hud-stub-body">No queued task.</div>
+                                <div class="hud-stub-body coming-soon-body">Task queue — <strong>coming soon.</strong><br>Line up the next thing so the HUD (and Claude) know where you're headed.</div>
                             </div>
                             <div class="hud-nav-pane" id="hud-pane-reports" data-hud-nav="reports">
                                 <div class="hud-pane-title">REPORTS</div>
-                                <div class="hud-stub-body">Run <code>usys status</code> from CODES tab for system report.</div>
+                                <div class="hud-stub-body coming-soon-body">System reports — <strong>coming soon.</strong><br>For now, run <code>usys status</code> in the SHELL pane.</div>
                             </div>
                             <div class="hud-nav-pane" id="hud-pane-settings" data-hud-nav="settings">
                                 <div class="hud-pane-title">SETTINGS</div>
@@ -282,15 +283,17 @@
                                 <div class="manual-body" id="guide-body">loading guide...</div>
                             </div><!-- /GUIDE -->
 
-                            <!-- PS7 SHELL — embedded, unrestricted (no allowlist, unlike CODES/PHOENIX CLI) -->
-                            <div class="hud-nav-pane" id="hud-pane-ps7-shell" data-hud-nav="ps7-shell">
-                                <div class="hud-pane-title">PS7 SHELL</div>
-                                <div class="ps7-shell-output" id="ps7-shell-output"></div>
-                                <div class="ps7-shell-input-row">
-                                    <span class="ps7-shell-cwd" id="ps7-shell-cwd">&gt;</span>
-                                    <input type="text" class="ps7-shell-input" id="ps7-shell-input" autocomplete="off" spellcheck="false" placeholder="PS7 command...">
-                                </div>
-                            </div><!-- /PS7 SHELL -->
+                            <!-- SHELL — real persistent PTY (pwsh/bash) in the active working dir -->
+                            <div class="hud-nav-pane" id="hud-pane-shell" data-hud-nav="shell">
+                                <div class="hud-pane-title">SHELL</div>
+                                <div class="term-host" id="term-host-shell"></div>
+                            </div><!-- /SHELL -->
+
+                            <!-- CLAUDE — the hotline. Interactive Claude Code in a PTY, in the working dir. -->
+                            <div class="hud-nav-pane" id="hud-pane-claude" data-hud-nav="claude">
+                                <div class="hud-pane-title">CLAUDE</div>
+                                <div class="term-host" id="term-host-claude"></div>
+                            </div><!-- /CLAUDE -->
 
                             <!-- GLOSSARY — searchable TOC/index over the clonepool + D1 -->
                             <div class="hud-nav-pane" id="hud-pane-glossary" data-hud-nav="glossary">
@@ -321,12 +324,13 @@
                     <button type="button" class="hud-nav-btn" data-hud-nav="help-chat"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">HELP CHAT</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="map"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">MAP</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="sector-map"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">SECTOR MAP</span></button>
-                    <button type="button" class="hud-nav-btn" data-hud-nav="prev-task"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">PREV. TASK</span></button>
-                    <button type="button" class="hud-nav-btn" data-hud-nav="next-task"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">NEXT TASK</span></button>
-                    <button type="button" class="hud-nav-btn" data-hud-nav="reports"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">REPORTS</span></button>
+                    <button type="button" class="hud-nav-btn coming-soon" data-hud-nav="prev-task"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">PREV. TASK</span><span class="soon-tag">soon</span></button>
+                    <button type="button" class="hud-nav-btn coming-soon" data-hud-nav="next-task"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">NEXT TASK</span><span class="soon-tag">soon</span></button>
+                    <button type="button" class="hud-nav-btn coming-soon" data-hud-nav="reports"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">REPORTS</span><span class="soon-tag">soon</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="settings"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">SETTINGS</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="codes"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">CODES</span></button>
-                    <button type="button" class="hud-nav-btn" data-hud-nav="ps7-shell"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">PS7 SHELL</span></button>
+                    <button type="button" class="hud-nav-btn" data-hud-nav="shell"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">SHELL</span></button>
+                    <button type="button" class="hud-nav-btn" data-hud-nav="claude"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">CLAUDE</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="glossary"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">GLOSSARY</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="guide"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">GUIDE</span></button>
                 </nav>
@@ -463,6 +467,8 @@
         </div>
     </div>
 
+    <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
+    <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
     <script src="dashboard.js"></script>
     <script src="hud-layout.js"></script>
     <script src="button-generator.js"></script>

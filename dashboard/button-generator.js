@@ -208,7 +208,7 @@ ButtonGenerator
     .define({
         id: 'guide',
         label: 'PHOENIX GUIDE',
-        sub: 'ollama chat · manual · Laurie's guide',
+        sub: "ollama chat · manual · Laurie's guide",
         onClick() {
             window.phoenixDashboard?._hudNavSwitch('guide');
         }
@@ -348,4 +348,8 @@ if (typeof window !== 'undefined') {
     window.ActionButtons = ButtonGenerator;
 }
 
-module.exports = ButtonGenerator;
+// Guarded — this file is loaded as a plain <script> in the renderer (no
+// CommonJS there). Only export when actually running under Node.
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = ButtonGenerator;
+}

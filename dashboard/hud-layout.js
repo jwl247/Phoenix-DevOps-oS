@@ -360,73 +360,70 @@
         renderPanel(current);
     });
 
-    // 9. PS7 SHELL — embedded, unrestricted (unlike the gated PHOENIX CLI)
-    let ps7ShellHistory = [];
-    let ps7ShellHistoryPos = 0;
+    // 9. SHELL + CLAUDE — real persistent PTYs behind xterm.js. Both open in
+    //    the active working directory (the active folder slot) and follow it
+    //    when it changes. CLAUDE is the same shell dropped straight into an
+    //    interactive `claude` — the hotline.
+    const hudTerminals = (function () {
+        const made = {};   // session -> { term, fit, started }
 
-    function ps7ShellAppend(html) {
-        const out = document.getElementById('ps7-shell-output');
-        if (!out) return;
-        const line = document.createElement('div');
-        line.innerHTML = html;
-        out.appendChild(line);
-        out.scrollTop = out.scrollHeight;
-    }
+        function build(session, hostId) {
+            const host = document.getElementById(hostId);
+            if (!host || typeof Terminal === 'undefined') return null;
 
-    function ps7ShellSetCwd(cwd) {
-        const cwdEl = document.getElementById('ps7-shell-cwd');
-        if (cwdEl) cwdEl.textContent = `${cwd}>`;
-    }
+            const term = new Terminal({
+                fontFamily: '"Cascadia Mono", "Consolas", "Courier New", monospace',
+                fontSize: 13,
+                cursorBlink: true,
+                theme: { background: 'rgba(5,7,12,0.0)', foreground: '#c8e6d0', cursor: '#00ff88' },
+                allowTransparency: true
+            });
+            let fit = null;
+            try { fit = new FitAddon.FitAddon(); term.loadAddon(fit); } catch (_) { fit = null; }
+            term.open(host);
+            term.onData(d => window.phoenix?.send('term-input', { session, data: d }));
 
-    // Lives as a full HUD nav pane (same size/placement as AI CHAT) rather
-    // than a small right-column popout — dashboard.js's generic
-    // .hud-nav-btn[data-hud-nav] listener already handles showing the pane;
-    // this just loads the tracked cwd and focuses the input on switch-in.
-    document.querySelector('.hud-nav-btn[data-hud-nav="ps7-shell"]')?.addEventListener('click', async () => {
-        const state = await invoke('ps7-shell-get-cwd').catch(() => null);
-        if (state) ps7ShellSetCwd(state.cwd);
-        document.getElementById('ps7-shell-input')?.focus();
-    });
+            const doFit = () => {
+                if (!fit) return;
+                try {
+                    fit.fit();
+                    window.phoenix?.send('term-resize', { session, cols: term.cols, rows: term.rows });
+                } catch (_) {}
+            };
+            window.addEventListener('resize', doFit);
 
-    document.getElementById('ps7-shell-input')?.addEventListener('keydown', async (e) => {
-        const input = e.currentTarget;
-        if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            if (!ps7ShellHistory.length) return;
-            ps7ShellHistoryPos = Math.max(0, ps7ShellHistoryPos - 1);
-            input.value = ps7ShellHistory[ps7ShellHistoryPos] || '';
-            return;
+            const rec = { term, fit, doFit, started: false };
+            made[session] = rec;
+            return rec;
         }
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            ps7ShellHistoryPos = Math.min(ps7ShellHistory.length, ps7ShellHistoryPos + 1);
-            input.value = ps7ShellHistory[ps7ShellHistoryPos] || '';
-            return;
-        }
-        if (e.key !== 'Enter') return;
 
-        const command = input.value;
-        if (!command.trim()) return;
-        ps7ShellHistory.push(command);
-        ps7ShellHistoryPos = ps7ShellHistory.length;
+        // Route incoming PTY data to the right xterm.
+        window.phoenix?.onStream('term-data', ({ session, data }) => {
+            const rec = made[session];
+            if (rec) rec.term.write(data);
+        });
 
-        const cwdEl = document.getElementById('ps7-shell-cwd');
-        const promptText = cwdEl ? cwdEl.textContent : '>';
-        const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        ps7ShellAppend(`<span class="ps7-shell-prompt">${esc(promptText)}</span> <span class="ps7-shell-cmd">${esc(command)}</span>`);
+        return {
+            async show(session, hostId) {
+                const rec = made[session] || build(session, hostId);
+                if (!rec) return;
+                if (!rec.started) {
+                    rec.started = true;
+                    rec.doFit();
+                    const res = await invoke('term-start', { session, cols: rec.term.cols, rows: rec.term.rows })
+                        .catch(e => ({ started: false, error: e.message }));
+                    if (!res.started) {
+                        rec.term.write(`\r\n\x1b[31m${res.error || 'terminal failed to start'}\x1b[0m\r\n`);
+                        return;
+                    }
+                }
+                setTimeout(() => { rec.doFit(); rec.term.focus(); }, 60);
+            }
+        };
+    })();
 
-        input.value = '';
-        input.disabled = true;
-        const result = await invoke('ps7-shell-run', { command }).catch(e => ({ success: false, error: e.message }));
-        input.disabled = false;
-        input.focus();
-
-        if (result.cwd) ps7ShellSetCwd(result.cwd);
-        if (result.output) ps7ShellAppend(`<span class="ps7-shell-stdout">${esc(result.output).replace(/\n/g, '<br>')}</span>`);
-        if (!result.success && result.error) {
-            ps7ShellAppend(`<span class="ps7-shell-stderr">${esc(result.error).replace(/\n/g, '<br>')}</span>`);
-        }
-    });
+    window.phoenixHudShell  = { show: () => hudTerminals.show('shell',  'term-host-shell') };
+    window.phoenixHudClaude = { show: () => hudTerminals.show('claude', 'term-host-claude') };
 
     // 10. GLOSSARY — searchable TOC/index over the clonepool + D1.
     // Backend (get-glossary/get-categories) confirmed working end-to-end

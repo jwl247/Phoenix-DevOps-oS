@@ -84,7 +84,7 @@ ActionButtons
     .define({
         id: 'guide',
         label: 'PHOENIX GUIDE',
-        sub: 'ollama chat · manual · Laurie's guide',
+        sub: "ollama chat · manual · Laurie's guide",
         onClick() {
             window.phoenixDashboard?._hudNavSwitch('guide');
         }
