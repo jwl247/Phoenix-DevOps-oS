@@ -161,7 +161,12 @@ function register({ ipcMain, spawn, dialog }) {
         const previousIndex = state.activeIndex;
         state.activeIndex = index;
         saveJson(SLOTS_FILE, state);
-        return { success: true, activeIndex: index, previousIndex };
+        // The active slot IS the working directory — point the live shell +
+        // Claude hotline sessions at it so everything follows the work.
+        if (index !== null) {
+            try { require('./terminal-pty').setWorkingDir(state.slots[index]); } catch (_) {}
+        }
+        return { success: true, activeIndex: index, previousIndex, dir: index !== null ? state.slots[index] : null };
     });
 
     // ── Venv auto-detect against the active slot ───────────────────────────

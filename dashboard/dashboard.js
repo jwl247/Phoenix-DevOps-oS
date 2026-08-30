@@ -1005,6 +1005,8 @@ class PhoenixDashboard {
         if (nav === 'sector-map') this._renderSectorMap();
         if (nav === 'ai-chat') document.getElementById('hud-input')?.focus();
         if (nav === 'guide' && !this._guideRaw) this._loadGuide();
+        if (nav === 'shell'  && window.phoenixHudShell)  window.phoenixHudShell.show();
+        if (nav === 'claude' && window.phoenixHudClaude) window.phoenixHudClaude.show();
     }
 
     async _loadGuide() {
@@ -1435,6 +1437,10 @@ class PhoenixAuthModal {
 
 function _bootDashboard(modal) {
     if (window.phoenixDashboard) return;
+    // On the skip path _dismiss() never runs, so hide the overlay here — the
+    // CSS default is display:flex, otherwise it just sits on top of the HUD.
+    const overlay = document.getElementById('auth-overlay');
+    if (overlay) overlay.style.display = 'none';
     window.phoenixDashboard = new PhoenixDashboard();
     console.log('Phoenix DevOps OS Desktop initialized');
     if (modal) modal.onDone = null;

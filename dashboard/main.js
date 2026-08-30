@@ -898,7 +898,7 @@ const { HelixMemoryJS } = require('./helix-packet');
 require('./clonepool-workdir').register({ ipcMain, dialog });
 require('./screenshot-analysis').register({ ipcMain, desktopCapturer });
 require('./hud-layout-backend').register({ ipcMain, spawn, dialog });
-require('./ps7-shell').register({ ipcMain, spawn });
+require('./terminal-pty').register({ ipcMain });
 require('./google-launcher').register({ ipcMain, shell });
 const HudMode = require('./hud-mode');
 HudMode.install({ app, BrowserWindow, ipcMain });

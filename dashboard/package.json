@@ -19,7 +19,11 @@
   "author": "jwl247",
   "license": "GPL-3.0",
   "dependencies": {
-    "electron": "^28.3.3"
+    "@homebridge/node-pty-prebuilt-multiarch": "^0.14.1",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "electron": "^28.3.3",
+    "leaflet": "^1.9.4"
   },
   "devDependencies": {
     "electron-builder": "^24.9.1"
@@ -49,6 +53,7 @@
     }
   },
   "allowScripts": {
-    "electron@28.3.3": true
+    "electron@28.3.3": true,
+    "@homebridge/node-pty-prebuilt-multiarch@0.14.1": true
   }
 }
