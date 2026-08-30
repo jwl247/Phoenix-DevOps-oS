@@ -929,6 +929,44 @@ function _phoenixSystemPrompt(stats) {
     ].join(' ');
 }
 
+// Laurie's Guide — the GUIDE tab as a gentle guided conversation, tuned for
+// Laurie specifically. Only active when PHOENIX_PROFILE=laurie. Everyone
+// else gets the dev manual until this is vetted.
+function _laurieGuidePrompt() {
+    let guide = '';
+    try { guide = fs.readFileSync(LAURIE_GUIDE_PATH, 'utf8'); } catch (_) {}
+    return [
+        'You are Laurie\'s guide inside Phoenix — not a manual, a patient companion.',
+        'Laurie is Jerry\'s wife. She is high-functioning autistic. Phoenix is her cushion —',
+        'a safe, private place. She does not write code and does not need to.',
+        '',
+        'HOW YOU TALK TO HER:',
+        '- Warm, calm, and plain. No jargon. If a technical word is unavoidable, explain it in one short line.',
+        '- Give her ONE next step at a time. Never a wall of text, never a numbered list longer than 4 short steps.',
+        '- Be concrete: name the exact tab, the exact button, what she will see happen.',
+        '- Reassure often and mean it: nothing she clicks or asks can break Phoenix. Say so when it fits.',
+        '- Work the phrase "it\'s easier than it sounds" in naturally when something looks intimidating — because it is true.',
+        '- If she seems stuck, frustrated, or unsure, slow down, shrink the step, and tell her she is doing fine.',
+        '- If she asks for something only Jerry should do (flipping sector switches, running commands), gently say that is Jerry\'s job and offer to help her ask him.',
+        '- Never guess about her personal files or say something is deleted — nothing in the clonepool is ever deleted.',
+        '',
+        'When she asks how to do something, answer as if you are standing next to her: the one tab to click,',
+        'the one thing to type or press, and what she will see. Then stop and let her try.',
+        '',
+        'Everything you need to know about Phoenix and the dashboard is in this reference:',
+        '--- REFERENCE ---',
+        guide,
+        '--- END REFERENCE ---',
+    ].join('\n');
+}
+
+// Which experience the GUIDE tab shows. 'laurie' = the gentle conversation;
+// anything else = the dev manual.
+ipcMain.handle('get-profile', async () => {
+    const profile = (process.env.PHOENIX_PROFILE || 'dev').toLowerCase();
+    return { profile, laurieGuide: profile === 'laurie' };
+});
+
 ipcMain.handle('get-user-manual', async () => {
     try {
         if (!fs.existsSync(PHOENIX_MANUAL_PATH)) {
@@ -1281,9 +1319,10 @@ function _runClaudeCliFull(prompt, onChunk) {
     });
 }
 
-ipcMain.handle('ai-chat', async (event, { message, history, phoenixStats }) => {
+ipcMain.handle('ai-chat', async (event, { message, history, phoenixStats, mode }) => {
     const provider = (process.env.PHOENIX_AI_PROVIDER || 'helpdesk').toLowerCase();
-    const systemPrompt = _phoenixSystemPrompt(phoenixStats);
+    const isLaurie = mode === 'laurie';
+    const systemPrompt = isLaurie ? _laurieGuidePrompt() : _phoenixSystemPrompt(phoenixStats);
 
     _helixMem.pushTurn('user', message);
     const chatMessages = _helixMem.getHistory(20);
@@ -1293,6 +1332,31 @@ ipcMain.handle('ai-chat', async (event, { message, history, phoenixStats }) => {
     const fullPrompt = `${systemPrompt}\n\n${historyText ? historyText + '\n\n' : ''}User: ${message}`;
 
     const errors = [];
+
+    // ── Laurie's Guide — its own tiny chain, always chat-only (no tools),
+    //    always the gentle prompt: Ollama → restricted Claude CLI. Never the
+    //    full-tool subscription path — she should never have an agent that
+    //    can touch the filesystem.
+    if (isLaurie) {
+        try {
+            const result = await _chatOllama(systemPrompt, chatMessages);
+            _helixMem.pushTurn('assistant', result.reply);
+            return { success: true, ...result, guide: 'laurie' };
+        } catch (e) {
+            errors.push(`ollama: ${e.message}`);
+        }
+        try {
+            const reply = await _runClaudeCli(fullPrompt);
+            _helixMem.pushTurn('assistant', reply);
+            return { success: true, provider: 'claude', reply, guide: 'laurie' };
+        } catch (e) {
+            return {
+                success: false,
+                provider: 'laurie-guide',
+                error: 'The guide is having trouble connecting right now. Wait a moment and try again — nothing is broken.'
+            };
+        }
+    }
 
     // ── Help Desk mode: Ollama → Claude (automatic chain) ──────────────────
     if (provider === 'helpdesk' || provider === 'ollama') {

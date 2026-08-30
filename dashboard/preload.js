@@ -6,7 +6,7 @@ const ALLOWED_CHANNELS = new Set([
   'execute-command', 'get-ai-status', 'get-drives', 'get-env-vars',
   'get-laurie-guide', 'get-os-metrics', 'get-phoenix-stats',
   'get-root-tree', 'get-sector-paths', 'get-user-dirs',
-  'get-user-manual', 'list-directory', 'open-file-dialog', 'open-path',
+  'get-user-manual', 'get-profile', 'list-directory', 'open-file-dialog', 'open-path',
   'run-file', 'set-ai-auth',
   // clonepool-workdir.js
   'clone-file-to-workdir', 'list-clonepool-files', 'open-directory-dialog',

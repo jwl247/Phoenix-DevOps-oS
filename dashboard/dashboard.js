@@ -1004,26 +1004,156 @@ class PhoenixDashboard {
         if (nav === 'help-chat' && !this._manualRaw) this._loadManual();
         if (nav === 'sector-map') this._renderSectorMap();
         if (nav === 'ai-chat') document.getElementById('hud-input')?.focus();
-        if (nav === 'guide' && !this._guideRaw) this._loadGuide();
         if (nav === 'shell'  && window.phoenixHudShell)  window.phoenixHudShell.show();
         if (nav === 'claude' && window.phoenixHudClaude) window.phoenixHudClaude.show();
+        if (nav === 'guide') {
+            if (!this._guideLoaded) { this._guideLoaded = true; this._loadGuide(); }
+            else if (this._laurieMode) document.getElementById('laurie-input')?.focus();
+        }
     }
 
     async _loadGuide() {
-        const body = document.getElementById('guide-body');
+        const body     = document.getElementById('guide-body');
+        const laurieEl  = document.getElementById('laurie-guide');
         if (!body) return;
+
+        // Decide which experience: Laurie gets the gentle conversation,
+        // everyone else gets the dev manual — until this is vetted.
+        let laurieMode = false;
+        if (isElectron && ipcRenderer) {
+            const prof = await ipcRenderer.invoke('get-profile').catch(() => ({}));
+            laurieMode = !!prof.laurieGuide;
+        }
+        this._laurieMode = laurieMode;
+
+        if (laurieMode && laurieEl) {
+            body.style.display = 'none';
+            laurieEl.style.display = 'flex';
+            this._initLaurieGuide();
+            return;
+        }
+
+        // Dev: the manual.
+        if (laurieEl) laurieEl.style.display = 'none';
+        body.style.display = 'block';
         body.textContent = 'loading guide...';
         if (!isElectron || !ipcRenderer) {
             body.textContent = 'Guide requires Electron runtime.';
             return;
         }
-        const result = await ipcRenderer.invoke('get-laurie-guide');
+        const result = await ipcRenderer.invoke('get-user-manual');
         if (!result.success) {
             body.textContent = result.error || 'Could not load guide.';
             return;
         }
         this._guideRaw = result.content;
         body.innerHTML = this._markdownToHtml(this._guideRaw);
+    }
+
+    // ── Laurie's Guide — a gentle guided conversation ─────────────────────
+    _initLaurieGuide() {
+        if (this._laurieInit) { document.getElementById('laurie-input')?.focus(); return; }
+        this._laurieInit = true;
+        this._laurieBusy = false;
+        this._laurieHistory = [];
+
+        const input = document.getElementById('laurie-input');
+        const send  = document.getElementById('laurie-send');
+        const go = () => {
+            const msg = input.value.trim();
+            if (!msg || this._laurieBusy) return;
+            input.value = '';
+            this._laurieSend(msg);
+        };
+        send?.addEventListener('click', go);
+        input?.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+
+        document.getElementById('laurie-plain-link')?.addEventListener('click', async () => {
+            const box = document.getElementById('laurie-messages');
+            const r = await ipcRenderer.invoke('get-laurie-guide').catch(() => ({}));
+            if (r.success) {
+                const div = document.createElement('div');
+                div.className = 'laurie-msg laurie-msg-plain';
+                div.innerHTML = this._markdownToHtml(r.content);
+                box.appendChild(div);
+                box.scrollTop = box.scrollHeight;
+            }
+        });
+
+        // First open ever gets the welcome — the surprise.
+        let firstOpen = true;
+        try { firstOpen = !localStorage.getItem('phoenix.laurie.welcomed'); } catch (_) {}
+        if (firstOpen) {
+            this._laurieAppend(
+                "Hi Laurie. This is your guide — but it's not a manual, it's a conversation. " +
+                "Ask me anything about Phoenix in your own words and I'll walk you through it, " +
+                "one small step at a time. Nothing you do here can break anything. " +
+                "It really is easier than it sounds. What would you like to do first?",
+                'laurie-msg-assist'
+            );
+            try { localStorage.setItem('phoenix.laurie.welcomed', '1'); } catch (_) {}
+        } else {
+            this._laurieAppend("Welcome back, Laurie. What would you like to do?", 'laurie-msg-assist');
+        }
+        input?.focus();
+    }
+
+    _laurieAppend(text, cls) {
+        const box = document.getElementById('laurie-messages');
+        if (!box) return null;
+        const div = document.createElement('div');
+        div.className = `laurie-msg ${cls}`;
+        // Light touch: render **bold** and `code`, escape everything else.
+        // Keeps her replies clean without a full markdown engine.
+        const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        div.innerHTML = esc(text)
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>');
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+        return div;
+    }
+
+    async _laurieSend(message) {
+        this._laurieBusy = true;
+        document.getElementById('laurie-send').disabled = true;
+        this._laurieAppend(message, 'laurie-msg-user');
+        this._laurieHistory.push({ role: 'user', content: message });
+
+        const thinking = this._laurieAppend('…', 'laurie-msg-thinking');
+        const box = document.getElementById('laurie-messages');
+
+        let streamDiv = null, streamText = '';
+        let unsub = null;
+        if (isElectron && ipcRenderer && window.phoenix?.onStream) {
+            unsub = window.phoenix.onStream('ai-chat-stream-chunk', ({ delta }) => {
+                if (!streamDiv) { thinking.remove(); streamDiv = this._laurieAppend('', 'laurie-msg-assist'); }
+                streamText += delta;
+                streamDiv.textContent = streamText;
+                box.scrollTop = box.scrollHeight;
+            });
+        }
+
+        let result = { success: false, error: 'The guide needs the Phoenix desktop to run.' };
+        if (isElectron && ipcRenderer) {
+            result = await ipcRenderer.invoke('ai-chat', {
+                message, history: this._laurieHistory, mode: 'laurie'
+            }).catch(e => ({ success: false, error: e.message }));
+        }
+        if (unsub) unsub();
+        if (!streamDiv) thinking.remove();
+
+        if (result.success) {
+            if (streamDiv) streamDiv.textContent = result.reply;
+            else this._laurieAppend(result.reply, 'laurie-msg-assist');
+            this._laurieHistory.push({ role: 'assistant', content: result.reply });
+        } else {
+            this._laurieAppend(result.error || 'Something went wrong — wait a moment and try again. Nothing is broken.', 'laurie-msg-assist');
+        }
+
+        this._laurieBusy = false;
+        document.getElementById('laurie-send').disabled = false;
+        document.getElementById('laurie-input')?.focus();
     }
 
     _renderSectorMap() {
