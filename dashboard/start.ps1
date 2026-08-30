@@ -34,6 +34,13 @@ if (-not $env:PHOENIX_SKIP_AUTH_MODAL) {
     $env:PHOENIX_SKIP_AUTH_MODAL = '1'
 }
 
+# GPU sandbox fix — must be set BEFORE electron starts, not after.
+# error_code=18 (SBOX_ERROR_CREATE_PROCESS) means the GPU child never spawned.
+# ELECTRON_DISABLE_GPU alone is not enough: Chromium still launches a GPU
+# process that then fatals with "GPU process isn't usable. Goodbye."
+# --disable-gpu-sandbox is the flag that actually stops the crash loop.
+$env:ELECTRON_EXTRA_LAUNCH_ARGS = "--disable-gpu-sandbox --disable-gpu --disable-software-rasterizer"
+
 Write-Host ""
 Write-Host "  +---------------------------------------+" -ForegroundColor Cyan
 Write-Host "  |   Phoenix DevOps OS Dashboard        |" -ForegroundColor Cyan
