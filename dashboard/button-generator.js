@@ -110,6 +110,101 @@ ButtonGenerator
                 .catch(e => alert(e.message));
         }
     })
+    // ── PoC: Windows steers, Debian runs ─────────────────────────────────
+    .define({
+        id: 'poc-debian',
+        label: 'DEBIAN ENGINE',
+        sub: 'usys run debian -Persist — Helix warm',
+        onClick({ invoke, el }) {
+            const original = el.textContent;
+            el.textContent = 'engaging...';
+            invoke('execute-command', 'usys run debian -Persist')
+                .then(r => {
+                    el.textContent = original;
+                    if (!r.success) alert(r.error || r.stderr || 'failed');
+                })
+                .catch(e => { el.textContent = original; alert(e.message); });
+        }
+    })
+    .define({
+        id: 'poc-helix',
+        label: 'HELIX STATUS',
+        sub: 'read shared snapshot + service state',
+        panel: true,
+        onClick({ invoke, panel }) {
+            if (!panel) return;
+            panel.innerHTML = 'reading...';
+            Promise.all([
+                invoke('execute-command', 'usys status').catch(e => ({ success: false, error: e.message })),
+                invoke('read-file', 'F:/Phoenix/helix-pages/windows_snapshot.json').catch(e => ({ success: false, error: e.message }))
+            ]).then(([status, snap]) => {
+                const lines = [];
+                if (status.success && status.output) lines.push(status.output.trim());
+                else lines.push('usys status: ' + (status.error || 'unavailable'));
+                if (snap.success && snap.content) {
+                    try {
+                        const j = JSON.parse(snap.content);
+                        lines.push('snapshot: hot=' + j.hot_mb + ' warm=' + j.warm_mb +
+                                   ' hit=' + j.hit_rate + ' @ ' + new Date(j.timestamp * 1000).toLocaleTimeString());
+                    } catch (_) { lines.push('snapshot: ' + snap.content.slice(0, 120)); }
+                } else {
+                    lines.push('snapshot: ' + (snap.error || 'not readable'));
+                }
+                panel.innerHTML = '<pre style="white-space:pre-wrap;font-size:10px;margin:0;">' +
+                    lines.join('\n\n') + '</pre>';
+            });
+        }
+    })
+    .define({
+        id: 'poc-phoronix',
+        label: 'PHORONIX',
+        sub: 'run pts/smallpt on Debian via Phoenix',
+        onClick({ invoke, el }) {
+            const original = el.textContent;
+            el.textContent = 'running...';
+            // Runs the suite on the Debian side; results land in /phoenix/Projects/phoronix-results
+            invoke('execute-command', 'usys run phoronix pts/smallpt')
+                .then(r => {
+                    el.textContent = original;
+                    if (!r.success) alert(r.error || r.stderr || 'failed');
+                })
+                .catch(e => { el.textContent = original; alert(e.message); });
+        }
+    })
+    .define({
+        id: 'poc-watch',
+        label: 'WATCH DOWNLOADS',
+        sub: 'auto-intake everything in F:\\Phoenix\\Downloads',
+        onClick({ invoke, el }) {
+            const original = el.textContent;
+            el.textContent = 'starting...';
+            const script = (window.phoenixDashboard && window.phoenixDashboard._phoenixRoot
+                ? window.phoenixDashboard._phoenixRoot
+                : 'D:/Users/jwlef/Phoenix/Phoenix-DevOps-oS') +
+                '/tools/poc/watch-downloads.ps1';
+            invoke('run-file', { filePath: script, args: '' })
+                .then(r => {
+                    el.textContent = original;
+                    if (!r.success) alert(r.error || r.stderr || 'failed');
+                })
+                .catch(e => { el.textContent = original; alert(e.message); });
+        }
+    })
+    .define({
+        id: 'poc-intake-now',
+        label: 'INTAKE DOWNLOADS NOW',
+        sub: 'one-shot phx-sync Downloads',
+        onClick({ invoke, el }) {
+            const original = el.textContent;
+            el.textContent = 'intaking...';
+            invoke('execute-command', 'phx-sync Downloads')
+                .then(r => {
+                    el.textContent = original;
+                    if (!r.success) alert(r.error || r.stderr || 'failed');
+                })
+                .catch(e => { el.textContent = original; alert(e.message); });
+        }
+    })
     .define({
         id: 'guide',
         label: 'PHOENIX GUIDE',

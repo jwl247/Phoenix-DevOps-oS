@@ -102,3 +102,20 @@ body.hud-mode .hud-zone,
 body.hud-mode .holographic-display {
     background: transparent !important;
 }
+
+/* ── PoC buttons: subtle accent so the peer-call surface reads distinct ─ */
+#action-poc-debian,
+#action-poc-helix,
+#action-poc-phoronix,
+#action-poc-watch,
+#action-poc-intake-now {
+    border-color: rgba(0, 200, 255, 0.45) !important;
+}
+#action-poc-debian:hover,
+#action-poc-helix:hover,
+#action-poc-phoronix:hover,
+#action-poc-watch:hover,
+#action-poc-intake-now:hover {
+    border-color: rgba(0, 220, 255, 0.8) !important;
+    box-shadow: 0 0 12px rgba(0, 200, 255, 0.3);
+}
