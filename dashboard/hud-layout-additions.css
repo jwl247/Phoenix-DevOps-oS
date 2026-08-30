@@ -428,3 +428,101 @@
     line-height: 1.6;
 }
 .coming-soon-body strong { color: var(--phoenix-gold, #ffcc33); }
+
+/* ===== LAURIE'S GUIDE — gentle guided conversation (PHOENIX_PROFILE=laurie) ===== */
+.laurie-guide {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-family: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+}
+.laurie-messages {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 6px 4px;
+}
+.laurie-msg {
+    max-width: 78%;
+    padding: 12px 15px;
+    border-radius: 14px;
+    font-size: 15.5px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.laurie-msg-assist {
+    align-self: flex-start;
+    background: rgba(61, 232, 255, 0.10);
+    border: 1px solid rgba(61, 232, 255, 0.28);
+    color: #e6f7fb;
+}
+.laurie-msg-user {
+    align-self: flex-end;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: #fff;
+}
+.laurie-msg-thinking {
+    align-self: flex-start;
+    opacity: 0.55;
+    font-size: 18px;
+    letter-spacing: 3px;
+}
+.laurie-msg-plain {
+    align-self: stretch;
+    max-width: 100%;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    font-size: 13px;
+    line-height: 1.5;
+}
+.laurie-msg-plain table { border-collapse: collapse; margin: 6px 0; }
+.laurie-msg-plain td { border: 1px solid rgba(255,255,255,0.15); padding: 3px 8px; }
+.laurie-input-row {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.laurie-input {
+    flex: 1;
+    padding: 12px 15px;
+    font-size: 15px;
+    font-family: inherit;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(61, 232, 255, 0.35);
+    border-radius: 12px;
+    color: #fff;
+    outline: none;
+}
+.laurie-input::placeholder { color: rgba(255, 255, 255, 0.45); }
+.laurie-input:focus { border-color: rgba(61, 232, 255, 0.7); }
+.laurie-send {
+    padding: 0 20px;
+    font-size: 16px;
+    background: rgba(61, 232, 255, 0.18);
+    border: 1px solid rgba(61, 232, 255, 0.5);
+    border-radius: 12px;
+    color: #e6f7fb;
+    cursor: pointer;
+}
+.laurie-send:hover { background: rgba(61, 232, 255, 0.3); }
+.laurie-send:disabled { opacity: 0.4; cursor: default; }
+.laurie-plain-link {
+    flex-shrink: 0;
+    align-self: center;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 11px;
+    font-family: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 2px;
+}
+.laurie-plain-link:hover { color: rgba(255, 255, 255, 0.7); }

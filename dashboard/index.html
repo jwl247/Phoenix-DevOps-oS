@@ -277,10 +277,18 @@
             </div>
                             </div><!-- /CODES -->
 
-                            <!-- GUIDE — plain-English guide for Laurie -->
+                            <!-- GUIDE — dev: the manual · laurie (PHOENIX_PROFILE=laurie): a gentle conversation -->
                             <div class="hud-nav-pane" id="hud-pane-guide" data-hud-nav="guide">
                                 <div class="hud-pane-title">GUIDE</div>
-                                <div class="manual-body" id="guide-body">loading guide...</div>
+                                <div class="manual-body" id="guide-body" style="display:none;">loading guide...</div>
+                                <div class="laurie-guide" id="laurie-guide" style="display:none;">
+                                    <div class="laurie-messages" id="laurie-messages"></div>
+                                    <div class="laurie-input-row">
+                                        <input type="text" id="laurie-input" class="laurie-input" autocomplete="off" placeholder="ask me anything — in your own words">
+                                        <button class="laurie-send" id="laurie-send" type="button">&#9658;</button>
+                                    </div>
+                                    <button type="button" class="laurie-plain-link" id="laurie-plain-link">show the plain-text version</button>
+                                </div>
                             </div><!-- /GUIDE -->
 
                             <!-- SHELL — real persistent PTY (pwsh/bash) in the active working dir -->
