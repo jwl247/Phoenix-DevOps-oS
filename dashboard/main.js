@@ -20,7 +20,8 @@ function createWindow() {
         height: 1080,
         minWidth: 1280,
         minHeight: 720,
-        backgroundColor: '#0a0e1a',
+        backgroundColor: '#00000000',
+        transparent: true,
         title: 'Phoenix DevOps OS - Command Center',
         icon: path.join(__dirname, 'assets', 'icon.png'),
         webPreferences: {
@@ -32,6 +33,10 @@ function createWindow() {
         frame: true,
         autoHideMenuBar: true
     });
+
+    // Apply native acrylic/mica glass as soon as the window exists so the
+    // first paint is already translucent instead of flashing opaque.
+    try { HudMode.applyGlass(mainWindow); } catch (_) {}
 
     // Load the dashboard
     mainWindow.loadFile('index.html');
@@ -894,6 +899,9 @@ require('./clonepool-workdir').register({ ipcMain, dialog });
 require('./screenshot-analysis').register({ ipcMain, desktopCapturer });
 require('./hud-layout-backend').register({ ipcMain, spawn, dialog });
 require('./ps7-shell').register({ ipcMain, spawn });
+require('./google-launcher').register({ ipcMain, shell });
+const HudMode = require('./hud-mode');
+HudMode.install({ app, BrowserWindow, ipcMain });
 const _helixMem = new HelixMemoryJS(40);   // SectorID.CLAUDE, 40-turn rolling window
 
 const PHOENIX_MANUAL_PATH = path.join(__dirname, 'manual', 'PHOENIX_MANUAL.md');
