@@ -72,8 +72,8 @@ CREATE TABLE IF NOT EXISTS secure_settings_config (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (partner_user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (partner_user_id) REFERENCES users(user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Unlock Attempts (Complete Audit Trail)
@@ -175,7 +175,7 @@ CREATE TABLE IF NOT EXISTS settings_unlock_attempts (
     INDEX idx_user_timestamp (user_id, attempt_timestamp),
     INDEX idx_threat_score (threat_score),
     INDEX idx_timestamp (attempt_timestamp),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Security Violations (Serious Threats)
@@ -260,7 +260,7 @@ CREATE TABLE IF NOT EXISTS security_violations (
     INDEX idx_user_severity (user_id, severity),
     INDEX idx_type_severity (violation_type, severity),
     INDEX idx_unresolved (resolved, detected_at),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (unlock_attempt_id) REFERENCES settings_unlock_attempts(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -322,7 +322,7 @@ CREATE TABLE IF NOT EXISTS user_behavior_profiles (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Emergency Overrides (Last Resort)
@@ -376,8 +376,8 @@ CREATE TABLE IF NOT EXISTS emergency_overrides (
     
     INDEX idx_user_pending (user_id, approved),
     INDEX idx_active_penalties (penalty_active, penalty_end_date),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (requested_by) REFERENCES users(user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Trusted Devices (For Reduced Security Checks)
@@ -418,7 +418,7 @@ CREATE TABLE IF NOT EXISTS trusted_devices (
     
     INDEX idx_user_active (user_id, active),
     INDEX idx_device_id (device_id),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Security Notifications Log
@@ -470,8 +470,8 @@ CREATE TABLE IF NOT EXISTS security_notifications (
     INDEX idx_user_unread (user_id, user_acknowledged),
     INDEX idx_partner_unread (partner_user_id, partner_acknowledged),
     INDEX idx_severity (severity, created_at),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (partner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (partner_user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (unlock_attempt_id) REFERENCES settings_unlock_attempts(id) ON DELETE SET NULL,
     FOREIGN KEY (violation_id) REFERENCES security_violations(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -512,7 +512,7 @@ CREATE TABLE IF NOT EXISTS security_stats (
     
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================
