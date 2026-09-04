@@ -1,0 +1,31 @@
+{
+  "name": "steam",
+  "version": "1.0.0",
+  "description": "Steam via Phoenix. Launches the Steam client through the dashboard, same as the Google/Chrome suite — no install on the host beyond Steam itself, Phoenix is just the launcher.",
+  "author": "jwl247",
+  "type": "app",
+  "entry": "steam.exe",
+  "runtime": "external",
+  "dependencies": [],
+  "environment": {},
+  "permissions": [
+    "network",
+    "display"
+  ],
+  "metadata": {
+    "category": "poc",
+    "tags": ["steam", "games", "in-game-control-center", "no-install"],
+    "source": "https://store.steampowered.com",
+    "license": "Proprietary (Valve Steam)"
+  },
+  "launch": {
+    "windows": {
+      "exe_candidates": [
+        "C:\\Program Files (x86)\\Steam\\steam.exe",
+        "C:\\Program Files\\Steam\\steam.exe"
+      ],
+      "args": [],
+      "fallback_url": "https://store.steampowered.com"
+    }
+  }
+}

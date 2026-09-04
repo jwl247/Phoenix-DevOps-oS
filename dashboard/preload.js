@@ -25,7 +25,9 @@ const ALLOWED_CHANNELS = new Set([
   // hud-mode.js
   'hud-set-mode', 'hud-get-mode', 'hud-toggle',
   // google-launcher.js
-  'launch-google', 'get-google-status'
+  'launch-google', 'get-google-status',
+  // steam-launcher.js
+  'launch-steam', 'get-steam-status'
 ]);
 
 // Main → renderer push events (streaming chat deltas, terminal output).
