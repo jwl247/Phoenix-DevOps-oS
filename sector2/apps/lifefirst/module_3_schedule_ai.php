@@ -294,20 +294,31 @@ function generalScheduleQuery($userId, $message) {
 }
 
 // ============================================
-// CLAUDE API INTEGRATION
+// AI INTEGRATION — Ollama primary (self-hosted, no API cost, no data
+// egress), matching config.php's own stated design. Falls back to Claude
+// only if CLAUDE_API_KEY is actually set. This used to call the Anthropic
+// API unconditionally with no key configured — first thing Laurie's "Today"
+// card would have shown was an HTTP 401.
 // ============================================
 
 function callClaudeAPI($userMessage, $context = '') {
-    if (CLAUDE_API_KEY === 'YOUR_CLAUDE_API_KEY_HERE') {
-        return "ERROR: Claude API key not configured. Add your key to line 25 of ai_schedule.php";
-    }
-    
     $systemPrompt = "You are a schedule management assistant. You help users understand their calendar and find available times. Be concise and helpful. Today is " . date('l, F j, Y') . ".";
-    
     if ($context) {
         $systemPrompt .= "\n\n" . $context;
     }
-    
+
+    if (function_exists('callOllama')) {
+        $ollama = callOllama($systemPrompt, [['role' => 'user', 'content' => $userMessage]], ollamaModelForIntent('schedule'));
+        if (!isset($ollama['error'])) {
+            return $ollama['content'];
+        }
+        // Ollama unreachable — fall through to Claude only if a real key exists.
+    }
+
+    if (!CLAUDE_API_KEY) {
+        return "I can't reach either AI right now — Ollama's down and no Claude key is set. Nothing is broken, just tell Jerry the AI backend needs a look.";
+    }
+
     $payload = [
         'model' => CLAUDE_MODEL,
         'max_tokens' => 1024,
