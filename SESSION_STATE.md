@@ -10,16 +10,37 @@ through a hunt, `PHOENIX_PROFILE=laurie` gated). Verified live 2026-09-04
 after a week untouched — 22/23 automated checks passed, 0 console errors.
 Still needs the HUD overlay retool and HELP CHAT/GUIDE folded into AI CHAT.
 
-**New thread, not yet deployed:** Life First is getting a real one-step
-installer (`sector2/apps/lifefirst/install.sh`) targeting the Debian VM,
-plus a zero-install web front door for Laurie (`sector2/apps/lifefirst/laurie/`)
-so she can see it's useful before being asked to install anything. Code is
-written and lint-clean but has never run against a live box — the Debian VM
-is currently down. See CLAUDE.md's 2026-09-04 session log entry for the
-full detail and NEXT SESSION for the exact next steps (boot VM, run
-installer, cloudflared tunnel login, MCP auth).
+**Life First — DEPLOYED and verified live, 2026-09-04.** Booted the Debian
+VM (note: `--share`/virtfs is broken on this machine's QEMU 11.1.0 build —
+"no option group 'virtfs'" — boot with plain `-Persist`, no `--share`, and
+move files over SSH/SFTP instead until a virtfs-capable QEMU build is
+sorted), ran `install.sh` for real, found and fixed two real bugs in the
+process (a FK column mismatch in secure_settings_schema.sql, and install.sh
+not deploying laurie/*.php). End state, confirmed live:
+- apache2 + mariadb + lifefirst-escalator.service all `active`
+- `curl http://localhost/api.php?action=health` → real JSON, DB true, all
+  5 modules installed
+- `curl http://localhost/laurie/proxy.php?op=check_notifications` → real
+  round-trip, browser path all the way to MySQL and back
+- `/laurie/` → HTTP 200
 
-origin/main is at commit fccdc92 (Life First work not yet committed).
+**Known gap, not a bug:** no AI backend inside the VM yet (Ollama isn't
+installed there, no CLAUDE_API_KEY set) — the AI-backed paths (today's
+calendar summary) give a plain fallback message. The notification/
+escalation half — the part that actually matters for the escalation tree —
+works without either.
+
+**Not yet done:** `cloudflared tunnel login` (cloudflared 2026.8.2 is
+installed on the Windows host, not authenticated), the Life First MCP
+connector auth (`/mcp` → claude.ai Life First App), and picking an AI
+backend for the VM (install Ollama there, or set a real CLAUDE_API_KEY in
+`/etc/lifefirst/lifefirst.env`).
+
+The VM was left running at session end (10.0.2.15 inside, host SSH on
+`localhost:2222`, phoenix/phoenix) — check `Get-Process qemu-system-x86_64`
+before assuming it's down next session.
+
+origin/main is at commit 155854a.
 
 Clonepool integrity system is real end to end.
 Shared filesystem is real end to end — proven live 2026-08-23.
