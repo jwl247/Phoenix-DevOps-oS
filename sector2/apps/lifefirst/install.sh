@@ -136,7 +136,7 @@ cp "$SRC_DIR/module_2_api_router.php" "$WEB_ROOT/api.php"
 # Laurie's zero-install front door — see laurie/index.html.
 if [[ -d "$SRC_DIR/laurie" ]]; then
     mkdir -p "$WEB_ROOT/laurie"
-    cp "$SRC_DIR/laurie/"*.html "$WEB_ROOT/laurie/" 2>/dev/null || true
+    cp "$SRC_DIR/laurie/"*.html "$SRC_DIR/laurie/"*.php "$WEB_ROOT/laurie/" 2>/dev/null || true
 fi
 
 chown -R www-data:www-data "$WEB_ROOT"
