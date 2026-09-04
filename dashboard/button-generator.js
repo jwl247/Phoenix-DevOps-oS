@@ -110,6 +110,16 @@ ButtonGenerator
                 .catch(e => alert(e.message));
         }
     })
+    .define({
+        id: 'steam',
+        label: 'STEAM',
+        sub: 'open the Steam client',
+        onClick({ invoke }) {
+            invoke('launch-steam', {})
+                .then(r => { if (!r.success) alert(r.error); })
+                .catch(e => alert(e.message));
+        }
+    })
     // ── PoC: Windows steers, Debian runs ─────────────────────────────────
     .define({
         id: 'poc-debian',
