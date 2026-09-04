@@ -30,17 +30,42 @@ calendar summary) give a plain fallback message. The notification/
 escalation half — the part that actually matters for the escalation tree —
 works without either.
 
-**Not yet done:** `cloudflared tunnel login` (cloudflared 2026.8.2 is
-installed on the Windows host, not authenticated), the Life First MCP
-connector auth (`/mcp` → claude.ai Life First App), and picking an AI
-backend for the VM (install Ollama there, or set a real CLAUDE_API_KEY in
+**UPDATE same day, later — public tunnel is live: https://lifefirst.authenticcoder.com**
+(`/laurie/` is Laurie's actual link). `cloudflared` wasn't installed
+anywhere (Windows has an unrelated pre-existing tunnel, `Phoenix_win8_26`,
+running as a service since 8/20 — deliberately untouched, don't confuse the
+two). Installed `cloudflared` on the VM, ran `tunnel login` (Jerry
+authorized in his own browser), created a dedicated `lifefirst` tunnel,
+routed `lifefirst.authenticcoder.com`, installed as a systemd service
+(`systemctl enable --now cloudflared` — survives reboot; a bare foreground
+`tunnel run` dying with the SSH session is the likely reason this stalled
+before). Gotcha: cloudflared's own startup precheck reports a scary
+"critical failure" — region2 redundancy is blocked on this network (UDP/
+HTTP2 on port 7844) — but region1 fully connects and the tunnel works
+regardless. Verified over the real public internet: `/api.php?action=health`
+6/6 HTTP 200, `/laurie/` 200, `/laurie/proxy.php?op=check_notifications`
+200 with a real DB round-trip.
+
+**Still not done:** the Life First MCP connector auth (`/mcp` → claude.ai
+Life First App, Jerry's side), and picking an AI backend for the VM
+(install Ollama there, or set a real CLAUDE_API_KEY in
 `/etc/lifefirst/lifefirst.env`).
 
 The VM was left running at session end (10.0.2.15 inside, host SSH on
 `localhost:2222`, phoenix/phoenix) — check `Get-Process qemu-system-x86_64`
-before assuming it's down next session.
+before assuming it's down next session. Boot is slow (TCG software
+emulation, no HW acceleration engaged) — give it 5-10+ min before assuming
+SSH/services are hung.
 
-origin/main is at commit 155854a.
+Clone pool pull-down is real now too: new `phoenix-clonepool-r2` worker
+(packages-worker untouched), `usys open <name>.lol` clones R2→workdir when
+the local file doesn't exist (proven byte-identical from a fresh terminal
+outside the repo). `usys`/`clone`/`.lol` now load in every new PowerShell
+terminal via a real `$PROFILE` (didn't exist before today). Full
+folder-by-folder → whole-repo intake pass done: 410 files, real R2 bytes
+behind all of them.
+
+origin/main is at commit 5d69d47.
 
 Clonepool integrity system is real end to end.
 Shared filesystem is real end to end — proven live 2026-08-23.
