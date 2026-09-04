@@ -1,17 +1,25 @@
 # Phoenix Session State
-# Updated: 2026-08-30
+# Updated: 2026-09-04
 # READ THIS AT THE START OF NEXT SESSION
 
 ## WHERE WE ARE
 
-Dashboard is the blocker to shipping. As of 2026-08-30 it has: a REAL
-terminal (SHELL pane — ConPTY pwsh/bash), a CLAUDE hotline (CLAUDE pane —
-interactive Claude Code in the HUD, on the subscription), a unified working
-directory (active folder slot drives shell + Claude cwd), HUD-mode glass
-toggle, a declarative button generator + PoC buttons, and a Google/Chrome
-launcher. Still needs the HUD overlay retool (map/game full-bleed base,
-panels floating as glass) and HELP CHAT / GUIDE folded into AI CHAT.
-origin/main is at commit 5323d9c.
+Dashboard: real terminal, CLAUDE hotline, unified working dir, HUD-mode
+glass toggle, button generator + PoC buttons, Laurie's Guide (follows her
+through a hunt, `PHOENIX_PROFILE=laurie` gated). Verified live 2026-09-04
+after a week untouched — 22/23 automated checks passed, 0 console errors.
+Still needs the HUD overlay retool and HELP CHAT/GUIDE folded into AI CHAT.
+
+**New thread, not yet deployed:** Life First is getting a real one-step
+installer (`sector2/apps/lifefirst/install.sh`) targeting the Debian VM,
+plus a zero-install web front door for Laurie (`sector2/apps/lifefirst/laurie/`)
+so she can see it's useful before being asked to install anything. Code is
+written and lint-clean but has never run against a live box — the Debian VM
+is currently down. See CLAUDE.md's 2026-09-04 session log entry for the
+full detail and NEXT SESSION for the exact next steps (boot VM, run
+installer, cloudflared tunnel login, MCP auth).
+
+origin/main is at commit fccdc92 (Life First work not yet committed).
 
 Clonepool integrity system is real end to end.
 Shared filesystem is real end to end — proven live 2026-08-23.
