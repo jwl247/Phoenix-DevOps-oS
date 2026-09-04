@@ -593,6 +593,24 @@ function Invoke-UsysOpen {
         [switch]$DryRun
     )
 
+    # .lol is an alias, not a rename: the SAME extension means two different
+    # things depending on whether the file already exists locally. Existing
+    # local file -> unchanged behavior (intake to vault, below). No local
+    # file, but its base name (stripped of .lol) is a known pool entry ->
+    # clone-to-working-directory instead. Too far along to rename the vault
+    # convention that's already live; this just teaches it a second trick.
+    if ([System.IO.Path]::GetExtension($Path).ToLowerInvariant() -eq '.lol' -and -not (Test-Path $Path)) {
+        $baseName = [System.IO.Path]::GetFileNameWithoutExtension($Path)
+        Write-Host ''
+        Write-UsysInfo "'$Path' doesn't exist locally — checking the pool for '$baseName'"
+        if ($DryRun) {
+            Write-Host "  [DRY RUN] would clone-to-workdir '$baseName' from the pool" -ForegroundColor Cyan
+            return
+        }
+        Invoke-UsysPull -SuiteName $baseName -Destination (Get-Location).Path
+        return
+    }
+
     if (-not (Test-UsysSafePath $Path)) {
         Write-UsysErr "path not found — '$Path'"
         return
@@ -671,6 +689,11 @@ function Invoke-UsysPull {
     param(
         [Parameter(Mandatory, Position = 0)]
         [string]$SuiteName,
+        # Where to write the real bytes once fetched from R2. Default (unset)
+        # keeps the original stub-manifest-only behavior for suite staging.
+        # Pass a folder to actually pull the file down into it — this is what
+        # the .lol clone-to-workdir alias uses.
+        [string]$Destination = '',
         [switch]$DryRun
     )
 
@@ -706,6 +729,40 @@ function Invoke-UsysPull {
         Write-Host "    hex_id   : $($resp.hex_id)"
         Write-Host "    pool_path: $($resp.pool_path)"
         Write-Host ''
+        return
+    }
+
+    # -Destination given: this is a real pull-to-workdir request (the .lol
+    # clone-to-workdir alias), not suite staging. Fetch the actual bytes from
+    # phoenix-clonepool-r2 — a separate worker from packages-worker, bound to
+    # the R2 bucket the D1 row's hex_id was supposed to have landed in.
+    if ($Destination) {
+        if (-not $resp.hex_id) {
+            Write-UsysErr "'$SuiteName' has no hex_id in D1 — can't fetch content."
+            return
+        }
+        $r2Url  = $env:PHOENIX_R2_WORKER_URL
+        if (-not $r2Url) { $r2Url = 'https://phoenix-clonepool-r2.phoenix-jwl.workers.dev' }
+        $objUri = "$($r2Url.TrimEnd('/'))/object/$([Uri]::EscapeDataString($resp.hex_id))"
+        $headers = @{}
+        if ($workerAuth) { $headers['Authorization'] = "Bearer $workerAuth" }
+
+        New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+        $outFile = Join-Path $Destination $resp.name
+
+        try {
+            Invoke-WebRequest -Uri $objUri -Headers $headers -Method GET -OutFile $outFile -ErrorAction Stop | Out-Null
+        } catch {
+            $statusCode = $_.Exception.Response.StatusCode.value__
+            if ($statusCode -eq 404) {
+                Write-UsysErr "'$($resp.name)' is in D1 but not in R2 — it likely predates R2 upload being wired (2026-08-22), or was never uploaded. Nothing to pull down."
+            } else {
+                Write-UsysErr "R2 fetch failed: $_"
+            }
+            return
+        }
+
+        Write-UsysOk "Cloned to working directory: $outFile"
         return
     }
 

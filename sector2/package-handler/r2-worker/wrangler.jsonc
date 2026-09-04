@@ -1,0 +1,26 @@
+{
+  // phoenix-clonepool-r2 — the clone pool's pull-down half.
+  // Brand new worker, never deployed before this — deliberately separate
+  // from packages-worker (which is live/load-bearing; this never touches it).
+  // Deploy: wrangler deploy
+  // Tail:   wrangler tail
+  // Secret: wrangler secret put PHOENIX_AUTH   (same value as packages-worker's)
+
+  "name": "phoenix-clonepool-r2",
+  "main": "index.js",
+  "compatibility_date": "2025-01-01",
+
+  // ── R2 Binding ─────────────────────────────────────────────────────────────
+  // Binds the EXISTING phoenix-clonepool bucket (created 2026-06-22) — not a
+  // new bucket. Same bytes intake.sh has been trying to upload all along.
+  "r2_buckets": [
+    {
+      "binding": "CLONEPOOL_BUCKET",
+      "bucket_name": "phoenix-clonepool"
+    }
+  ]
+
+  // ── Secrets ────────────────────────────────────────────────────────────────
+  // PHOENIX_AUTH — set via: wrangler secret put PHOENIX_AUTH
+  // Never put the token here — secrets only
+}

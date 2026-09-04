@@ -29,6 +29,12 @@ CATALOG_DB="${HOME}/.catalog/catalog.db"
 LOG_DIR="${HOME}/.unitedsys/logs"
 LOG_FILE="${LOG_DIR}/intake.log"
 WORKER_URL="${PHOENIX_WORKER_URL:-https://packages-worker.phoenix-jwl.workers.dev}"
+# Separate worker for the actual R2 bytes (2026-09-04). packages-worker has
+# no R2 binding and no PUT handler for the route upload_to_r2() was calling
+# — every upload since this pipeline existed has been silently failing
+# (confirmed: files from before 2026-08-22 are not in R2 at all). This is a
+# brand-new worker, never touches packages-worker.
+R2_WORKER_URL="${PHOENIX_R2_WORKER_URL:-https://phoenix-clonepool-r2.phoenix-jwl.workers.dev}"
 PHOENIX_AUTH="${PHOENIX_AUTH:-}"
 
 # ── Python detection ──────────────────────────────────────────
@@ -417,7 +423,7 @@ upload_to_r2() {
     -X PUT \
     -H "Authorization: Bearer ${PHOENIX_AUTH}" \
     --data-binary "@${filepath}" \
-    "${WORKER_URL}/clonepool/${hex}" 2>/dev/null)
+    "${R2_WORKER_URL}/object/${hex}" 2>/dev/null)
   [[ "${http_code}" == "200" ]] \
     && log "INFO" "R2 OK → ${hex} (${size} bytes)" \
     || log "WARN" "R2 upload failed (${http_code}) → ${hex}"
