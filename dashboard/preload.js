@@ -29,7 +29,10 @@ const ALLOWED_CHANNELS = new Set([
   // steam-launcher.js
   'launch-steam', 'get-steam-status',
   // scriptforge-launcher.js
-  'launch-scriptforge'
+  'launch-scriptforge',
+  // config-centralizer.js
+  'config-centralizer-scan', 'config-centralizer-import', 'config-centralizer-sync-all',
+  'config-centralizer-list-imported', 'config-centralizer-init-git', 'config-centralizer-commit'
 ]);
 
 // Main → renderer push events (streaming chat deltas, terminal output).

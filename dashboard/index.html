@@ -228,7 +228,24 @@
                             </div>
                             <div class="hud-nav-pane" id="hud-pane-settings" data-hud-nav="settings">
                                 <div class="hud-pane-title">SETTINGS</div>
-                                <div class="hud-stub-body">Click the provider line in AI CHAT to open auth settings.</div>
+                                <div class="hud-stub-body" style="margin-bottom:10px">Click the provider line in AI CHAT to open auth settings.</div>
+
+                                <div class="cc-section">
+                                    <div class="cc-section-title">CONFIG CENTRALIZER</div>
+                                    <div class="cc-section-sub">Find configs, API keys, and service files scattered across this machine — review, then centralize the ones that matter.</div>
+
+                                    <div class="cc-toolbar">
+                                        <button type="button" class="drawer-btn" id="cc-scan-btn">SCAN SYSTEM</button>
+                                        <button type="button" class="drawer-btn secondary" id="cc-import-selected-btn" disabled>IMPORT SELECTED</button>
+                                        <button type="button" class="drawer-btn secondary" id="cc-import-recommended-btn" disabled>IMPORT RECOMMENDED</button>
+                                        <button type="button" class="drawer-btn secondary" id="cc-sync-btn">SYNC ALL</button>
+                                    </div>
+
+                                    <div class="cc-summary" id="cc-summary"></div>
+                                    <div class="cc-list" id="cc-list"><div class="place-loading">click SCAN SYSTEM to begin</div></div>
+
+                                    <div class="cc-section-sub" style="margin-top:12px">Already-centralized configs live in <code id="cc-master-dir">~/.phoenix/config-centralizer/master</code>.</div>
+                                </div>
                             </div>
 
                             <!-- CODES — Phoenix CLI + RUNIT -->
@@ -480,5 +497,6 @@
     <script src="dashboard.js"></script>
     <script src="hud-layout.js"></script>
     <script src="button-generator.js"></script>
+    <script src="config-centralizer-ui.js"></script>
 </body>
 </html>

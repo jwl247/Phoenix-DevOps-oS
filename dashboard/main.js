@@ -902,6 +902,7 @@ require('./terminal-pty').register({ ipcMain });
 require('./google-launcher').register({ ipcMain, shell });
 require('./steam-launcher').register({ ipcMain, shell });
 require('./scriptforge-launcher').register({ ipcMain, BrowserWindow, phoenixRoot: resolvePhoenixRoot() });
+require('./config-centralizer').register({ ipcMain });
 const HudMode = require('./hud-mode');
 HudMode.install({ app, BrowserWindow, ipcMain });
 const _helixMem = new HelixMemoryJS(40);   // SectorID.CLAUDE, 40-turn rolling window

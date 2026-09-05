@@ -532,3 +532,69 @@
     border-left: 3px solid rgba(61, 232, 255, 0.55);
     border-radius: 6px 14px 14px 6px;
 }
+
+/* ── Config Centralizer (Settings tab) ─────────────────────────── */
+.cc-section {
+    border-top: 1px solid var(--border-color);
+    padding-top: 12px;
+}
+.cc-section-title {
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--phoenix-gold);
+    margin-bottom: 4px;
+}
+.cc-section-sub {
+    color: var(--text-dim);
+    font-size: 0.85em;
+    margin-bottom: 10px;
+}
+.cc-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.cc-summary {
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    white-space: pre-wrap;
+}
+.cc-list {
+    max-height: 340px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px;
+}
+.cc-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.85em;
+}
+.cc-item:last-child { border-bottom: none; }
+.cc-item-path {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+.cc-item-meta {
+    color: var(--text-dim);
+    font-size: 0.9em;
+    flex-shrink: 0;
+}
+.cc-item.sensitive .cc-item-path { color: var(--red-light); }
+.cc-item-cat {
+    flex-shrink: 0;
+    font-size: 0.8em;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary);
+}
