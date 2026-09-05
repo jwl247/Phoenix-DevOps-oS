@@ -1,0 +1,54 @@
+def init_repository(self):
+        """Initialize restic repository"""
+        reply = QMessageBox.question(
+            self,
+            "Initialize Repository",
+            f"Initialize restic repository at {CONFIG['repo_path']}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.status_label.setText("Initializing repository...")
+            QApplication.processEvents()
+            
+            success, output = self.manager.init_repo()
+            
+            if success:
+                QMessageBox.information(self, "Success", "Repository initialized!")
+            else:
+                QMessageBox.warning(self, "Error", f"Initialization failed:\n{output}")
+            
+            self.refresh_stats()
+
+# ============================================================================
+# MAIN ENTRY POINT
+# ============================================================================
+
+def main():
+    app = QApplication(sys.argv)
+    
+    # Set dark theme (optional)
+    app.setStyle('Fusion')
+    dark_palette = QPalette()
+    dark_palette.setColor(QPalette.ColorRole.Window, QColor(53, 53, 53))
+    dark_palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.white)
+    dark_palette.setColor(QPalette.ColorRole.Base, QColor(25, 25, 25))
+    dark_palette.setColor(QPalette.ColorRole.AlternateBase, QColor(53, 53, 53))
+    dark_palette.setColor(QPalette.ColorRole.ToolTipBase, Qt.GlobalColor.white)
+    dark_palette.setColor(QPalette.ColorRole.ToolTipText, Qt.GlobalColor.white)
+    dark_palette.setColor(QPalette.ColorRole.Text, Qt.GlobalColor.white)
+    dark_palette.setColor(QPalette.ColorRole.Button, QColor(53, 53, 53))
+    dark_palette.setColor(QPalette.ColorRole.ButtonText, Qt.GlobalColor.white)
+    dark_palette.setColor(QPalette.ColorRole.BrightText, Qt.GlobalColor.red)
+    dark_palette.setColor(QPalette.ColorRole.Link, QColor(42, 130, 218))
+    dark_palette.setColor(QPalette.ColorRole.Highlight, QColor(42, 130, 218))
+    dark_palette.setColor(QPalette.ColorRole.HighlightedText, Qt.GlobalColor.black)
+    app.setPalette(dark_palette)
+    
+    widget = BackupWidget()
+    widget.show()
+    
+    sys.exit(app.exec())
+
+if __name__ == '__main__':
+    main()

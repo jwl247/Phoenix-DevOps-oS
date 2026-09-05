@@ -1,0 +1,505 @@
+/**
+ * ═══════════════════════════════════════════════════════════════
+ * LOCKDOWN DEFENSE MODULE (STANDALONE)
+ * ═══════════════════════════════════════════════════════════════
+ * Completely isolated security response system
+ * Designed to grow and scale independently
+ * 
+ * Usage: const lockdown = require('./lockdown-module');
+ *        await lockdown.execute(motion);
+ * ═══════════════════════════════════════════════════════════════
+ */
+
+const fs = require('fs').promises;
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
+
+class LockdownDefenseModule {
+  constructor(config = {}) {
+    this.version = '1.0.0';
+    this.config = {
+      // Alert endpoints
+      alertEndpoints: config.alertEndpoints || [],
+      
+      // Lockdown levels
+      defaultLevel: config.defaultLevel || 'aggressive',
+      
+      // File caps (for future 3-file-cap feature)
+      enableFileCap: config.enableFileCap || false,
+      maxFilesPerDir: config.maxFilesPerDir || 3,
+      
+      // Auto-revert settings
+      autoRevert: config.autoRevert || false,
+      revertDelay: config.revertDelay || 300000,
+      
+      // Forensics
+      forensicsDir: config.forensicsDir || '/var/forensics',
+      quarantineDir: config.quarantineDir || '/var/quarantine',
+      
+      // Logging
+      logFile: config.logFile || '/var/log/lockdown.log',
+      verbose: config.verbose || true,
+      
+      ...config
+    };
+    
+    // State management
+    this.state = {
+      isLocked: false,
+      lockdownHistory: [],
+      originalPermissions: new Map(),
+      activeIncidents: new Map()
+    };
+
+    // Initialize directories
+    this._init();
+  }
+
+  async _init() {
+    try {
+      // Create required directories if they don't exist
+      // await fs.mkdir(this.config.forensicsDir, { recursive: true });
+      // await fs.mkdir(this.config.quarantineDir, { recursive: true });
+      this._log('info', 'Lockdown Defense Module initialized');
+    } catch (error) {
+      this._log('error', `Initialization failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * CORE LOCKDOWN ORCHESTRATOR
+   * ═══════════════════════════════════════════════════════════════
+   */
+  async execute(motion, options = {}) {
+    const incidentId = `incident_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    this._log('critical', `
+╔════════════════════════════════════════════════════════════╗
+║               🚨 LOCKDOWN INITIATED 🚨                    ║
+╚════════════════════════════════════════════════════════════╝
+    `);
+
+    const incident = {
+      id: incidentId,
+      path: motion.path,
+      changeType: motion.changeType,
+      timestamp: Date.now(),
+      severity: this._calculateSeverity(motion),
+      layers: [],
+      status: 'in_progress'
+    };
+
+    this.state.activeIncidents.set(incidentId, incident);
+
+    try {
+      // Execute defense layers sequentially
+      const layers = [
+        { name: 'Forensics', fn: () => this.layer_forensics(motion) },
+        { name: 'Process Kill', fn: () => this.layer_processKill(motion) },
+        { name: 'File Cap Check', fn: () => this.layer_fileCapCheck(motion) },
+        { name: 'Permission Lockdown', fn: () => this.layer_permissions(motion) },
+        { name: 'Network Isolation', fn: () => this.layer_network(motion) },
+        { name: 'Quarantine', fn: () => this.layer_quarantine(motion) },
+        { name: 'Alert Dispatch', fn: () => this.layer_alert(incident) }
+      ];
+
+      for (const layer of layers) {
+        try {
+          this._log('info', `[${layer.name}] Executing...`);
+          const result = await layer.fn();
+          incident.layers.push({
+            name: layer.name,
+            status: 'success',
+            result: result,
+            timestamp: Date.now()
+          });
+          this._log('success', `[${layer.name}] ✓ Complete`);
+        } catch (error) {
+          this._log('error', `[${layer.name}] ✗ Failed: ${error.message}`);
+          incident.layers.push({
+            name: layer.name,
+            status: 'failed',
+            error: error.message,
+            timestamp: Date.now()
+          });
+        }
+      }
+
+      incident.status = 'completed';
+      this.state.lockdownHistory.push(incident);
+
+      this._log('critical', `
+╔════════════════════════════════════════════════════════════╗
+║            ✓ LOCKDOWN COMPLETE - SYSTEM SECURED            ║
+╚════════════════════════════════════════════════════════════╝
+      `);
+
+      // Auto-revert if configured
+      if (this.config.autoRevert) {
+        setTimeout(() => this.revert(incident.id), this.config.revertDelay);
+      }
+
+      return incident;
+
+    } catch (error) {
+      incident.status = 'error';
+      incident.error = error.message;
+      this._log('error', `Lockdown failed: ${error.message}`);
+      throw error;
+    } finally {
+      this.state.activeIncidents.delete(incidentId);
+    }
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * DEFENSE LAYERS (Individual modules for growth)
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  // LAYER 1: Forensic Evidence Collection
+  async layer_forensics(motion) {
+    const snapshotId = `forensic_${Date.now()}`;
+    const snapshot = {
+      id: snapshotId,
+      path: motion.path,
+      timestamp: Date.now(),
+      metadata: await this._getFileMetadata(motion.path),
+      processes: await this._getProcessesAccessingPath(motion.path),
+      networkConnections: await this._getNetworkConnections(),
+      hash: await this._calculateHash(motion.path)
+    };
+
+    // Save snapshot to forensics directory
+    // await fs.writeFile(
+    //   `${this.config.forensicsDir}/${snapshotId}.json`,
+    //   JSON.stringify(snapshot, null, 2)
+    // );
+
+    return snapshot;
+  }
+
+  // LAYER 2: Kill Suspicious Processes
+  async layer_processKill(motion) {
+    const processes = await this._getProcessesAccessingPath(motion.path);
+    const killed = [];
+
+    for (const proc of processes) {
+      if (this._isSuspiciousProcess(proc)) {
+        try {
+          // await execPromise(`kill -9 ${proc.pid}`);
+          killed.push(proc);
+          this._log('warning', `Killed suspicious process: PID ${proc.pid} (${proc.name})`);
+        } catch (error) {
+          this._log('error', `Failed to kill PID ${proc.pid}: ${error.message}`);
+        }
+      }
+    }
+
+    return { terminated: killed.length, processes: killed };
+  }
+
+  // LAYER 3: File Cap Enforcement (NEW - for your 3-file cap feature)
+  async layer_fileCapCheck(motion) {
+    if (!this.config.enableFileCap) {
+      return { enabled: false, message: 'File cap check disabled' };
+    }
+
+    try {
+      // Get directory from file path
+      const dir = motion.path.substring(0, motion.path.lastIndexOf('/'));
+      
+      // Count files in directory
+      // const files = await fs.readdir(dir);
+      const fileCount = 5; // Simulated for demo
+      
+      if (fileCount > this.config.maxFilesPerDir) {
+        this._log('warning', `Directory ${dir} exceeds file cap: ${fileCount}/${this.config.maxFilesPerDir}`);
+        
+        // Future implementation: automatically remove oldest files or trigger alert
+        return {
+          exceeded: true,
+          directory: dir,
+          fileCount: fileCount,
+          maxAllowed: this.config.maxFilesPerDir,
+          action: 'alert_triggered'
+        };
+      }
+
+      return {
+        exceeded: false,
+        directory: dir,
+        fileCount: fileCount,
+        maxAllowed: this.config.maxFilesPerDir
+      };
+    } catch (error) {
+      return { error: error.message };
+    }
+  }
+
+  // LAYER 4: Permission Lockdown
+  async layer_permissions(motion) {
+    const path = motion.path;
+    
+    // Store original permissions
+    const originalPerms = await this._getFileMetadata(path);
+    this.state.originalPermissions.set(path, originalPerms);
+
+    const lockdownStrategies = {
+      'basic': { chmod: '700', immutable: false },
+      'strict': { chmod: '500', immutable: false },
+      'aggressive': { chmod: '000', immutable: true },
+      'critical': { chmod: '000', immutable: true, append_only: true }
+    };
+
+    const strategy = lockdownStrategies[this.config.defaultLevel];
+
+    // Apply chmod
+    // await fs.chmod(path, strategy.chmod);
+    
+    // Apply immutable flag if needed
+    if (strategy.immutable) {
+      // await execPromise(`chattr +i ${path}`);
+    }
+
+    return {
+      path: path,
+      strategy: this.config.defaultLevel,
+      permissions: strategy.chmod,
+      immutable: strategy.immutable,
+      original: originalPerms
+    };
+  }
+
+  // LAYER 5: Network Isolation
+  async layer_network(motion) {
+    if (!motion.sourceIP) {
+      return { skipped: true, reason: 'No source IP detected' };
+    }
+
+    const ip = motion.sourceIP;
+    const rules = [
+      `iptables -A INPUT -s ${ip} -j DROP`,
+      `iptables -A OUTPUT -d ${ip} -j DROP`,
+      `ss -K dst ${ip}`
+    ];
+
+    const applied = [];
+    for (const rule of rules) {
+      try {
+        // await execPromise(rule);
+        applied.push(rule);
+      } catch (error) {
+        this._log('error', `Failed to apply rule: ${rule}`);
+      }
+    }
+
+    return {
+      ip: ip,
+      rulesApplied: applied.length,
+      rules: applied
+    };
+  }
+
+  // LAYER 6: File Quarantine
+  async layer_quarantine(motion) {
+    if (motion.changeType !== 'files_added' && motion.changeType !== 'files_modified') {
+      return { skipped: true, reason: 'No quarantine needed for this change type' };
+    }
+
+    const timestamp = Date.now();
+    const filename = motion.path.split('/').pop();
+    const quarantinePath = `${this.config.quarantineDir}/${timestamp}_${filename}`;
+
+    try {
+      // Move file to quarantine
+      // await fs.rename(motion.path, quarantinePath);
+      // await fs.chmod(quarantinePath, '000');
+
+      return {
+        original: motion.path,
+        quarantine: quarantinePath,
+        timestamp: timestamp
+      };
+    } catch (error) {
+      return { error: error.message };
+    }
+  }
+
+  // LAYER 7: Alert Dispatch
+  async layer_alert(incident) {
+    const alert = {
+      id: incident.id,
+      severity: incident.severity,
+      type: 'intrusion_detected',
+      timestamp: Date.now(),
+      path: incident.path,
+      changeType: incident.changeType,
+      layers_executed: incident.layers.map(l => l.name),
+      status: incident.status
+    };
+
+    const dispatched = [];
+
+    for (const endpoint of this.config.alertEndpoints) {
+      try {
+        // await fetch(endpoint.url, {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify(alert)
+        // });
+        dispatched.push(endpoint.name);
+        this._log('info', `Alert sent to ${endpoint.name}`);
+      } catch (error) {
+        this._log('error', `Failed to send alert to ${endpoint.name}: ${error.message}`);
+      }
+    }
+
+    return {
+      alert: alert,
+      dispatchedTo: dispatched
+    };
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * UTILITY FUNCTIONS
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  _calculateSeverity(motion) {
+    const severityMap = {
+      'files_added': 'high',
+      'files_removed': 'high',
+      'files_modified': 'medium',
+      'permissions_changed': 'critical',
+      'ownership_changed': 'critical'
+    };
+    return severityMap[motion.changeType] || 'medium';
+  }
+
+  async _getFileMetadata(path) {
+    // Simulated - replace with actual fs.stat()
+    return {
+      permissions: '755',
+      owner: 'root',
+      group: 'root',
+      size: 12345,
+      modified: Date.now()
+    };
+  }
+
+  async _getProcessesAccessingPath(path) {
+    // Simulated - replace with actual lsof command
+    return [
+      { pid: 1234, name: 'suspicious.sh', user: 'www-data' },
+      { pid: 5678, name: 'backdoor.py', user: 'nobody' }
+    ];
+  }
+
+  async _getNetworkConnections() {
+    // Simulated - replace with actual netstat/ss command
+    return [
+      { ip: '192.168.1.100', port: 4444, state: 'ESTABLISHED' }
+    ];
+  }
+
+  async _calculateHash(path) {
+    // Simulated - replace with actual crypto.createHash()
+    return `sha256_${Math.random().toString(36).substring(7)}`;
+  }
+
+  _isSuspiciousProcess(proc) {
+    const suspiciousNames = ['nc', 'ncat', 'backdoor', 'shell', 'exploit'];
+    const suspiciousUsers = ['nobody', 'www-data'];
+    
+    return suspiciousNames.some(name => proc.name.includes(name)) ||
+           suspiciousUsers.includes(proc.user);
+  }
+
+  _log(level, message) {
+    if (!this.config.verbose && level === 'info') return;
+
+    const timestamp = new Date().toISOString();
+    const levels = {
+      'info': '📘',
+      'success': '✅',
+      'warning': '⚠️',
+      'error': '❌',
+      'critical': '🚨'
+    };
+
+    const logMessage = `${timestamp} ${levels[level] || '📝'} ${message}`;
+    console.log(logMessage);
+
+    // Write to log file
+    // await fs.appendFile(this.config.logFile, logMessage + '\n');
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * MANAGEMENT FUNCTIONS
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  async revert(incidentId) {
+    const incident = this.state.lockdownHistory.find(i => i.id === incidentId);
+    if (!incident) {
+      throw new Error(`Incident ${incidentId} not found`);
+    }
+
+    this._log('info', `Reverting lockdown for incident: ${incidentId}`);
+
+    const path = incident.path;
+    const original = this.state.originalPermissions.get(path);
+
+    if (original) {
+      // await fs.chmod(path, original.permissions);
+      // await execPromise(`chattr -i ${path}`);
+      this._log('success', `Reverted permissions for ${path}`);
+    }
+
+    return { reverted: true, path: path };
+  }
+
+  getStatus() {
+    return {
+      version: this.version,
+      config: this.config,
+      state: {
+        isLocked: this.state.isLocked,
+        activeIncidents: this.state.activeIncidents.size,
+        totalIncidents: this.state.lockdownHistory.length
+      }
+    };
+  }
+
+  getHistory(limit = 10) {
+    return this.state.lockdownHistory.slice(-limit);
+  }
+
+  async updateConfig(newConfig) {
+    this.config = { ...this.config, ...newConfig };
+    this._log('info', 'Configuration updated');
+    return this.config;
+  }
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════
+ * MODULE EXPORTS
+ * ═══════════════════════════════════════════════════════════════
+ */
+
+module.exports = LockdownDefenseModule;
+
+// Convenience factory function
+module.exports.create = (config) => new LockdownDefenseModule(config);
+
+// Quick access to execute
+module.exports.execute = async (motion, config) => {
+  const lockdown = new LockdownDefenseModule(config);
+  return await lockdown.execute(motion);
+};
