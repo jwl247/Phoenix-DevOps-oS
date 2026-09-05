@@ -94,6 +94,14 @@ hash baseline at intake time and re-verifies it at clone time, gating on
 mismatch (`sector2/package-handler/README.md` § Integrity Verification).
 Office applies the same pattern to "finalized" instead of "intaked."
 
+**General principle worth naming (2026-09-05, Jerry):** to make anything
+immutable, all it takes is a narrowed snapshot of it, held read-only. That's
+literally what SIGNED is — a snapshot of the field set at the handoff
+moment, hash-locked, never opened for writing again. Not specific to
+Office; this is the same shape as `breach_coms4`'s "never delete" rule and
+the clone pool's version retention, just named plainly. Worth reapplying
+anywhere else in Phoenix something needs to become tamper-evident.
+
 ### Read+fill, not write — from the moment of forging, not just after signing
 Refined 2026-09-05, per Jerry: immutability doesn't start at the end of
 the document's life, it starts at the *field* level from the moment it's
