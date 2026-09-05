@@ -384,6 +384,45 @@ VALUES ('${hex}','${name}','${action}','${version}','${src}','${dst}','${state}'
 SQL
 }
 
+# ── Auth preflight ────────────────────────────────────────────
+# Past incidents (2026-08-21, 2026-08-22): PHOENIX_AUTH silently drifted from
+# one or both Cloudflare workers' secrets, and the only symptom was a WARN
+# line buried among hundreds of per-file log lines during a bulk intake —
+# nobody noticed until D1/R2 sync had already been broken for a while.
+# This runs once per invocation, before touching any files, so a bad token
+# stops the whole run with one unmissable message instead of that.
+check_whoami() {
+  local url="$1"
+  curl -s -o /dev/null -w "%{http_code}" \
+    -H "Authorization: Bearer ${PHOENIX_AUTH}" \
+    "${url}/whoami" 2>/dev/null
+}
+
+preflight_auth() {
+  [[ -z "${PHOENIX_AUTH}" ]] && return 0   # not configured — D1/R2 sync intentionally off
+  local d1_code r2_code bad=0
+  d1_code=$(check_whoami "${WORKER_URL}")
+  r2_code=$(check_whoami "${R2_WORKER_URL}")
+  [[ "${d1_code}" == "401" ]] && bad=1
+  [[ "${r2_code}" == "401" ]] && bad=1
+  if (( bad )); then
+    echo ""
+    echo " ╔══════════════════════════════════════════════════════════════╗"
+    echo " ║  PHOENIX_AUTH REJECTED — stopping before touching any files   ║"
+    echo " ╚══════════════════════════════════════════════════════════════╝"
+    [[ "${d1_code}" == "401" ]] && echo "  packages-worker (D1)   : REJECTED  ${WORKER_URL}/whoami"
+    [[ "${r2_code}"  == "401" ]] && echo "  phoenix-clonepool-r2 (R2): REJECTED  ${R2_WORKER_URL}/whoami"
+    echo ""
+    echo "  Local PHOENIX_AUTH does not match at least one worker's secret."
+    echo "  Run sector2/package-handler/rotate-phoenix-auth.sh to reissue and"
+    echo "  re-sync both workers in one step, instead of hand-editing either."
+    echo ""
+    exit 1
+  fi
+  # Non-401 failures (network down, DNS, timeout) are not treated as fatal —
+  # intake should still work offline/local-only.
+}
+
 # ── D1 reporter ───────────────────────────────────────────────
 post_to_d1() {
   local endpoint="$1" payload="$2"
@@ -878,6 +917,13 @@ intake_status() {
   echo " ║     INTAKE / CLONEPOOL STATUS        ║"
   echo " ╚══════════════════════════════════════╝"
   echo " Worker  : ${WORKER_URL}"
+  if [[ -z "${PHOENIX_AUTH}" ]]; then
+    echo " Auth    : not set (D1/R2 sync off)"
+  elif [[ "$(check_whoami "${WORKER_URL}")" == "200" && "$(check_whoami "${R2_WORKER_URL}")" == "200" ]]; then
+    echo " Auth    : OK (D1 + R2 both verified)"
+  else
+    echo " Auth    : MISMATCH — run rotate-phoenix-auth.sh"
+  fi
   echo " Pool    : ${CLONEPOOL_DIR}"
   [[ -n "${PYTHON_CMD}" ]] \
     && echo " Python  : ${PYTHON_CMD}" \
@@ -1365,6 +1411,8 @@ resolve_lol() {
 self_register
 
 # ── Entry point ───────────────────────────────────────────────
+[[ "${1:-help}" != "help" && "${1:-help}" != "--help" && "${1:-help}" != "-h" ]] && preflight_auth
+
 case "${1:-help}" in
   help|--help|-h) show_help ;;
   status)         intake_status ;;

@@ -3,7 +3,10 @@
   // UnitedSys — United Systems | jwl247
   // Deploy: wrangler deploy
   // Tail:   wrangler tail
-  // Secret: wrangler secret put PHOENIX_AUTH
+  // Secret: do NOT run `wrangler secret put PHOENIX_AUTH` here by hand — it
+  //         must match phoenix-clonepool-r2's secret AND the local registry
+  //         value. Use ../rotate-phoenix-auth.sh, which sets and verifies
+  //         all three together.
 
   "name": "packages-worker",
   "main": "index.js",
@@ -20,6 +23,6 @@
   ]
 
   // ── Secrets ────────────────────────────────────────────────────────────────
-  // PHOENIX_AUTH — set via: wrangler secret put PHOENIX_AUTH
+  // PHOENIX_AUTH — rotate via ../rotate-phoenix-auth.sh, never by hand
   // Never put the token here — secrets only
 }

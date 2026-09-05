@@ -558,6 +558,15 @@ export default {
         return new Response(HTML_PLATFORM, { status: 200, headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Access-Control-Allow-Origin': '*' } });
       }
 
+      // ── Whoami (GET /whoami — auth round-trip check, no side effects) ────────
+      // Exists so a token rotation (or intake.sh's preflight) can confirm the
+      // local PHOENIX_AUTH actually matches this worker's secret in one cheap
+      // call, instead of finding out from a pile of silent per-file 401s.
+      if (path === '/whoami') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        return ok({ ok: true, worker: 'packages-worker', version: '3.4.0' });
+      }
+
       // ── Health (GET / or GET /health — API clients) ──────────────────────────
       if (path === '/' || path === '/health') {
         const tables = await db
