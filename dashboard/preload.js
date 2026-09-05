@@ -27,7 +27,9 @@ const ALLOWED_CHANNELS = new Set([
   // google-launcher.js
   'launch-google', 'get-google-status',
   // steam-launcher.js
-  'launch-steam', 'get-steam-status'
+  'launch-steam', 'get-steam-status',
+  // scriptforge-launcher.js
+  'launch-scriptforge'
 ]);
 
 // Main → renderer push events (streaming chat deltas, terminal output).

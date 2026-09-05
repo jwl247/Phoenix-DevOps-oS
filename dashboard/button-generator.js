@@ -120,6 +120,18 @@ ButtonGenerator
                 .catch(e => alert(e.message));
         }
     })
+    .define({
+        id: 'scriptforge',
+        label: 'SCRIPTFORGE',
+        sub: 'code lint · security scan · convert',
+        onClick({ invoke, el }) {
+            const original = el.textContent;
+            el.textContent = 'opening...';
+            invoke('launch-scriptforge', {})
+                .then(r => { el.textContent = original; if (!r.success) alert(r.error); })
+                .catch(e => { el.textContent = original; alert(e.message); });
+        }
+    })
     // ── PoC: Windows steers, Debian runs ─────────────────────────────────
     .define({
         id: 'poc-debian',
