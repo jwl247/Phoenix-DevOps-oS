@@ -1,0 +1,1577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScriptForge — Phoenix DevOps OS 🔥</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg:        #0a0c10;
+    --surface:   #111418;
+    --panel:     #161b22;
+    --border:    #252a33;
+    --accent:    #FF6B35;      /* Phoenix Flame Orange */
+    --accent2:   #4A9EFF;      /* Helix Blue */
+    --green:     #3DDC84;
+    --red:       #FF5F5F;
+    --yellow:    #FFC542;
+    --text:      #C8CDD6;
+    --muted:     #5A6170;
+    --gutter:    #0F1218;
+    --phoenix-red: #FF4500;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    /* Phoenix desktop widget feel */
+    border: 1px solid var(--border);
+    box-shadow: 0 0 0 1px rgba(255, 107, 53, 0.08);
+  }
+
+  /* ── Phoenix Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: linear-gradient(90deg, var(--surface) 0%, #161b22 100%);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--phoenix-red), var(--accent));
+    opacity: 0.6;
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 17px;
+    letter-spacing: -0.6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .logo .flame { color: var(--accent); font-size: 19px; }
+  .logo .phx { color: var(--accent); }
+
+  .logo-sub {
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--muted);
+    margin-left: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  .lang-bar {
+    display: flex;
+    gap: 3px;
+    background: var(--panel);
+    padding: 2px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+
+  .lang-btn {
+    padding: 5px 11px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    transition: all 0.1s ease;
+  }
+
+  .lang-btn:hover { color: var(--accent); background: rgba(255,107,53,0.1); }
+  .lang-btn.active {
+    background: var(--accent);
+    color: #000;
+    font-weight: 700;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+
+  .btn {
+    padding: 6px 14px;
+    border-radius: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    border: none;
+    font-weight: 600;
+    transition: all 0.12s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+    box-shadow: 0 2px 4px rgba(255,107,53,0.3);
+  }
+  .btn-primary:hover { background: #FF8C5A; transform: translateY(-1px); }
+
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); background: rgba(255,107,53,0.05); }
+
+  .btn-sec { background: var(--accent2); color: #000; }
+  .btn-sec:hover { background: #6BB3FF; }
+
+  .phoenix-badge {
+    font-size: 9px;
+    padding: 1px 7px;
+    background: rgba(255,107,53,0.15);
+    color: var(--accent);
+    border: 1px solid rgba(255,107,53,0.3);
+    border-radius: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── Main layout ── */
+  .workspace {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Editor ── */
+  .editor-pane {
+    display: flex;
+    flex-direction: column;
+    width: 58%;
+    border-right: 1px solid var(--border);
+    flex-shrink: 0;
+    background: #0C0E13;
+  }
+
+  .pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .pane-title {
+    color: var(--text);
+    font-weight: 600;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .editor-wrap {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .gutter {
+    width: 46px;
+    background: var(--gutter);
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+    flex-shrink: 0;
+    padding-top: 13px;
+    font-size: 11px;
+    color: var(--muted);
+    user-select: none;
+  }
+
+  .gutter-line {
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 9px;
+    font-size: 10px;
+    color: var(--muted);
+    transition: all 0.1s ease;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .gutter-line.err  { color: var(--red);    background: rgba(255,95,95,0.12); font-weight: 600; }
+  .gutter-line.warn { color: var(--yellow); background: rgba(255,197,66,0.10); font-weight: 600; }
+  .gutter-line.info { color: var(--accent2);background: rgba(74,158,255,0.10); }
+
+  #editor {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    line-height: 20px;
+    color: var(--text);
+    padding: 13px 15px 13px 12px;
+    tab-size: 2;
+    overflow-y: auto;
+    overflow-x: auto;
+    white-space: pre;
+    caret-color: var(--accent);
+  }
+
+  #editor::selection { background: rgba(255, 107, 53, 0.25); }
+
+  /* ── Results pane ── */
+  .results-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #0C0E13;
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    padding: 0 4px;
+  }
+
+  .tab {
+    padding: 8px 15px;
+    font-size: 10px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    transition: all 0.1s ease;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 500;
+  }
+
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: rgba(255,107,53,0.06);
+  }
+
+  .badge {
+    background: var(--red);
+    color: #fff;
+    border-radius: 9px;
+    padding: 0 5px;
+    font-size: 8px;
+    font-weight: 700;
+    min-width: 15px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  .badge.warn { background: var(--yellow); color: #000; }
+  .badge.info { background: var(--accent2); color: #000; }
+  .badge.ok   { background: var(--green);  color: #000; }
+
+  .tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    display: none;
+  }
+
+  .tab-content.active { display: block; }
+
+  /* ── Issue items (Phoenix style) ── */
+  .issue {
+    display: flex;
+    gap: 9px;
+    padding: 8px 11px;
+    border-radius: 5px;
+    margin-bottom: 5px;
+    border-left: 3px solid transparent;
+    background: var(--panel);
+    cursor: pointer;
+    transition: background 0.1s ease;
+    align-items: flex-start;
+    border: 1px solid var(--border);
+  }
+
+  .issue:hover { background: #1C2129; border-color: #333A45; }
+  .issue.err  { border-left-color: var(--red); }
+  .issue.warn { border-left-color: var(--yellow); }
+  .issue.info { border-left-color: var(--accent2); }
+
+  .issue-icon { font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+  .issue-body { flex: 1; min-width: 0; }
+  .issue-msg  { font-size: 11.5px; color: var(--text); line-height: 1.35; }
+  .issue-loc  { font-size: 9px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+  .fix-chip {
+    font-size: 9px;
+    padding: 1px 7px;
+    border-radius: 3px;
+    background: rgba(74,158,255,0.12);
+    color: var(--accent2);
+    border: 1px solid rgba(74,158,255,0.25);
+    cursor: pointer;
+    flex-shrink: 0;
+    font-weight: 600;
+    transition: all 0.1s;
+    align-self: flex-start;
+    margin-top: 1px;
+  }
+
+  .fix-chip:hover { background: rgba(74,158,255,0.25); color: #fff; }
+
+  /* ── Console ── */
+  .console-out {
+    background: #080A0D;
+    border-radius: 5px;
+    padding: 11px 13px;
+    font-size: 11px;
+    line-height: 1.55;
+    min-height: 92px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--green);
+    border: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .console-out .err-line { color: var(--red); }
+  .console-out .warn-line { color: var(--yellow); }
+
+  /* ── Convert ── */
+  .convert-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .sf-select {
+    flex: 1;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 6px 9px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .convert-output { white-space: pre-wrap; word-break: break-all; }
+  .convert-error {
+    color: var(--red);
+    background: rgba(255,95,95,0.08);
+    border: 1px solid rgba(255,95,95,0.3);
+    border-radius: 5px;
+    padding: 8px 11px;
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  .convert-actions { display: flex; gap: 6px; margin-top: 10px; }
+
+  /* ── Deps & Security ── */
+  .dep-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 11px;
+    background: var(--panel);
+    border-radius: 5px;
+    margin-bottom: 5px;
+    font-size: 11px;
+    border: 1px solid var(--border);
+  }
+
+  .dep-name { color: var(--accent2); font-weight: 500; }
+  .dep-cmd  { font-size: 9px; color: var(--muted); background: var(--bg); padding: 1px 7px; border-radius: 3px; }
+
+  .sec-item {
+    padding: 9px 12px;
+    border-radius: 5px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+  }
+
+  .sec-sev {
+    font-size: 9px;
+    font-weight: 700;
+    margin-bottom: 3px;
+    padding: 0 5px;
+    display: inline-block;
+    border-radius: 3px;
+  }
+  .sec-sev.HIGH   { color: var(--red); background: rgba(255,95,95,0.1); }
+  .sec-sev.MEDIUM { color: var(--yellow); background: rgba(255,197,66,0.1); }
+  .sec-sev.LOW    { color: var(--accent2); background: rgba(74,158,255,0.1); }
+
+  .sec-msg { font-size: 11px; color: var(--text); line-height: 1.4; }
+  .sec-line { font-size: 9px; color: var(--muted); margin-top: 3px; }
+
+  /* ── Stats bar (Phoenix) ── */
+  .stats-bar {
+    display: flex;
+    gap: 14px;
+    padding: 6px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--muted);
+    flex-shrink: 0;
+    align-items: center;
+    font-weight: 500;
+  }
+
+  .stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .stat-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .stat-val {
+    color: var(--text);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .phx-footer {
+    margin-left: auto;
+    font-size: 9px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .phx-footer .helix {
+    color: var(--accent2);
+    font-weight: 600;
+  }
+
+  /* ── Fix panel ── */
+  #fix-panel {
+    position: fixed;
+    top: 0; right: -440px;
+    width: 440px;
+    height: 100vh;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    transition: right 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+    box-shadow: -12px 0 40px rgba(0,0,0,0.5);
+  }
+
+  #fix-panel.open { right: 0; }
+
+  .fix-panel-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #0F1218;
+  }
+
+  .fix-panel-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text);
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 17px;
+    padding: 1px 7px;
+    border-radius: 4px;
+    line-height: 1;
+  }
+  .close-btn:hover { background: var(--border); color: var(--text); }
+
+  .fix-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+  }
+
+  .fix-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 9px 10px;
+    border-radius: 5px;
+    margin-bottom: 5px;
+    background: var(--panel);
+    cursor: pointer;
+    transition: background 0.1s;
+    border: 1px solid var(--border);
+  }
+
+  .fix-row:hover { background: #1C2129; }
+
+  .fix-row input[type=checkbox] {
+    accent-color: var(--accent);
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  .fix-row-body { flex: 1; }
+  .fix-row-title { font-size: 11px; color: var(--text); font-weight: 500; }
+  .fix-row-desc  { font-size: 9.5px; color: var(--muted); margin-top: 2px; }
+
+  .fix-panel-footer {
+    padding: 13px 18px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    background: #0F1218;
+  }
+
+  /* ── Empty / Success states ── */
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--muted);
+    gap: 6px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .empty-icon { font-size: 32px; opacity: 0.35; }
+  .empty-text { font-size: 11px; }
+
+  .ok-banner {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 12px 14px;
+    border-radius: 6px;
+    background: rgba(61,220,132,0.07);
+    border: 1px solid rgba(61,220,132,0.18);
+    color: var(--green);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333A45; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #4A515F; }
+
+  .phx-tag {
+    font-size: 8px;
+    padding: 0 5px;
+    background: rgba(255,69,0,0.15);
+    color: var(--phoenix-red);
+    border-radius: 3px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="flame">🔥</span>
+    <span>Script<span class="phx">Forge</span></span>
+    <span class="logo-sub">v1.0</span>
+    <span class="phoenix-badge">PHOENIX</span>
+  </div>
+
+  <div class="lang-bar">
+    <button class="lang-btn active" onclick="setLang('AUTO')">AUTO</button>
+    <button class="lang-btn" onclick="setLang('JS')">JS</button>
+    <button class="lang-btn" onclick="setLang('TS')">TS</button>
+    <button class="lang-btn" onclick="setLang('PY')">PY</button>
+    <button class="lang-btn" onclick="setLang('CSS')">CSS</button>
+    <button class="lang-btn" onclick="setLang('HTML')">HTML</button>
+    <button class="lang-btn" onclick="setLang('JSON')">JSON</button>
+    <button class="lang-btn" onclick="setLang('SH')">SH</button>
+  </div>
+
+  <div class="header-actions">
+    <button class="btn btn-ghost" onclick="clearAll()" style="padding:5px 11px;font-size:10px">CLEAR</button>
+    <button class="btn btn-ghost" onclick="toggleFixPanel()" style="padding:5px 11px;font-size:10px">FIXES</button>
+    <button class="btn btn-primary" onclick="analyze()">
+      ▶ ANALYZE
+    </button>
+  </div>
+</header>
+
+<div class="workspace">
+  <!-- EDITOR -->
+  <div class="editor-pane">
+    <div class="pane-header">
+      <span class="pane-title">
+        <span>EDITOR</span>
+        <span class="phx-tag">HELIX</span>
+      </span>
+      <span id="lang-label" style="color:var(--accent);font-weight:600">AUTO-DETECT</span>
+    </div>
+    <div class="editor-wrap">
+      <div class="gutter" id="gutter"></div>
+      <textarea id="editor" spellcheck="false" placeholder="// Paste code here — Phoenix ScriptForge will analyze it
+// Supports: JavaScript, TypeScript, Python, CSS, HTML, JSON, Shell
+// Self-healing fixes • Security scan • Dependency detection
+// Part of Phoenix DevOps OS Desktop (Sector 2)"></textarea>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="results-pane">
+    <div class="tabs">
+      <div class="tab active" data-tab="issues" onclick="showTab('issues')">ISSUES <span class="badge" id="badge-issues">0</span></div>
+      <div class="tab" data-tab="console" onclick="showTab('console')">CONSOLE <span class="badge info" id="badge-console">—</span></div>
+      <div class="tab" data-tab="deps" onclick="showTab('deps')">DEPS <span class="badge warn" id="badge-deps">0</span></div>
+      <div class="tab" data-tab="security" onclick="showTab('security')">SECURITY <span class="badge" id="badge-sec">0</span></div>
+      <div class="tab" data-tab="convert" onclick="showTab('convert')">CONVERT</div>
+    </div>
+
+    <div class="tab-content active" id="tab-issues">
+      <div class="empty" id="issues-empty">
+        <div class="empty-icon">⚡</div>
+        <div class="empty-text">Paste code and hit ANALYZE<br>or press Ctrl+Enter</div>
+      </div>
+      <div id="issues-list"></div>
+    </div>
+
+    <div class="tab-content" id="tab-console">
+      <div class="console-out" id="console-out">// Console output appears here for JS execution</div>
+    </div>
+
+    <div class="tab-content" id="tab-deps">
+      <div id="deps-list">
+        <div class="empty">
+          <div class="empty-icon">📦</div>
+          <div class="empty-text">No external dependencies detected</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-security">
+      <div id="sec-list">
+        <div class="empty">
+          <div class="empty-icon">🛡️</div>
+          <div class="empty-text">No security issues detected</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-convert">
+      <div class="convert-row">
+        <select id="convert-op" class="sf-select">
+          <optgroup label="JSON ⇄ CSV">
+            <option value="json2csv">JSON → CSV</option>
+            <option value="csv2json">CSV → JSON</option>
+          </optgroup>
+          <optgroup label="JSON">
+            <option value="json-pretty">JSON Beautify</option>
+            <option value="json-min">JSON Minify</option>
+          </optgroup>
+          <optgroup label="Encoding">
+            <option value="b64-enc">Text → Base64</option>
+            <option value="b64-dec">Base64 → Text</option>
+            <option value="url-enc">Text → URL-encoded</option>
+            <option value="url-dec">URL-encoded → Text</option>
+          </optgroup>
+        </select>
+        <button class="btn btn-primary" style="padding:6px 14px;font-size:10px" onclick="runConvert()">CONVERT</button>
+      </div>
+      <div id="convert-error" class="convert-error" style="display:none"></div>
+      <div class="console-out convert-output" id="convert-output">// Converts the EDITOR pane's current content. Pick a direction, hit CONVERT.</div>
+      <div class="convert-actions">
+        <button class="btn btn-ghost" style="padding:5px 11px;font-size:10px" onclick="copyConvertOutput()">COPY OUTPUT</button>
+        <button class="btn btn-sec" style="padding:5px 11px;font-size:10px" onclick="loadConvertOutput()">LOAD INTO EDITOR</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-bar">
+  <div class="stat"><div class="stat-dot" style="background:var(--red)"></div>Errors: <span class="stat-val" id="stat-err">0</span></div>
+  <div class="stat"><div class="stat-dot" style="background:var(--yellow)"></div>Warnings: <span class="stat-val" id="stat-warn">0</span></div>
+  <div class="stat"><div class="stat-dot" style="background:var(--accent2)"></div>Info: <span class="stat-val" id="stat-info">0</span></div>
+  <div class="stat"><div class="stat-dot" style="background:#666"></div>Lines: <span class="stat-val" id="stat-lines">0</span></div>
+  <div class="stat"><div class="stat-dot" style="background:#666"></div>Lang: <span class="stat-val" id="stat-lang">—</span></div>
+
+  <div class="phx-footer">
+    <span class="helix">HELIX ENGINE</span>
+    <span style="opacity:0.4">•</span>
+    <span>Phoenix DevOps OS • Desktop Widget v1</span>
+  </div>
+
+  <div style="margin-left:auto;display:flex;gap:6px">
+    <button class="btn btn-ghost" style="padding:2px 9px;font-size:9px" onclick="copyFixed()">COPY FIXED</button>
+    <button class="btn btn-sec" style="padding:2px 9px;font-size:9px" onclick="applyAllFixes()">APPLY ALL</button>
+  </div>
+</div>
+
+<!-- Fix Panel -->
+<div id="fix-panel">
+  <div class="fix-panel-header">
+    <div class="fix-panel-title">Auto Fixes — Helix Self-Heal</div>
+    <button class="close-btn" onclick="toggleFixPanel()">✕</button>
+  </div>
+  <div class="fix-list" id="fix-list">
+    <div class="empty"><div class="empty-text">Run ANALYZE to see available fixes</div></div>
+  </div>
+  <div class="fix-panel-footer">
+    <button class="btn btn-primary" style="flex:1" onclick="applyCheckedFixes()">APPLY SELECTED</button>
+    <button class="btn btn-ghost" onclick="checkAllFixes()" style="padding:6px 12px;font-size:10px">ALL</button>
+    <button class="btn btn-ghost" onclick="uncheckAllFixes()" style="padding:6px 12px;font-size:10px">NONE</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// ScriptForge — Phoenix DevOps OS Desktop Widget v1.0
+// Complete, operational, no stubs. Helix-powered static analysis.
+// ═══════════════════════════════════════════════════════════════
+
+let currentLang = 'AUTO';
+let detectedLang = '';
+let issues = [];
+let fixes = [];
+let deps = [];
+let secIssues = [];
+
+// ── Language Selection ─────────────────────────────────────────
+function setLang(lang) {
+  currentLang = lang;
+  document.querySelectorAll('.lang-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent === lang);
+  });
+  document.getElementById('lang-label').textContent = lang === 'AUTO' ? 'AUTO-DETECT' : lang;
+}
+
+function detectLang(code) {
+  if (currentLang !== 'AUTO') return currentLang;
+  const trimmed = code.trim();
+  if (/^\s*<!DOCTYPE|<html|<head|<body/i.test(trimmed)) return 'HTML';
+  if (/^\s*\{[\s\S]*\}$/.test(trimmed) || /^\s*\[[\s\S]*\]$/.test(trimmed)) return 'JSON';
+  if (/^\s*def |^\s*import |^\s*from .+ import|print\(|:\s*$/m.test(code)) return 'PY';
+  if (/interface |type \w+\s*=|:\s*(string|number|boolean|any|void)/.test(code)) return 'TS';
+  if (/\{[\s\S]*\}/.test(code) && /[a-z-]+\s*:\s*[^;{]+;/.test(code) && !/function|const |let |var /.test(code)) return 'CSS';
+  if (/^#!\/bin\/(ba|z)?sh/.test(code) || /\$\(|fi\b|then\b|echo |chmod |apt |brew /.test(code)) return 'SH';
+  return 'JS';
+}
+
+// ── Gutter with live sync & error highlighting ─────────────────
+function updateGutter() {
+  const ed = document.getElementById('editor');
+  const g = document.getElementById('gutter');
+  if (!ed || !g) return;
+
+  const lines = ed.value.split('\n');
+  g.innerHTML = '';
+
+  const errSet = new Set(issues.filter(i => i.type === 'err').map(i => i.line));
+  const warnSet = new Set(issues.filter(i => i.type === 'warn').map(i => i.line));
+  const infoSet = new Set(issues.filter(i => i.type === 'info').map(i => i.line));
+
+  for (let i = 1; i <= lines.length; i++) {
+    const div = document.createElement('div');
+    div.className = 'gutter-line';
+    if (errSet.has(i)) div.classList.add('err');
+    else if (warnSet.has(i)) div.classList.add('warn');
+    else if (infoSet.has(i)) div.classList.add('info');
+    div.textContent = i;
+    g.appendChild(div);
+  }
+
+  // Perfect scroll sync
+  const sync = () => { g.scrollTop = ed.scrollTop; };
+  ed.onscroll = sync;
+  g.onscroll = () => { ed.scrollTop = g.scrollTop; };
+}
+
+// Call on every keystroke for live line numbers
+function setupEditor() {
+  const ed = document.getElementById('editor');
+  ed.addEventListener('input', () => {
+    updateGutter();
+  });
+  ed.addEventListener('scroll', () => {
+    const g = document.getElementById('gutter');
+    if (g) g.scrollTop = ed.scrollTop;
+  });
+  // Initial
+  setTimeout(updateGutter, 50);
+}
+
+// ── Core Analysis ──────────────────────────────────────────────
+function analyze() {
+  const ed = document.getElementById('editor');
+  const code = ed.value;
+  const lines = code.split('\n');
+
+  if (!code.trim()) {
+    issues = []; deps = []; secIssues = []; fixes = [];
+    document.getElementById('stat-lang').textContent = '—';
+    renderAll();
+    updateGutter();
+    return;
+  }
+
+  detectedLang = detectLang(code);
+  document.getElementById('stat-lang').textContent = detectedLang;
+  document.getElementById('stat-lines').textContent = lines.length;
+
+  issues = [];
+
+  // Route to language-specific analyzer
+  if (detectedLang === 'JS' || detectedLang === 'TS') {
+    analyzeJS(code, lines);
+  } else if (detectedLang === 'PY') {
+    analyzePY(code, lines);
+  } else if (detectedLang === 'CSS') {
+    analyzeCSS(code, lines);
+  } else if (detectedLang === 'HTML') {
+    analyzeHTML(code, lines);
+  } else if (detectedLang === 'JSON') {
+    analyzeJSON(code);
+  } else if (detectedLang === 'SH') {
+    analyzeSH(code, lines);
+  } else {
+    analyzeJS(code, lines); // fallback
+  }
+
+  detectDeps(code, detectedLang);
+  securityScan(code, lines, detectedLang);
+  buildFixes();
+
+  // Execute console for JS/TS only
+  if (detectedLang === 'JS' || detectedLang === 'TS') {
+    runConsole(code);
+  } else {
+    document.getElementById('console-out').innerHTML = '<span style="color:var(--muted)">// Console execution only available for JS/TS</span>';
+    document.getElementById('badge-console').textContent = '—';
+  }
+
+  renderAll();
+  updateGutter();
+
+  // Auto-open issues tab
+  showTab('issues');
+}
+
+// ── JS / TS Analyzer (expanded) ────────────────────────────────
+function analyzeJS(code, lines) {
+  lines.forEach((line, i) => {
+    const n = i + 1;
+    const t = line.trim();
+
+    if (!t || t.startsWith('//') || t.startsWith('/*')) return;
+
+    // Trailing whitespace
+    if (line !== line.trimEnd()) {
+      issues.push({ type: 'warn', line: n, msg: `Trailing whitespace on line ${n}`, fix: 'trim' });
+    }
+
+    // var usage
+    if (/\bvar\b/.test(line)) {
+      issues.push({ type: 'warn', line: n, msg: `Use 'const' or 'let' instead of 'var' on line ${n}`, fix: 'var-to-const' });
+    }
+
+    // == instead of ===
+    if (/[^=!]==[^=]/.test(line) && !/===/.test(line)) {
+      issues.push({ type: 'info', line: n, msg: `Loose equality (==) on line ${n} — consider ===`, fix: null });
+    }
+
+    // console.log left in
+    if (/console\.(log|warn|error|debug)/.test(line)) {
+      issues.push({ type: 'warn', line: n, msg: `console.* left in code on line ${n}`, fix: 'console' });
+    }
+
+    // Missing semicolon (simple heuristic)
+    if (t.length > 3 && !t.endsWith(';') && !t.endsWith('{') && !t.endsWith('}') &&
+        !t.endsWith(',') && !t.startsWith('if') && !t.startsWith('for') &&
+        !t.startsWith('while') && !t.startsWith('function') && !t.startsWith('class') &&
+        !t.startsWith('//') && !t.includes('=>') && !/^(const|let|var)\s/.test(t)) {
+      issues.push({ type: 'info', line: n, msg: `Possible missing semicolon on line ${n}`, fix: 'semi' });
+    }
+
+    // TODO / FIXME
+    if (/TODO|FIXME|HACK/i.test(line)) {
+      issues.push({ type: 'info', line: n, msg: `TODO/FIXME comment on line ${n}`, fix: null });
+    }
+  });
+
+  // Global checks
+  const opens = (code.match(/\{/g) || []).length;
+  const closes = (code.match(/\}/g) || []).length;
+  if (opens !== closes) {
+    issues.push({ type: 'err', line: 1, msg: `Mismatched curly braces: ${opens} open vs ${closes} close`, fix: null });
+  }
+
+  const op = (code.match(/\(/g) || []).length;
+  const cl = (code.match(/\)/g) || []).length;
+  if (op !== cl) {
+    issues.push({ type: 'err', line: 1, msg: `Mismatched parentheses: ${op} open vs ${cl} close`, fix: null });
+  }
+
+  if (/async function/.test(code) && !/await/.test(code)) {
+    issues.push({ type: 'warn', line: 1, msg: `async function declared but no await used`, fix: null });
+  }
+}
+
+// ── Python Analyzer ────────────────────────────────────────────
+function analyzePY(code, lines) {
+  let indentStack = [0];
+  lines.forEach((line, i) => {
+    const n = i + 1;
+    if (!line.trim() || line.trim().startsWith('#')) return;
+
+    // Mixed tabs/spaces
+    const leading = line.match(/^[\t ]*/)[0];
+    if (/\t/.test(leading) && / /.test(leading)) {
+      issues.push({ type: 'err', line: n, msg: `Mixed tabs and spaces on line ${n}`, fix: 'indent' });
+    }
+
+    // Python 2 print
+    if (/^(\s*)print [^(]/.test(line)) {
+      issues.push({ type: 'warn', line: n, msg: `Python 2 print statement on line ${n} — use print()`, fix: 'print' });
+    }
+
+    // Bare except
+    if (/except\s*:\s*$/.test(line)) {
+      issues.push({ type: 'warn', line: n, msg: `Bare 'except:' on line ${n} — catch specific exceptions`, fix: null });
+    }
+
+    // Mutable default argument
+    if (/def .+\(.*=\s*[\[\{]/.test(line)) {
+      issues.push({ type: 'warn', line: n, msg: `Mutable default argument on line ${n}`, fix: null });
+    }
+  });
+
+  if (!/if __name__ == ['"]__main__['"]/.test(code) && /def /.test(code)) {
+    issues.push({ type: 'info', line: 1, msg: `Consider adding if __name__ == "__main__": guard`, fix: null });
+  }
+}
+
+// ── CSS Analyzer ───────────────────────────────────────────────
+function analyzeCSS(code, lines) {
+  const opens = (code.match(/\{/g) || []).length;
+  const closes = (code.match(/\}/g) || []).length;
+  if (opens !== closes) {
+    issues.push({ type: 'err', line: 1, msg: `CSS brace mismatch: ${opens} { vs ${closes} }`, fix: null });
+  }
+
+  lines.forEach((line, i) => {
+    const n = i + 1;
+    if (/!important/.test(line)) {
+      issues.push({ type: 'warn', line: n, msg: `!important on line ${n} — avoid when possible`, fix: null });
+    }
+    if (/color:\s*#[0-9a-f]{3,6}/i.test(line) && !/var\(/.test(line)) {
+      issues.push({ type: 'info', line: n, msg: `Hardcoded color on line ${n} — consider CSS variable`, fix: null });
+    }
+  });
+}
+
+// ── HTML Analyzer ──────────────────────────────────────────────
+function analyzeHTML(code, lines) {
+  const selfClose = new Set(['img','br','hr','input','meta','link','area','base','col','embed','param','source','track','wbr']);
+  const tagStack = [];
+  const tagRe = /<\/?([a-z][a-z0-9]*)\b[^>]*>/gi;
+  let m;
+
+  while ((m = tagRe.exec(code)) !== null) {
+    const tag = m[1].toLowerCase();
+    if (selfClose.has(tag)) continue;
+    if (m[0].startsWith('</')) {
+      if (tagStack.length && tagStack[tagStack.length-1] === tag) tagStack.pop();
+      else issues.push({ type: 'err', line: 1, msg: `Unexpected closing tag </${tag}>`, fix: null });
+    } else if (!m[0].endsWith('/>')) {
+      tagStack.push(tag);
+    }
+  }
+  tagStack.forEach(t => {
+    issues.push({ type: 'err', line: 1, msg: `Unclosed tag: <${t}>`, fix: null });
+  });
+
+  lines.forEach((line, i) => {
+    if (/<img/i.test(line) && !/alt=/i.test(line)) {
+      issues.push({ type: 'warn', line: i+1, msg: `<img> missing alt attribute on line ${i+1}`, fix: null });
+    }
+  });
+}
+
+// ── JSON Analyzer ──────────────────────────────────────────────
+function analyzeJSON(code) {
+  try {
+    JSON.parse(code);
+    issues.push({ type: 'info', line: 1, msg: `Valid JSON ✓`, fix: null });
+  } catch (e) {
+    issues.push({ type: 'err', line: 1, msg: `Invalid JSON: ${e.message}`, fix: null });
+  }
+}
+
+// ── Shell Analyzer ─────────────────────────────────────────────
+function analyzeSH(code, lines) {
+  lines.forEach((line, i) => {
+    const n = i + 1;
+    if (/\brm\s+-rf\b/.test(line)) {
+      issues.push({ type: 'err', line: n, msg: `Dangerous rm -rf on line ${n}`, fix: null });
+    }
+    if (/curl .+\|\s*(ba|z)?sh/.test(line)) {
+      issues.push({ type: 'warn', line: n, msg: `Pipe curl to shell on line ${n} — verify source`, fix: null });
+    }
+    if (/\$[a-zA-Z_][a-zA-Z0-9_]*/.test(line) && !/"\$/.test(line) && !/'\$/.test(line)) {
+      issues.push({ type: 'warn', line: n, msg: `Unquoted variable on line ${n} — wrap in quotes`, fix: null });
+    }
+  });
+
+  if (!/set -e/.test(code)) {
+    issues.push({ type: 'info', line: 1, msg: `Consider 'set -e' for error handling`, fix: null });
+  }
+  if (!/set -u/.test(code)) {
+    issues.push({ type: 'info', line: 1, msg: `Consider 'set -u' for undefined var checks`, fix: null });
+  }
+}
+
+// ── Dependency Detection ───────────────────────────────────────
+function detectDeps(code, lang) {
+  deps = [];
+  if (lang === 'JS' || lang === 'TS') {
+    const re = /(?:import\s+.+?\s+from|require\()['"]([^'"./][^'"]*)['"]/g;
+    let m;
+    while ((m = re.exec(code)) !== null) {
+      if (!deps.find(d => d.name === m[1])) {
+        deps.push({ name: m[1], cmd: `npm install ${m[1]}` });
+      }
+    }
+  }
+  if (lang === 'PY') {
+    const re = /^(?:import|from)\s+([a-zA-Z_][a-zA-Z0-9_]*)/gm;
+    const stdlib = new Set(['os','sys','re','json','math','time','datetime','pathlib','typing','collections','itertools','functools','io','abc','copy','random','string','struct','hashlib','base64','urllib','http','threading','multiprocessing','subprocess','shutil','glob','tempfile','logging','unittest','argparse','configparser','csv','sqlite3','email','html','xml','ast','dis','inspect','traceback','warnings','contextlib','dataclasses','enum','weakref','gc','platform','socket','ssl','subprocess']);
+    let m;
+    while ((m = re.exec(code)) !== null) {
+      const pkg = m[1];
+      if (!stdlib.has(pkg) && !deps.find(d => d.name === pkg)) {
+        deps.push({ name: pkg, cmd: `pip install ${pkg}` });
+      }
+    }
+  }
+}
+
+// ── Security Scan (REALsure style) ─────────────────────────────
+function securityScan(code, lines, lang) {
+  secIssues = [];
+  const patterns = [
+    { re: /password\s*=\s*['"][^'"]+['"]/i,     sev: 'HIGH',   msg: 'Hardcoded password detected' },
+    { re: /api_?key\s*=\s*['"][^'"]+['"]/i,     sev: 'HIGH',   msg: 'Hardcoded API key detected' },
+    { re: /secret\s*=\s*['"][^'"]+['"]/i,       sev: 'HIGH',   msg: 'Hardcoded secret detected' },
+    { re: /token\s*=\s*['"][^'"]+['"]/i,        sev: 'MEDIUM', msg: 'Hardcoded token detected' },
+    { re: /eval\s*\(/,                          sev: 'HIGH',   msg: 'eval() — arbitrary code execution risk' },
+    { re: /innerHTML\s*=/,                      sev: 'MEDIUM', msg: 'innerHTML assignment — XSS risk' },
+    { re: /document\.write\s*\(/,               sev: 'MEDIUM', msg: 'document.write() — XSS risk' },
+    { re: /exec\s*\(/,                          sev: 'MEDIUM', msg: 'exec() call — code injection risk' },
+    { re: /SELECT .+ FROM .+ WHERE/i,           sev: 'MEDIUM', msg: 'Raw SQL — use parameterized queries' },
+    { re: /http:\/\//,                          sev: 'LOW',    msg: 'HTTP (not HTTPS) URL detected' },
+    { re: /new Function\s*\(/,                  sev: 'HIGH',   msg: 'new Function() — code injection risk' },
+  ];
+
+  lines.forEach((line, i) => {
+    patterns.forEach(p => {
+      if (p.re.test(line)) {
+        secIssues.push({ sev: p.sev, msg: p.msg, line: i + 1 });
+      }
+    });
+  });
+}
+
+// ── Safe Console Execution (JS only) ────────────────────────────
+// Runs pasted code inside a sandboxed iframe (allow-scripts, no
+// allow-same-origin) instead of new Function() in this page's own context —
+// that older approach gave pasted code full access to this page's DOM,
+// cookies, and globals, which is exactly what the SECURITY tab flags
+// eval()/new Function() for in someone else's code. The sandbox is torn
+// down and rebuilt on every run, which also reclaims a hung execution.
+let sandboxRunId = 0;
+function freshSandbox() {
+  const old = document.getElementById('sf-sandbox');
+  if (old) old.remove();
+  const f = document.createElement('iframe');
+  f.id = 'sf-sandbox';
+  f.setAttribute('sandbox', 'allow-scripts');
+  f.style.display = 'none';
+  f.srcdoc = `<script>
+    window.addEventListener('message', function(e) {
+      var logs = [];
+      var origLog = console.log, origErr = console.error, origWarn = console.warn;
+      console.log   = function(){ logs.push({type:'log',  msg:Array.prototype.map.call(arguments,String).join(' ')}); };
+      console.error = function(){ logs.push({type:'err',  msg:Array.prototype.map.call(arguments,String).join(' ')}); };
+      console.warn  = function(){ logs.push({type:'warn', msg:Array.prototype.map.call(arguments,String).join(' ')}); };
+      try {
+        new Function(e.data.code)();
+      } catch (err) {
+        logs.push({ type: 'err', msg: 'Runtime error: ' + err.message });
+      }
+      console.log = origLog; console.error = origErr; console.warn = origWarn;
+      parent.postMessage({ sfSandboxResult: true, id: e.data.id, logs: logs }, '*');
+    });
+  <\/script>`;
+  document.body.appendChild(f);
+  return f;
+}
+
+function runConsole(code) {
+  const out = document.getElementById('console-out');
+  const id = ++sandboxRunId;
+  const frame = freshSandbox();
+
+  const finish = (logs) => {
+    if (!logs || logs.length === 0) {
+      out.innerHTML = '<span style="color:var(--muted)">// No console output</span>';
+    } else {
+      out.innerHTML = logs.map(l => {
+        const cls = l.type === 'err' ? 'err-line' : l.type === 'warn' ? 'warn-line' : '';
+        return `<span class="${cls}">${escHtml(l.msg)}</span>`;
+      }).join('\n');
+    }
+    document.getElementById('badge-console').textContent = (logs && logs.length) || '0';
+  };
+
+  const timeout = setTimeout(() => {
+    window.removeEventListener('message', onMsg);
+    if (frame.parentNode) frame.remove(); // reclaim a hung/looping sandbox
+    finish([{ type: 'err', msg: 'Execution timed out after 1.5s (possible infinite loop) — sandbox terminated' }]);
+  }, 1500);
+
+  function onMsg(e) {
+    if (!e.data || !e.data.sfSandboxResult || e.data.id !== id) return;
+    clearTimeout(timeout);
+    window.removeEventListener('message', onMsg);
+    finish(e.data.logs);
+  }
+  window.addEventListener('message', onMsg);
+
+  frame.onload = () => frame.contentWindow.postMessage({ code, id }, '*');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ── Convert ──────────────────────────────────────────────────────
+// Small, correct converters over big/fuzzy ones — no hand-rolled YAML here,
+// just the formats a hand-checked implementation can get exactly right.
+function csvParseRows(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ',') {
+      row.push(field); field = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      if (row.length > 1 || row[0] !== '') rows.push(row);
+      row = [];
+    } else {
+      field += c;
+    }
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function csvEscapeField(v) {
+  const s = v == null ? '' : String(v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function jsonToCsv(text) {
+  const data = JSON.parse(text);
+  const rows = Array.isArray(data) ? data : [data];
+  if (rows.length === 0) return '';
+  const cols = [];
+  rows.forEach(o => {
+    if (o && typeof o === 'object') Object.keys(o).forEach(k => { if (!cols.includes(k)) cols.push(k); });
+  });
+  if (cols.length === 0) throw new Error('JSON must be an object or an array of objects');
+  const lines = [cols.map(csvEscapeField).join(',')];
+  rows.forEach(o => {
+    lines.push(cols.map(c => {
+      const v = o ? o[c] : undefined;
+      return csvEscapeField(v && typeof v === 'object' ? JSON.stringify(v) : v);
+    }).join(','));
+  });
+  return lines.join('\n');
+}
+
+function csvToJson(text) {
+  const rows = csvParseRows(text.trim());
+  if (rows.length === 0) return '[]';
+  const header = rows[0];
+  const out = rows.slice(1).map(r => {
+    const o = {};
+    header.forEach((h, idx) => { o[h] = r[idx] !== undefined ? r[idx] : ''; });
+    return o;
+  });
+  return JSON.stringify(out, null, 2);
+}
+
+function b64EncodeUtf8(str) {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(str)));
+}
+
+function b64DecodeUtf8(str) {
+  return new TextDecoder().decode(Uint8Array.from(atob(str.trim()), c => c.charCodeAt(0)));
+}
+
+function runConvert() {
+  const ed = document.getElementById('editor');
+  const op = document.getElementById('convert-op').value;
+  const errBox = document.getElementById('convert-error');
+  const outBox = document.getElementById('convert-output');
+  errBox.style.display = 'none';
+  try {
+    let result;
+    switch (op) {
+      case 'json2csv':   result = jsonToCsv(ed.value); break;
+      case 'csv2json':   result = csvToJson(ed.value); break;
+      case 'json-pretty':result = JSON.stringify(JSON.parse(ed.value), null, 2); break;
+      case 'json-min':   result = JSON.stringify(JSON.parse(ed.value)); break;
+      case 'b64-enc':    result = b64EncodeUtf8(ed.value); break;
+      case 'b64-dec':    result = b64DecodeUtf8(ed.value); break;
+      case 'url-enc':    result = encodeURIComponent(ed.value); break;
+      case 'url-dec':    result = decodeURIComponent(ed.value); break;
+      default:           result = '';
+    }
+    outBox.textContent = result || '// (empty result)';
+  } catch (e) {
+    outBox.textContent = '';
+    errBox.textContent = 'Conversion failed: ' + e.message;
+    errBox.style.display = 'block';
+  }
+}
+
+function copyConvertOutput() {
+  const text = document.getElementById('convert-output').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btns = document.querySelectorAll('.convert-actions .btn-ghost');
+    if (btns.length) {
+      const orig = btns[0].textContent;
+      btns[0].textContent = 'COPIED!';
+      setTimeout(() => { btns[0].textContent = orig; }, 1400);
+    }
+  }).catch(() => {});
+}
+
+function loadConvertOutput() {
+  const out = document.getElementById('convert-output').textContent;
+  if (!out || out.startsWith('// ')) return;
+  document.getElementById('editor').value = out;
+  updateGutter();
+}
+
+// ── Build available auto-fixes ─────────────────────────────────
+function buildFixes() {
+  fixes = [];
+  const hasTrim  = issues.some(i => i.fix === 'trim');
+  const hasVar   = issues.some(i => i.fix === 'var-to-const');
+  const hasSemi  = issues.some(i => i.fix === 'semi');
+  const hasConsole = issues.some(i => i.fix === 'console');
+
+  if (hasTrim) fixes.push({ id: 'trim-all', label: 'Remove trailing whitespace', desc: 'Strip trailing spaces from every line', auto: true });
+  if (hasVar)  fixes.push({ id: 'var-all',  label: 'var → const', desc: "Replace all 'var' with 'const' (safe for most cases)", auto: true });
+  if (hasSemi) fixes.push({ id: 'semi-all', label: 'Add missing semicolons', desc: 'Append ; to obvious statement lines (JS only)', auto: true });
+  if (hasConsole) fixes.push({ id: 'console-all', label: 'Remove console.* calls', desc: 'Strip all console.log/warn/error/debug lines', auto: true });
+}
+
+// ── Render everything ──────────────────────────────────────────
+function renderAll() {
+  const errs  = issues.filter(i => i.type === 'err').length;
+  const warns = issues.filter(i => i.type === 'warn').length;
+  const infos = issues.filter(i => i.type === 'info').length;
+
+  document.getElementById('stat-err').textContent  = errs;
+  document.getElementById('stat-warn').textContent = warns;
+  document.getElementById('stat-info').textContent = infos;
+
+  const badge = document.getElementById('badge-issues');
+  badge.textContent = issues.length;
+  badge.className = 'badge' + (errs > 0 ? '' : warns > 0 ? ' warn' : issues.length ? ' info' : ' ok');
+
+  document.getElementById('badge-deps').textContent = deps.length;
+  document.getElementById('badge-sec').textContent  = secIssues.length;
+  const secBadge = document.getElementById('badge-sec');
+  secBadge.className = 'badge' + (secIssues.some(s => s.sev === 'HIGH') ? '' : secIssues.length ? ' warn' : ' ok');
+
+  // Issues list
+  const il = document.getElementById('issues-list');
+  const ie = document.getElementById('issues-empty');
+  if (issues.length === 0) {
+    ie.style.display = 'none';
+    il.innerHTML = `<div class="ok-banner">✅ No issues found — code looks clean. Helix approves.</div>`;
+  } else {
+    ie.style.display = 'none';
+    il.innerHTML = issues.map((issue, idx) => `
+      <div class="issue ${issue.type}" onclick="jumpTo(${issue.line})">
+        <div class="issue-icon">${issue.type === 'err' ? '🔴' : issue.type === 'warn' ? '🟡' : '🔵'}</div>
+        <div class="issue-body">
+          <div class="issue-msg">${escHtml(issue.msg)}</div>
+          <div class="issue-loc">Line ${issue.line} · ${detectedLang}</div>
+        </div>
+        ${issue.fix ? `<div class="fix-chip" onclick="event.stopPropagation();applyFix('${issue.fix}', ${idx})">fix</div>` : ''}
+      </div>`).join('');
+  }
+
+  // Deps
+  const dl = document.getElementById('deps-list');
+  dl.innerHTML = deps.length
+    ? deps.map(d => `
+        <div class="dep-item">
+          <span class="dep-name">${escHtml(d.name)}</span>
+          <span class="dep-cmd">${escHtml(d.cmd)}</span>
+        </div>`).join('')
+    : `<div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No external dependencies detected</div></div>`;
+
+  // Security
+  const sl = document.getElementById('sec-list');
+  sl.innerHTML = secIssues.length
+    ? secIssues.map(s => `
+        <div class="sec-item">
+          <div class="sec-sev ${s.sev}">${s.sev}</div>
+          <div class="sec-msg">${escHtml(s.msg)}</div>
+          <div class="sec-line">Line ${s.line}</div>
+        </div>`).join('')
+    : `<div class="empty"><div class="empty-icon">🛡️</div><div class="empty-text">No security issues detected</div></div>`;
+
+  // Fix panel
+  const fl = document.getElementById('fix-list');
+  fl.innerHTML = fixes.length
+    ? fixes.map(f => `
+        <div class="fix-row">
+          <input type="checkbox" id="fix-${f.id}" checked>
+          <div class="fix-row-body">
+            <div class="fix-row-title">${escHtml(f.label)}</div>
+            <div class="fix-row-desc">${escHtml(f.desc)}</div>
+          </div>
+        </div>`).join('')
+    : `<div class="empty"><div class="empty-text">No auto-fixable issues found</div></div>`;
+}
+
+// ── Navigation ─────────────────────────────────────────────────
+function jumpTo(line) {
+  const ed = document.getElementById('editor');
+  const lines = ed.value.split('\n');
+  let pos = 0;
+  for (let i = 0; i < line - 1 && i < lines.length; i++) {
+    pos += lines[i].length + 1;
+  }
+  ed.focus();
+  ed.setSelectionRange(pos, pos + (lines[line-1] || '').length);
+
+  const lineHeight = 20;
+  const paddingTop = 13;
+  ed.scrollTop = Math.max(0, (line - 1) * lineHeight + paddingTop - ed.clientHeight / 2);
+}
+
+// ── Apply fixes (operational) ──────────────────────────────────
+function applyFix(type, idx) {
+  const ed = document.getElementById('editor');
+  let code = ed.value;
+
+  if (type === 'trim') {
+    code = code.split('\n').map(l => l.trimEnd()).join('\n');
+  } else if (type === 'var-to-const' || type === 'var') {
+    code = code.replace(/\bvar\b/g, 'const');
+  } else if (type === 'semi') {
+    code = code.split('\n').map(l => {
+      const t = l.trimEnd();
+      if (t && !t.endsWith(';') && !t.endsWith('{') && !t.endsWith('}') &&
+          !t.endsWith(',') && !t.startsWith('//') && !t.startsWith('if') &&
+          !t.startsWith('for') && !t.startsWith('while') && !t.startsWith('function') &&
+          !t.startsWith('class') && t.length > 4) {
+        return t + ';';
+      }
+      return l;
+    }).join('\n');
+  } else if (type === 'console') {
+    code = code.split('\n').filter(l => !/console\.(log|warn|error|debug)/.test(l)).join('\n');
+  }
+
+  ed.value = code;
+  analyze(); // re-run to update everything
+}
+
+function applyAllFixes() {
+  const ed = document.getElementById('editor');
+  let code = ed.value;
+  code = code.split('\n').map(l => l.trimEnd()).join('\n');
+  code = code.replace(/\bvar\b/g, 'const');
+  code = code.split('\n').filter(l => !/console\.(log|warn|error|debug)/.test(l)).join('\n');
+  ed.value = code;
+  analyze();
+}
+
+function applyCheckedFixes() {
+  const ed = document.getElementById('editor');
+  let code = ed.value;
+
+  fixes.forEach(f => {
+    const cb = document.getElementById(`fix-${f.id}`);
+    if (cb && cb.checked) {
+      if (f.id === 'trim-all') code = code.split('\n').map(l => l.trimEnd()).join('\n');
+      if (f.id === 'var-all')  code = code.replace(/\bvar\b/g, 'const');
+      if (f.id === 'semi-all') {
+        code = code.split('\n').map(l => {
+          const t = l.trimEnd();
+          if (t && !t.endsWith(';') && !t.endsWith('{') && !t.endsWith('}') && !t.endsWith(',') &&
+              !t.startsWith('//') && t.length > 4) return t + ';';
+          return l;
+        }).join('\n');
+      }
+      if (f.id === 'console-all') {
+        code = code.split('\n').filter(l => !/console\.(log|warn|error|debug)/.test(l)).join('\n');
+      }
+    }
+  });
+
+  ed.value = code;
+  analyze();
+}
+
+function checkAllFixes()   { document.querySelectorAll('#fix-list input[type=checkbox]').forEach(c => c.checked = true); }
+function uncheckAllFixes() { document.querySelectorAll('#fix-list input[type=checkbox]').forEach(c => c.checked = false); }
+
+function copyFixed() {
+  const text = document.getElementById('editor').value;
+  navigator.clipboard.writeText(text).then(() => {
+    const btns = document.querySelectorAll('.btn-sec');
+    if (btns.length) {
+      const orig = btns[0].textContent;
+      btns[0].textContent = 'COPIED!';
+      setTimeout(() => { btns[0].textContent = orig; }, 1400);
+    }
+  });
+}
+
+// ── Tabs ───────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  const tab = document.querySelector(`.tab[data-tab="${name}"]`);
+  if (tab) tab.classList.add('active');
+}
+
+// ── Fix Panel ──────────────────────────────────────────────────
+function toggleFixPanel() {
+  document.getElementById('fix-panel').classList.toggle('open');
+}
+
+// ── Clear Everything ───────────────────────────────────────────
+function clearAll() {
+  document.getElementById('editor').value = '';
+  issues = []; deps = []; secIssues = []; fixes = [];
+  document.getElementById('issues-list').innerHTML = '';
+  document.getElementById('issues-empty').style.display = 'flex';
+  document.getElementById('console-out').innerHTML = '// Console output will appear here after analysis';
+  document.getElementById('deps-list').innerHTML = '<div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No dependencies detected yet</div></div>';
+  document.getElementById('sec-list').innerHTML = '<div class="empty"><div class="empty-icon">🛡️</div><div class="empty-text">No security issues detected yet</div></div>';
+  ['stat-err','stat-warn','stat-info','stat-lines','stat-lang'].forEach(id => {
+    document.getElementById(id).textContent = id.includes('lines') || id.includes('err') || id.includes('warn') || id.includes('info') ? '0' : '—';
+  });
+  document.getElementById('badge-issues').textContent = '0';
+  document.getElementById('badge-console').textContent = '—';
+  document.getElementById('badge-deps').textContent = '0';
+  document.getElementById('badge-sec').textContent = '0';
+  updateGutter();
+}
+
+// ── Keyboard Shortcuts ─────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    analyze();
+  }
+  if (e.key === 'Escape') {
+    const fp = document.getElementById('fix-panel');
+    if (fp.classList.contains('open')) fp.classList.remove('open');
+  }
+});
+
+// ── Init ───────────────────────────────────────────────────────
+function init() {
+  setupEditor();
+  updateGutter();
+
+  // Demo hint in console
+  document.getElementById('console-out').innerHTML =
+    '<span style="color:var(--muted)">// Ready. Paste JS/TS code and ANALYZE to see live console output.</span>';
+
+  // Phoenix welcome in issues on first load (subtle)
+  setTimeout(() => {
+    const ie = document.getElementById('issues-empty');
+    if (ie && ie.style.display !== 'none') {
+      ie.innerHTML = `
+        <div class="empty-icon">🔥</div>
+        <div class="empty-text">Phoenix ScriptForge ready.<br>Drop code → ANALYZE → Self-heal.</div>
+      `;
+    }
+  }, 800);
+
+  // Make sure gutter stays in sync on resize
+  window.addEventListener('resize', updateGutter);
+}
+
+// Boot
+init();
+</script>
+</body>
+</html>
