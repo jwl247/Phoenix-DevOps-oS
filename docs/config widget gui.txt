@@ -1,0 +1,606 @@
+#!/usr/bin/env python3
+"""
+Config Centralizer GUI Widget
+Interactive interface for scanning and managing configs
+"""
+
+import sys
+from pathlib import Path
+from datetime import datetime
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QTextEdit,
+    QProgressBar, QGroupBox, QSplitter, QCheckBox, QLineEdit,
+    QMessageBox, QFileDialog, QTabWidget
+)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QFont, QColor
+
+# Import the scanner backend
+# (In real deployment, this would be: from config_centralizer import ConfigScanner, ConfigCentralizer)
+
+
+class ScanWorker(QThread):
+    """Background thread for scanning"""
+    progress = pyqtSignal(str)
+    finished = pyqtSignal(list, dict)
+    
+    def __init__(self, scanner):
+        super().__init__()
+        self.scanner = scanner
+    
+    def run(self):
+        def progress_callback(msg):
+            self.progress.emit(msg)
+        
+        results = self.scanner.scan(progress_callback)
+        summary = self.scanner.get_summary()
+        self.finished.emit(results, summary)
+
+
+class ConfigCentralizerWidget(QMainWindow):
+    """Main GUI widget for config management"""
+    
+    def __init__(self):
+        super().__init__()
+        # Note: In real deployment, import these from the backend
+        # self.scanner = ConfigScanner()
+        # self.centralizer = ConfigCentralizer()
+        
+        self.scan_results = []
+        self.init_ui()
+    
+    def init_ui(self):
+        """Initialize user interface"""
+        self.setWindowTitle("Config Centralizer - Life OS")
+        self.setGeometry(100, 100, 1200, 800)
+        
+        # Central widget
+        central = QWidget()
+        self.setCentralWidget(central)
+        layout = QVBoxLayout(central)
+        
+        # Title
+        title = QLabel("🔍 Config Centralizer")
+        title_font = QFont()
+        title_font.setPointSize(18)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        layout.addWidget(title)
+        
+        subtitle = QLabel("Find and centralize all your scattered configs")
+        layout.addWidget(subtitle)
+        
+        # Tab widget
+        tabs = QTabWidget()
+        layout.addWidget(tabs)
+        
+        # Tab 1: Scanner
+        tabs.addTab(self.create_scanner_tab(), "🔍 Scan & Import")
+        
+        # Tab 2: Manage
+        tabs.addTab(self.create_manage_tab(), "📁 Manage Configs")
+        
+        # Tab 3: Sync
+        tabs.addTab(self.create_sync_tab(), "🔄 Sync & Version")
+        
+        # Status bar
+        self.status_label = QLabel("Ready to scan")
+        layout.addWidget(self.status_label)
+    
+    def create_scanner_tab(self) -> QWidget:
+        """Create scanner tab"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Scan controls
+        control_layout = QHBoxLayout()
+        
+        self.scan_btn = QPushButton("🔍 Scan System")
+        self.scan_btn.clicked.connect(self.start_scan)
+        control_layout.addWidget(self.scan_btn)
+        
+        self.import_selected_btn = QPushButton("📥 Import Selected")
+        self.import_selected_btn.clicked.connect(self.import_selected)
+        self.import_selected_btn.setEnabled(False)
+        control_layout.addWidget(self.import_selected_btn)
+        
+        self.import_all_btn = QPushButton("📥 Import All Recommended")
+        self.import_all_btn.clicked.connect(self.import_recommended)
+        self.import_all_btn.setEnabled(False)
+        control_layout.addWidget(self.import_all_btn)
+        
+        control_layout.addStretch()
+        layout.addLayout(control_layout)
+        
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
+        
+        self.progress_label = QLabel("")
+        layout.addWidget(self.progress_label)
+        
+        # Summary stats
+        stats_group = QGroupBox("Scan Summary")
+        stats_layout = QVBoxLayout(stats_group)
+        self.stats_label = QLabel("No scan performed yet")
+        stats_layout.addWidget(self.stats_label)
+        layout.addWidget(stats_group)
+        
+        # Splitter for tree and details
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # Results tree
+        tree_widget = QWidget()
+        tree_layout = QVBoxLayout(tree_widget)
+        tree_layout.addWidget(QLabel("Found Configurations:"))
+        
+        # Filter controls
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("Filter:"))
+        self.filter_input = QLineEdit()
+        self.filter_input.setPlaceholderText("Type to filter...")
+        self.filter_input.textChanged.connect(self.filter_results)
+        filter_layout.addWidget(self.filter_input)
+        
+        self.show_recommended_only = QCheckBox("Recommended only")
+        self.show_recommended_only.stateChanged.connect(self.filter_results)
+        filter_layout.addWidget(self.show_recommended_only)
+        
+        tree_layout.addLayout(filter_layout)
+        
+        self.results_tree = QTreeWidget()
+        self.results_tree.setHeaderLabels(['', 'Name', 'Category', 'Size', 'Modified'])
+        self.results_tree.setColumnWidth(0, 30)
+        self.results_tree.setColumnWidth(1, 350)
+        self.results_tree.itemSelectionChanged.connect(self.show_config_details)
+        tree_layout.addWidget(self.results_tree)
+        
+        splitter.addWidget(tree_widget)
+        
+        # Details panel
+        details_widget = QWidget()
+        details_layout = QVBoxLayout(details_widget)
+        details_layout.addWidget(QLabel("Config Details:"))
+        
+        self.details_text = QTextEdit()
+        self.details_text.setReadOnly(True)
+        details_layout.addWidget(self.details_text)
+        
+        # Preview
+        details_layout.addWidget(QLabel("File Preview:"))
+        self.preview_text = QTextEdit()
+        self.preview_text.setReadOnly(True)
+        self.preview_text.setMaximumHeight(200)
+        details_layout.addWidget(self.preview_text)
+        
+        splitter.addWidget(details_widget)
+        splitter.setSizes([600, 400])
+        
+        layout.addWidget(splitter)
+        
+        return widget
+    
+    def create_manage_tab(self) -> QWidget:
+        """Create management tab"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Master directory info
+        info_group = QGroupBox("Centralized Config Location")
+        info_layout = QVBoxLayout(info_group)
+        
+        master_dir = Path.home() / '.config/lifeOS/master'
+        info_layout.addWidget(QLabel(f"Master Directory: {master_dir}"))
+        
+        btn_layout = QHBoxLayout()
+        
+        open_btn = QPushButton("📂 Open in File Manager")
+        open_btn.clicked.connect(lambda: self.open_directory(master_dir))
+        btn_layout.addWidget(open_btn)
+        
+        terminal_btn = QPushButton("💻 Open in Terminal")
+        terminal_btn.clicked.connect(lambda: self.open_terminal(master_dir))
+        btn_layout.addWidget(terminal_btn)
+        
+        btn_layout.addStretch()
+        info_layout.addLayout(btn_layout)
+        
+        layout.addWidget(info_group)
+        
+        # Imported configs tree
+        layout.addWidget(QLabel("Imported Configurations:"))
+        
+        self.imported_tree = QTreeWidget()
+        self.imported_tree.setHeaderLabels(['Config', 'Original Location', 'Category', 'Last Synced'])
+        layout.addWidget(self.imported_tree)
+        
+        # Actions
+        action_layout = QHBoxLayout()
+        
+        refresh_btn = QPushButton("🔄 Refresh List")
+        refresh_btn.clicked.connect(self.refresh_imported)
+        action_layout.addWidget(refresh_btn)
+        
+        edit_btn = QPushButton("✏️ Edit Selected")
+        edit_btn.clicked.connect(self.edit_selected_config)
+        action_layout.addWidget(edit_btn)
+        
+        remove_btn = QPushButton("🗑️ Remove from Master")
+        remove_btn.clicked.connect(self.remove_from_master)
+        action_layout.addWidget(remove_btn)
+        
+        action_layout.addStretch()
+        layout.addLayout(action_layout)
+        
+        return widget
+    
+    def create_sync_tab(self) -> QWidget:
+        """Create sync tab"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Sync controls
+        sync_group = QGroupBox("Synchronization")
+        sync_layout = QVBoxLayout(sync_group)
+        
+        sync_layout.addWidget(QLabel(
+            "Sync master configs to their original locations.\n"
+            "Services will be reloaded automatically."
+        ))
+        
+        btn_layout = QHBoxLayout()
+        
+        sync_all_btn = QPushButton("🔄 Sync All Configs")
+        sync_all_btn.clicked.connect(self.sync_all_configs)
+        btn_layout.addWidget(sync_all_btn)
+        
+        sync_selected_btn = QPushButton("🔄 Sync Selected Only")
+        sync_selected_btn.clicked.connect(self.sync_selected_configs)
+        btn_layout.addWidget(sync_selected_btn)
+        
+        btn_layout.addStretch()
+        sync_layout.addLayout(btn_layout)
+        
+        layout.addWidget(sync_group)
+        
+        # Git version control
+        git_group = QGroupBox("Version Control (Git)")
+        git_layout = QVBoxLayout(git_group)
+        
+        git_btn_layout = QHBoxLayout()
+        
+        init_git_btn = QPushButton("🎯 Initialize Git")
+        init_git_btn.clicked.connect(self.init_git_repo)
+        git_btn_layout.addWidget(init_git_btn)
+        
+        commit_btn = QPushButton("💾 Commit Changes")
+        commit_btn.clicked.connect(self.commit_changes)
+        git_btn_layout.addWidget(commit_btn)
+        
+        history_btn = QPushButton("📜 View History")
+        history_btn.clicked.connect(self.view_git_history)
+        git_btn_layout.addWidget(history_btn)
+        
+        git_btn_layout.addStretch()
+        git_layout.addLayout(git_btn_layout)
+        
+        layout.addWidget(git_group)
+        
+        # Sync log
+        layout.addWidget(QLabel("Sync Log:"))
+        self.sync_log = QTextEdit()
+        self.sync_log.setReadOnly(True)
+        layout.addWidget(self.sync_log)
+        
+        layout.addStretch()
+        
+        return widget
+    
+    # ========================================================================
+    # EVENT HANDLERS
+    # ========================================================================
+    
+    def start_scan(self):
+        """Start system scan"""
+        self.scan_btn.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 0)  # Indeterminate
+        self.status_label.setText("Scanning system...")
+        
+        # In real deployment:
+        # self.scan_worker = ScanWorker(self.scanner)
+        # self.scan_worker.progress.connect(self.update_scan_progress)
+        # self.scan_worker.finished.connect(self.scan_complete)
+        # self.scan_worker.start()
+        
+        # Mock for demo:
+        self.mock_scan_results()
+    
+    def mock_scan_results(self):
+        """Mock scan results for demo"""
+        # In real deployment, this would come from the actual scanner
+        mock_results = [
+            {
+                'path': Path.home() / '.config/backup-system/config.json',
+                'category': 'application',
+                'importance': 4,
+                'sensitive': False,
+                'size': 2340,
+                'modified': datetime.now(),
+                'recommend_import': True,
+            },
+            {
+                'path': Path.home() / '.anthropic_api_key',
+                'category': 'secret',
+                'importance': 5,
+                'sensitive': True,
+                'size': 128,
+                'modified': datetime.now(),
+                'recommend_import': True,
+            },
+            {
+                'path': Path.home() / '.config/systemd/user/backup.service',
+                'category': 'service',
+                'importance': 4,
+                'sensitive': False,
+                'size': 456,
+                'modified': datetime.now(),
+                'recommend_import': True,
+            },
+        ]
+        
+        mock_summary = {
+            'total': 3,
+            'categories': {'application': 1, 'secret': 1, 'service': 1},
+            'total_size_mb': 0.003,
+            'recommended': 3,
+            'sensitive': 1,
+        }
+        
+        self.scan_complete(mock_results, mock_summary)
+    
+    def update_scan_progress(self, message: str):
+        """Update scan progress"""
+        self.progress_label.setText(message)
+    
+    def scan_complete(self, results: list, summary: dict):
+        """Handle scan completion"""
+        self.scan_results = results
+        
+        self.progress_bar.setVisible(False)
+        self.scan_btn.setEnabled(True)
+        self.import_selected_btn.setEnabled(True)
+        self.import_all_btn.setEnabled(True)
+        
+        # Update summary
+        summary_text = f"""
+Found {summary['total']} configuration files
+Recommended for import: {summary['recommended']}
+Sensitive files: {summary['sensitive']}
+Total size: {summary['total_size_mb']:.1f} MB
+
+By Category:
+"""
+        for cat, count in summary['categories'].items():
+            summary_text += f"  • {cat}: {count}\n"
+        
+        self.stats_label.setText(summary_text)
+        
+        # Populate tree
+        self.populate_results_tree(results)
+        
+        self.status_label.setText(f"Scan complete - found {summary['total']} configs")
+    
+    def populate_results_tree(self, results: list):
+        """Populate results tree"""
+        self.results_tree.clear()
+        
+        for item in results:
+            tree_item = QTreeWidgetItem()
+            
+            # Checkbox
+            tree_item.setCheckState(0, Qt.CheckState.Checked if item['recommend_import'] else Qt.CheckState.Unchecked)
+            
+            # Icon and name
+            icon = "🔒" if item['sensitive'] else "📄"
+            tree_item.setText(1, f"{icon} {item['path'].name}")
+            tree_item.setData(1, Qt.ItemDataRole.UserRole, item)
+            
+            # Category
+            tree_item.setText(2, item['category'])
+            
+            # Size
+            size_kb = item['size'] / 1024
+            tree_item.setText(3, f"{size_kb:.1f} KB")
+            
+            # Modified
+            if item['modified']:
+                tree_item.setText(4, item['modified'].strftime('%Y-%m-%d %H:%M'))
+            
+            # Color code by importance
+            if item['sensitive']:
+                tree_item.setForeground(1, QColor(255, 100, 100))
+            elif item['importance'] >= 4:
+                tree_item.setForeground(1, QColor(100, 200, 100))
+            
+            self.results_tree.addTopLevelItem(tree_item)
+    
+    def filter_results(self):
+        """Filter displayed results"""
+        filter_text = self.filter_input.text().lower()
+        show_recommended = self.show_recommended_only.isChecked()
+        
+        for i in range(self.results_tree.topLevelItemCount()):
+            item = self.results_tree.topLevelItem(i)
+            data = item.data(1, Qt.ItemDataRole.UserRole)
+            
+            # Check filter
+            text_match = filter_text in str(data['path']).lower() if filter_text else True
+            rec_match = data['recommend_import'] if show_recommended else True
+            
+            item.setHidden(not (text_match and rec_match))
+    
+    def show_config_details(self):
+        """Show details of selected config"""
+        selected = self.results_tree.selectedItems()
+        if not selected:
+            return
+        
+        item = selected[0]
+        data = item.data(1, Qt.ItemDataRole.UserRole)
+        
+        details = f"""
+Path: {data['path']}
+Category: {data['category']}
+Importance: {data['importance']}/5
+Sensitive: {'Yes' if data['sensitive'] else 'No'}
+Size: {data['size']/1024:.1f} KB
+Modified: {data['modified'].strftime('%Y-%m-%d %H:%M:%S') if data['modified'] else 'Unknown'}
+Recommended: {'Yes' if data['recommend_import'] else 'No'}
+        """
+        
+        self.details_text.setText(details.strip())
+        
+        # Load preview
+        try:
+            with open(data['path'], 'r') as f:
+                preview = f.read(500)  # First 500 chars
+                if len(preview) == 500:
+                    preview += "\n\n... (truncated)"
+                self.preview_text.setText(preview)
+        except:
+            self.preview_text.setText("(Unable to preview)")
+    
+    def import_selected(self):
+        """Import selected configs"""
+        selected_count = 0
+        for i in range(self.results_tree.topLevelItemCount()):
+            item = self.results_tree.topLevelItem(i)
+            if item.checkState(0) == Qt.CheckState.Checked:
+                selected_count += 1
+        
+        if selected_count == 0:
+            QMessageBox.warning(self, "No Selection", "No configs selected for import.")
+            return
+        
+        reply = QMessageBox.question(
+            self,
+            "Confirm Import",
+            f"Import {selected_count} selected configs to master directory?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.perform_import(selected_only=True)
+    
+    def import_recommended(self):
+        """Import all recommended configs"""
+        recommended_count = sum(1 for r in self.scan_results if r['recommend_import'])
+        
+        reply = QMessageBox.question(
+            self,
+            "Confirm Import",
+            f"Import {recommended_count} recommended configs?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.perform_import(selected_only=False)
+    
+    def perform_import(self, selected_only: bool):
+        """Actually perform the import"""
+        imported = 0
+        errors = []
+        
+        # In real deployment, use self.centralizer.import_config()
+        
+        for i in range(self.results_tree.topLevelItemCount()):
+            item = self.results_tree.topLevelItem(i)
+            data = item.data(1, Qt.ItemDataRole.UserRole)
+            
+            should_import = False
+            if selected_only:
+                should_import = item.checkState(0) == Qt.CheckState.Checked
+            else:
+                should_import = data['recommend_import']
+            
+            if should_import:
+                # Mock import
+                imported += 1
+                # In real: success, msg = self.centralizer.import_config(data)
+        
+        QMessageBox.information(
+            self,
+            "Import Complete",
+            f"Successfully imported {imported} configurations!\n\n"
+            f"Master directory: ~/.config/lifeOS/master/"
+        )
+        
+        self.status_label.setText(f"Imported {imported} configs")
+    
+    def refresh_imported(self):
+        """Refresh list of imported configs"""
+        # In real deployment, load from self.centralizer.mapping
+        self.status_label.setText("Imported configs list refreshed")
+    
+    def edit_selected_config(self):
+        """Edit selected config in default editor"""
+        QMessageBox.information(self, "Edit", "Would open config in default editor")
+    
+    def remove_from_master(self):
+        """Remove config from master"""
+        QMessageBox.information(self, "Remove", "Would remove config from master directory")
+    
+    def sync_all_configs(self):
+        """Sync all configs to original locations"""
+        self.sync_log.append(f"[{datetime.now().strftime('%H:%M:%S')}] Starting sync of all configs...")
+        # In real: results = self.centralizer.sync_all()
+        self.sync_log.append(f"[{datetime.now().strftime('%H:%M:%S')}] ✓ Sync complete")
+        self.status_label.setText("All configs synced")
+    
+    def sync_selected_configs(self):
+        """Sync selected configs only"""
+        self.sync_log.append(f"[{datetime.now().strftime('%H:%M:%S')}] Syncing selected configs...")
+        self.sync_log.append(f"[{datetime.now().strftime('%H:%M:%S')}] ✓ Sync complete")
+    
+    def init_git_repo(self):
+        """Initialize git repository"""
+        # In real: success, msg = self.centralizer.init_git()
+        QMessageBox.information(self, "Git", "Git repository initialized")
+    
+    def commit_changes(self):
+        """Commit changes to git"""
+        # In real: success, msg = self.centralizer.commit_changes()
+        self.sync_log.append(f"[{datetime.now().strftime('%H:%M:%S')}] ✓ Changes committed to git")
+    
+    def view_git_history(self):
+        """View git history"""
+        QMessageBox.information(self, "History", "Would show git commit history")
+    
+    def open_directory(self, path: Path):
+        """Open directory in file manager"""
+        import subprocess
+        subprocess.run(['xdg-open', str(path)])
+    
+    def open_terminal(self, path: Path):
+        """Open terminal in directory"""
+        import subprocess
+        subprocess.Popen(['konsole', '--workdir', str(path)])
+
+
+def main():
+    app = QApplication(sys.argv)
+    
+    # Dark theme
+    app.setStyle('Fusion')
+    
+    widget = ConfigCentralizerWidget()
+    widget.show()
+    
+    sys.exit(app.exec())
+
+
+if __name__ == '__main__':
+    main()

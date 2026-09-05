@@ -1,0 +1,333 @@
+/**
+ * FILE MOTION SENSOR MODULE
+ * Isolated, lightweight module for detecting file changes
+ * No heavy hashing - just motion detection and versioning
+ * Designed to trigger external modules (permissions, hashing, cloud backup)
+ */
+
+class FileMotionSensor {
+  constructor(config = {}) {
+    this.config = {
+      maxLocalSnapshots: config.maxLocalSnapshots || 100,
+      snapshotDir: config.snapshotDir || './snapshots',
+      triggerThreshold: config.triggerThreshold || 1, // Changes before triggering
+      checkInterval: config.checkInterval || 5000, // ms
+      ...config
+    };
+    
+    this.watchedPaths = new Map();
+    this.motionQueue = [];
+    this.snapshotCount = 0;
+    this.callbacks = {
+      onMotion: null,
+      onCapReached: null,
+      onPermissionCheck: null
+    };
+  }
+
+  // Register callback hooks for external modules
+  on(event, callback) {
+    this.callbacks[event] = callback;
+  }
+
+  // Add directory to watch
+  watch(path, options = {}) {
+    const watcher = {
+      path: path,
+      lastState: null,
+      changeCount: 0,
+      permissions: options.permissions || 'read-write',
+      priority: options.priority || 'normal',
+      enabled: true
+    };
+    
+    this.watchedPaths.set(path, watcher);
+    this.captureState(path); // Initial state
+    return watcher;
+  }
+
+  // Lightweight state capture (just metadata, no file contents)
+  async captureState(path) {
+    // In real implementation, this would use fs.stat for metadata only
+    const state = {
+      timestamp: Date.now(),
+      path: path,
+      fileCount: Math.floor(Math.random() * 50), // Simulated
+      lastModified: Date.now(),
+      permissions: '755' // Simulated
+    };
+    
+    const watcher = this.watchedPaths.get(path);
+    if (watcher) {
+      watcher.lastState = state;
+    }
+    
+    return state;
+  }
+
+  // Detect motion (changes)
+  async detectMotion(path) {
+    const watcher = this.watchedPaths.get(path);
+    if (!watcher || !watcher.enabled) return null;
+
+    const currentState = await this.captureState(path);
+    const previousState = watcher.lastState;
+
+    if (!previousState) return null;
+
+    // Compare states (lightweight comparison)
+    const hasMotion = 
+      currentState.fileCount !== previousState.fileCount ||
+      currentState.lastModified !== previousState.lastModified ||
+      currentState.permissions !== previousState.permissions;
+
+    if (hasMotion) {
+      watcher.changeCount++;
+      
+      const motion = {
+        id: `motion_${Date.now()}`,
+        path: path,
+        timestamp: Date.now(),
+        changeType: this.detectChangeType(currentState, previousState),
+        priority: watcher.priority,
+        previousState: previousState,
+        currentState: currentState
+      };
+
+      this.motionQueue.push(motion);
+      
+      // Trigger permission check immediately
+      if (this.callbacks.onPermissionCheck) {
+        await this.callbacks.onPermissionCheck(motion);
+      }
+
+      // Trigger motion callback
+      if (watcher.changeCount >= this.config.triggerThreshold) {
+        if (this.callbacks.onMotion) {
+          await this.callbacks.onMotion(motion);
+        }
+        watcher.changeCount = 0; // Reset
+      }
+
+      return motion;
+    }
+
+    return null;
+  }
+
+  detectChangeType(current, previous) {
+    if (current.fileCount > previous.fileCount) return 'files_added';
+    if (current.fileCount < previous.fileCount) return 'files_removed';
+    if (current.permissions !== previous.permissions) return 'permissions_changed';
+    return 'files_modified';
+  }
+
+  // Create lightweight snapshot (metadata only)
+  async createSnapshot(path) {
+    const state = await this.captureState(path);
+    this.snapshotCount++;
+
+    const snapshot = {
+      id: `snapshot_${this.snapshotCount}`,
+      ...state,
+      type: 'lightweight',
+      size: 1024 // Simulated KB
+    };
+
+    // Check if cap reached
+    if (this.snapshotCount >= this.config.maxLocalSnapshots) {
+      if (this.callbacks.onCapReached) {
+        await this.callbacks.onCapReached({
+          snapshotCount: this.snapshotCount,
+          readyForShipping: this.getShippableSnapshots()
+        });
+      }
+    }
+
+    return snapshot;
+  }
+
+  // Get snapshots ready for cloud shipping
+  getShippableSnapshots() {
+    // In real implementation, this would zip and prepare for cloud transfer
+    return {
+      count: this.snapshotCount,
+      estimatedSize: this.snapshotCount * 1024, // KB
+      readyToShip: this.snapshotCount >= this.config.maxLocalSnapshots
+    };
+  }
+
+  // Start monitoring all watched paths
+  startMonitoring() {
+    this.monitoringInterval = setInterval(async () => {
+      for (const [path, watcher] of this.watchedPaths) {
+        if (watcher.enabled) {
+          await this.detectMotion(path);
+        }
+      }
+    }, this.config.checkInterval);
+  }
+
+  stopMonitoring() {
+    if (this.monitoringInterval) {
+      clearInterval(this.monitoringInterval);
+    }
+  }
+
+  // Get motion events for reporting
+  getMotionLog() {
+    return this.motionQueue;
+  }
+
+  // Clear shipped snapshots
+  clearShippedSnapshots() {
+    this.snapshotCount = 0;
+    this.motionQueue = [];
+  }
+}
+
+
+/**
+ * USAGE EXAMPLE WITH EXTERNAL MODULES
+ */
+
+// Initialize motion sensor
+const motionSensor = new FileMotionSensor({
+  maxLocalSnapshots: 100,
+  checkInterval: 5000,
+  triggerThreshold: 1
+});
+
+// Hook 1: Motion detected - trigger snapshot
+motionSensor.on('onMotion', async (motion) => {
+  console.log(`[MOTION DETECTED] ${motion.path}`);
+  console.log(`  Change Type: ${motion.changeType}`);
+  console.log(`  Priority: ${motion.priority}`);
+  
+  // Create lightweight snapshot
+  const snapshot = await motionSensor.createSnapshot(motion.path);
+  console.log(`  Snapshot Created: ${snapshot.id}`);
+  
+  // TODO: Trigger external hashing module (isolated process)
+  // await hashingModule.hashSnapshot(snapshot);
+});
+
+// Hook 2: Permission check on any file change
+motionSensor.on('onPermissionCheck', async (motion) => {
+  console.log(`[PERMISSION CHECK] ${motion.path}`);
+  
+  // Instant permission validation
+  if (motion.currentState.permissions !== motion.previousState.permissions) {
+    console.log(`  ⚠️  ALERT: Permissions changed!`);
+    console.log(`  Old: ${motion.previousState.permissions}`);
+    console.log(`  New: ${motion.currentState.permissions}`);
+    
+    // TODO: Trigger security module
+    // await securityModule.validatePermissionChange(motion);
+  }
+});
+
+// Hook 3: Cap reached - ship to cloud
+motionSensor.on('onCapReached', async (data) => {
+  console.log(`[CAP REACHED] ${data.snapshotCount} snapshots`);
+  console.log(`  Preparing for cloud shipment...`);
+  
+  const shippable = data.readyForShipping;
+  console.log(`  Estimated size: ${shippable.estimatedSize} KB`);
+  
+  // TODO: Trigger cloud backup module
+  // const zipFile = await zipModule.compress(shippable);
+  // await cloudModule.ship(zipFile);
+  
+  // Clear local storage after shipping
+  motionSensor.clearShippedSnapshots();
+  console.log(`  ✓ Local snapshots cleared`);
+});
+
+
+/**
+ * STANDALONE HASHING MODULE (RUNS IN ISOLATION)
+ * This can be a separate process/worker to avoid blocking main system
+ */
+
+class HashingModule {
+  constructor() {
+    this.queue = [];
+    this.processing = false;
+  }
+
+  // Add to hash queue (non-blocking)
+  async queueForHashing(snapshot) {
+    this.queue.push(snapshot);
+    if (!this.processing) {
+      this.processQueue();
+    }
+  }
+
+  // Process queue in background
+  async processQueue() {
+    this.processing = true;
+    
+    while (this.queue.length > 0) {
+      const snapshot = this.queue.shift();
+      const hash = await this.computeHash(snapshot);
+      
+      // Store hash for integrity checking
+      console.log(`[HASH] ${snapshot.id} -> ${hash}`);
+      
+      // TODO: Store in hash database
+      // await hashDB.store(snapshot.id, hash);
+    }
+    
+    this.processing = false;
+  }
+
+  async computeHash(snapshot) {
+    // Simulated hashing (in real impl: SHA-256 of file contents)
+    return `sha256_${Math.random().toString(36).substring(7)}`;
+  }
+}
+
+
+/**
+ * DEMO: Start the system
+ */
+
+// Watch critical directories
+motionSensor.watch('/etc/system/critical', { 
+  priority: 'high',
+  permissions: 'read-only' 
+});
+
+motionSensor.watch('/var/app/data', { 
+  priority: 'normal',
+  permissions: 'read-write' 
+});
+
+motionSensor.watch('/home/user/sensitive', { 
+  priority: 'high',
+  permissions: 'read-write' 
+});
+
+// Start monitoring
+console.log('🎥 Motion Sensor Active');
+console.log('📊 Monitoring 3 directories');
+console.log('⚡ Cap: 100 snapshots before cloud shipping\n');
+
+motionSensor.startMonitoring();
+
+// Simulate for demo
+setTimeout(() => {
+  console.log('\n📈 Motion Log:', motionSensor.getMotionLog().length, 'events');
+  motionSensor.stopMonitoring();
+}, 15000);
+
+
+/**
+ * MODULE EXPORTS (for integration with your platform)
+ */
+
+module.exports = {
+  FileMotionSensor,
+  HashingModule
+};

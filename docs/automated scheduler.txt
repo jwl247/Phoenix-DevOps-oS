@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""
+Automated rotation and backup scheduler
+"""
+
+import schedule
+import time
+from rotating_master import RotatingMasterImage
+
+class BackupScheduler:
+    def __init__(self, manager: RotatingMasterImage, paths: list[str]):
+        self.manager = manager
+        self.paths = paths
+    
+    def setup_schedule(self):
+        """Setup backup schedule"""
+        
+        # Hourly incremental snapshots
+        schedule.every().hour.at(":00").do(
+            lambda: self.manager.create_incremental_snapshot(self.paths)
+        )
+        
+        # Daily status check
+        schedule.every().day.at("09:00").do(
+            self.manager.status_report
+        )
+        
+        # Weekly smart snapshot (checks for master rotation)
+        schedule.every().sunday.at("03:00").do(
+            lambda: self.manager.smart_snapshot(self.paths)
+        )
+        
+        # Monthly aggressive prune
+        schedule.every(30).days.at("04:00").do(
+            self.manager.aggressive_prune_incrementals
+        )
+    
+    def run(self):
+        """Run scheduler loop"""
+        print("Backup scheduler started")
+        self.setup_schedule()
+        
+        while True:
+            schedule.run_pending()
+            time.sleep(60)
+
+# Usage
+if __name__ == '__main__':
+    manager = RotatingMasterImage(
+        repo_path='/mnt/backup/restic-repo',
+        password='your-secure-password',
+        total_capacity_gb=1000,
+        master_allocation_pct=0.45  # 45% for master, 45% for incrementals, 10% buffer
+    )
+    
+    paths_to_backup = [
+        '/home/user',
+        '/etc',
+        # Add your important paths
+    ]
+    
+    scheduler = BackupScheduler(manager, paths_to_backup)
+    scheduler.run()

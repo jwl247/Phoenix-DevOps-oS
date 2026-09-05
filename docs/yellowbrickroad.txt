@@ -1,0 +1,274 @@
+https://claude.ai/share/b46f685d-b99c-44ae-ad19-4aa1a5bd15df
+#!/bin/bash
+# HeIX Userspace Quick Build - Complete Setup in One Script
+
+set -e
+
+echo "🚀 HeIX Userspace Quick Build"
+echo "=============================="
+
+WORK_DIR="$HOME/heix-userspace"
+mkdir -p "$WORK_DIR"
+cd "$WORK_DIR"
+
+# 1. CREATE USERSPACE LIBRARY
+cat > libhelix.c << 'EOF'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+
+#define HELIX_DEVICE "/dev/helix_bridge"
+#define HELIX_IOCTL_MAGIC 'H'
+
+struct helix_register_data { char app_name[64]; };
+struct helix_hot_data { char data_types[256]; };
+
+#define HELIX_IOCTL_REGISTER _IOW(HELIX_IOCTL_MAGIC, 1, struct helix_register_data)
+#define HELIX_IOCTL_DECLARE_HOT _IOW(HELIX_IOCTL_MAGIC, 2, struct helix_hot_data)
+
+static int helix_fd = -1;
+
+int helix_init(void) {
+    helix_fd = open(HELIX_DEVICE, O_RDWR);
+    if (helix_fd < 0) { perror("HeIX device"); return -1; }
+    printf("HeIX: Connected\n");
+    return 0;
+}
+
+int helix_register(const char *app_name) {
+    struct helix_register_data data;
+    strncpy(data.app_name, app_name, 63);
+    data.app_name[63] = 0;
+    if (ioctl(helix_fd, HELIX_IOCTL_REGISTER, &data) < 0) return -1;
+    printf("HeIX: Registered '%s'\n", app_name);
+    return 0;
+}
+
+int helix_declare_hot(const char **types, int count) {
+    struct helix_hot_data data = {0};
+    for (int i = 0; i < count && strlen(data.data_types) < 240; i++) {
+        if (i > 0) strcat(data.data_types, ",");
+        strncat(data.data_types, types[i], 240 - strlen(data.data_types));
+    }
+    if (ioctl(helix_fd, HELIX_IOCTL_DECLARE_HOT, &data) < 0) return -1;
+    printf("HeIX: Hot: %s\n", data.data_types);
+    return 0;
+}
+
+void helix_cleanup(void) {
+    if (helix_fd >= 0) { close(helix_fd); helix_fd = -1; }
+}
+EOF
+
+# 2. BUILD LIBRARY
+echo "📦 Building libhelix.so..."
+gcc -fPIC -shared -o libhelix.so libhelix.c
+sudo cp libhelix.so /usr/local/lib/
+sudo ldconfig
+
+# 3. CREATE PYTHON BINDINGS
+cat > helix.py << 'EOF'
+import ctypes
+import os
+
+libhelix = ctypes.CDLL('/usr/local/lib/libhelix.so')
+
+libhelix.helix_init.argtypes = []
+libhelix.helix_init.restype = ctypes.c_int
+libhelix.helix_register.argtypes = [ctypes.c_char_p]
+libhelix.helix_register.restype = ctypes.c_int
+libhelix.helix_cleanup.argtypes = []
+
+class HeIX:
+    def __init__(self):
+        if libhelix.helix_init() < 0:
+            raise Exception("HeIX init failed - is kernel module loaded?")
+    
+    def register(self, app_name):
+        if libhelix.helix_register(app_name.encode()) < 0:
+            raise Exception(f"Registration failed: {app_name}")
+        return True
+    
+    def __del__(self):
+        libhelix.helix_cleanup()
+
+if __name__ == "__main__":
+    helix = HeIX()
+    helix.register("test-app")
+    print("✅ HeIX Python bindings work!")
+EOF
+
+# 4. CREATE NODE.JS BINDINGS
+cat > helix.js << 'EOF'
+const ffi = require('ffi-napi');
+
+const libhelix = ffi.Library('/usr/local/lib/libhelix.so', {
+    'helix_init': ['int', []],
+    'helix_register': ['int', ['string']],
+    'helix_cleanup': ['void', []]
+});
+
+class HeIX {
+    constructor() {
+        if (libhelix.helix_init() < 0) {
+            throw new Error('HeIX init failed');
+        }
+    }
+    
+    register(appName) {
+        if (libhelix.helix_register(appName) < 0) {
+            throw new Error('Registration failed');
+        }
+        return true;
+    }
+    
+    cleanup() { libhelix.helix_cleanup(); }
+}
+
+module.exports = HeIX;
+
+if (require.main === module) {
+    const helix = new HeIX();
+    helix.register('test-app');
+    console.log('✅ HeIX Node.js bindings work!');
+    helix.cleanup();
+}
+EOF
+
+# 5. CREATE KERNEL MODULE PATCH
+cat > helix_bridge_device.patch << 'EOF'
+Add device file creation to helix_bridge.ko
+
+Add these to your helix_bridge.c:
+
+#include <linux/fs.h>
+#include <linux/cdev.h>
+#include <linux/device.h>
+
+#define HELIX_IOCTL_MAGIC 'H'
+#define HELIX_IOCTL_REGISTER _IOW(HELIX_IOCTL_MAGIC, 1, struct helix_register_data)
+#define HELIX_IOCTL_DECLARE_HOT _IOW(HELIX_IOCTL_MAGIC, 2, struct helix_hot_data)
+
+static int major_number;
+static struct class* helix_class = NULL;
+static struct device* helix_device = NULL;
+
+static long helix_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
+    // Handle ioctl commands
+    return 0;
+}
+
+static struct file_operations fops = {
+    .unlocked_ioctl = helix_ioctl,
+};
+
+static int __init helix_bridge_init(void) {
+    major_number = register_chrdev(0, "helix_bridge", &fops);
+    helix_class = class_create(THIS_MODULE, "helix");
+    helix_device = device_create(helix_class, NULL, MKDEV(major_number, 0), NULL, "helix_bridge");
+    printk(KERN_INFO "HeIX: Device created at /dev/helix_bridge\n");
+    return 0;
+}
+
+static void __exit helix_bridge_exit(void) {
+    device_destroy(helix_class, MKDEV(major_number, 0));
+    class_destroy(helix_class);
+    unregister_chrdev(major_number, "helix_bridge");
+}
+EOF
+
+# 6. TEST SCRIPT
+cat > test_helix.sh << 'EOF'
+#!/bin/bash
+echo "🧪 Testing HeIX Userspace"
+
+# Check device
+if [ ! -e /dev/helix_bridge ]; then
+    echo "❌ /dev/helix_bridge not found!"
+    echo "   Kernel module needs device file support"
+    exit 1
+fi
+echo "✅ Device file exists"
+
+# Test library
+if [ ! -f /usr/local/lib/libhelix.so ]; then
+    echo "❌ libhelix.so not found"
+    exit 1
+fi
+echo "✅ Library installed"
+
+# Test Python
+python3 helix.py && echo "✅ Python bindings work" || echo "❌ Python test failed"
+
+# Test Node (if available)
+if command -v node &> /dev/null; then
+    npm install ffi-napi 2>/dev/null
+    node helix.js && echo "✅ Node.js bindings work" || echo "❌ Node test failed"
+fi
+EOF
+
+chmod +x test_helix.sh
+
+# 7. INSTALLATION SUMMARY
+cat > README.md << 'EOF'
+# HeIX Userspace - Quick Setup
+
+## What Got Built:
+- libhelix.so - C library for HeIX kernel communication
+- helix.py - Python bindings
+- helix.js - Node.js bindings
+
+## Next Steps:
+
+### 1. Update Kernel Module (REQUIRED)
+Your helix_bridge.ko needs device file support.
+See: helix_bridge_device.patch
+
+cd /usr/src/linux-6.6.8/drivers/helix
+# Apply changes from patch file
+make M=drivers/helix modules
+sudo make M=drivers/helix modules_install
+sudo rmmod helix_bridge
+sudo modprobe helix_bridge
+
+### 2. Test
+./test_helix.sh
+
+### 3. Use in Your Apps
+
+Python:
+```python
+from helix import HeIX
+helix = HeIX()
+helix.register("my-app")
+```
+
+Node.js:
+```javascript
+const HeIX = require('./helix');
+const helix = new HeIX();
+helix.register('my-app');
+```
+
+## Files:
+- libhelix.so - Installed in /usr/local/lib/
+- helix.py - Python module
+- helix.js - Node.js module
+- test_helix.sh - Test script
+EOF
+
+echo ""
+echo "✅ Build Complete!"
+echo ""
+echo "📂 Location: $WORK_DIR"
+echo ""
+echo "📋 Next Steps:"
+echo "1. Update kernel module (see helix_bridge_device.patch)"
+echo "2. Run: ./test_helix.sh"
+echo "3. Use helix.py or helix.js in your apps"
+echo ""
+echo "Files created:"
+ls -lh

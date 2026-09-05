@@ -1,0 +1,282 @@
+#!/usr/bin/env python3
+"""
+Rotating Master Image System for 1TB constraint
+"""
+
+import subprocess
+import json
+import time
+from pathlib import Path
+from datetime import datetime, timedelta
+from typing import Optional
+
+class RotatingMasterImage:
+    """Manages a rotating full system image + incremental versions"""
+    
+    def __init__(self, 
+                 repo_path: str,
+                 password: str,
+                 total_capacity_gb: int = 1000,
+                 master_allocation_pct: float = 0.45):
+        
+        self.repo = repo_path
+        self.password = password
+        self.env = {
+            'RESTIC_REPOSITORY': repo_path,
+            'RESTIC_PASSWORD': password
+        }
+        
+        # Storage allocation
+        self.total_capacity = total_capacity_gb * 1e9
+        self.master_allocation = int(self.total_capacity * master_allocation_pct)
+        self.incremental_allocation = int(self.total_capacity * master_allocation_pct)
+        self.buffer = self.total_capacity - self.master_allocation - self.incremental_allocation
+        
+        # Master image tracking
+        self.master_tag = "MASTER_IMAGE"
+        self.master_rotation_days = 30  # Rotate master monthly
+        
+    def get_current_master(self) -> Optional[dict]:
+        """Get the current master image snapshot"""
+        result = subprocess.run(
+            ['restic', 'snapshots', '--tag', self.master_tag, '--json'],
+            env=self.env,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            return None
+            
+        snapshots = json.loads(result.stdout)
+        return snapshots[-1] if snapshots else None
+    
+    def should_rotate_master(self) -> bool:
+        """Check if master image should be rotated"""
+        master = self.get_current_master()
+        
+        if not master:
+            return True  # No master exists
+        
+        # Check age
+        master_time = datetime.fromisoformat(master['time'].replace('Z', '+00:00'))
+        age_days = (datetime.now(master_time.tzinfo) - master_time).days
+        
+        if age_days >= self.master_rotation_days:
+            return True
+        
+        # Check if storage is getting tight
+        stats = self.get_storage_stats()
+        if stats['usage_pct'] > 85:
+            return True  # Rotate early if space constrained
+        
+        return False
+    
+    def create_master_image(self, paths: list[str]):
+        """Create new master image, removing old one"""
+        print(f"Creating new master image...")
+        
+        # Remove old master tag first
+        old_master = self.get_current_master()
+        if old_master:
+            print(f"Removing old master: {old_master['short_id']}")
+            subprocess.run(
+                ['restic', 'forget', old_master['short_id']],
+                env=self.env,
+                capture_output=True
+            )
+        
+        # Create new master snapshot
+        cmd = [
+            'restic', 'backup',
+            '--tag', self.master_tag,
+            '--tag', f"master-{datetime.now().strftime('%Y%m%d')}"
+        ]
+        cmd.extend(paths)
+        
+        result = subprocess.run(
+            cmd,
+            env=self.env,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            print("✓ New master image created")
+            
+            # Prune to reclaim space from old master
+            self.prune_repository()
+            return True
+        else:
+            print(f"✗ Master creation failed: {result.stderr}")
+            return False
+    
+    def create_incremental_snapshot(self, paths: list[str], tags: list[str] = None):
+        """Create incremental snapshot (normal versioning)"""
+        cmd = ['restic', 'backup']
+        
+        # Add tags (but not master tag)
+        default_tags = [
+            f"incremental",
+            f"date-{datetime.now().strftime('%Y%m%d')}"
+        ]
+        all_tags = default_tags + (tags or [])
+        
+        for tag in all_tags:
+            cmd.extend(['--tag', tag])
+        
+        cmd.extend(paths)
+        
+        result = subprocess.run(
+            cmd,
+            env=self.env,
+            capture_output=True,
+            text=True
+        )
+        
+        return result.returncode == 0
+    
+    def get_storage_stats(self) -> dict:
+        """Get detailed storage statistics"""
+        result = subprocess.run(
+            ['restic', 'stats', '--json'],
+            env=self.env,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            return {'error': True}
+        
+        stats = json.loads(result.stdout)
+        total_size = stats.get('total_size', 0)
+        
+        # Get master vs incremental breakdown
+        master = self.get_current_master()
+        master_size = master.get('total_size', 0) if master else 0
+        
+        incremental_size = total_size - master_size
+        
+        return {
+            'total_size': total_size,
+            'total_size_gb': total_size / 1e9,
+            'master_size': master_size,
+            'master_size_gb': master_size / 1e9,
+            'incremental_size': incremental_size,
+            'incremental_size_gb': incremental_size / 1e9,
+            'usage_pct': (total_size / self.total_capacity) * 100,
+            'free_gb': (self.total_capacity - total_size) / 1e9,
+            'master_allocation_gb': self.master_allocation / 1e9,
+            'incremental_allocation_gb': self.incremental_allocation / 1e9
+        }
+    
+    def aggressive_prune_incrementals(self):
+        """Prune incrementals when space is tight, preserve master"""
+        print("Pruning incremental snapshots...")
+        
+        # Very aggressive policy for incrementals
+        policy = {
+            'keep-hourly': 24,     # Last day only
+            'keep-daily': 7,       # Last week
+            'keep-weekly': 4,      # Last month
+            'keep-monthly': 3,     # Last quarter
+        }
+        
+        # Forget incrementals only (master has special tag)
+        cmd = ['restic', 'forget', '--tag', 'incremental']
+        for key, value in policy.items():
+            cmd.extend([f'--{key}', str(value)])
+        
+        subprocess.run(cmd, env=self.env, capture_output=True)
+        self.prune_repository()
+    
+    def prune_repository(self):
+        """Remove unreferenced data blocks"""
+        print("Pruning unreferenced blocks...")
+        subprocess.run(
+            ['restic', 'prune'],
+            env=self.env,
+            capture_output=True
+        )
+    
+    def smart_snapshot(self, paths: list[str]):
+        """Intelligently decide: master rotation or incremental?"""
+        stats = self.get_storage_stats()
+        
+        print(f"\nStorage: {stats['usage_pct']:.1f}% used ({stats['free_gb']:.1f} GB free)")
+        
+        # Check if we need to rotate master
+        if self.should_rotate_master():
+            print("→ Master rotation needed")
+            self.create_master_image(paths)
+        else:
+            # Normal incremental
+            self.create_incremental_snapshot(paths)
+        
+        # Check if we need to prune
+        stats = self.get_storage_stats()
+        if stats['usage_pct'] > 80:
+            print("→ Storage high, pruning incrementals...")
+            self.aggressive_prune_incrementals()
+    
+    def restore_master(self, target_path: str):
+        """Restore from master image"""
+        master = self.get_current_master()
+        if not master:
+            print("✗ No master image found")
+            return False
+        
+        print(f"Restoring master image: {master['short_id']}")
+        result = subprocess.run(
+            ['restic', 'restore', master['short_id'], '--target', target_path],
+            env=self.env,
+            capture_output=True,
+            text=True
+        )
+        
+        return result.returncode == 0
+    
+    def status_report(self):
+        """Print detailed status"""
+        stats = self.get_storage_stats()
+        master = self.get_current_master()
+        
+        # Get snapshot counts
+        all_snapshots = subprocess.run(
+            ['restic', 'snapshots', '--json'],
+            env=self.env,
+            capture_output=True,
+            text=True
+        )
+        snapshots = json.loads(all_snapshots.stdout) if all_snapshots.returncode == 0 else []
+        incremental_count = len([s for s in snapshots if self.master_tag not in s.get('tags', [])])
+        
+        print(f"""
+╔════════════════════════════════════════════════════════╗
+║        Rotating Master Image System Status             ║
+╠════════════════════════════════════════════════════════╣
+║ Total Capacity:    {self.total_capacity/1e9:6.0f} GB                       ║
+║ Used:              {stats['total_size_gb']:6.1f} GB ({stats['usage_pct']:5.1f}%)           ║
+║ Free:              {stats['free_gb']:6.1f} GB                       ║
+╠════════════════════════════════════════════════════════╣
+║ Master Image:      {stats['master_size_gb']:6.1f} GB (allocated: {self.master_allocation/1e9:.0f} GB) ║
+║ Incrementals:      {stats['incremental_size_gb']:6.1f} GB (allocated: {self.incremental_allocation/1e9:.0f} GB) ║
+╠════════════════════════════════════════════════════════╣
+║ Incremental Snapshots: {incremental_count:4} snapshots               ║
+╚════════════════════════════════════════════════════════╝
+        """)
+        
+        if master:
+            master_time = master['time'][:10]
+            age = (datetime.now() - datetime.fromisoformat(master['time'].replace('Z', '+00:00'))).days
+            print(f"Master Image: {master_time} ({age} days old)")
+            
+            if age >= self.master_rotation_days:
+                print("⚠️  Master image due for rotation")
+        else:
+            print("⚠️  No master image exists!")
+        
+        if stats['usage_pct'] > 85:
+            print("🚨 WARNING: Storage > 85%")
+        elif stats['usage_pct'] > 75:
+            print("⚠️  NOTICE: Storage > 75%")
