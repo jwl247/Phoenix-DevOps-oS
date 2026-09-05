@@ -172,7 +172,7 @@ sector4/
 - **Sketchpad/Concepts** — freehand, airbrush, splatter brush (5 colors), airbrush eraser
 - **Music Notation Transcriber** — multi-instrument
 - **Desktop** — shade UI, drawer filesystem, customizable switches
-- **ScriptForge** (`sector2/apps/scriptforge/`) — single-file Helix-branded code widget: paste JS/TS/PY/CSS/HTML/JSON/SH, get lint issues, dependency detection, a security scanner, "Auto Fixes — Helix Self-Heal", and a CONVERT tab (JSON⇄CSV, JSON beautify/minify, Base64, URL-encode). Moved 2026-09-05 from `tools/` (was orphaned there, unwired, undocumented) — no dashboard pane wired to it yet. Console-execution tab runs pasted JS in a sandboxed iframe (no allow-same-origin, 1.5s hang guard), not in the page's own context — the old version ran arbitrary pasted code with full DOM/cookie access, the exact class of risk the SECURITY tab flags in other people's code.
+- **ScriptForge** (`sector2/apps/scriptforge/`) — single-file Helix-branded code widget: paste JS/TS/PY/CSS/HTML/JSON/SH, get lint issues, dependency detection, a security scanner, "Auto Fixes — Helix Self-Heal", and a CONVERT tab (JSON⇄CSV, JSON beautify/minify, Base64, URL-encode). Moved 2026-09-05 from `tools/` (was orphaned there, unwired, undocumented). Wired into the dashboard's right-column buttons (`SCRIPTFORGE`, `dashboard/scriptforge-launcher.js`) — opens in its own Electron window, `nodeIntegration`/`require`/`process` confirmed unreachable from it (verified live via CDP). Console-execution tab itself also runs pasted JS in a sandboxed iframe (no allow-same-origin, 1.5s hang guard) — the old version ran arbitrary pasted code with full DOM/cookie access, the exact class of risk the SECURITY tab flags in other people's code.
 
 ## TAV ADDRESS SYSTEM
 ```
@@ -288,7 +288,7 @@ Import sequence:
 - [x] Live Monitor panel — on-demand desktop/window screen capture (desktopCapturer) streamed to Claude chat, separate capture destination from the watched screenshots folder so the two don't storm each other
 - [x] Clonepool panel converted to async (fs.promises) with search + result capping — was freezing the whole Electron main process once the pool passed ~15k files
 - [x] Clonepool made available at the repo root as a Windows directory junction (already gitignored); PS7 shell dot-sources `scripts/usys.ps1` so `clone`/`usys` work inside it (previously silently missing under `-NoProfile`)
-- [x] ScriptForge — given a real home at `sector2/apps/scriptforge/` (was loose in `tools/`, unwired, undocumented); sandboxed its console-execution tab (was running pasted code with full page access) and added a CONVERT tab (JSON⇄CSV, beautify/minify, Base64, URL-encode) (2026-09-05). Not yet wired to a dashboard pane.
+- [x] ScriptForge — given a real home at `sector2/apps/scriptforge/` (was loose in `tools/`, unwired, undocumented); sandboxed its console-execution tab (was running pasted code with full page access) and added a CONVERT tab (JSON⇄CSV, beautify/minify, Base64, URL-encode); wired into the dashboard as a SCRIPTFORGE button opening its own isolated Electron window (2026-09-05, verified live via CDP)
 - [ ] Desktop (shade UI, drawer filesystem) — dashboard transforms into this
 - [ ] Office (dual browser pane)
 - [ ] Sketchpad/Concepts
