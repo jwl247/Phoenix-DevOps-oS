@@ -52,6 +52,16 @@ export default {
       }), { headers: { 'Content-Type': 'application/json', ...CORS } });
     }
 
+    // Auth round-trip check, no side effects — see packages-worker's /whoami
+    // for why this exists (a rotation script needs to confirm the token it
+    // just pushed here actually took, not assume it did).
+    if (path === '/whoami') {
+      if (!isAuthorized(req, env)) return err('unauthorized', 401);
+      return new Response(JSON.stringify({ ok: true, worker: 'phoenix-clonepool-r2' }), {
+        headers: { 'Content-Type': 'application/json', ...CORS },
+      });
+    }
+
     if (path.startsWith('/object/')) {
       const hex = decodeURIComponent(path.slice('/object/'.length));
       if (!hex) return err('hex required', 400);

@@ -4,7 +4,10 @@
   // from packages-worker (which is live/load-bearing; this never touches it).
   // Deploy: wrangler deploy
   // Tail:   wrangler tail
-  // Secret: wrangler secret put PHOENIX_AUTH   (same value as packages-worker's)
+  // Secret: do NOT run `wrangler secret put PHOENIX_AUTH` here by hand — it
+  //         must match packages-worker's secret AND the local registry
+  //         value. Use ../rotate-phoenix-auth.sh, which sets and verifies
+  //         all three together.
 
   "name": "phoenix-clonepool-r2",
   "main": "index.js",
@@ -21,6 +24,6 @@
   ]
 
   // ── Secrets ────────────────────────────────────────────────────────────────
-  // PHOENIX_AUTH — set via: wrangler secret put PHOENIX_AUTH
+  // PHOENIX_AUTH — rotate via ../rotate-phoenix-auth.sh, never by hand
   // Never put the token here — secrets only
 }
