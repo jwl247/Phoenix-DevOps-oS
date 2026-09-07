@@ -281,12 +281,15 @@ their own real deliverables.
 
 ## Open questions
 
-1. **Debian VM vs Windows for the author-side worker (Module 4).** Life
-   First runs on the Debian VM; `phoenix-unoserver.service` targets it. But
-   Office's author is on Windows (the dashboard). Does the Windows dashboard
-   shell out to the Debian VM's unoserver over the network, or does the
-   author's Windows box get its own LibreOffice + a Windows unoserver?
-   DESIGN.md says "author side needs Phoenix running" but not which box.
+1. ~~**Debian VM vs Windows for the author-side worker (Module 4).**~~
+   **Resolved (Jerry, 2026-09-07): "it won't matter because you're
+   importing the process."** Frank's import method pulls in whatever
+   LibreOffice components the task needs, on whatever box Phoenix is
+   running — the worker doesn't care where unoserver lives, it imports the
+   capability to wherever it's invoked. So Module 4b is written against
+   "Frank imports the process," not "connect to a fixed unoserver host."
+   4a (deploy `phoenix-unoserver.service`) still happens so there's a
+   daemon to import against; it just isn't a hardcoded network dependency.
 2. **Binding-contract gate timing** (above).
 3. **Change-order UX** — DESIGN.md nails the data model (new dated
    document, `supersedes_hex`, never edits the original). Module 6 needs a
