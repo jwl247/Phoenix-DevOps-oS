@@ -2,10 +2,35 @@
 # Phoenix Dashboard - Quick Start Script
 # Checks dependencies and launches the Electron app
 
+param([switch]$NoElevate)
+
 $ErrorActionPreference = 'Stop'
 
 # Always run from the dashboard directory regardless of where the script was invoked from
 Set-Location $PSScriptRoot
+
+# --- Platform admin by default -----------------------------------------------
+# The dashboard is the Phoenix control plane: pagefile / drive / service ops
+# (main.js isElevated() gates) and the embedded SHELL + CLAUDE panes need
+# Administrator to be useful. Self-elevate once at launch so there is no
+# mid-session UAC wall. Opt out: -NoElevate, or set PHOENIX_NO_ELEVATE=1.
+# The autostart Scheduled Task runs with RunLevel Highest, so it lands here
+# already elevated and this block is a no-op (no logon-time prompt).
+# Elevation raises what the main process and its shells can do; the renderer
+# stays locked down (contextIsolation, no nodeIntegration) either way.
+$__phxAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $__phxAdmin -and -not $NoElevate -and -not $env:PHOENIX_NO_ELEVATE) {
+    Write-Host "  [PHX] Elevating to Administrator (-NoElevate / PHOENIX_NO_ELEVATE=1 to skip)..." -ForegroundColor Yellow
+    $__hostExe = (Get-Process -Id $PID).Path
+    if (-not $__hostExe) { $__hostExe = 'pwsh.exe' }
+    try {
+        Start-Process -FilePath $__hostExe -Verb RunAs -WorkingDirectory $PSScriptRoot `
+            -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
+        exit 0
+    } catch {
+        Write-Host "  [PHX] Elevation declined - continuing unelevated; admin-only panels disabled." -ForegroundColor DarkYellow
+    }
+}
 
 # Load ~/.phoenix/phoenix.env (same file systemd / Scheduled Task uses)
 $envFile = Join-Path $HOME '.phoenix\phoenix.env'
