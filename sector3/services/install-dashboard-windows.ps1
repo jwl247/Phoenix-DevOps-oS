@@ -65,16 +65,21 @@ $action = New-ScheduledTaskAction `
 
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+# RunLevel Highest — the dashboard is the Phoenix control plane and self-elevates
+# anyway (dashboard/start.ps1); running the logon task elevated means no UAC
+# prompt at boot and the embedded SHELL/CLAUDE panes inherit admin.
+$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
 
 Register-ScheduledTask `
     -TaskName $TaskName `
     -Action $action `
     -Trigger $trigger `
     -Settings $settings `
-    -Description 'Phoenix DevOps OS Desktop — boots Help Desk + operator shell at login' `
+    -Principal $principal `
+    -Description 'Phoenix DevOps OS Desktop — boots Help Desk + operator shell at login (elevated)' `
     -Force | Out-Null
 
-ok "Registered '$TaskName' — runs at logon"
+ok "Registered '$TaskName' — runs at logon, elevated (RunLevel Highest)"
 
 hdr 'Ollama reminder'
 $ollama = Get-Command ollama -ErrorAction SilentlyContinue
