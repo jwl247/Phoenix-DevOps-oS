@@ -10,13 +10,13 @@ const fingerprint = require('../lib/fingerprint');
 const doc = require('../lib/document');
 const notify = require('../lib/notify');
 const fileFormat = require('../lib/file-format');
+const tamperGuard = require('../lib/tamper-guard');
 
-let passed = 0;
-function test(name, fn) {
-  fn();
-  passed++;
-  console.log('ok -', name);
-}
+// Register-then-run so async tests are actually awaited (they weren't
+// before — a rejected assertion in an async body just became an unhandled
+// rejection and still counted as "ok"). Test bodies are unchanged.
+const tests = [];
+function test(name, fn) { tests.push({ name, fn }); }
 
 // ── fingerprint.js ─────────────────────────────────────────────
 test('machineFingerprint is a 128-char hex string (SHA3-512 output)', () => {
@@ -312,4 +312,124 @@ test('loadOfficeFile does not flag an unsigned (DRAFT) document as tampered', ()
   assert.strictEqual(loaded.footer, null);
 });
 
-console.log(`\n${passed} passing`);
+// ── notify.js — worker transport (Module 3) ───────────────────
+test('workerTransport POSTs { doc_hex, notice } with a bearer token to /notify', async () => {
+  let captured = null;
+  const fakeFetch = async (url, opts) => {
+    captured = { url, opts };
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, notification_id: 1 }) };
+  };
+  const send = notify.workerTransport({
+    workerUrl: 'https://office-notify-worker.example.dev/',
+    auth: 'TESTTOKEN',
+    docHex: 'abc123',
+    fetchImpl: fakeFetch,
+  });
+  const res = await send({ to: 'x@y.com', via: 'email', subject: 's', body: 'b' });
+  assert.strictEqual(captured.url, 'https://office-notify-worker.example.dev/notify');
+  assert.strictEqual(captured.opts.method, 'POST');
+  assert.strictEqual(captured.opts.headers.Authorization, 'Bearer TESTTOKEN');
+  const body = JSON.parse(captured.opts.body);
+  assert.strictEqual(body.doc_hex, 'abc123');
+  assert.strictEqual(body.notice.to, 'x@y.com');
+  assert.strictEqual(res.notification_id, 1);
+});
+
+test('workerTransport throws on a non-2xx worker response', async () => {
+  const fakeFetch = async () => ({ ok: false, status: 500, text: async () => 'boom' });
+  const send = notify.workerTransport({ workerUrl: 'https://w.dev', auth: 't', docHex: 'h', fetchImpl: fakeFetch });
+  await assert.rejects(() => send({ to: 'a', via: 'email' }), /office-notify-worker 500/);
+});
+
+test('workerTransport requires workerUrl and docHex', () => {
+  assert.throws(() => notify.workerTransport({ docHex: 'h', fetchImpl: () => {} }), /workerUrl/);
+  assert.throws(() => notify.workerTransport({ workerUrl: 'x', fetchImpl: () => {} }), /docHex/);
+});
+
+// ── tamper-guard.js — detection + notification wired together ──
+function signedDocWithCounterparty(counterparty) {
+  let d = doc.createDocument({ fieldNames: ['total'], authorFingerprint: 'AUTHOR_FP', counterparty });
+  d = doc.fillField(d, 'total', '150', 'AUTHOR_FP').document;
+  d = doc.handToClient(d);
+  return doc.sign(d, 'CLIENT_FP');
+}
+
+test('checkAndAlert on an untouched signed document sends nothing', async () => {
+  const d = signedDocWithCounterparty({ email: 'c@x.com' });
+  let called = false;
+  const r = await tamperGuard.checkAndAlert(d, { send: async () => { called = true; } });
+  assert.strictEqual(r.integrity.tampered, false);
+  assert.strictEqual(r.notified, null);
+  assert.strictEqual(called, false);
+});
+
+test('checkAndAlert on a DRAFT document sends nothing and does not throw', async () => {
+  const d = doc.createDocument({ fieldNames: ['total'], authorFingerprint: 'AUTHOR_FP', counterparty: { email: 'c@x.com' } });
+  const r = await tamperGuard.checkAndAlert(d, { send: async () => { throw new Error('should not be called'); } });
+  assert.strictEqual(r.notified, null);
+});
+
+test('checkAndAlert on a tampered signed document fires the notification with the real doc identity', async () => {
+  const d = signedDocWithCounterparty({ phone: '5551234567', carrier: 'verizon' });
+  d.fields.total = '999'; // the mechanic edits the number after signing
+
+  let payload = null;
+  const send = async (notice) => { payload = notice; return { ok: true }; };
+  const r = await tamperGuard.checkAndAlert(d, {
+    attempt: { field: 'total', at: '2026-09-07T00:00:00Z' },
+    send,
+  });
+  assert.strictEqual(r.integrity.tampered, true);
+  assert.strictEqual(r.notified.sent, true);
+  assert.strictEqual(payload.to, '5551234567@vtext.com');
+  assert.strictEqual(payload.field, 'total');
+});
+
+test('checkAndAlert builds a worker transport from a URL when no send override is given', async () => {
+  const d = signedDocWithCounterparty({ email: 'c@x.com' });
+  d.fields.total = '999';
+  let captured = null;
+  const fakeFetch = async (url, opts) => {
+    captured = { url, body: JSON.parse(opts.body) };
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, notification_id: 9 }) };
+  };
+  const r = await tamperGuard.checkAndAlert(d, {
+    notifyWorkerUrl: 'https://office-notify-worker.phoenix-jwl.workers.dev',
+    phoenixAuth: 'T',
+    fetchImpl: fakeFetch,
+    attempt: { field: 'total' },
+  });
+  assert.strictEqual(r.notified.sent, true);
+  assert.strictEqual(captured.url, 'https://office-notify-worker.phoenix-jwl.workers.dev/notify');
+  // doc_hex must be the file-format identity hash, not something ad hoc
+  assert.strictEqual(captured.body.doc_hex, fileFormat.documentIdentityHash(d));
+});
+
+test('checkAndAlert reports a failed send without throwing', async () => {
+  const d = signedDocWithCounterparty({ email: 'c@x.com' });
+  d.fields.total = '999';
+  const r = await tamperGuard.checkAndAlert(d, { send: async () => { throw new Error('carrier gateway 550'); } });
+  assert.strictEqual(r.integrity.tampered, true);
+  assert.strictEqual(r.notified.sent, false);
+  assert.match(r.notified.error, /carrier gateway 550/);
+});
+
+test('checkAndAlert on a tampered doc with no transport at all reports the gap without throwing', async () => {
+  const d = signedDocWithCounterparty({ email: 'c@x.com' });
+  d.fields.total = '999';
+  const r = await tamperGuard.checkAndAlert(d, { attempt: { field: 'total' } });
+  assert.strictEqual(r.integrity.tampered, true);
+  assert.strictEqual(r.notified.sent, false);
+  assert.match(r.notified.error, /no notifyWorkerUrl/);
+});
+
+// ── run ───────────────────────────────────────────────────────
+(async () => {
+  let passed = 0, failed = 0;
+  for (const { name, fn } of tests) {
+    try { await fn(); passed++; console.log('ok -', name); }
+    catch (e) { failed++; console.error('FAIL -', name); console.error(e && e.stack || e); }
+  }
+  console.log(`\n${passed} passing${failed ? `, ${failed} FAILING` : ''}`);
+  process.exit(failed ? 1 : 0);
+})();

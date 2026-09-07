@@ -61,6 +61,7 @@ function buildAlterationNotice(doc, attempt) {
       `(detected ${detectedAt})`,
     doc_hash: doc.hash,
     field: attempt && attempt.field,
+    detected_at: detectedAt,
   };
 }
 
@@ -79,11 +80,41 @@ async function notifyAlterationAttempt(doc, attempt, send) {
     return { sent: false, error: 'no send() transport provided', notice };
   }
   try {
-    await send(notice);
-    return { sent: true, notice };
+    const result = await send(notice);
+    return { sent: true, notice, result: result || null };
   } catch (e) {
     return { sent: false, error: e.message, notice };
   }
 }
 
-module.exports = { CARRIER_GATEWAYS, resolveTarget, buildAlterationNotice, notifyAlterationAttempt };
+// One concrete transport: POST the notice to office-notify-worker, which
+// owns the actual send + the escalate-until-acknowledged loop + the audit
+// row (sector2/apps/office/notify-worker). This module stays transport-
+// blind — workerTransport just returns a send() shaped like any other.
+// docHex is bound here by the caller (tamper-guard.js) so notify.js never
+// has to know how a document's identity is computed.
+function workerTransport({ workerUrl, auth, docHex, fetchImpl } = {}) {
+  if (!workerUrl) throw new Error('workerTransport needs workerUrl');
+  if (!docHex) throw new Error('workerTransport needs docHex');
+  const f = fetchImpl || (typeof fetch === 'function' ? fetch : null);
+  if (!f) throw new Error('no fetch available — pass fetchImpl on older Node');
+  const base = String(workerUrl).replace(/\/+$/, '');
+  return async function send(notice) {
+    const res = await f(`${base}/notify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(auth ? { Authorization: `Bearer ${auth}` } : {}),
+      },
+      body: JSON.stringify({ doc_hex: docHex, notice }),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(`office-notify-worker ${res.status}: ${text.slice(0, 300)}`);
+    try { return JSON.parse(text); } catch { return { ok: true, raw: text }; }
+  };
+}
+
+module.exports = {
+  CARRIER_GATEWAYS, resolveTarget, buildAlterationNotice, notifyAlterationAttempt,
+  workerTransport,
+};

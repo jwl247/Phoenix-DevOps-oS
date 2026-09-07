@@ -1,0 +1,68 @@
+{
+  // office-notify-worker — Phoenix Office Module 3 (2026-09-07)
+  // UnitedSys — United Systems | jwl247 | GPL-3.0
+  //
+  // The standalone alteration-attempt notification path. Deliberately its
+  // own worker — NOT folded into packages-worker or phoenix-clonepool-r2
+  // (same standing call as the R2 split). It must keep working with zero
+  // Phoenix machine running: the counterparty protection can't depend on
+  // the author's box being up.
+  //
+  // Deploy:  wrangler deploy
+  // Tail:    wrangler tail
+  // Secrets (wrangler secret put <NAME>):
+  //   PHOENIX_AUTH    — bearer for POST /notify. MUST match the value the
+  //                     rest of Phoenix uses. Prefer ../../../package-handler/
+  //                     rotate-phoenix-auth.sh once this worker is added to it.
+  //   RESEND_API_KEY  — real arbitrary-recipient send (resend.com, free tier
+  //                     100/day). This is the working transport for customer
+  //                     SMS-gateway + email. Set this one.
+  // Optional:
+  //   NOTIFY_FROM     — From: header (default "Phoenix Office
+  //                     <office@authenticcoder.com>"; the domain must be
+  //                     verified in whichever transport is active).
+  //
+  // Email Routing send binding (send_email) is available as a Cloudflare-
+  // native fallback but only reaches VERIFIED destination addresses — good
+  // for routing a copy to the issuer, not for reaching an arbitrary
+  // customer. Uncomment + configure Email Routing to use it.
+
+  "name": "office-notify-worker",
+  "main": "index.js",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Non-secret. Used to build the ack link inside the scheduled re-scan,
+  // where there's no inbound request to read an origin from. Change this if
+  // the worker is deployed under a custom domain.
+  "vars": {
+    "WORKER_PUBLIC_URL": "https://office-notify-worker.phoenix-jwl.workers.dev"
+  },
+
+  // ── D1 ────────────────────────────────────────────────────────────────────
+  // Same phoenix_dev_db as everything else. office_notifications lives here
+  // (sector2/apps/office/schema.sql). This row set is an audit trail, not
+  // the source of truth for any document.
+  "d1_databases": [
+    {
+      "binding": "PHOENIX_DB",
+      "database_name": "phoenix_dev_db",
+      "database_id": "27958687-4349-47ed-8b6a-dbc4ab29730f"
+    }
+  ],
+
+  // ── Scheduled re-scan ─────────────────────────────────────────────────────
+  // Cloudflare cron minimum granularity is 1 minute. DESIGN.md / Life First
+  // Module 6 use a 30s interval; this is 60s — the one deviation, noted
+  // here on purpose. Every run: re-send every unacknowledged notification
+  // whose last send is >45s old, escalating the subject line, level capped
+  // at 5 (then it just keeps re-sending at level 5 — relentless until ack).
+  "triggers": {
+    "crons": ["* * * * *"]
+  }
+
+  // ── Email Routing send binding (optional, verified-recipients only) ────────
+  // "send_email": [
+  //   { "name": "ISSUER_COPY", "destination_address": "you@yourdomain.com" }
+  // ]
+}

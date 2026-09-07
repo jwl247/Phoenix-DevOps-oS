@@ -39,10 +39,25 @@ Three hard constraints from that:
 
 ## Module 3 — Notification transport (`notify.js` → real send)
 
-**Today:** `lib/notify.js` builds correct, tested payloads and takes a
-pluggable `send(notice)` function. Nothing sends.
+**Status 2026-09-07: BUILT — code complete, 36/36 tests, `wrangler deploy
+--dry-run` clean. Pending: Jerry's live deploy (Cloudflare secrets + Resend
+key) + one real end-to-end SMS test.** Files: `notify-worker/index.js`,
+`notify-worker/wrangler.jsonc`, `notify-worker/README.md`,
+`lib/tamper-guard.js`, `notify.js` `workerTransport()`, `schema.sql`
+`office_notifications`. Runbook in `notify-worker/README.md`.
 
-**Build:**
+**Transport reality (found while building):** "Cloudflare Email Workers" as
+written in DESIGN.md is *not* a free arbitrary-recipient send path —
+`send_email` only reaches verified addresses, and MailChannels ended its
+free Workers offering in 2024. Working transport is **Resend** (one `fetch`,
+free tier, swappable — `sendNotice()` is the only provider-aware spot). The
+`send_email` binding path is still coded for the issuer-copy case. AWS SES
+was rejected (single-cloud-vendor lock-in, against CLAUDE.md).
+
+**Cron granularity:** Cloudflare minimum is 1 minute, so the escalation loop
+is 60s not Module 6's 30s — the one deviation, noted in code + README.
+
+**Original build spec (as designed):**
 1. **New worker `office-notify-worker`** (`sector2/apps/office/notify-worker/`).
    Own worker, own route — *not* folded into `packages-worker` or
    `phoenix-clonepool-r2` (same standing call as the R2 worker split, per
