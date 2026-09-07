@@ -253,10 +253,33 @@ credential to manage.
   phoenix_dev_db --file=schema.sql --remote`, both tables confirmed live
   via a follow-up query against `sqlite_master`.
 
-**Not yet done:** Module 3 (real send transport for `notify.js` via
-Cloudflare Email Workers), Module 4 (LibreOffice/Frank/Helix wiring),
-Module 5 (Google/Windows sign-in), Module 6 (dual-pane UI wired into the
-dashboard, following `dashboard/scriptforge-launcher.js`'s pattern).
+**Phase 2, Module 3 — notification transport — CODE COMPLETE, 2026-09-07:**
+- `notify-worker/` — `office-notify-worker`, standalone Cloudflare Worker.
+  `POST /notify` (bearer `PHOENIX_AUTH`), `GET /ack/:token` (single-use,
+  token is the auth), `GET /whoami`, `GET /health`. `scheduled()` cron
+  (`* * * * *`) re-sends every unacknowledged notification, escalating the
+  subject, level capped at 5. Zero deps. Survives with no Phoenix box up.
+- `schema.sql` — `office_notifications` append-only audit table (the proof
+  the attempt happened *and* the counterparty was told, repeatedly, until
+  acknowledged).
+- `lib/tamper-guard.js` — `checkAndAlert(doc, opts)`, the seam between
+  `document.js` (pure detection) and `notify.js` (payloads) and the worker.
+  Never throws; a failed notice can't corrupt the op that found the tamper.
+- `notify.js` gained `workerTransport({ workerUrl, auth, docHex })`.
+- 36/36 tests (test harness fixed to actually await async cases).
+  `wrangler deploy --dry-run` clean.
+- **Transport:** DESIGN.md's "Cloudflare Email Workers" isn't a real free
+  arbitrary-recipient path (`send_email` = verified recipients only;
+  MailChannels' free tier gone). Working transport is **Resend** (swappable,
+  one `fetch`); `send_email` binding still coded for issuer copies; AWS SES
+  rejected (vendor lock-in). Cron min is 60s, not Module 6's 30s.
+- **Pending:** Jerry's live deploy (secrets + Resend key) + one real SMS
+  round-trip. Runbook: `notify-worker/README.md`.
+
+**Not yet done:** Module 4 (LibreOffice/Frank/Helix wiring), Module 5
+(Google/Windows sign-in), Module 6 (dual-pane UI wired into the dashboard,
+following `dashboard/scriptforge-launcher.js`'s pattern). Plan for all:
+`PLAN-modules-3-6.md`.
 
 **Phase 2 — dual-pane UI:** the ScriptForge-style single-file HTML app,
 wired into the dashboard the same way (own Electron window, sandboxed).

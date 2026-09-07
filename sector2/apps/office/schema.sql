@@ -66,3 +66,42 @@ CREATE TABLE IF NOT EXISTS office_documents (
 CREATE INDEX IF NOT EXISTS idx_documents_author ON office_documents(author_id);
 CREATE INDEX IF NOT EXISTS idx_documents_state  ON office_documents(state);
 CREATE INDEX IF NOT EXISTS idx_documents_supersedes ON office_documents(supersedes_hex);
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- TABLE: office_notifications   (Module 3 — 2026-09-07)
+-- Append-only log of alteration-attempt notifications and their escalation
+-- state. Written by office-notify-worker (sector2/apps/office/notify-worker).
+--
+-- This is the audit trail that (a) an alteration was attempted against a
+-- SIGNED document AND (b) the counterparty was told, and kept being told
+-- until they acknowledged. It is NOT the source of truth for the document
+-- itself — that stays in the .office file (DESIGN.md "Self-sovereign
+-- truth"). Losing this table loses the notification history, nothing else.
+--
+-- Deliberately NOT dependent on office_authors / office_documents / a Life
+-- First user: the counterparty (DESIGN.md's oil-change customer) has no
+-- Phoenix account. Contact info is denormalized straight onto the row from
+-- the document, exactly as notify.js resolves it.
+-- ══════════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS office_notifications (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  doc_hex           TEXT    NOT NULL,               -- document identity (mirrors office_documents.hex / the .office header)
+  doc_hash          TEXT    DEFAULT NULL,           -- the signed-baseline hash the attempt failed against
+  attempt_field     TEXT    DEFAULT NULL,           -- which field the alteration targeted, if known
+  attempt_at        TEXT    NOT NULL,               -- when the tamper was detected (ISO 8601)
+  to_address        TEXT    NOT NULL,               -- resolved send target: carrier SMS-gateway address or plain email
+  via               TEXT    NOT NULL                -- how it's delivered
+                      CHECK(via IN ('sms-gateway','email')),
+  ack_token         TEXT    NOT NULL UNIQUE,        -- single-use token; the ack link IS the auth, no account needed
+  escalation_level  INTEGER NOT NULL DEFAULT 1      -- 1..5, bumped by the scheduled re-scan; caps at 5 and keeps sending
+                      CHECK(escalation_level BETWEEN 1 AND 5),
+  send_count        INTEGER NOT NULL DEFAULT 0,     -- total sends (initial + every escalation)
+  last_sent_at      TEXT    DEFAULT NULL,
+  last_error        TEXT    DEFAULT NULL,           -- transport error from the most recent send attempt, if any
+  acknowledged_at   TEXT    DEFAULT NULL,           -- set when the ack link is hit; stops all further escalation
+  created_at        TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_notif_doc  ON office_notifications(doc_hex);
+-- the scheduled re-scan's hot query: unacknowledged, not yet maxed, ordered by staleness
+CREATE INDEX IF NOT EXISTS idx_notif_open ON office_notifications(acknowledged_at, last_sent_at);
