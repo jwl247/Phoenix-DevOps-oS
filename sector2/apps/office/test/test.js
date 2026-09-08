@@ -556,6 +556,58 @@ test('an identity resolves cleanly into a document handoff (document.js unchange
   assert.strictEqual(d.history.find(h => h.event === 'SIGNED').by, me.author_id);
 });
 
+// ── Module 6 — the full lifecycle the dual-pane UI drives ─────
+test('full UI lifecycle: whoami -> new -> fill -> hand -> sign -> save/open -> tamper -> verify+notify -> change order', async () => {
+  const me = await identity.resolveAuthor({ prefer: 'fingerprint' });
+
+  let d = doc.createDocument({
+    fieldNames: ['customer', 'total'],
+    authorFingerprint: me.author_id,
+    counterparty: { email: 'cust@example.com' },
+  });
+  d = doc.fillField(d, 'customer', 'Acme Steel', me.author_id).document;
+  d = doc.fillField(d, 'total', '1850.00', me.author_id).document;
+  // the UI blocks an overwrite the same way document.js does
+  assert.strictEqual(doc.fillField(d, 'total', '9999', me.author_id).allowed, false);
+
+  d = doc.handToClient(d);
+  assert.strictEqual(d.state, 'PENDING_REVIEW');
+  d = doc.sign(d, me.author_id);
+  assert.strictEqual(d.state, 'SIGNED');
+
+  // office:qr
+  assert.ok(fileFormat.buildHeader(d).startsWith('USYS:'));
+  assert.ok(fileFormat.buildFooter(d).includes(':FOOTER:'));
+
+  // office:save -> office:open round-trip
+  const tmp = path.join(os.tmpdir(), `office-m6-${Date.now()}.office.json`);
+  fileFormat.saveOfficeFile(tmp, d);
+  assert.strictEqual(fileFormat.loadOfficeFile(tmp).tampered, false);
+
+  // a mechanic edits the saved file; office:open flags it, office:verify notifies
+  const raw = JSON.parse(fs.readFileSync(tmp, 'utf8'));
+  raw.body.fields.total = '2850.00';
+  fs.writeFileSync(tmp, JSON.stringify(raw, null, 2));
+  const reopened = fileFormat.loadOfficeFile(tmp);
+  assert.strictEqual(reopened.tampered, true);
+
+  let alertedTo = null;
+  const guard = await tamperGuard.checkAndAlert(reopened.document, {
+    attempt: { field: 'total' },
+    send: async (n) => { alertedTo = n.to; return { ok: true }; },
+  });
+  assert.strictEqual(guard.integrity.tampered, true);
+  assert.strictEqual(guard.notified.sent, true);
+  assert.strictEqual(alertedTo, 'cust@example.com');
+
+  // office:change-order
+  const co = doc.createChangeOrder(d, ['reason', 'new_total'], me.author_id);
+  assert.strictEqual(co.state, 'DRAFT');
+  assert.ok(co.supersedes && co.supersedes.hash);
+
+  fs.unlinkSync(tmp);
+});
+
 // ── run ───────────────────────────────────────────────────────
 (async () => {
   let passed = 0, failed = 0;

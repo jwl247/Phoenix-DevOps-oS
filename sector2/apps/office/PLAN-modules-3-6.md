@@ -207,11 +207,21 @@ internal case completely; Google is only for later cross-org convenience.
 
 ## Module 6 — Dual-pane UI
 
-**Today:** nothing. Pattern to follow: `dashboard/scriptforge-launcher.js`
-(own Electron window, `sandbox: true`, `contextIsolation: true`,
-`nodeIntegration: false`, one IPC channel).
+**Status 2026-09-07: BUILT — code complete, 50 tests, all channel names
+cross-checked, end-to-end lifecycle verified without Electron.**
+- `sector2/apps/office/index.html` — left = fields (lock on fill) +
+  counterparty + state badge + state-aware handoff buttons + QR strings;
+  right = Claude copilot (debounced auto-refresh).
+- `sector2/apps/office/preload.js` — 12 allow-listed `office:*` channels,
+  sandboxed renderer.
+- `dashboard/office-launcher.js` — window + `office:*` handlers (call the
+  libs in main) + `office:copilot` via the dashboard's `_runClaudeCli`.
+- Wired: `main.js` register line, `preload.js` `launch-office`,
+  `button-generator.js` **OFFICE** button.
+- **Pending:** launch it once from the dashboard to exercise the live
+  render / contextBridge / copilot (can't unit-test a running window).
 
-**Build:**
+**Original build spec (as designed):**
 1. **`sector2/apps/office/index.html`** — single-file app, same shape as
    ScriptForge. Left pane: the document's fields, rendered from
    `document.js` state — each field an input that goes read-only the

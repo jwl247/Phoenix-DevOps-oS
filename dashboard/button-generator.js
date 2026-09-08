@@ -132,6 +132,18 @@ ButtonGenerator
                 .catch(e => { el.textContent = original; alert(e.message); });
         }
     })
+    .define({
+        id: 'office',
+        label: 'OFFICE',
+        sub: 'tamper-evident documents · work orders · sign',
+        onClick({ invoke, el }) {
+            const original = el.textContent;
+            el.textContent = 'opening...';
+            invoke('launch-office', {})
+                .then(r => { el.textContent = original; if (!r.success) alert(r.error); })
+                .catch(e => { el.textContent = original; alert(e.message); });
+        }
+    })
     // ── PoC: Windows steers, Debian runs ─────────────────────────────────
     .define({
         id: 'poc-debian',
