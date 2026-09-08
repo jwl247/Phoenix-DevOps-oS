@@ -30,6 +30,8 @@ const ALLOWED_CHANNELS = new Set([
   'launch-steam', 'get-steam-status',
   // scriptforge-launcher.js
   'launch-scriptforge',
+  // office-launcher.js  (the Office window has its own narrow preload for office:* channels)
+  'launch-office',
   // config-centralizer.js
   'config-centralizer-scan', 'config-centralizer-import', 'config-centralizer-sync-all',
   'config-centralizer-list-imported', 'config-centralizer-init-git', 'config-centralizer-commit'

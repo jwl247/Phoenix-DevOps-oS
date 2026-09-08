@@ -302,10 +302,37 @@ credential to manage.
   token comes straight from Google's TLS endpoint in response to our own
   device_code).
 
-**Not yet done:** Module 4 (LibreOffice/Frank/Helix wiring), Module 6
-(dual-pane UI wired into the dashboard, following
-`dashboard/scriptforge-launcher.js`'s pattern). Plan for both:
-`PLAN-modules-3-6.md`.
+**Phase 2, Module 6 — dual-pane UI — CODE COMPLETE, 2026-09-07:**
+- `sector2/apps/office/index.html` — the app. Left pane: the document's
+  fields (each goes read-only the instant it's filled — the lib enforces
+  it, the UI reflects it), counterparty contact, state badge
+  (DRAFT/PENDING REVIEW/SIGNED), and the custody-handoff buttons that
+  change with state (Hand to client → Client signs / Send back → Verify
+  integrity / New change order). Header + footer QR strings shown. Right
+  pane: the Claude copilot — suggestions on the document as it's filled,
+  auto-refreshed (debounced) on every change.
+- `sector2/apps/office/preload.js` — narrow bridge, 12 allow-listed
+  `office:*` channels, nothing else. Renderer stays sandboxed
+  (contextIsolation on, nodeIntegration off).
+- `dashboard/office-launcher.js` — opens the window with that preload;
+  `office:*` IPC handlers call the libs in the main process; `office:copilot`
+  routes through the dashboard's existing `_runClaudeCli` (subscription,
+  no-tools). `dialog` for open/save.
+- Wired into the dashboard: `require('./office-launcher').register(...)` in
+  `main.js`, `launch-office` in `preload.js`'s allowlist, an **OFFICE**
+  button in `button-generator.js`.
+- `document.js` unchanged. Verified end-to-end (no Electron needed for the
+  logic): whoami → new → fill → overwrite-blocked → hand → sign → QR →
+  save/open round-trip → on-disk tamper → verify + notify → change order.
+  **50 tests.** Channel names cross-checked identical across
+  preload / launcher / html.
+- **Not covered by automated tests** (needs a running Electron window): the
+  actual render, the contextBridge, and a live copilot call — launch it
+  from the dashboard's OFFICE button to exercise those.
+
+**Not yet done:** Module 4 (LibreOffice/Frank/Helix wiring — the invisible
+format-following). Office is fully usable for the tamper-evident-record
+purpose without it. Plan: `PLAN-modules-3-6.md`.
 
 **Phase 2 — dual-pane UI:** the ScriptForge-style single-file HTML app,
 wired into the dashboard the same way (own Electron window, sandboxed).

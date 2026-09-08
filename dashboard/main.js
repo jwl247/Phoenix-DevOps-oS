@@ -902,6 +902,7 @@ require('./terminal-pty').register({ ipcMain });
 require('./google-launcher').register({ ipcMain, shell });
 require('./steam-launcher').register({ ipcMain, shell });
 require('./scriptforge-launcher').register({ ipcMain, BrowserWindow, phoenixRoot: resolvePhoenixRoot() });
+require('./office-launcher').register({ ipcMain, BrowserWindow, dialog, phoenixRoot: resolvePhoenixRoot(), askAI: _runClaudeCli });
 require('./config-centralizer').register({ ipcMain });
 const HudMode = require('./hud-mode');
 HudMode.install({ app, BrowserWindow, ipcMain });
