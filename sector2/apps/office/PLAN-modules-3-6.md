@@ -158,12 +158,22 @@ follows 4b. Module 4 does not depend on Modules 3/5/6.
 
 ## Module 5 — Pluggable sign-in (`office_authors` → real resolution)
 
-**Today:** `lib/fingerprint.js` produces the sovereign Phoenix hardware
-fingerprint (verified live, all 9 Windows signals real). `schema.sql` has
-`office_authors` (fingerprint | windows | google) live in `phoenix_dev_db`.
-No resolver, no Windows/Google paths.
+**Status 2026-09-07: BUILT — code complete, 49/49 tests, worker dry-run
+clean, live-verified on the real machine (fingerprint + Windows SID both
+resolve to stable derived ids).**
+- `lib/identity.js` — `resolveAuthor()`, `credentialFor()`, `windowsSid()`,
+  `deriveAuthorId()` (deterministic/offline — the sovereign anchor),
+  `linkCredential()`, `workerAuthStore()`, and the Google device-flow
+  helpers (`googleDeviceCodeStart/Poll`, `googleSubFromIdToken`).
+- `notify-worker/index.js` — `GET /author/:type/:value`, `POST /author/link`
+  (the Office backend for `office_authors`).
+- `document.js` untouched — Module 6 passes `resolveAuthor().author_id` in.
+- **Pending:** a real Google OAuth client id (`console.cloud.google.com`,
+  "TV & Limited Input" type) to exercise the google path live — optional,
+  fingerprint + windows cover the internal case fully. JWKS signature
+  verification of the id_token is a noted hardening step.
 
-**Build:**
+**Original build spec (as designed):**
 1. **`lib/identity.js`** — `resolveAuthor({ preferred }) → { author_id,
    credential_type, credential_value }`. Order of attempt:
    - `fingerprint` — always works, zero network, `machineFingerprint()`.

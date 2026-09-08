@@ -276,9 +276,35 @@ credential to manage.
 - **Pending:** Jerry's live deploy (secrets + Resend key) + one real SMS
   round-trip. Runbook: `notify-worker/README.md`.
 
-**Not yet done:** Module 4 (LibreOffice/Frank/Helix wiring), Module 5
-(Google/Windows sign-in), Module 6 (dual-pane UI wired into the dashboard,
-following `dashboard/scriptforge-launcher.js`'s pattern). Plan for all:
+**Phase 2, Module 5 — pluggable author identity — CODE COMPLETE, 2026-09-07:**
+- `lib/identity.js` — `resolveAuthor()` resolves the acting author to one
+  canonical `author_id`. `fingerprint` (always works, zero network, never
+  needs D1 — the sovereign anchor) / `windows` (the OS account SID) /
+  `google` (an OpenID `sub` via the OAuth 2.0 device-authorization flow —
+  no embedded browser). `author_id` is *derived* deterministically from a
+  credential; D1's `office_authors` only *links* alternate credentials to
+  an existing id, and nothing breaks if D1 is unreachable (degrades to
+  `source: 'derived'`, never throws).
+- `notify-worker/index.js` gained `GET /author/:type/:value` (lookup) and
+  `POST /author/link` — the Office backend for `office_authors` (same D1,
+  same auth). `lib/identity.js` `workerAuthStore()` binds to them, same
+  pattern as `notify.js` `workerTransport()`.
+- `document.js` **unchanged** — its handoffs already take an opaque
+  identity string in `by`. Module 6 calls `resolveAuthor()` and passes
+  `author_id` into `createDocument` / `fillField` / `sign`.
+- Live-verified on the real machine: fingerprint → stable derived id;
+  Windows SID (`S-1-5-21-…`) → stable derived id. 36 → **49 tests**.
+  Google `sub` decode + device-flow poll covered with mocked fetch (real
+  Google needs an OAuth client id; without one the google path is simply
+  unavailable and fingerprint/windows still work).
+- **Hardening noted:** full JWKS signature verification of the Google
+  id_token (currently decode + aud/iss/exp check — sufficient since the
+  token comes straight from Google's TLS endpoint in response to our own
+  device_code).
+
+**Not yet done:** Module 4 (LibreOffice/Frank/Helix wiring), Module 6
+(dual-pane UI wired into the dashboard, following
+`dashboard/scriptforge-launcher.js`'s pattern). Plan for both:
 `PLAN-modules-3-6.md`.
 
 **Phase 2 — dual-pane UI:** the ScriptForge-style single-file HTML app,

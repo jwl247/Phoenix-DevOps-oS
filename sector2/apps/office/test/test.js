@@ -11,6 +11,7 @@ const doc = require('../lib/document');
 const notify = require('../lib/notify');
 const fileFormat = require('../lib/file-format');
 const tamperGuard = require('../lib/tamper-guard');
+const identity = require('../lib/identity');
 
 // Register-then-run so async tests are actually awaited (they weren't
 // before — a rejected assertion in an async body just became an unhandled
@@ -421,6 +422,138 @@ test('checkAndAlert on a tampered doc with no transport at all reports the gap w
   assert.strictEqual(r.integrity.tampered, true);
   assert.strictEqual(r.notified.sent, false);
   assert.match(r.notified.error, /no notifyWorkerUrl/);
+});
+
+// ── identity.js — Module 5, pluggable author identity ─────────
+test('credentialFor(fingerprint) returns the 128-hex hardware fingerprint', () => {
+  const c = identity.credentialFor('fingerprint');
+  assert.strictEqual(c.type, 'fingerprint');
+  assert.ok(/^[0-9a-f]{128}$/.test(c.value));
+});
+
+test('credentialFor(windows) returns a SID on Windows, null elsewhere', () => {
+  const c = identity.credentialFor('windows');
+  if (process.platform === 'win32') {
+    assert.ok(c && /^S-1-\d+(-\d+)+$/.test(c.value), 'expected a Windows SID');
+  } else {
+    assert.strictEqual(c, null);
+  }
+});
+
+test('deriveAuthorId is deterministic and credential-specific', () => {
+  const a = identity.deriveAuthorId({ type: 'fingerprint', value: 'abc' });
+  const b = identity.deriveAuthorId({ type: 'fingerprint', value: 'abc' });
+  const c = identity.deriveAuthorId({ type: 'fingerprint', value: 'xyz' });
+  const d = identity.deriveAuthorId({ type: 'windows', value: 'abc' });
+  assert.strictEqual(a, b);
+  assert.notStrictEqual(a, c);
+  assert.notStrictEqual(a, d); // same value, different type -> different id
+  assert.ok(a.startsWith('a_f'));
+});
+
+test('resolveAuthor with no store derives a stable sovereign author_id from the fingerprint', async () => {
+  const r1 = await identity.resolveAuthor();
+  const r2 = await identity.resolveAuthor();
+  assert.strictEqual(r1.source, 'derived');
+  assert.strictEqual(r1.credential.type, 'fingerprint');
+  assert.strictEqual(r1.author_id, r2.author_id);
+  assert.strictEqual(r1.linked, false);
+});
+
+test('resolveAuthor uses the store author_id when the credential is already linked', async () => {
+  const store = { lookup: async () => 'a_existing_person', link: async () => { throw new Error('should not link'); } };
+  const r = await identity.resolveAuthor({ store });
+  assert.strictEqual(r.author_id, 'a_existing_person');
+  assert.strictEqual(r.source, 'd1');
+  assert.strictEqual(r.linked, true);
+});
+
+test('resolveAuthor derives + links when the store has no match', async () => {
+  let linked = null;
+  const store = { lookup: async () => null, link: async (row) => { linked = row; return { ...row, already: false }; } };
+  const r = await identity.resolveAuthor({ store });
+  assert.strictEqual(r.source, 'derived');
+  assert.strictEqual(r.linked, true);
+  assert.strictEqual(linked.credential_type, 'fingerprint');
+  assert.strictEqual(linked.author_id, r.author_id);
+});
+
+test('resolveAuthor never throws when the store is unreachable', async () => {
+  const store = { lookup: async () => { throw new Error('D1 down'); }, link: async () => { throw new Error('D1 down'); } };
+  const r = await identity.resolveAuthor({ store });
+  assert.strictEqual(r.source, 'derived');
+  assert.strictEqual(r.linked, false);
+  assert.ok(r.author_id);
+});
+
+test('workerAuthStore.lookup hits GET /author/:type/:value with a bearer, maps 404 to null', async () => {
+  const calls = [];
+  const fakeFetch = async (url, o) => {
+    calls.push({ url, o });
+    if (url.includes('/author/fingerprint/')) return { status: 404, ok: false };
+    return { status: 200, ok: true, json: async () => ({ author_id: 'a_x' }) };
+  };
+  const store = identity.workerAuthStore({ workerUrl: 'https://w.dev/', auth: 'T', fetchImpl: fakeFetch });
+  assert.strictEqual(await store.lookup('fingerprint', 'deadbeef'), null);
+  assert.strictEqual(calls[0].url, 'https://w.dev/author/fingerprint/deadbeef');
+  assert.strictEqual(calls[0].o.headers.Authorization, 'Bearer T');
+  assert.strictEqual(await store.lookup('windows', 'S-1-5-21'), 'a_x');
+});
+
+test('workerAuthStore.link POSTs /author/link', async () => {
+  let body = null;
+  const fakeFetch = async (url, o) => {
+    body = JSON.parse(o.body);
+    return { ok: true, status: 200, text: async () => JSON.stringify({ author_id: body.author_id, already: false }) };
+  };
+  const store = identity.workerAuthStore({ workerUrl: 'https://w.dev', auth: 'T', fetchImpl: fakeFetch });
+  const out = await store.link({ author_id: 'a_1', credential_type: 'windows', credential_value: 'S-1-5-21-7' });
+  assert.strictEqual(out.author_id, 'a_1');
+  assert.strictEqual(body.credential_type, 'windows');
+});
+
+test('linkCredential requires a store and passes the right row shape', async () => {
+  let row = null;
+  const store = { link: async (r) => { row = r; return r; } };
+  await identity.linkCredential({ authorId: 'a_1', type: 'google', value: '11576...', store });
+  assert.deepStrictEqual(row, { author_id: 'a_1', credential_type: 'google', credential_value: '11576...' });
+  await assert.rejects(() => identity.linkCredential({ authorId: 'a_1', type: 'google', value: 'x' }), /needs a store/);
+});
+
+test('googleSubFromIdToken decodes sub/email and rejects a wrong-audience token', () => {
+  const mk = (payload) => {
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+    return `${b64({ alg: 'RS256' })}.${b64(payload)}.sig`;
+  };
+  const good = mk({ iss: 'https://accounts.google.com', aud: 'CID', sub: '11576', email: 'a@b.com', email_verified: true, exp: Math.floor(Date.now() / 1000) + 3600 });
+  const claims = identity.googleSubFromIdToken(good, { clientId: 'CID' });
+  assert.strictEqual(claims.sub, '11576');
+  assert.strictEqual(claims.email, 'a@b.com');
+  assert.strictEqual(claims.email_verified, true);
+  assert.throws(() => identity.googleSubFromIdToken(good, { clientId: 'OTHER' }), /aud does not match/);
+  const expired = mk({ iss: 'accounts.google.com', aud: 'CID', sub: '1', exp: 1 });
+  assert.throws(() => identity.googleSubFromIdToken(expired, { clientId: 'CID' }), /expired/);
+});
+
+test('googleDeviceCodePoll surfaces authorization_pending as a coded error', async () => {
+  const pending = async () => ({ ok: false, status: 428, json: async () => ({ error: 'authorization_pending' }) });
+  await assert.rejects(
+    () => identity.googleDeviceCodePoll({ clientId: 'C', deviceCode: 'D', fetchImpl: pending }),
+    (e) => e.code === 'authorization_pending'
+  );
+  const done = async () => ({ ok: true, status: 200, json: async () => ({ id_token: 'x.y.z', access_token: 'a' }) });
+  const tok = await identity.googleDeviceCodePoll({ clientId: 'C', deviceCode: 'D', fetchImpl: done });
+  assert.strictEqual(tok.id_token, 'x.y.z');
+});
+
+test('an identity resolves cleanly into a document handoff (document.js unchanged)', async () => {
+  const me = await identity.resolveAuthor();
+  let d = doc.createDocument({ fieldNames: ['total'], authorFingerprint: me.author_id, counterparty: { email: 'c@x.com' } });
+  assert.strictEqual(d.author_fingerprint, me.author_id);
+  d = doc.fillField(d, 'total', '150', me.author_id).document;
+  d = doc.handToClient(d);
+  d = doc.sign(d, me.author_id);
+  assert.strictEqual(d.history.find(h => h.event === 'SIGNED').by, me.author_id);
 });
 
 // ── run ───────────────────────────────────────────────────────

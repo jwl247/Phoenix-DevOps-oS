@@ -10,12 +10,18 @@
 // machine running, so the protection never depends on the author's box.
 // It does NOT touch packages-worker or phoenix-clonepool-r2.
 //
+// Also the Office backend for the office_authors table (Module 5) — same
+// D1, same auth, one worker. The notify path is its first and primary job.
+//
 // Routes
-//   GET  /health          worker + bindings status (no auth)
-//   GET  /whoami          auth round-trip, no side effects (Bearer PHOENIX_AUTH)
-//   POST /notify          create + send a notification         (Bearer PHOENIX_AUTH)
-//                         body: { doc_hex, notice }   notice = notify.js buildAlterationNotice() output
-//   GET  /ack/:token      counterparty acknowledges; stops escalation (token IS the auth)
+//   GET  /health                       worker + bindings status (no auth)
+//   GET  /whoami                       auth round-trip (Bearer PHOENIX_AUTH)
+//   POST /notify                       create + send a notification (Bearer)
+//                                      body: { doc_hex, notice }
+//   GET  /ack/:token                   counterparty acknowledges (token IS the auth)
+//   GET  /author/:type/:value          canonical author_id for a credential (Bearer)
+//   POST /author/link                  link a credential to an author_id (Bearer)
+//                                      body: { author_id, credential_type, credential_value }
 //
 // scheduled()  cron (* * * * *) — re-send every unacknowledged notification
 //              whose last send is stale, escalating the subject, level capped at 5.
@@ -207,6 +213,48 @@ async function handleAck(token, env) {
   });
 }
 
+// ── office_authors (Module 5) ────────────────────────────────────────────────
+const CRED_TYPES = ['fingerprint', 'windows', 'google'];
+
+async function handleAuthorLookup(type, value, env) {
+  if (!CRED_TYPES.includes(type)) return err(`credential_type must be one of ${CRED_TYPES.join(', ')}`, 400);
+  if (!value) return err('credential value required', 400);
+  const row = await env.PHOENIX_DB.prepare(
+    'SELECT author_id, linked_at FROM office_authors WHERE credential_type = ? AND credential_value = ?'
+  ).bind(type, value).first();
+  if (!row) return err('not linked', 404);
+  return json({ author_id: row.author_id, linked_at: row.linked_at });
+}
+
+async function handleAuthorLink(req, env) {
+  let body;
+  try { body = await req.json(); } catch { return err('body must be JSON', 400); }
+  const { author_id, credential_type, credential_value } = body || {};
+  if (!author_id) return err('author_id required', 400);
+  if (!CRED_TYPES.includes(credential_type)) return err(`credential_type must be one of ${CRED_TYPES.join(', ')}`, 400);
+  if (!credential_value) return err('credential_value required', 400);
+
+  // idempotent: if this credential is already linked, return the existing
+  // author_id (409-ish info, not an error) rather than violating UNIQUE.
+  const existing = await env.PHOENIX_DB.prepare(
+    'SELECT author_id, linked_at FROM office_authors WHERE credential_type = ? AND credential_value = ?'
+  ).bind(credential_type, credential_value).first();
+  if (existing) {
+    return json({
+      author_id: existing.author_id,
+      linked_at: existing.linked_at,
+      already: true,
+      conflict: existing.author_id !== author_id, // a credential can't move authors
+    });
+  }
+
+  const now = new Date().toISOString();
+  await env.PHOENIX_DB.prepare(
+    'INSERT INTO office_authors (author_id, credential_type, credential_value, linked_at) VALUES (?, ?, ?, ?)'
+  ).bind(author_id, credential_type, credential_value, now).run();
+  return json({ author_id, linked_at: now, already: false });
+}
+
 function ackPage(message, ok) {
   return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Phoenix Office</title>
@@ -283,6 +331,20 @@ export default {
 
     if (path.startsWith('/ack/')) {
       return handleAck(decodeURIComponent(path.slice('/ack/'.length)), env);
+    }
+
+    if (path === '/author/link' && req.method === 'POST') {
+      if (!isAuthorized(req, env)) return err('unauthorized', 401);
+      return handleAuthorLink(req, env);
+    }
+    if (path.startsWith('/author/') && req.method === 'GET') {
+      if (!isAuthorized(req, env)) return err('unauthorized', 401);
+      const rest = path.slice('/author/'.length).split('/');
+      return handleAuthorLookup(
+        decodeURIComponent(rest[0] || ''),
+        decodeURIComponent(rest.slice(1).join('/') || ''),
+        env
+      );
     }
 
     return err('not found', 404);
