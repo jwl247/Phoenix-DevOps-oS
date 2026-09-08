@@ -23,6 +23,40 @@ with no central database required to trust it."
 
 ---
 
+## Product principles (Jerry, 2026-09-07) — the bar every feature is held to
+
+**EASY for the user, even when it's hard for us.** The complexity lives in
+Phoenix, never in the person's face.
+
+- **No 1000-page manual.** If a feature needs a manual, it's wrong. The
+  screen tells you what to do.
+- **A button for every process.** Not a menu of options to reason about —
+  one obvious button per thing you'd want to do, in the state where it
+  makes sense.
+- **No "convert." No "save."** Conversion is invisible process-following
+  (Module 4). **Saving is automatic** — the document is always persisted;
+  there is no Save button to forget to press.
+- **The clone pool carries the load.** Office doesn't manage files, Phoenix
+  does. Concretely:
+  - Every Office document is **auto-intaked into the clone pool** — hex
+    identity, custody, R2. So "it's saved" means "the pool has it,"
+    versioned and recoverable, with zero user action.
+  - **Reference other documents by naming them.** "I need to reference
+    these 3 documents" → tell Phoenix which → *poof*, those 3 are in your
+    working directory, pulled from the pool. Use them, then **delete them
+    freely** — the pool is the source of truth, not your workdir. (This is
+    `usys clone` / the pull-down worker, wired into Office's UI.)
+  - **New document = pick a template**, not "type your field names." The
+    templates (work order, invoice, inspection, change order) live in the
+    pool; picking one drops its field set in.
+
+**Office is the hook; Phoenix is the reason it can be this easy.** "People
+want PBM Office — so you have to have Phoenix." Every place we can make an
+instance genuinely easy, Phoenix underneath is what makes that possible.
+The two sell together.
+
+---
+
 ## Decided
 
 ### The dual pane

@@ -255,6 +255,39 @@ Module 4's `worker.js` is in.
 
 ---
 
+## Module 7 — the EASY pass (Jerry, 2026-09-07 — see DESIGN.md "Product principles")
+
+Modules 3/5/6 make Office *work*. Module 7 makes it *effortless* — the bar
+is "no manual, a button for everything, nothing to save or convert." Not
+yet built.
+
+1. **Autosave.** Kill the Save button. The document persists on every
+   change to a stable path (derived, or chosen once). Ctrl+S becomes a
+   no-op that just flashes "saved."
+2. **Auto-intake to the clone pool.** On create and on every state change,
+   the `.office` file is intaked (`sector2/package-handler/intake.sh` /
+   `usys clone`) — hex identity, custody, R2. "Saved" = "the pool has it,"
+   versioned, recoverable, zero user action. The local file becomes a
+   disposable working copy.
+3. **Template picker for New.** Replace the "type comma-separated field
+   names" prompt with a list of templates (work order, invoice,
+   inspection, change order). Templates are `.office` skeletons stored in
+   the pool; picking one loads its field set. PBM's real templates seed
+   the "PBM Office" build.
+4. **Reference-pull from the pool.** A "Reference documents" action: name
+   or pick documents → Phoenix clones them from the pool into the working
+   directory → they show in a side drawer, read-only → the user can delete
+   them any time because the pool is authoritative. This is the pull-down
+   worker (`phoenix-clonepool-r2` / `usys clone`) surfaced in Office's UI.
+5. **One-button flows.** Audit every action for "does the user have to
+   think?" — collapse choices, default the obvious, name buttons for the
+   outcome not the mechanism.
+
+Depends on: Modules 3/5/6 (done) + the clonepool pull-down (exists —
+`phoenix-clonepool-r2` worker + `usys clone`). Module 4 not required.
+
+---
+
 ## Build order
 
 All four ship. This is engineering sequence, not a scope cut — nothing here
