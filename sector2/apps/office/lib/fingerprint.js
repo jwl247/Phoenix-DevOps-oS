@@ -69,4 +69,9 @@ function machineFingerprint() {
   return doubleHash(getSignals());
 }
 
-module.exports = { machineFingerprint, doubleHash, getSignals, getWindowsSignals, getLinuxSignals };
+module.exports = {
+  machineFingerprint, doubleHash, getSignals, getWindowsSignals, getLinuxSignals,
+  // exposed for identity.js — same safe-exec discipline (timeout, windowsHide,
+  // never throw) reused to read a Windows SID
+  safeRun, safePowerShell,
+};
