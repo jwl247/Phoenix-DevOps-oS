@@ -257,34 +257,54 @@ Module 4's `worker.js` is in.
 
 ## Module 7 — the EASY pass (Jerry, 2026-09-07 — see DESIGN.md "Product principles")
 
-Modules 3/5/6 make Office *work*. Module 7 makes it *effortless* — the bar
-is "no manual, a button for everything, nothing to save or convert." Not
-yet built.
+**Status 2026-09-07: BUILT — 51 tests, handlers verified end-to-end.**
 
-1. **Autosave.** Kill the Save button. The document persists on every
-   change to a stable path (derived, or chosen once). Ctrl+S becomes a
-   no-op that just flashes "saved."
-2. **Auto-intake to the clone pool.** On create and on every state change,
-   the `.office` file is intaked (`sector2/package-handler/intake.sh` /
-   `usys clone`) — hex identity, custody, R2. "Saved" = "the pool has it,"
-   versioned, recoverable, zero user action. The local file becomes a
-   disposable working copy.
-3. **Template picker for New.** Replace the "type comma-separated field
-   names" prompt with a list of templates (work order, invoice,
-   inspection, change order). Templates are `.office` skeletons stored in
-   the pool; picking one loads its field set. PBM's real templates seed
-   the "PBM Office" build.
-4. **Reference-pull from the pool.** A "Reference documents" action: name
-   or pick documents → Phoenix clones them from the pool into the working
-   directory → they show in a side drawer, read-only → the user can delete
-   them any time because the pool is authoritative. This is the pull-down
-   worker (`phoenix-clonepool-r2` / `usys clone`) surfaced in Office's UI.
-5. **One-button flows.** Audit every action for "does the user have to
-   think?" — collapse choices, default the obvious, name buttons for the
-   outcome not the mechanism.
+1. **Autosave — DONE.** No Save button. Every change (`office:new`,
+   `office:fill`, `office:hand`, `office:sign`, `office:reject`) writes the
+   `.office` file to `~/PhoenixOffice/<b58>.office.json` (path stable for
+   the document's life). Header shows a subtle "autosaved" flash. Ctrl+S is
+   a no-op that says "Office saves every change."
+2. **Auto-intake to the clone pool on sign — DONE.** `office:sign` runs
+   `bash sector2/package-handler/intake.sh <file>` after signing — hex
+   identity, custody ledger, R2. The UI reports "sealed into the clone pool
+   (vN) — the local copy is now disposable." Best-effort: a failed seal
+   never blocks the sign, and Verify offers a retry path. (DRAFT states are
+   *not* auto-intaked — only the finished record. Autosave covers "don't
+   lose work.")
+3. **Template picker for New — DONE.** `sector2/apps/office/templates/*.json`
+   — work-order, invoice, inspection, change-order, blank. The New modal
+   shows them as cards; picking one loads its field set + a counterparty
+   form. "Blank" falls back to naming your own fields. PBM's real templates
+   drop into this folder for the "PBM Office" build.
+4. **Reference-pull from the pool — DONE.** "Pull from pool" → name
+   documents → `bash intake.sh clone <name>` into `~/PhoenixOffice/.references/`
+   → they list in the right-pane drawer → "Clear" wipes them (the pool
+   keeps the originals). Missing names report `[intake:MISS]`.
+5. **Recent + one-click reopen — DONE.** `office:recent` lists the workdir;
+   `office:open-path` reopens one (path-guarded to the workdir so the
+   renderer can't read elsewhere).
 
-Depends on: Modules 3/5/6 (done) + the clonepool pull-down (exists —
-`phoenix-clonepool-r2` worker + `usys clone`). Module 4 not required.
+**Not yet:** auto-intake of DRAFT checkpoints (deliberately skipped — noise
+vs. value; the signed record is what's sealed). A dedicated `OFFICE_AUTH`
+token for the Office worker (see "Security" below). Templates loading *from
+the pool* rather than bundled files (works either way).
+
+### Security — separate Office DB? (Jerry asked 2026-09-07)
+Office currently shares `phoenix_dev_db`, guarded by `PHOENIX_AUTH`. A
+separate D1 database only helps if it *also* has its own token + an
+access-scoped worker — otherwise it's the same lock. Recommendation:
+- **Now:** stay shared. The immutable `.office` file is the real security;
+  the D1 rows are disposable custody/reference.
+- **One proportionate step if wanted now:** give `office-notify-worker` its
+  own `OFFICE_AUTH` secret (≠ `PHOENIX_AUTH`) so an Office-worker compromise
+  doesn't hand over package-handler/clonepool. +1 secret to keep in sync.
+- **Full split** (`phoenix_office_db` + own token + read-scoped worker):
+  do it when a **federal contract** (NIST 800-171 / CMMC) or a **real
+  customer's data** lands in it. Clean migration then — schema copy +
+  worker + one `rotate-phoenix-auth.sh` entry.
+
+Depends on: Modules 3/5/6 (done) + the clonepool intake/pull-down (exists).
+Module 4 not required for any of this.
 
 ---
 

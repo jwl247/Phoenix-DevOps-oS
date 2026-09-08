@@ -1,0 +1,14 @@
+{
+  "template": "invoice",
+  "label": "Invoice",
+  "fields": [
+    "bill_to",
+    "invoice_number",
+    "date",
+    "line_items",
+    "subtotal",
+    "tax",
+    "total_due",
+    "payment_terms"
+  ]
+}

@@ -6,106 +6,112 @@
 <title>Phoenix Office</title>
 <style>
   :root {
-    --bg: #0a0c10; --panel: #12161d; --panel-2: #171c25; --line: #232b38;
-    --ink: #e8edf4; --ink-dim: #9aa7b8; --accent: #4da3ff; --accent-dim: #2b6db0;
-    --ok: #43d19e; --warn: #ffb454; --bad: #ff5c6c; --lock: #6b7688;
-    --draft: #6b7688; --review: #ffb454; --signed: #43d19e;
+    --bg:#0a0c10; --panel:#12161d; --panel-2:#171c25; --line:#232b38;
+    --ink:#e8edf4; --ink-dim:#9aa7b8; --accent:#4da3ff; --accent-dim:#2b6db0;
+    --ok:#43d19e; --warn:#ffb454; --bad:#ff5c6c; --lock:#6b7688;
+    --draft:#6b7688; --review:#ffb454; --signed:#43d19e;
   }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
-  body {
-    background: var(--bg); color: var(--ink);
-    font: 15px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif;
-    display: flex; flex-direction: column; overflow: hidden;
-  }
+  * { box-sizing:border-box; }
+  html,body { height:100%; margin:0; }
+  body { background:var(--bg); color:var(--ink); overflow:hidden;
+    font:15px/1.5 -apple-system,"Segoe UI",system-ui,sans-serif; display:flex; flex-direction:column; }
 
-  header {
-    display: flex; align-items: center; gap: 14px;
-    padding: 10px 16px; border-bottom: 1px solid var(--line);
-    background: var(--panel); flex: none;
-  }
-  header .brand { font-weight: 700; letter-spacing: .3px; }
-  header .brand small { color: var(--ink-dim); font-weight: 400; margin-left: 6px; }
-  header .spacer { flex: 1; }
-  header .who { color: var(--ink-dim); font-size: 13px; }
-  header .who b { color: var(--ink); font-weight: 600; }
+  header { display:flex; align-items:center; gap:14px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:var(--panel); flex:none; }
+  header .brand { font-weight:700; letter-spacing:.3px; }
+  header .brand small { color:var(--ink-dim); font-weight:400; margin-left:6px; }
+  header .spacer { flex:1; }
+  header .who { color:var(--ink-dim); font-size:13px; }
+  header .who b { color:var(--ink); font-weight:600; }
+  header .saved { color:var(--ok); font-size:12px; opacity:0; transition:opacity .3s; }
+  header .saved.show { opacity:.85; }
 
-  .badge {
-    font-size: 12px; font-weight: 700; letter-spacing: .6px;
-    padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
-    text-transform: uppercase;
-  }
-  .badge.DRAFT { color: var(--draft); border-color: var(--draft); }
-  .badge.PENDING_REVIEW { color: var(--review); border-color: var(--review); }
-  .badge.SIGNED { color: var(--signed); border-color: var(--signed); }
+  .badge { font-size:12px; font-weight:700; letter-spacing:.6px; padding:3px 9px;
+    border-radius:999px; border:1px solid var(--line); text-transform:uppercase; }
+  .badge.DRAFT { color:var(--draft); border-color:var(--draft); }
+  .badge.PENDING_REVIEW { color:var(--review); border-color:var(--review); }
+  .badge.SIGNED { color:var(--signed); border-color:var(--signed); }
 
-  button {
-    font: inherit; font-size: 13px; font-weight: 600;
-    color: var(--ink); background: var(--panel-2);
-    border: 1px solid var(--line); border-radius: 7px;
-    padding: 7px 13px; cursor: pointer;
-  }
-  button:hover:not(:disabled) { border-color: var(--accent-dim); }
-  button:disabled { opacity: .4; cursor: not-allowed; }
-  button.primary { background: var(--accent-dim); border-color: var(--accent); }
-  button.danger { color: var(--bad); border-color: #5a2b30; }
+  button { font:inherit; font-size:13px; font-weight:600; color:var(--ink);
+    background:var(--panel-2); border:1px solid var(--line); border-radius:7px;
+    padding:7px 13px; cursor:pointer; }
+  button:hover:not(:disabled) { border-color:var(--accent-dim); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.primary { background:var(--accent-dim); border-color:var(--accent); }
+  button.danger { color:var(--bad); border-color:#5a2b30; }
+  select { font:inherit; font-size:13px; color:var(--ink); background:var(--panel-2);
+    border:1px solid var(--line); border-radius:7px; padding:6px 8px; }
 
-  main { flex: 1; display: grid; grid-template-columns: 1.35fr 1fr; overflow: hidden; }
-  .pane { overflow-y: auto; padding: 18px 20px; }
-  .pane.left { border-right: 1px solid var(--line); }
-  .pane.right { background: var(--panel); }
+  main { flex:1; display:grid; grid-template-columns:1.35fr 1fr; overflow:hidden; }
+  .pane { overflow-y:auto; padding:18px 20px; }
+  .pane.left { border-right:1px solid var(--line); }
+  .pane.right { background:var(--panel); display:flex; flex-direction:column; gap:18px; }
 
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .7px;
-       color: var(--ink-dim); margin: 0 0 12px; font-weight: 700; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.7px; color:var(--ink-dim);
+    margin:0 0 12px; font-weight:700; }
+  .empty { color:var(--ink-dim); text-align:center; margin-top:16vh; }
+  .empty p { margin:6px 0 20px; }
 
-  .empty { color: var(--ink-dim); text-align: center; margin-top: 20vh; }
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:13px; color:var(--ink-dim); margin-bottom:4px; }
+  .field .row { display:flex; gap:8px; align-items:center; }
+  .field input { flex:1; font:inherit; color:var(--ink); background:var(--panel-2);
+    border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
+  .field input:focus { outline:none; border-color:var(--accent); }
+  .field.filled input { background:transparent; border-style:dashed; color:var(--ink-dim); }
+  .field .lock { color:var(--lock); font-size:13px; white-space:nowrap; }
 
-  .field { margin-bottom: 14px; }
-  .field label { display: block; font-size: 13px; color: var(--ink-dim); margin-bottom: 4px; }
-  .field .row { display: flex; gap: 8px; align-items: center; }
-  .field input {
-    flex: 1; font: inherit; color: var(--ink);
-    background: var(--panel-2); border: 1px solid var(--line);
-    border-radius: 6px; padding: 8px 10px;
-  }
-  .field input:focus { outline: none; border-color: var(--accent); }
-  .field.filled input {
-    background: transparent; border-style: dashed; color: var(--ink-dim);
-  }
-  .field .lock { color: var(--lock); font-size: 13px; }
-  .field .fillbtn { flex: none; }
+  .section { margin:22px 0 8px; padding-top:16px; border-top:1px solid var(--line); }
+  .cp-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+  .cp-grid .field { margin-bottom:0; }
+  .muted { color:var(--ink-dim); font-size:12px; }
 
-  .section { margin: 22px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
-  .cp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .cp-grid .field { margin-bottom: 0; }
+  .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:20px; padding-top:16px;
+    border-top:1px solid var(--line); }
 
-  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px;
-             padding-top: 16px; border-top: 1px solid var(--line); }
+  .qr { margin-top:18px; font:12px/1.6 ui-monospace,"Cascadia Code",monospace;
+    color:var(--ink-dim); word-break:break-all; }
+  .qr b { color:var(--ink); }
+  .sealed { margin-top:14px; font-size:13px; color:var(--ok); }
 
-  .qr { margin-top: 18px; font: 12px/1.5 ui-monospace, "Cascadia Code", monospace;
-        color: var(--ink-dim); word-break: break-all; }
-  .qr b { color: var(--ink); }
+  .banner { padding:10px 14px; border-radius:8px; margin-bottom:16px; font-size:14px; }
+  .banner.bad { background:#2a1418; border:1px solid #5a2b30; color:#ffb9c0; }
+  .banner.ok  { background:#10241d; border:1px solid #204a3c; color:#b6f0da; }
 
-  .banner { padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
-  .banner.bad { background: #2a1418; border: 1px solid #5a2b30; color: #ffb9c0; }
-  .banner.ok  { background: #10241d; border: 1px solid #204a3c; color: #b6f0da; }
+  #copilot-out { white-space:pre-wrap; font-size:14px; color:var(--ink);
+    background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:14px; min-height:110px; }
+  .row-head { display:flex; align-items:center; gap:10px; }
+  .row-head .spacer { flex:1; }
 
-  #copilot-out {
-    white-space: pre-wrap; font-size: 14px; color: var(--ink);
-    background: var(--panel-2); border: 1px solid var(--line);
-    border-radius: 8px; padding: 14px; min-height: 120px;
-  }
-  #copilot-out .muted { color: var(--ink-dim); }
-  .copilot-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .copilot-head .spacer { flex: 1; }
+  .refs { flex:none; }
+  .ref-item { background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:10px 12px; margin-bottom:8px; }
+  .ref-item .name { font-weight:600; font-size:13px; }
+  .ref-item pre { margin:6px 0 0; font:11px/1.5 ui-monospace,monospace; color:var(--ink-dim);
+    max-height:120px; overflow:auto; white-space:pre-wrap; }
+  .ref-item .err { color:var(--warn); font-size:12px; }
 
-  .toast {
-    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
-    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
-    padding: 9px 16px; font-size: 13px; color: var(--ink); box-shadow: 0 8px 30px #0008;
-    opacity: 0; transition: opacity .18s; pointer-events: none;
-  }
-  .toast.show { opacity: 1; }
+  /* modal */
+  .scrim { position:fixed; inset:0; background:#000a; display:none; align-items:center; justify-content:center; }
+  .scrim.show { display:flex; }
+  .modal { background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:22px; width:min(520px,92vw); }
+  .modal h3 { margin:0 0 14px; font-size:16px; }
+  .tpl-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+  .tpl { text-align:left; padding:12px 14px; }
+  .tpl.sel { border-color:var(--accent); background:var(--accent-dim); }
+  .tpl .n { font-weight:700; }
+  .tpl .f { font-size:11px; color:var(--ink-dim); margin-top:4px; }
+  .modal .cp-grid { margin-top:6px; }
+  .modal .field input { background:var(--panel-2); }
+  .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; }
+
+  .toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%);
+    background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:9px 16px; font-size:13px; box-shadow:0 8px 30px #0008; opacity:0;
+    transition:opacity .18s; pointer-events:none; }
+  .toast.show { opacity:1; }
 </style>
 </head>
 <body>
@@ -113,248 +119,299 @@
 <header>
   <span class="brand">Phoenix Office<small id="doc-title"></small></span>
   <span id="badge" class="badge DRAFT" hidden>DRAFT</span>
+  <span class="saved" id="saved">autosaved</span>
   <span class="spacer"></span>
   <span class="who" id="who">…</span>
-  <button id="btn-new">New</button>
-  <button id="btn-open">Open</button>
-  <button id="btn-save" disabled>Save</button>
+  <select id="recent" title="Recent documents"><option value="">Recent…</option></select>
+  <button id="btn-new" class="primary">New</button>
+  <button id="btn-open">Open…</button>
 </header>
 
 <main>
   <section class="pane left" id="left">
     <div class="empty" id="empty">
-      No document open.<br><br>
+      <p>Pick a template and start filling it in.<br>It saves itself — there is no Save button.</p>
       <button class="primary" id="btn-new-2">New document</button>
-      &nbsp;
-      <button id="btn-open-2">Open a .office file</button>
     </div>
     <div id="doc-view" hidden></div>
   </section>
 
   <section class="pane right">
-    <div class="copilot-head">
-      <h2 style="margin:0">Copilot</h2>
-      <span class="spacer"></span>
-      <button id="btn-copilot">Get suggestions</button>
+    <div class="refs" id="refs-box">
+      <div class="row-head">
+        <h2 style="margin:0">Reference documents</h2>
+        <span class="spacer"></span>
+        <button id="btn-ref">＋ Pull from pool</button>
+        <button id="btn-ref-clear" hidden>Clear</button>
+      </div>
+      <div id="refs"><span class="muted">Name documents from the clone pool and they appear here. Delete them any time — the pool keeps the originals.</span></div>
     </div>
-    <div id="copilot-out"><span class="muted">Open or start a document — suggestions appear here as you fill it in.</span></div>
+    <div style="flex:1; display:flex; flex-direction:column;">
+      <div class="row-head">
+        <h2 style="margin:0">Copilot</h2>
+        <span class="spacer"></span>
+        <button id="btn-copilot">Suggestions</button>
+      </div>
+      <div id="copilot-out" style="flex:1"><span class="muted">Start a document — suggestions appear as you fill it in.</span></div>
+    </div>
   </section>
 </main>
+
+<!-- New-document modal -->
+<div class="scrim" id="scrim">
+  <div class="modal">
+    <h3>New document</h3>
+    <div class="tpl-grid" id="tpl-grid"></div>
+    <div id="blank-fields" hidden>
+      <div class="field"><label>Field names (comma-separated)</label>
+        <div class="row"><input id="blank-input" placeholder="customer, description, total"></div></div>
+    </div>
+    <h2 style="margin:14px 0 6px">Counterparty contact <span class="muted">— who gets alerted if a signed copy is altered</span></h2>
+    <div class="cp-grid">
+      <div class="field"><label>phone</label><div class="row"><input id="cp-phone"></div></div>
+      <div class="field"><label>carrier</label><div class="row"><input id="cp-carrier" placeholder="verizon / att / …"></div></div>
+      <div class="field"><label>email</label><div class="row"><input id="cp-email"></div></div>
+    </div>
+    <div class="modal-actions">
+      <button id="m-cancel">Cancel</button>
+      <button class="primary" id="m-create" disabled>Create</button>
+    </div>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-const $ = (s, r = document) => r.querySelector(s);
+const $ = (s,r=document) => r.querySelector(s);
 const api = window.office;
-let doc = null;        // current document object
-let me = null;         // { author_id, via }
-let filePath = null;   // current save target
-let copilotTimer = null;
+let doc = null, me = null, filePath = null, copilotTimer = null;
+let templates = [], selTpl = null, bannerHtml = '';
 
-// ── util ────────────────────────────────────────────────────────────────────
-function toast(msg) {
-  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
-  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2200);
-}
-function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
+function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2200); }
+function flashSaved(){ const s=$('#saved'); s.classList.add('show'); clearTimeout(flashSaved._t);
+  flashSaved._t=setTimeout(()=>s.classList.remove('show'),1400); }
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function banner(kind,html){ bannerHtml=`<div class="banner ${kind}">${html}</div>`; render(); }
 
-async function boot() {
-  if (!api) {
-    $('#empty').innerHTML = 'Open <b>Phoenix Office</b> from the Phoenix dashboard.';
-    return;
-  }
+async function boot(){
+  if (!api){ $('#empty').innerHTML='Open <b>Phoenix Office</b> from the Phoenix dashboard.'; return; }
   const w = await api.invoke('office:whoami', {});
   me = w.ok ? w : null;
   $('#who').innerHTML = me
-    ? `signed in as <b>${me.author_id.slice(0, 12)}…</b> <span>via ${esc(me.via)}</span>`
+    ? `signed in as <b>${me.author_id.slice(0,12)}…</b> <span>via ${esc(me.via)}</span>`
     : 'identity unavailable';
+  const t = await api.invoke('office:templates', {});
+  templates = (t.ok && t.templates) || [];
+  await loadRecent();
 }
 
-// ── new / open / save ───────────────────────────────────────────────────────
-async function newDoc() {
-  const raw = prompt('Field names, comma-separated\n(e.g. customer_name, description, parts, labor_hours, total)');
-  if (!raw) return;
-  const fieldNames = raw.split(',').map(s => s.trim()).filter(Boolean);
-  if (!fieldNames.length) return;
+async function loadRecent(){
+  const r = await api.invoke('office:recent', {});
+  const sel = $('#recent');
+  sel.innerHTML = '<option value="">Recent…</option>' +
+    ((r.ok && r.items) || []).slice(0,12).map(i =>
+      `<option value="${esc(i.path)}">${esc(String(i.title).slice(0,40))} · ${i.state}</option>`).join('');
+}
 
-  const phone   = prompt('Counterparty phone (optional — for the tamper alert)') || '';
-  const carrier = phone ? (prompt('Phone carrier (verizon, att, tmobile, sprint, …) — leave blank to use email') || '') : '';
-  const email   = prompt('Counterparty email (optional)') || '';
-  const counterparty = (phone || email)
-    ? { phone: phone || undefined, carrier: carrier || undefined, email: email || undefined }
-    : null;
+// ── new-document modal ──────────────────────────────────────────────────────
+function openModal(){
+  selTpl = null;
+  $('#tpl-grid').innerHTML = templates.map(t =>
+    `<button class="tpl" data-t="${esc(t.template)}"><div class="n">${esc(t.label)}</div>
+     <div class="f">${t.fields.length ? esc(t.fields.join(', ')) : 'you name the fields'}</div></button>`).join('');
+  $('#tpl-grid').querySelectorAll('.tpl').forEach(b => b.addEventListener('click', () => {
+    $('#tpl-grid').querySelectorAll('.tpl').forEach(x => x.classList.remove('sel'));
+    b.classList.add('sel'); selTpl = b.dataset.t;
+    $('#blank-fields').hidden = (selTpl !== 'blank');
+    $('#m-create').disabled = false;
+  }));
+  $('#cp-phone').value = $('#cp-carrier').value = $('#cp-email').value = '';
+  $('#blank-input').value = ''; $('#blank-fields').hidden = true; $('#m-create').disabled = true;
+  $('#scrim').classList.add('show');
+}
+function closeModal(){ $('#scrim').classList.remove('show'); }
 
-  const r = await api.invoke('office:new', { fieldNames, counterparty, authorId: me && me.author_id });
+async function createFromModal(){
+  const phone = $('#cp-phone').value.trim(), carrier = $('#cp-carrier').value.trim(), email = $('#cp-email').value.trim();
+  const counterparty = (phone || email) ? { phone: phone||undefined, carrier: carrier||undefined, email: email||undefined } : null;
+  const body = { counterparty, authorId: me && me.author_id };
+  if (selTpl === 'blank') {
+    const f = $('#blank-input').value.split(',').map(s=>s.trim()).filter(Boolean);
+    if (!f.length) return toast('name at least one field');
+    body.fieldNames = f;
+  } else {
+    body.template = selTpl;
+  }
+  const r = await api.invoke('office:new', body);
   if (!r.ok) return toast(r.error);
-  doc = r.document; filePath = null;
-  render(); refreshCopilot(true);
-  toast('New document forged');
+  doc = r.document; filePath = r.path; closeModal();
+  render(); flashSaved(); refreshCopilot(true);
 }
 
-async function openDoc() {
-  const r = await api.invoke('office:open');
+// ── open / recent ───────────────────────────────────────────────────────────
+async function openDoc(){
+  const r = await api.invoke('office:open', {});
   if (r.canceled) return;
   if (!r.ok) return toast(r.error);
-  doc = r.document; filePath = r.filePath;
+  applyLoaded(r);
+}
+function applyLoaded(r){
+  doc = r.document; filePath = r.filePath || r.path || filePath;
   render();
-  if (r.tampered) banner('bad', '⚠ This signed document has been ALTERED since it was signed. ' + esc(r.reason || ''));
-  else if (doc.state === 'SIGNED') banner('ok', '✓ Signature verified — document is intact.');
+  if (r.tampered) banner('bad', '⚠ This signed document has been ALTERED since it was signed. ' + esc(r.reason||''));
+  else if (doc.state === 'SIGNED') banner('ok', '✓ Signature verified — the document is intact.');
   refreshCopilot(true);
 }
 
-async function saveDoc() {
-  if (!doc) return;
-  const r = await api.invoke('office:save', { document: doc, filePath });
-  if (r.canceled) return;
-  if (!r.ok) return toast(r.error);
-  filePath = r.filePath;
-  toast('Saved: ' + r.filePath.split(/[\\/]/).pop());
-}
-
-// ── field fill ──────────────────────────────────────────────────────────────
-async function fill(field, value) {
-  if (value === '' || value == null) return;
+// ── fields ──────────────────────────────────────────────────────────────────
+async function fill(field, value){
+  if (!value) return;
   const r = await api.invoke('office:fill', { document: doc, field, value, by: me && me.author_id });
-  if (!r.ok) { toast(r.error || r.reason); render(); return; }
-  doc = r.document; render(); refreshCopilot();
+  if (!r.ok){ toast(r.error || r.reason); render(); return; }
+  doc = r.document; filePath = r.path || filePath; render(); flashSaved(); refreshCopilot();
 }
 
 // ── handoffs ────────────────────────────────────────────────────────────────
-async function hand() {
+async function hand(){
   const r = await api.invoke('office:hand', { document: doc });
   if (!r.ok) return toast(r.error);
-  doc = r.document; render(); refreshCopilot(true);
-  toast('Handed to client for review');
+  doc = r.document; render(); flashSaved(); refreshCopilot(true); toast('Handed to client for review');
 }
-async function sign() {
-  if (!confirm('Sign and LOCK this document?\nAfter signing, no field can ever be changed by anyone.')) return;
+async function sign(){
+  if (!confirm('Sign and LOCK this document?\nAfter this, no field can be changed by anyone — and it is sealed into the vault.')) return;
   const r = await api.invoke('office:sign', { document: doc, by: me && me.author_id });
   if (!r.ok) return toast(r.error);
   doc = r.document; render();
-  banner('ok', '✓ Signed and locked. The hash baseline is set — any later change is now tamper-evident.');
-  refreshCopilot(true);
+  const s = r.sealed || {};
+  banner('ok', '✓ Signed, locked, and ' + (s.ok
+    ? `sealed into the clone pool${s.version ? ' (' + esc(s.version) + ')' : ''}. It is recoverable from the vault — the local copy is now disposable.`
+    : 'saved locally. (Vault seal: ' + esc(s.error || 'pending') + ' — retry from Verify.)'));
+  refreshCopilot(true); loadRecent();
 }
-async function reject() {
+async function reject(){
   const reason = prompt('Send back for changes. Reason (optional):') || '';
   const r = await api.invoke('office:reject', { document: doc, by: me && me.author_id, reason });
   if (!r.ok) return toast(r.error);
-  doc = r.document; render(); toast('Sent back to draft');
+  doc = r.document; render(); flashSaved(); toast('Sent back to draft');
 }
-async function verify() {
+async function verify(){
   const r = await api.invoke('office:verify', { document: doc });
   if (!r.ok) return toast(r.error);
-  if (r.integrity.tampered) {
-    banner('bad', '⚠ TAMPERED — fields no longer match the signed baseline. '
-      + (r.notified && r.notified.sent ? 'Counterparty has been notified.'
-        : r.notified ? 'Notification: ' + esc(r.notified.error || 'not sent') : ''));
-  } else {
-    banner('ok', '✓ Verified — the document matches its signed baseline exactly.');
-  }
+  if (r.integrity.tampered) banner('bad', '⚠ TAMPERED — fields no longer match the signed baseline. '
+    + (r.notified && r.notified.sent ? 'The counterparty has been notified.'
+      : r.notified ? 'Notification: ' + esc(r.notified.error || 'not sent') : ''));
+  else banner('ok', '✓ Verified — the document matches its signed baseline exactly.');
 }
-async function changeOrder() {
-  const raw = prompt('Change order — field names for the correction (comma-separated):',
-    Object.keys(doc.fields).join(', '));
-  if (!raw) return;
-  const fieldNames = raw.split(',').map(s => s.trim()).filter(Boolean);
-  const r = await api.invoke('office:change-order', { document: doc, fieldNames, authorId: me && me.author_id });
+async function changeOrder(){
+  const r = await api.invoke('office:change-order', {
+    document: doc, fieldNames: ['references_document','reason_for_change','revised_scope','cost_impact','approved_by'],
+    authorId: me && me.author_id });
   if (!r.ok) return toast(r.error);
-  doc = r.document; filePath = null; render();
-  toast('Change order created — linked to the original, original untouched');
-  refreshCopilot(true);
+  doc = r.document; filePath = null; render(); flashSaved();
+  toast('Change order created — linked to the original, original untouched'); refreshCopilot(true);
+}
+
+// ── reference-pull ──────────────────────────────────────────────────────────
+async function pullRefs(){
+  const raw = prompt('Document names to pull from the clone pool (comma-separated):');
+  if (!raw) return;
+  const names = raw.split(',').map(s=>s.trim()).filter(Boolean);
+  $('#refs').innerHTML = '<span class="muted">pulling…</span>';
+  const r = await api.invoke('office:reference', { names });
+  if (!r.ok){ $('#refs').innerHTML = '<span class="err">' + esc(r.error) + '</span>'; return; }
+  $('#btn-ref-clear').hidden = false;
+  $('#refs').innerHTML = r.pulled.map(p => p.error
+    ? `<div class="ref-item"><div class="name">${esc(p.name)}</div><div class="err">${esc(p.error)}</div></div>`
+    : `<div class="ref-item"><div class="name">📄 ${esc(p.name)}</div>
+        <div class="muted">${esc(p.path)}</div></div>`).join('') || '<span class="muted">nothing matched in the pool</span>';
+}
+async function clearRefs(){
+  await api.invoke('office:reference-clear', {});
+  $('#refs').innerHTML = '<span class="muted">cleared. the pool still has the originals.</span>';
+  $('#btn-ref-clear').hidden = true;
 }
 
 // ── copilot ─────────────────────────────────────────────────────────────────
-function refreshCopilot(now) {
-  clearTimeout(copilotTimer);
-  copilotTimer = setTimeout(runCopilot, now ? 0 : 1400);
-}
-async function runCopilot() {
+function refreshCopilot(now){ clearTimeout(copilotTimer); copilotTimer = setTimeout(runCopilot, now ? 0 : 1400); }
+async function runCopilot(){
   if (!doc) return;
-  const out = $('#copilot-out');
-  out.innerHTML = '<span class="muted">thinking…</span>';
+  const out = $('#copilot-out'); out.innerHTML = '<span class="muted">thinking…</span>';
   const r = await api.invoke('office:copilot', { document: doc });
   out.textContent = r.ok ? (r.suggestions || 'No suggestions right now.') : ('· ' + r.error);
-  if (!r.ok) out.classList.add('muted');
 }
 
 // ── render ──────────────────────────────────────────────────────────────────
-let bannerHtml = '';
-function banner(kind, html) { bannerHtml = `<div class="banner ${kind}">${html}</div>`; render(); }
-
-function render() {
-  $('#btn-save').disabled = !doc;
-  if (!doc) { $('#empty').hidden = false; $('#doc-view').hidden = true; $('#badge').hidden = true; $('#doc-title').textContent = ''; return; }
+function render(){
+  if (!doc){ $('#empty').hidden = false; $('#doc-view').hidden = true; $('#badge').hidden = true; $('#doc-title').textContent=''; return; }
   $('#empty').hidden = true; $('#doc-view').hidden = false;
 
-  const b = $('#badge'); b.hidden = false; b.className = 'badge ' + doc.state; b.textContent = doc.state.replace('_', ' ');
+  const b = $('#badge'); b.hidden = false; b.className = 'badge ' + doc.state; b.textContent = doc.state.replace('_',' ');
   $('#doc-title').textContent = doc.supersedes ? ' — change order' : '';
 
   const locked = doc.state === 'SIGNED';
-  const fieldsHtml = Object.entries(doc.fields).map(([name, val]) => {
+  const fieldsHtml = Object.entries(doc.fields).map(([name,val]) => {
     const filled = val !== null;
-    return `<div class="field ${filled ? 'filled' : ''}">
+    return `<div class="field ${filled ? 'filled':''}">
       <label>${esc(name)}</label>
       <div class="row">
-        <input data-field="${esc(name)}" value="${filled ? esc(val) : ''}"
-               ${filled || locked ? 'readonly' : ''} placeholder="${locked ? '' : 'type, then Enter'}">
-        ${filled ? '<span class="lock">🔒 filled</span>'
-          : locked ? '<span class="lock">locked</span>'
-          : '<button class="fillbtn" data-fill="' + esc(name) + '">Fill</button>'}
-      </div>
-    </div>`;
+        <input data-field="${esc(name)}" value="${filled ? esc(val):''}" ${filled||locked ? 'readonly':''}
+               placeholder="${locked ? '' : 'type, then Enter'}">
+        ${filled ? '<span class="lock">🔒 filled</span>' : locked ? '<span class="lock">locked</span>' : ''}
+      </div></div>`;
   }).join('');
 
   const cp = doc.counterparty || {};
   const cpHtml = `<div class="section"><h2>Counterparty contact</h2>
     <div class="cp-grid">
-      <div class="field"><label>phone</label><div class="row"><input value="${esc(cp.phone || '')}" readonly></div></div>
-      <div class="field"><label>carrier</label><div class="row"><input value="${esc(cp.carrier || '')}" readonly></div></div>
-      <div class="field"><label>email</label><div class="row"><input value="${esc(cp.email || '')}" readonly></div></div>
+      <div class="field"><label>phone</label><div class="row"><input value="${esc(cp.phone||'')}" readonly></div></div>
+      <div class="field"><label>carrier</label><div class="row"><input value="${esc(cp.carrier||'')}" readonly></div></div>
+      <div class="field"><label>email</label><div class="row"><input value="${esc(cp.email||'')}" readonly></div></div>
     </div>
-    <p style="color:var(--ink-dim);font-size:12px;margin:8px 0 0">Set when the document is forged. This is who gets the alert if a signed copy is altered.</p>
-  </div>`;
+    <p class="muted" style="margin-top:8px">Set when the document was created. This is who gets the alert if a signed copy is altered.</p></div>`;
 
   let actions = '';
-  if (doc.state === 'DRAFT')            actions = `<button class="primary" id="a-hand">Hand to client</button>`;
+  if (doc.state === 'DRAFT') actions = `<button class="primary" id="a-hand">Hand to client</button>`;
   else if (doc.state === 'PENDING_REVIEW') actions = `<button class="primary" id="a-sign">Client signs</button><button class="danger" id="a-reject">Send back</button>`;
-  else if (doc.state === 'SIGNED')      actions = `<button id="a-verify">Verify integrity</button><button id="a-co">New change order</button>`;
-
-  let qr = '';
-  api.invoke('office:qr', { document: doc }).then(q => {
-    if (!q.ok) return;
-    $('#qr').innerHTML = `<b>header</b> ${esc(q.header)}<br>${q.footer ? '<b>footer</b> ' + esc(q.footer) : '<span class="muted">footer QR appears once signed</span>'}`;
-  });
+  else if (doc.state === 'SIGNED') actions = `<button id="a-verify">Verify integrity</button><button id="a-co">New change order</button>`;
 
   $('#doc-view').innerHTML = bannerHtml + fieldsHtml + cpHtml
     + `<div class="actions">${actions}</div><div class="qr" id="qr"></div>`;
   bannerHtml = '';
 
-  // wire field inputs
+  api.invoke('office:qr', { document: doc }).then(q => {
+    if (!q.ok) return;
+    $('#qr').innerHTML = `<b>header</b> ${esc(q.header)}<br>` +
+      (q.footer ? `<b>footer</b> ${esc(q.footer)}` : '<span class="muted">footer QR appears once signed</span>');
+  });
+
   $('#doc-view').querySelectorAll('input[data-field]').forEach(inp => {
     const f = inp.dataset.field;
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); fill(f, inp.value); } });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fill(f, inp.value.trim()); }});
     inp.addEventListener('blur', () => { if (!inp.readOnly && inp.value.trim()) fill(f, inp.value.trim()); });
   });
-  $('#doc-view').querySelectorAll('button[data-fill]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const inp = $(`input[data-field="${CSS.escape(btn.dataset.fill)}"]`);
-      if (inp && inp.value.trim()) fill(btn.dataset.fill, inp.value.trim());
-    });
-  });
-  const bind = (id, fn) => { const el = $('#' + id); if (el) el.addEventListener('click', fn); };
-  bind('a-hand', hand); bind('a-sign', sign); bind('a-reject', reject);
-  bind('a-verify', verify); bind('a-co', changeOrder);
+  const bind = (id,fn) => { const el = $('#'+id); if (el) el.addEventListener('click', fn); };
+  bind('a-hand',hand); bind('a-sign',sign); bind('a-reject',reject); bind('a-verify',verify); bind('a-co',changeOrder);
 }
 
-// ── wire top bar ────────────────────────────────────────────────────────────
-$('#btn-new').addEventListener('click', newDoc);
-$('#btn-new-2').addEventListener('click', newDoc);
-$('#btn-open').addEventListener('click', openDoc);
-$('#btn-open-2').addEventListener('click', openDoc);
-$('#btn-save').addEventListener('click', saveDoc);
+// ── wire ────────────────────────────────────────────────────────────────────
+$('#btn-new').addEventListener('click', openModal);
+$('#btn-new-2').addEventListener('click', openModal);
+$('#btn-open').addEventListener('click', () => openDoc());
+$('#m-cancel').addEventListener('click', closeModal);
+$('#m-create').addEventListener('click', createFromModal);
 $('#btn-copilot').addEventListener('click', runCopilot);
+$('#btn-ref').addEventListener('click', pullRefs);
+$('#btn-ref-clear').addEventListener('click', clearRefs);
+$('#recent').addEventListener('change', async e => {
+  const p = e.target.value; e.target.value = '';
+  if (!p) return;
+  const r = await api.invoke('office:open-path', { path: p });
+  if (!r.ok) return toast(r.error);
+  applyLoaded(r);
+});
 window.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveDoc(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 's'){ e.preventDefault(); flashSaved(); toast('Already saved — Office saves every change'); }
 });
 
 boot();

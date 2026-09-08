@@ -364,6 +364,17 @@ credential to manage.
   actual render, the contextBridge, and a live copilot call — launch it
   from the dashboard's OFFICE button to exercise those.
 
+**Module 7 — the EASY pass — DONE, 2026-09-07:** autosave (no Save button —
+`~/PhoenixOffice/<b58>.office.json`, written on every change); auto-intake
+of the *signed* document into the clone pool on sign ("sealed — the local
+copy is disposable"); template picker for New (`templates/*.json` —
+work-order / invoice / inspection / change-order / blank); reference-pull
+("name documents → Phoenix clones them from the pool into a scratch drawer
+→ delete freely"); Recent list + path-guarded one-click reopen. 50 → **51
+tests.** Security note (separate Office DB): stay shared for now, the
+`.office` file is the real security; split to a dedicated DB + token when a
+federal contract or real customer data drives it — see `PLAN-modules-3-6.md`.
+
 **Not yet done:** Module 4 (LibreOffice/Frank/Helix wiring — the invisible
 format-following). Office is fully usable for the tamper-evident-record
 purpose without it. Plan: `PLAN-modules-3-6.md`.
