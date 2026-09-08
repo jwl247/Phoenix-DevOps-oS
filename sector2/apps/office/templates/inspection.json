@@ -1,0 +1,15 @@
+{
+  "template": "inspection",
+  "label": "Field inspection",
+  "fields": [
+    "project",
+    "location",
+    "inspector",
+    "date",
+    "items_checked",
+    "deficiencies",
+    "corrective_action",
+    "pass_fail",
+    "reviewed_by"
+  ]
+}

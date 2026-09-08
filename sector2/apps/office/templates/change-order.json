@@ -1,0 +1,14 @@
+{
+  "template": "change-order",
+  "label": "Change order",
+  "fields": [
+    "references_document",
+    "date",
+    "reason_for_change",
+    "original_scope",
+    "revised_scope",
+    "cost_impact",
+    "schedule_impact",
+    "approved_by"
+  ]
+}

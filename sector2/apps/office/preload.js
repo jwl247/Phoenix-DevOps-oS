@@ -6,11 +6,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 const CHANNELS = new Set([
-  'office:whoami',
+  'office:whoami', 'office:templates',
   'office:new', 'office:fill', 'office:hand', 'office:sign', 'office:reject',
   'office:change-order',
   'office:verify', 'office:qr',
-  'office:open', 'office:save',
+  'office:autosave', 'office:open', 'office:open-path', 'office:recent',
+  'office:reference', 'office:reference-clear',
   'office:copilot',
 ]);
 

@@ -608,6 +608,27 @@ test('full UI lifecycle: whoami -> new -> fill -> hand -> sign -> save/open -> t
   fs.unlinkSync(tmp);
 });
 
+// ── Module 7 (EASY pass) — templates ─────────────────────────
+test('every bundled template is valid and produces a fillable document', () => {
+  const dir = path.join(__dirname, '..', 'templates');
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+  assert.ok(files.length >= 4, 'expected work-order / invoice / inspection / change-order at minimum');
+  for (const f of files) {
+    const t = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    assert.strictEqual(typeof t.template, 'string');
+    assert.strictEqual(typeof t.label, 'string');
+    assert.ok(Array.isArray(t.fields));
+    if (t.template === 'blank') { assert.strictEqual(t.fields.length, 0); continue; }
+    const d = doc.createDocument({ fieldNames: t.fields, authorFingerprint: 'A' });
+    assert.deepStrictEqual(Object.keys(d.fields).sort(), [...t.fields].sort());
+    // and it can be filled + signed like any other
+    let x = d;
+    for (const name of t.fields) x = doc.fillField(x, name, 'v', 'A').document;
+    x = doc.sign(doc.handToClient(x), 'C');
+    assert.strictEqual(x.state, 'SIGNED');
+  }
+});
+
 // ── run ───────────────────────────────────────────────────────
 (async () => {
   let passed = 0, failed = 0;
