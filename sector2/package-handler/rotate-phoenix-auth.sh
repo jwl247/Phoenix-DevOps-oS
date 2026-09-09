@@ -4,15 +4,16 @@
 # Author: jwl247 / Phoenix DevOps LLC
 # License: GPL-3.0
 # ============================================================
-# PHOENIX_AUTH lives in three places that don't sync with each other:
+# PHOENIX_AUTH lives in four places that don't sync with each other:
 #   1. Windows registry (HKCU\Environment, via setx)         — what intake.sh reads
 #   2. packages-worker's Cloudflare secret                   — D1 sync
 #   3. phoenix-clonepool-r2's Cloudflare secret               — R2 sync
+#   4. office-notify-worker's Cloudflare secret               — Office Module 3 tamper alerts
 # The 2026-08-21 and 2026-08-22 incidents were exactly this: one of the three
 # drifted from the others, and nothing noticed until sync had been silently
 # broken for a while. This script is the only supported way to rotate the
-# token — it pushes to both workers, verifies each via /whoami before moving
-# on, and only touches the registry once both are confirmed live. If any
+# token — it pushes to every worker, verifies each via /whoami before moving
+# on, and only touches the registry once all are confirmed live. If any
 # step fails, it stops immediately and tells you exactly which leg is out of
 # sync instead of leaving all three in an unknown state.
 #
@@ -25,8 +26,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 D1_WORKER_DIR="${SCRIPT_DIR}/worker"
 R2_WORKER_DIR="${SCRIPT_DIR}/r2-worker"
+OFFICE_WORKER_DIR="${SCRIPT_DIR}/../apps/office/notify-worker"
 D1_WORKER_URL="https://packages-worker.phoenix-jwl.workers.dev"
 R2_WORKER_URL="https://phoenix-clonepool-r2.phoenix-jwl.workers.dev"
+OFFICE_WORKER_URL="https://office-notify-worker.phoenix-jwl.workers.dev"
 
 command -v wrangler >/dev/null 2>&1 || { echo "wrangler CLI not found on PATH — install it first (npm i -g wrangler)"; exit 1; }
 command -v setx >/dev/null 2>&1     || { echo "setx.exe not found — this must run under Windows/Git Bash"; exit 1; }
@@ -34,6 +37,7 @@ command -v curl >/dev/null 2>&1     || { echo "curl not found on PATH"; exit 1; 
 
 [[ -d "${D1_WORKER_DIR}" ]] || { echo "missing ${D1_WORKER_DIR}"; exit 1; }
 [[ -d "${R2_WORKER_DIR}" ]] || { echo "missing ${R2_WORKER_DIR}"; exit 1; }
+[[ -d "${OFFICE_WORKER_DIR}" ]] || { echo "missing ${OFFICE_WORKER_DIR}"; exit 1; }
 
 echo ""
 echo "── Phoenix PHOENIX_AUTH rotation ──────────────────────────────"
@@ -90,6 +94,19 @@ if [[ "${code}" != "200" ]]; then
   exit 1
 fi
 echo "  phoenix-clonepool-r2 verified (/whoami → 200)"
+
+# ── office-notify-worker (Office Module 3) ────────────────────
+push_secret "${OFFICE_WORKER_DIR}" "office-notify-worker"
+code="$(check_whoami_retry "${OFFICE_WORKER_URL}")"
+if [[ "${code}" != "200" ]]; then
+  echo ""
+  echo "  ABORTED — office-notify-worker did not accept the new token (/whoami → ${code})."
+  echo "  WARNING: packages-worker and phoenix-clonepool-r2 are ALREADY on the NEW"
+  echo "  token, but this one and the registry are still on the OLD token. Re-run"
+  echo "  this script to finish — do not hand-edit anything, that's how they drift."
+  exit 1
+fi
+echo "  office-notify-worker verified (/whoami → 200)"
 
 # ── Only now touch the local registry value ───────────────────
 setx PHOENIX_AUTH "${NEW_TOKEN}" >/dev/null
