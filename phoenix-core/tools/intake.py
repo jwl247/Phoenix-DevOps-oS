@@ -3,11 +3,28 @@
 # intake.py — Phoenix DevOps TAV Intake
 # Author:  jwl247 / Phoenix DevOps LLC
 # Sector:  4 (breach_coms4 / master vault)
+#
+#   *** DEPRECATED — NOT the canonical intake path (2026-09-09) ***
+#
+#   The canonical intake pipeline is  sector2/package-handler/intake.sh.
+#   That one does everything this script does PLUS: real R2 blob upload,
+#   the content-integrity baseline + POST /clonepool/:hex/validate gate,
+#   real QR generation (this file's sidecar QR is a `qr:sha3:...` STUB,
+#   see below), sensitive-file flagging, and companion-file enrichment.
+#
+#   A file intaked through THIS script gets a D1 custody row but NO R2
+#   content blob and NO integrity baseline — a lesser record. usys.ps1
+#   still calls it from `usys watch` / `usys download` / `distro
+#   intake-qemu`; those call sites are slated to move to intake.sh
+#   (audit doc "sec audit doc from you to you.txt" §7). Do not build new
+#   callers on this file.
+#
 # Role:    Content-address a single file:
 #            1. Compute SHA3-512 hex ID
 #            2. Compute BLAKE2b-512 hex ID
 #            3. Write/update sidecar.json alongside the file
 #            4. Append a row to the local clone pool (SQLite catalog)
+#            5. Best-effort D1 sync (POST /clonepool + /custody) — no R2
 #
 # Usage:
 #   python3 intake.py <file_path>
@@ -387,6 +404,12 @@ def main() -> int:
     parser.add_argument("--no-clone", action="store_true",
                         help="skip copying the file into the clone pool (hash + sidecar + catalog only)")
     args = parser.parse_args()
+
+    print(
+        "WARNING: phoenix-core/tools/intake.py is DEPRECATED — it does no R2 upload "
+        "and sets no integrity baseline. Canonical: sector2/package-handler/intake.sh",
+        file=sys.stderr,
+    )
 
     try:
         result = intake_file(Path(args.file), skip_clone=args.no_clone)
