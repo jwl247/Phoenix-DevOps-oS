@@ -1,0 +1,102 @@
+# Phoenix DevOps OS — Security & Integrity Audit Handoff
+
+**Source:** Direct code audit against `Phoenix-DevOps-oS` and `Phoenix-Package_handler` repos (uploaded zips + live GitHub), September 2026. Every finding below traces to a specific file, line, git commit, or grep result — nothing here is inferred from docs, comments, or memory. Where a doc/README claim didn't match the code, the code wins and the doc is flagged separately.
+
+**Standing instruction for whoever works this list (including future Claude Code sessions):** verify before asserting. Multiple things in this codebase are documented, commented, or named as if they work (`copes_runtime.py`'s own docstring says it's "called at CoPES boot" — it isn't, by anything, anywhere) and don't. Before marking any item below "done," show the actual call site / actual test output, not just that the file was edited.
+
+**How JW and Claude work together — apply this to Claude Code too:**
+- Verify before building on top of. A claim from memory or excitement is fine as a starting point — it's how ideas move fast. Before the next thing gets built on it, check it against the actual file/log/output if that's possible. Speed of idea, then a checkpoint before weight gets put on it.
+- When something turns out wrong, name the mechanics, not the person: what was assumed, what checking found, what changes. No "why did that happen," no relitigating who said it first, no tally. The only output is a corrected fact and a next action.
+- There are no problems here, only challenges and their fixes.
+
+---
+
+## Tier 1 — Real security holes (fix before any file that isn't yours touches this system)
+
+### 1. No permission enforcement in the execution path
+- **Evidence:** `.suite.json` files declare a `permissions` array (`network`, `filesystem:read`, `filesystem:write`). `scripts/usys.ps1` (1579 lines, full file checked) never reads or checks `$manifest.permissions` before `Invoke-UsysRun` executes an entry point.
+- **Fix:** Before execution, check the manifest's declared permissions against what the entry point is about to do — at minimum, restrict filesystem writes to the suite's own clonepool directory unless `filesystem:write` is explicitly declared, and log/refuse network calls from suites that didn't declare `network`.
+- **My take:** This is the single highest-value fix on the whole list. It's the difference between "declared intent" and "enforced boundary," and it's a bounded, well-scoped piece of engineering — not a redesign. Do this before anything else on Tier 1.
+
+### 2. No sandboxing of suite execution
+- **Evidence:** Suites run as subprocesses of whatever account launched Phoenix (`frank_ring.py::_run_subprocess`, `usys.ps1::Invoke-UsysRun`). QEMU-run suites (Debian/Ubuntu) are incidentally contained by the VM boundary; script/binary suites (`yt-dlp`, `hello-phoenix`, anything user-dropped) get zero isolation.
+- **Fix:** At minimum, run non-VM suites under a restricted account or Windows Job Object / Linux cgroup+namespace, scoped to the suite's declared permissions from #1.
+- **My take:** Don't over-engineer this into a full container runtime on day one. A Windows Job Object with a capped token is a day's work and closes most of the realistic risk. Containerize later if the threat model grows (e.g., once other people's suites flow through clonepool).
+
+### 3. No local execution auth boundary
+- **Evidence:** The worker (`worker/index.js`) has real, working bearer-token auth (`isAuthorized()`) on every write endpoint, unchanged since the first commit (`a26edc6`, Apr 1 2026). Nothing equivalent exists between "file present in clonepool" and "file executes." Anything that lands in the pool via any path gets ambient trust at run time.
+- **Fix:** Extend the exact pattern that already works — require a local equivalent of `PHOENIX_AUTH` (a signature or intake-stamped token) on a suite before `usys run` will execute it. Suites that arrived without that stamp (manually dropped, pulled from an unverified source) should require an explicit `--i-know-this-is-unverified`-style flag, not silent default trust.
+- **My take:** You already solved this problem once, correctly, for the worker. This is the same problem at a different layer. Don't invent a new mechanism — port the one that's already survived six months of real use.
+
+### 4. Guardian/honeypot security system built but never wired in
+- **Evidence:** `SECTOR4/copes/src/security/` — `guardian_rotator.py`, 4 guardians (Alpha/Beta/Gamma/Delta), `honeypot.py`. Real moving-target-defense design: one guardian active at a time, others act as honeypots, randomized rotation (180–600s), threshold-based escalation (`GuardianAlpha`: 3 failed auths → escalate; `kernel_tamper` event → escalate immediately), honeypot-contact fingerprinting with forced rotation. Confirmed via full-repo grep: zero call sites for `copes_runtime.boot()` anywhere outside its own file. It also currently sits in `SECTOR4`, which is an archived/fossil directory per JW's own project history.
+- **Fix:** (a) Move `security/` out of the archived directory into the live tree. (b) Call `copes_runtime.boot()` from whatever the actual current boot entrypoint is (`sector1/kernel/` per the live README — confirm the real file before wiring, don't assume). (c) Wire real event sources: `phoenix_auth.py` → `GuardianAlpha.handle_contact({"type": "auth_failure", ...})` on failed login; suite execution in `usys.ps1` → a Beta (process-based) event on running an unrecognized or permission-violating suite.
+- **My take:** This is the best news in the whole audit — the hard design work (the actual security *thinking*, not just plumbing) is already done and it's good work. This should be prioritized above writing new security code from scratch. Resurrect before you reinvent.
+
+---
+
+## Tier 2 — Integrity claims that don't hold up under a direct technical question
+
+### 5. Hash "validation" proves consistency, not provenance
+- **Evidence:** `qr_sha3`/`qr_blake2` values are derived from the file's own content (`intake.py`). Anyone who controls the file can regenerate a matching value — there's no signature and no cross-check against a source of truth (D1) at validation time.
+- **Fix:** Either (a) sign the hash at intake with a key only Phoenix holds, and check the signature at validation, or (b) look the hash up against the D1 record from original intake rather than trusting whatever travels with the file locally. B is cheaper and fits the system's existing architecture (D1 is already the backend of record).
+- **My take:** Do B first — it's near-free given D1 already exists, and it converts the sidecar from "the thing being trusted" into "a cache that gets checked," which is the correct trust direction.
+
+### 6. QR fields are text-string stubs, not QR codes
+- **Evidence:** `phoenix-core/tools/intake.py`, lines 113–117, author's own comments: `"QR placeholder — real QR generation requires 'qrcode' or similar lib"` and `"stub; replace with real QR encode"`. No `qrcode` library import anywhere in the repo. One confirmed real sidecar record has `state`/`tier` as plain fields, no `qr` field.
+- **Fix:** Either implement real QR generation (`pip install qrcode pillow`, per your own planning notes) if there's an actual optical/scan use case, or rename `qr_sha3`/`qr_top`/`qr_bottom` to something honest (`validation_string_sha3`, etc.) if there isn't one. Don't leave a field named like a shipped feature holding a stub value.
+- **My take:** Given the design intent (system-to-system validation, not camera scanning — per JW directly), there's no real case for QR encoding at all. Drop the QR framing entirely, keep the plain string, save the dev time.
+
+### 7. Two parallel intake pipelines, neither declared canonical
+- **Evidence:** `phoenix-core/tools/intake.py` (Python) vs. `sector2/package-handler/intake.sh` (bash) — different languages, different feature sets (only `intake.py` has the QR-stub logic; `intake.sh` doesn't reference permissions, suits, or QR at all).
+- **Fix:** Pick one. Recommend: whichever one the live install scripts (`install.sh`/`install.ps1`) actually invoke on a fresh install — that's your de facto canonical path already, just not declared as such. Deprecate the other loudly (rename with a `.deprecated` suffix or move to `archive/`), don't just leave both live.
+- **My take:** This is why fixes land inconsistently — you'll patch one path and forget the other exists. Resolve this before doing more work on either.
+
+---
+
+## Tier 3 — Dead or misleading code found during review
+
+### 8. `Ball.authorize()` defined, documented as "IS the permission system," never called
+- **Evidence:** `franken5.py`, line 119 defines it; full-file grep shows zero call sites.
+- **Fix:** Either wire it into real action checks (tie it to #1's enforcement point) or strip the docstring claim so nothing downstream assumes it's active.
+
+### 9. Every suit gets the same fixed default permission set
+- **Evidence:** `Ball.for_family()` always returns `{read: True, write: True, clone: True, translate: False, delete: False, kernel: False}` regardless of what the suit actually needs.
+- **Fix:** Once #1 and #8 are real, make this least-privilege-by-declaration instead of a hardcoded constant — permissions should come from what the suite's manifest actually asks for, not a blanket default.
+
+### 10. Sidecar identity has silently regressed once already
+- **Evidence:** `repair_clonepool.py` (already built) fixed 136 of 137 rows in `phoenix_dev_db` where `hex_id = hex(filename)` instead of a real content hash — i.e., the identity system was broken for nearly the entire table before anyone caught it.
+- **Fix:** Run an integrity check now to confirm this hasn't recurred, and add a lightweight periodic check (even a cron'd script comparing `hex_id` against a fresh hash of stored content) so this class of regression gets caught in days, not eventually.
+- **My take:** This is a symptom of the same root issue as everything else on this list — nothing checks that stated identity matches actual content, automatically, on an ongoing basis. Worth generalizing #5's fix into a standing integrity job, not a one-off.
+
+---
+
+## Tier 4 — Public claims vs. verified reality (fixes the credibility problem, not the code)
+
+### 11. "Not WSL or hypervisor" is false as stated
+- **Evidence:** `run-ubuntu.ps1` has an explicit `--accel hyperv` path; the whole no-install-OS feature runs on QEMU, a real emulator/hypervisor-accelerated stack.
+- **Fix:** Correct this everywhere it's been said publicly. The accurate and still-impressive claim: *"real cloud OS images, zero install steps, one command, hardware-accelerated when available."* That's a legitimate pitch and doesn't require denying what QEMU is.
+
+### 12. Unverified performance superlatives in the main README
+- **Evidence:** "700,000 ops/sec, 100% cache hit rate," "97k ops/sec OctahedronBlock" — stated with no benchmark methodology, no reproducible test script linked.
+- **Fix:** Either link the actual benchmark script/methodology, or soften to something you can defend on request ("benchmarked at X ops/sec under Y conditions, see `/bench`"). A specific, sourced number beats a big round one.
+
+### 13. "Real code only — no demos" contradicts the repo's own stub
+- **Evidence:** Listed as Critical Rule #9 in the live README; directly contradicted by the explicit `"stub"` comment in `intake.py` (#6 above).
+- **Fix:** Fix the stub (or rename the field per #6) so the rule is actually true, or soften the rule's wording until it is.
+
+---
+
+## Suggested sequencing
+
+1. **Tier 1, #4 first** — resurrecting the guardian system is highest leverage for lowest new-code cost; the hard part is already written.
+2. **Tier 1, #1 and #3 together** — permission enforcement and local auth are the same underlying fix (a check before execution) and should be designed as one mechanism, not two.
+3. **Tier 2, #7** — decide the canonical intake path before touching either intake script further; otherwise fixes to #5/#6 have to be done twice.
+4. **Tier 2, #5 and #6** — once canonical intake is settled, fix validation and drop/rename the QR stub in the same pass.
+5. **Tier 1, #2** — sandboxing, once the permission model from #1 exists to scope it against.
+6. **Tier 3** — cleanup, can run in parallel with anything above.
+7. **Tier 4** — do last, once the above is real, so the public claims describe what's actually true rather than needing a second correction pass.
+
+---
+
+*Compiled from a live, adversarial code audit — every claim in this document was checked against actual source, not taken from documentation or prior session summaries. Treat any future claim about this codebase's security posture the same way before accepting it.*
