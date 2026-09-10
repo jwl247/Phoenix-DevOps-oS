@@ -856,6 +856,262 @@ function Find-UsysSuites {
     return $suites
 }
 
+# =============================================================================
+# SUITE EXECUTION GATE — check before execution (security audit T1 #1 + #3)
+#
+# One mechanism, asked at the top of Invoke-UsysRun, before anything runs:
+#
+#   #3 provenance — is this suite locally trust-stamped?  `.phoenix-trust` in
+#      the suite dir holds an HMAC-SHA256 over the entry file + core manifest
+#      fields, keyed by THIS machine's PHOENIX_AUTH. `usys suite-trust <name>`
+#      writes it (a future intake.sh will too). Change the entry file and the
+#      stamp stops verifying.
+#
+#   #1 permission — what does the manifest `permissions` array ask for, and is
+#      it granted? A trust-stamped suite is granted whatever it declares (you
+#      vouched). An UNSTAMPED host-runtime suite that asks for network / broad
+#      filesystem:write / process:spawn / env:write is REFUSED unless run with
+#      -Unverified or a live "yes".
+#
+# qemu-runtime suites (debian/ubuntu/…) are already contained by the VM
+# boundary — they pass the gate with a log line, not a challenge. The threat
+# surface is host-executing runtimes (python/node/bash/powershell/binary).
+#
+# This is a consent + audit boundary, NOT a kernel sandbox — real write/network
+# confinement is audit T1 #2 (Job Objects), still open. Every decision is
+# appended to ~/.unitedsys/logs/suite_exec.jsonl. A refusal on an unstamped,
+# elevated-ask suite also fires the CoPES Beta guardian (audit T1 #4's last
+# wire). Global escape hatch: PHOENIX_SUITE_NO_GATE=1.
+# =============================================================================
+
+$script:UsysHostRuntimes = @('python', 'node', 'bash', 'powershell', 'binary')
+
+function Get-UsysSuiteTrustKey {
+    $k = $env:PHOENIX_AUTH
+    if (-not $k) { $k = [Environment]::GetEnvironmentVariable('PHOENIX_AUTH', 'User') }
+    return $k
+}
+
+function Get-UsysFileSha256([string]$Path) {
+    if (-not (Test-Path $Path -PathType Leaf)) { return $null }
+    return (Get-FileHash -Path $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Get-UsysSuiteStampValue {
+    param([object]$Manifest, [string]$EntryPath)
+    $key = Get-UsysSuiteTrustKey
+    if (-not $key) { return $null }
+    $entryHash = Get-UsysFileSha256 $EntryPath
+    if (-not $entryHash) { return $null }
+    $msg = @(
+        'phoenix-suite-trust-v1',
+        [string]$Manifest.name,
+        [string]$Manifest.version,
+        [string]$Manifest.runtime,
+        [string]$Manifest.entry,
+        $entryHash
+    ) -join "`n"
+    $hmac = [System.Security.Cryptography.HMACSHA256]::new([Text.Encoding]::UTF8.GetBytes($key))
+    try {
+        $bytes = $hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($msg))
+    }
+    finally { $hmac.Dispose() }
+    return (-join ($bytes | ForEach-Object { $_.ToString('x2') }))
+}
+
+function Test-UsysSuiteTrusted {
+    param([object]$Suite)
+    $stampPath = Join-Path $Suite.Path '.phoenix-trust'
+    if (-not (Test-Path $stampPath)) {
+        return [pscustomobject]@{ Trusted = $false; Reason = 'not trust-stamped' }
+    }
+    try { $stamp = Get-Content $stampPath -Raw | ConvertFrom-Json }
+    catch { return [pscustomobject]@{ Trusted = $false; Reason = '.phoenix-trust unreadable' } }
+
+    $expected = Get-UsysSuiteStampValue -Manifest $Suite.Manifest -EntryPath (Join-Path $Suite.Path $Suite.Manifest.entry)
+    if (-not $expected) {
+        return [pscustomobject]@{ Trusted = $false; Reason = 'no PHOENIX_AUTH to verify the stamp against' }
+    }
+    if ($stamp.stamp -and $stamp.stamp -eq $expected) {
+        return [pscustomobject]@{ Trusted = $true; Reason = 'stamp valid' }
+    }
+    return [pscustomobject]@{ Trusted = $false; Reason = 'stamp mismatch — entry file changed, or stamped on another machine' }
+}
+
+function Get-UsysSuitePermissionAsks {
+    param([object]$Manifest)
+    $perms = @()
+    if ($Manifest.permissions) { $perms = @($Manifest.permissions | ForEach-Object { [string]$_ }) }
+    $elevated = @()
+    foreach ($p in $perms) {
+        if ($p -eq 'network') { $elevated += 'network' }
+        elseif ($p -eq 'filesystem:write') { $elevated += 'filesystem:write (unscoped)' }
+        elseif ($p -eq 'process:spawn') { $elevated += 'process:spawn' }
+        elseif ($p -eq 'env:write') { $elevated += 'env:write' }
+    }
+    return [pscustomobject]@{ Declared = $perms; Elevated = $elevated }
+}
+
+function Get-UsysSuiteExecLogPath {
+    if ($env:PHOENIX_SUITE_EXEC_LOG) { return $env:PHOENIX_SUITE_EXEC_LOG }
+    $home = $env:USERPROFILE
+    if (-not $home) { $home = $HOME }
+    return (Join-Path $home '.unitedsys\logs\suite_exec.jsonl')
+}
+
+function Write-UsysSuiteExecLog {
+    param([hashtable]$Entry)
+    try {
+        $path = Get-UsysSuiteExecLogPath
+        New-Item -ItemType Directory -Path (Split-Path $path) -Force -EA SilentlyContinue | Out-Null
+        $Entry['ts'] = (Get-Date).ToUniversalTime().ToString('o')
+        Add-Content -Path $path -Value ($Entry | ConvertTo-Json -Compress -Depth 5) -Encoding UTF8
+    }
+    catch { }
+}
+
+function Send-UsysGuardianEvent {
+    param([string]$Type, [hashtable]$Fields)
+    try {
+        $sec = Join-Path $script:UsysRepoRoot 'sector1'
+        if (-not (Test-Path (Join-Path $sec 'security'))) { return }
+        $py = if (Get-Command python3 -EA SilentlyContinue) { 'python3' }
+        elseif (Get-Command python -EA SilentlyContinue) { 'python' }
+        else { return }
+        $payload = (($Fields.Clone()) + @{ type = $Type }) | ConvertTo-Json -Compress
+        $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload))
+        $code = "import sys,json,base64; sys.path.insert(0, r'$sec'); " +
+        "from security import copes_runtime; " +
+        "copes_runtime.dispatch(json.loads(base64.b64decode('$b64')))"
+        Start-Job -ScriptBlock { param($p, $c) & $p -c $c 2>$null } -ArgumentList $py, $code |
+            Wait-Job -Timeout 6 | Out-Null
+    }
+    catch { }
+}
+
+function Assert-UsysSuiteExecutionAllowed {
+    param(
+        [object]$Suite,
+        [string]$EntryPath,
+        [switch]$Unverified,
+        [switch]$DryRun
+    )
+    $manifest = $Suite.Manifest
+    $asks = Get-UsysSuitePermissionAsks -Manifest $manifest
+    $logBase = @{
+        name = [string]$manifest.name; version = [string]$manifest.version
+        runtime = [string]$manifest.runtime; entry = [string]$manifest.entry
+        entry_sha256 = (Get-UsysFileSha256 $EntryPath)
+        permissions = $asks.Declared
+    }
+
+    if ($env:PHOENIX_SUITE_NO_GATE -eq '1') {
+        Write-UsysWarn 'Suite execution gate BYPASSED (PHOENIX_SUITE_NO_GATE=1)'
+        Write-UsysSuiteExecLog ($logBase + @{ decision = 'bypassed'; gated_by = 'PHOENIX_SUITE_NO_GATE' })
+        return $true
+    }
+
+    # qemu (and anything not a host runtime) is contained by the VM boundary
+    if ([string]$manifest.runtime -notin $script:UsysHostRuntimes) {
+        Write-UsysInfo "Execution gate: '$($manifest.runtime)' runtime is VM-contained — pass"
+        Write-UsysSuiteExecLog ($logBase + @{ decision = 'allow'; gated_by = "vm-contained" })
+        return $true
+    }
+
+    $trust = Test-UsysSuiteTrusted -Suite $Suite
+    $logBase['trusted'] = $trust.Trusted
+
+    if ($trust.Trusted) {
+        Write-UsysOk "Execution gate: trust stamp valid — granted $($asks.Declared -join ', ')"
+        Write-UsysSuiteExecLog ($logBase + @{ decision = 'allow'; gated_by = 'trust-stamp' })
+        return $true
+    }
+
+    Write-UsysWarn "Execution gate: $($trust.Reason)"
+    if ($asks.Elevated.Count -eq 0) {
+        Write-UsysInfo 'No elevated permissions declared — allowing unstamped run'
+        Write-UsysSuiteExecLog ($logBase + @{ decision = 'allow'; gated_by = 'no-elevated-asks' })
+        return $true
+    }
+
+    Write-UsysWarn "Unstamped suite asks for: $($asks.Elevated -join ', ')"
+    Send-UsysGuardianEvent -Type 'suite_unrecognized' -Fields @{
+        name = [string]$manifest.name; version = [string]$manifest.version
+        runtime = [string]$manifest.runtime
+        elevated = ($asks.Elevated -join ','); source = 'usys run'
+    }
+
+    if ($DryRun) {
+        Write-UsysInfo '[DRY RUN] real run would require -Unverified or an interactive "yes"'
+        Write-UsysSuiteExecLog ($logBase + @{ decision = 'would-block'; gated_by = 'dry-run' })
+        return $true
+    }
+    if ($Unverified) {
+        Write-UsysWarn 'Proceeding on -Unverified — you have accepted the risk'
+        Write-UsysSuiteExecLog ($logBase + @{ decision = 'allow'; gated_by = 'unverified-flag' })
+        return $true
+    }
+    if ([Environment]::UserInteractive) {
+        try {
+            $ans = Read-Host "  Run this unverified suite anyway? type 'yes'"
+            if ($ans -eq 'yes') {
+                Write-UsysSuiteExecLog ($logBase + @{ decision = 'allow'; gated_by = 'interactive-consent' })
+                return $true
+            }
+        }
+        catch {
+            # no real console (NonInteractive host) — fall through to refuse
+        }
+    }
+
+    Write-UsysErr "Refused: unstamped suite with elevated permission asks."
+    Write-UsysInfo "  vouch for it:  usys suite-trust $($manifest.name)"
+    Write-UsysInfo "  or one-shot:   usys run $($manifest.name) --unverified"
+    Write-UsysSuiteExecLog ($logBase + @{ decision = 'refused'; gated_by = 'gate' })
+    return $false
+}
+
+function Invoke-UsysSuiteTrust {
+    param(
+        [Parameter(Mandatory)][string]$SuiteName,
+        [string]$Version = ''
+    )
+    $suites = Find-UsysSuites -Name $SuiteName
+    if ($suites.Count -eq 0) { Write-UsysErr "Suite not found: $SuiteName"; return }
+    $suite = if ($Version) {
+        $suites | Where-Object { $_.Version -eq $Version } | Select-Object -First 1
+    }
+    else {
+        $suites | Sort-Object { [version]$_.Version } -Descending | Select-Object -First 1
+    }
+    if (-not $suite) { Write-UsysErr "Suite version not found: $SuiteName@$Version"; return }
+
+    $entryPath = Join-Path $suite.Path $suite.Manifest.entry
+    if (-not (Test-Path $entryPath)) {
+        Write-UsysErr "Entry point not found: $($suite.Manifest.entry)"; return
+    }
+    if (-not (Get-UsysSuiteTrustKey)) {
+        Write-UsysErr 'PHOENIX_AUTH not set — cannot stamp. Run: usys init'; return
+    }
+
+    $stamp = Get-UsysSuiteStampValue -Manifest $suite.Manifest -EntryPath $entryPath
+    $obj = [ordered]@{
+        v            = 1
+        algo         = 'HMAC-SHA256'
+        stamp        = $stamp
+        entry        = [string]$suite.Manifest.entry
+        entry_sha256 = (Get-UsysFileSha256 $entryPath)
+        stamped_at   = (Get-Date).ToUniversalTime().ToString('o')
+        stamped_by   = $env:USERNAME
+        machine      = $env:COMPUTERNAME
+    }
+    $stampPath = Join-Path $suite.Path '.phoenix-trust'
+    $obj | ConvertTo-Json | Set-Content -Path $stampPath -Encoding UTF8
+    Write-UsysOk "Trust-stamped: $($suite.Manifest.name) v$($suite.Manifest.version)"
+    Write-UsysInfo "  $stampPath"
+    Write-UsysInfo '  (machine-bound — re-run this on any other machine that will execute the suite)'
+}
+
 function Invoke-UsysRun {
     [CmdletBinding()]
     param(
@@ -864,6 +1120,11 @@ function Invoke-UsysRun {
 
         [string]$Version = '',
         [switch]$DryRun,
+
+        # Accept an unstamped suite that asks for elevated permissions
+        # (network / broad filesystem:write / process:spawn / env:write).
+        # The explicit "I know this is unverified" flag from the audit.
+        [switch]$Unverified,
 
         # Override accelerator: auto | tcg | whpx | hyperv | kvm
         # 'auto' = Phoenix picks the best available (default)
@@ -919,7 +1180,13 @@ function Invoke-UsysRun {
     Write-UsysInfo "Type: $($manifest.type)"
     Write-UsysInfo "Runtime: $($manifest.runtime)"
     Write-UsysInfo "Entry: $($manifest.entry)"
-    
+
+    # ── execution gate — check before execution (audit T1 #1 + #3) ────────────
+    if (-not (Assert-UsysSuiteExecutionAllowed -Suite $suite -EntryPath $entryPath `
+                -Unverified:$Unverified -DryRun:$DryRun)) {
+        return
+    }
+
     if ($DryRun) {
         Write-Host ''
         Write-Host '  [DRY RUN] Would execute:' -ForegroundColor Cyan
@@ -1596,6 +1863,15 @@ function Show-UsysHelp {
     suite-promote <name> -Desc "x"  Same with a custom description
     suite-list                       List all runnable suites in clonepool
     list-suites                      Alias for suite-list
+    suite-trust <name>[@ver]         Trust-stamp a suite for execution on THIS machine
+    run <name> --unverified          Run an unstamped elevated-ask suite anyway
+
+  Suite execution gate (audit T1 #1+#3): a host-runtime suite (python/node/
+    bash/powershell/binary) that is not trust-stamped and declares network /
+    filesystem:write / process:spawn / env:write is refused by 'usys run'
+    until you 'usys suite-trust' it or pass --unverified. qemu suites are
+    VM-contained and pass freely. Bypass all of it: PHOENIX_SUITE_NO_GATE=1.
+    Decisions log to ~/.unitedsys/logs/suite_exec.jsonl.
 
   Registry (requires ~/.usys/usys.sh):
     register <file> <name>       Register callable file
@@ -1610,7 +1886,7 @@ function Show-UsysHelp {
 
   Environment:
     PHOENIX_ROOT, PHOENIX_BASH, PHOENIX_INTAKE, PHOENIX_INTAKE_SECTOR4
-    PHOENIX_AUTH, PHOENIX_WORKER_URL, CLONEPOOL_DIR
+    PHOENIX_AUTH, PHOENIX_WORKER_URL, CLONEPOOL_DIR, PHOENIX_SUITE_NO_GATE
 
 "@
 }
@@ -1730,12 +2006,13 @@ function global:usys {
         }
 
         'run' {
-            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys run <suite> [--accel auto|tcg|whpx|hyperv|kvm] [--share] [args...]'; return }
-            $dry       = $Rest -contains '-DryRun' -or $Rest -contains '--dry-run'
-            $share     = $Rest -contains '--share' -or $Rest -contains '-Share'
-            $accel     = 'auto'
-            $suiteName = $Rest[0]
-            $version   = ''
+            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys run <suite> [--accel auto|tcg|whpx|hyperv|kvm] [--share] [--unverified] [args...]'; return }
+            $dry        = $Rest -contains '-DryRun' -or $Rest -contains '--dry-run'
+            $share      = $Rest -contains '--share' -or $Rest -contains '-Share'
+            $unverified = $Rest -contains '--unverified' -or $Rest -contains '-Unverified'
+            $accel      = 'auto'
+            $suiteName  = $Rest[0]
+            $version    = ''
 
             # Handle suite@version syntax
             if ($suiteName -match '^(.+)@(.+)$') {
@@ -1752,7 +2029,7 @@ function global:usys {
                     $skipNext = $true
                     continue
                 }
-                if ($token -in '--share', '-Share') { continue }
+                if ($token -in '--share', '-Share', '--unverified', '-Unverified') { continue }
                 $filteredRest.Add($token)
             }
             # Second pass for --accel=value and value-after-flag
@@ -1765,7 +2042,14 @@ function global:usys {
             }
 
             $passArgs = $filteredRest | Where-Object { $_ -notin '-DryRun', '--dry-run' }
-            Invoke-UsysRun -SuiteName $suiteName -Version $version -Accel $accel -Share:$share -DryRun:$dry -Arguments $passArgs
+            Invoke-UsysRun -SuiteName $suiteName -Version $version -Accel $accel -Share:$share -Unverified:$unverified -DryRun:$dry -Arguments $passArgs
+        }
+
+        'suite-trust' {
+            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys suite-trust <suite> [@version]'; return }
+            $sn = $Rest[0]; $sv = ''
+            if ($sn -match '^(.+)@(.+)$') { $sn = $matches[1]; $sv = $matches[2] }
+            Invoke-UsysSuiteTrust -SuiteName $sn -Version $sv
         }
 
         'pull' {
