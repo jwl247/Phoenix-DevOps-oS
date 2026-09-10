@@ -95,16 +95,43 @@ FAMILY_ZONE: dict[str, str] = {
     DataFamily.USER:    "/mnt/clonepool/@yellow",
 }
 
+# Family → default permission set (least privilege by declaration — audit T3 #9).
+# `translate` / `delete` / `kernel` are NEVER in a default set: translate only at
+# the sector-3 boundary, delete never, kernel never from userspace (CLAUDE.md
+# Critical Rules). A ring that legitimately needs one is spawned with an explicit
+# `permissions=` override (e.g. the sector-3 translator ring gets translate:True).
+_DENIED = {"translate": False, "delete": False, "kernel": False}
+FAMILY_PERMISSIONS: dict[str, dict] = {
+    # observed signals — a ring reads them, doesn't author them
+    DataFamily.PHYSICS: {"read": True, "write": False, "clone": True,  **_DENIED},
+    DataFamily.SYSTEM:  {"read": True, "write": False, "clone": False, **_DENIED},
+    DataFamily.NETWORK: {"read": True, "write": False, "clone": True,  **_DENIED},
+    # authored artifacts — a ring produces output that gets cloned out
+    DataFamily.ASSETS:  {"read": True, "write": True,  "clone": True,  **_DENIED},
+    DataFamily.USER:    {"read": True, "write": True,  "clone": True,  **_DENIED},
+    DataFamily.AI:      {"read": True, "write": True,  "clone": True,  **_DENIED},
+}
+# Fallback for an unknown family — most restrictive thing that can still do work.
+FAMILY_PERMISSIONS_DEFAULT = {"read": True, "write": False, "clone": False, **_DENIED}
+
 
 @dataclass
 class Ball:
     """
-    The ball travels with Frank through every process he wears.
-    It never leaves him. It IS the permission system.
-    No process Frank wears can do anything the ball doesn't authorize.
+    The ball travels with Frank through every process he wears, from ring
+    spawn until it is committed to D1 when Frank dies. It carries two things:
+    the permission set for this ring, and the custody chain (every hand it
+    passed through) — the ball IS the chain of evidence.
 
-    Born at ring spawn. Committed to D1 when Frank dies.
-    The ball IS the chain of evidence.
+    The ball is the *declared* boundary. Enforcement is at the point of
+    action: a component about to do something permission-relevant calls
+    `ball.assert_authorized("write" | "clone" | "translate" | ...)` first and
+    must handle the PermissionError. franken5 itself performs no gated
+    filesystem/network/exec actions, so it holds the ball but does not check
+    it — the execution layer (frank_ring / process suits / the sector-3
+    translator) is where the checks belong. Wiring those call sites and real
+    sandboxing is security-audit Tier 1 #2 (see docs/SUITE_EXECUTION_GATE.md
+    for the sibling mechanism already built for `usys run`).
     """
     family:      str                        # DataFamily
     zipcode:     str                        # clonepool zone
@@ -117,8 +144,25 @@ class Ball:
     metadata:    dict  = field(default_factory=dict)   # anything extra
 
     def authorize(self, action: str) -> bool:
-        """Ball says what Frank CAN do. If it's not in here, Frank can't do it."""
-        return self.permissions.get(action, False)
+        """Ball says what Frank CAN do. If it's not in here, Frank can't do it.
+        Non-raising — use assert_authorized() at an actual enforcement point."""
+        return bool(self.permissions.get(action, False))
+
+    def assert_authorized(self, action: str, actor: str = "") -> None:
+        """Enforcement primitive: raise PermissionError unless `action` is
+        granted. Call this immediately before doing the thing. Refusals are
+        logged so a denied action leaves a trail even if the caller swallows
+        the exception."""
+        if not self.authorize(action):
+            who = actor or self.custody[-1]["to"] if self.custody else "unknown"
+            log.warning(
+                "BALL DENY: '%s' attempted '%s' (family=%s sector=%s) — not in %s",
+                who, action, self.family, self.sector, sorted(self.permissions),
+            )
+            raise PermissionError(
+                f"ball does not authorize '{action}' for family={self.family} "
+                f"sector={self.sector}"
+            )
 
     def hand_off(self, from_component: str, to_component: str):
         """Record every hand the ball passes through. Immutable custody chain."""
@@ -150,20 +194,21 @@ class Ball:
         """
         slot    = FAMILY_SLOT.get(family, KernelSlot.PYTHON_USER)
         zipcode = FAMILY_ZONE.get(family, "/mnt/clonepool/@yellow")
+        # Least privilege by declaration (audit T3 #9): the default set comes
+        # from the family, not one blanket {read,write,clone}=True for everyone.
+        # An explicit `permissions` arg still wins — that's how a ring that
+        # genuinely needs translate/delete/kernel is granted it, deliberately.
+        default_perms = dict(FAMILY_PERMISSIONS.get(family, FAMILY_PERMISSIONS_DEFAULT))
+        # A populated dict wins (explicit grant). None or {} -> family default,
+        # so a SuitSpec that never set `permissions` (default_factory=dict) still
+        # gets a working least-privilege set rather than an empty one.
         return cls(
             family      = family,
             zipcode     = zipcode,
             slot        = slot,
             sector      = sector,
             ring_pos    = ring_pos,
-            permissions = permissions or {
-                "read":       True,
-                "write":      True,
-                "clone":      True,
-                "translate":  False,   # only at sector3 boundary
-                "delete":     False,   # never
-                "kernel":     False,   # never from userspace
-            }
+            permissions = dict(permissions) if permissions else default_perms,
         )
 
 
@@ -304,13 +349,26 @@ class RingRecord:
         """
         Frank is syncing. Final accumulation.
         If definitive — snap-clone fires. Frank dies clean.
-        Returns True if definitive.
+        Returns True if definitive AND the ball authorizes the clone.
+
+        This is franken5's one real enforcement point: a snap-clone is a
+        `clone` action, so a ring whose ball doesn't grant `clone` (e.g. a
+        SYSTEM-family observer) cannot trigger one — call3 logs the denial and
+        returns False instead of raising, so the ring still dies clean.
         """
         if self.pcs:
             self.pcs.call3(data)
             if self.ball:
                 self.ball.hand_off("call2", "D1")
-            return self.pcs.definitive
+            if not self.pcs.definitive:
+                return False
+            if self.ball and not self.ball.authorize("clone"):
+                log.warning(
+                    "Ring %s (%s) hit definitive but ball denies 'clone' — "
+                    "snap-clone suppressed", self.ring_id, self.process,
+                )
+                return False
+            return True
         return False
 
     def to_custody_record(self) -> dict:
