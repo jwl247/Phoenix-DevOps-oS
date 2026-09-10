@@ -28,6 +28,7 @@ from helixe import HelixE
 # Phoenix extensions (always in same dir as this file)
 _here = Path(__file__).parent
 sys.path.insert(0, str(_here))
+sys.path.insert(0, str(_here.parent))   # sector1/ — for `security` (CoPES guardians)
 
 log = logging.getLogger("phoenix_uk")
 
@@ -87,6 +88,18 @@ def boot():
         helix_system.start()
     except Exception as e:
         log.info("  Helix memory stack not connected: %s (standalone mode)", e)
+
+    # ── CoPES guardian rotation — moving-target defense, armed before the ──────
+    # rest comes up. Non-fatal: a boot without guardians is worse than nothing
+    # but must not stop Phoenix from starting.
+    try:
+        from security import copes_runtime
+        copes_runtime.boot(on_escalate=lambda inc: log.critical(
+            "  GUARDIAN ESCALATION %s/%s", inc.get("type"), inc.get("guardian")))
+        log.info("  CoPES guardians  armed   (%s)",
+                 copes_runtime.status().get("active_guardian"))
+    except Exception as e:
+        log.warning("  CoPES guardians NOT armed: %s", e)
 
     llm_engine = _boot_llm_engine(helix_system)
     _boot_file_tree()
