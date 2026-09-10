@@ -29,6 +29,22 @@ LOCKOUT_BASE  = 30   # seconds, doubles each lockout
 
 os.makedirs(LOG_DIR, exist_ok=True)
 
+
+# ── CoPES guardian feed ─────────────────────────────────────────────────────
+# Auth is GuardianAlpha's event source. Best-effort only: if the guardian
+# layer isn't importable or isn't armed, dispatch() no-ops. Auth must never
+# break because of the security layer.
+def _guardian(event_type, **fields):
+    try:
+        from pathlib import Path as _P
+        _s = str(_P(__file__).resolve().parent.parent)   # sector1/
+        if _s not in sys.path:
+            sys.path.insert(0, _s)
+        from security import copes_runtime
+        copes_runtime.dispatch({"type": event_type, **fields})
+    except Exception:
+        pass
+
 # ── Hardware Signal Collectors ───────────────────────────────
 def get_hw_signals():
     """Collect 10 hardware signals for fingerprint"""
@@ -170,15 +186,18 @@ def authenticate():
     if authorized:
         authorize_machine(fp)  # update last_seen
         print(f"[PHOENIX_AUTH] AUTHORIZED")
+        _guardian("auth_success", source=fp[:16])
         return True
     elif reason == "NOT_REGISTERED":
         print(f"[PHOENIX_AUTH] New machine — registering...")
         authorize_machine(fp)
         print(f"[PHOENIX_AUTH] AUTHORIZED (first run)")
+        _guardian("auth_success", source=fp[:16], first_run=True)
         return True
     else:
         print(f"[PHOENIX_AUTH] DENIED — {reason}")
         record_failed_attempt(fp)
+        _guardian("auth_failure", source=fp[:16], reason=reason)
         return False
 
 if __name__ == "__main__":
