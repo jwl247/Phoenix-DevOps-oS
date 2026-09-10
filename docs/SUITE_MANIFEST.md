@@ -218,6 +218,13 @@ Permission types:
 - `env:read` - Read environment variables
 - `env:write` - Modify environment
 
+**These are enforced at `usys run` time** by the suite execution gate — a
+host-runtime suite (python/node/bash/powershell/binary) that declares an
+elevated permission (`network`, unscoped `filesystem:write`, `process:spawn`,
+`env:write`) and is not trust-stamped (`usys suite-trust <name>`) is refused
+unless run with `--unverified`. `qemu` suites are VM-contained and pass
+freely. See [SUITE_EXECUTION_GATE.md](SUITE_EXECUTION_GATE.md).
+
 ---
 
 ## Complete Example
