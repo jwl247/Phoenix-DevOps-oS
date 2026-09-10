@@ -37,8 +37,8 @@ CREATE TABLE IF NOT EXISTS medication_log (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id       INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
   dose_at       TEXT    NOT NULL,                       -- when she took it (ISO-8601 UTC)
-  recorded_via  TEXT    NOT NULL                        -- assistant | pushover-ack | email-ack | sms-reply | manual
-                  CHECK (recorded_via IN ('assistant','pushover-ack','email-ack','sms-reply','manual')),
+  recorded_via  TEXT    NOT NULL                        -- how the dose was confirmed
+                  CHECK (recorded_via IN ('assistant','link-ack','pushover-ack','email-ack','sms-reply','manual')),
   recorded_at   TEXT    NOT NULL DEFAULT (datetime('now')),
   note          TEXT
 );

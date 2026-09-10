@@ -1,0 +1,66 @@
+{
+  // meds-worker — Laurie's medication guardrail (2026-09-09)
+  // UnitedSys — United Systems | jwl247 | GPL-3.0
+  //
+  // Its own worker on purpose (same call as Office's notify-worker vs
+  // packages-worker): the guardrail must keep reminding her with zero Phoenix
+  // machine running. Shares the lifefirst-db D1, owns only the medication_*
+  // tables (schema.sql). Does NOT touch lifefirst-mcp (source not local).
+  //
+  // Deploy:  wrangler deploy
+  // Tail:    wrangler tail
+  //
+  // Secrets (wrangler secret put <NAME>) — every one is optional at the code
+  // level (a missing channel is skipped, never fatal), but Pushover for Laurie
+  // is the intended primary:
+  //   PHOENIX_AUTH          bearer for /status /configure /record-dose. MUST match
+  //                         the value the rest of Phoenix uses — add this worker
+  //                         to package-handler/rotate-phoenix-auth.sh.
+  //   PUSHOVER_TOKEN        Pushover application token (Jerry's account)
+  //   PUSHOVER_USER_LAURIE  Laurie's Pushover user/device key — PRIMARY channel
+  //   PUSHOVER_USER_JERRY   Jerry's Pushover key — caregiver escalation
+  //   RESEND_API_KEY        resend.com, backup email channel
+  //   LAURIE_EMAIL          Laurie's email (backup channel)
+  //   CAREGIVER_EMAIL       Jerry's email (caregiver escalation)
+  //   TWILIO_ACCOUNT_SID    } bonus SMS channel. GV number filtering makes this
+  //   TWILIO_AUTH_TOKEN     } unreliable near-term, so it's a best-effort try,
+  //   TWILIO_FROM           } not a channel to lean on.
+  //   LAURIE_SMS            Laurie's SMS number (GV 405-237-5727)
+  //   CAREGIVER_SMS         Jerry's SMS number
+  // Optional:
+  //   MEDS_FROM             From: header for email (default "Life First
+  //                         <lifefirst@authenticcoder.com>"; domain must be
+  //                         verified in Resend).
+
+  "name": "meds-worker",
+  "main": "index.js",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Non-secret. Used to build the /ack link inside the cron, where there is no
+  // inbound request to read an origin from.
+  "vars": {
+    "WORKER_PUBLIC_URL": "https://meds-worker.phoenix-jwl.workers.dev"
+  },
+
+  // ── D1 ────────────────────────────────────────────────────────────────────
+  // lifefirst-db — shared with lifefirst-mcp. This worker owns only
+  // medication_state / medication_log / med_alerts (schema.sql).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lifefirst-db",
+      "database_id": "6a24691c-0970-441f-81f9-9746475c3cef"
+    }
+  ],
+
+  // ── Adaptive check + escalation ───────────────────────────────────────────
+  // Every 5 min the cron: (1) opens a check-in for any active guardrail whose
+  // dose is now due, (2) re-sends any open check-in whose last send is >14 min
+  // old, escalating the message, level capped at 5, (3) loops Jerry in once a
+  // check-in has been open ~1 h unanswered. All timestamp-gated — the interval
+  // is just resolution, not the cadence.
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  }
+}
