@@ -629,6 +629,61 @@ test('every bundled template is valid and produces a fillable document', () => {
   }
 });
 
+// ── hash.js — Electron / BoringSSL compatibility (2026-09-10) ──
+// Electron's crypto is BoringSSL, which supports neither sha3-512 nor
+// blake2b512 — `crypto.createHash('sha3-512')` throws "Digest method not
+// supported" and took the whole app down the first time Office was opened
+// from the dashboard. lib/hash.js falls back to a vendored pure-JS
+// implementation. These tests prove the fallback is byte-identical to
+// OpenSSL and that a full document lifecycle survives it.
+test('vendored noble-hashes output is byte-identical to native OpenSSL', () => {
+  const crypto = require('crypto');
+  const { sha3_512 } = require('../lib/vendor/noble-hashes/sha3.js');
+  const { blake2b } = require('../lib/vendor/noble-hashes/blake2b.js');
+  const { bytesToHex } = require('../lib/vendor/noble-hashes/utils.js');
+  for (const s of ['', 'a', 'the quick brown fox', JSON.stringify({ total: '150', notes: null })]) {
+    const bytes = Buffer.from(s, 'utf8');
+    assert.strictEqual(
+      bytesToHex(sha3_512(bytes)),
+      crypto.createHash('sha3-512').update(bytes).digest('hex'),
+      `sha3-512 mismatch for ${JSON.stringify(s)}`);
+    assert.strictEqual(
+      bytesToHex(blake2b(bytes, { dkLen: 64 })),
+      crypto.createHash('blake2b512').update(bytes).digest('hex'),
+      `blake2b512 mismatch for ${JSON.stringify(s)}`);
+  }
+});
+
+test('document lifecycle + tamper detection work when createHash rejects sha3/blake2 (Electron sim)', () => {
+  const crypto = require('crypto');
+  const realCreateHash = crypto.createHash.bind(crypto);
+  crypto.createHash = (algo, ...rest) => {
+    if (algo === 'sha3-512' || algo === 'blake2b512') throw new Error('Digest method not supported');
+    return realCreateHash(algo, ...rest);
+  };
+  const marker = `${path.sep}office${path.sep}lib${path.sep}`;
+  const bust = () => { for (const k of Object.keys(require.cache)) if (k.includes(marker)) delete require.cache[k]; };
+  bust(); // fresh require of the lib graph so hash.js re-detects
+  try {
+    const d2 = require('../lib/document');
+    const ff2 = require('../lib/file-format');
+    let d = d2.createDocument({ fieldNames: ['total'], authorFingerprint: 'A', counterparty: { email: 'x@y.z' } });
+    d = d2.fillField(d, 'total', '150', 'A').document;
+    d = d2.sign(d2.handToClient(d), 'C');
+    const p = path.join(os.tmpdir(), `office-electron-sim-${Date.now()}.office.json`);
+    ff2.saveOfficeFile(p, d);
+    assert.strictEqual(ff2.loadOfficeFile(p).tampered, false, 'clean signed doc must verify under the fallback');
+    const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
+    raw.body.fields.total = '999';
+    fs.writeFileSync(p, JSON.stringify(raw, null, 2), 'utf8');
+    assert.strictEqual(ff2.loadOfficeFile(p).tampered, true, 'tamper must be caught under the fallback');
+    fs.unlinkSync(p);
+  } finally {
+    crypto.createHash = realCreateHash;
+    bust();
+  }
+});
+
 // ── run ───────────────────────────────────────────────────────
 (async () => {
   let passed = 0, failed = 0;

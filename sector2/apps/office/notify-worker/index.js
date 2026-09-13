@@ -182,14 +182,19 @@ async function handleNotify(req, env) {
   const origin = new URL(req.url).origin;
   const result = await deliver(env, row, origin);
 
+  // Always 200: the notification IS recorded (the append-only row is written)
+  // and the cron will keep retrying delivery. A non-2xx here would make a
+  // retrying client re-POST and double-insert (CLAUDE.md wart, 2026-09-09).
+  // `sent` / `error` carry the actual delivery outcome for the caller.
   return json({
     ok: true,
+    recorded: true,
     notification_id: ins.id,
     ack_token: token,
     ack_url: ackUrl(env, origin, token),
     sent: result.sent,
     error: result.error,
-  }, result.sent ? 200 : 502);
+  }, 200);
 }
 
 async function handleAck(token, env) {

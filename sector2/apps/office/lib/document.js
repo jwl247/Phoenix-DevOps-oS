@@ -11,7 +11,7 @@
 //   - A real-world correction after signing is a new, separate document
 //     (a change order) that references the original — never an edit to it.
 
-const crypto = require('crypto');
+const { sha3_512Hex, blake2b512Hex } = require('./hash');
 const { machineFingerprint } = require('./fingerprint');
 
 const STATES = ['DRAFT', 'PENDING_REVIEW', 'SIGNED'];
@@ -24,8 +24,8 @@ function deepClone(x) { return JSON.parse(JSON.stringify(x)); }
 // document's field content instead of hardware signals.
 function contentHash(fields) {
   const s = JSON.stringify(fields, Object.keys(fields).sort());
-  const sha3 = crypto.createHash('sha3-512').update(s, 'utf8').digest('hex');
-  const blake2b = crypto.createHash('blake2b512').update(s, 'utf8').digest('hex');
+  const sha3 = sha3_512Hex(s);
+  const blake2b = blake2b512Hex(s);
   return { sha3, blake2b };
 }
 
