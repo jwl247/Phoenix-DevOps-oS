@@ -470,8 +470,13 @@ function Invoke-UsysDoctor {
     $repo = Get-UsysRepoRoot
     $phoenixRoot = Split-Path $repo -Parent
 
-    Write-Host '  -- Git state (every repo under Phoenix\) --' -ForegroundColor Yellow
-    foreach ($r in @('Phoenix-DevOps-oS', 'Phoenix-Package_handler', 'package-handler', 'Helix_lightning_kernel')) {
+    Write-Host '  -- Git state (every active repo under Phoenix\) --' -ForegroundColor Yellow
+    # Phoenix-Package_handler and package-handler were archived 2026-09-13 to
+    # archive/package-handler-consolidation-20260913/ after being confirmed to
+    # have zero unique value vs. this repo's own sector2/package-handler/ —
+    # see that folder's README.md. Not checked here anymore; if either ever
+    # gets revived, add it back.
+    foreach ($r in @('Phoenix-DevOps-oS', 'Helix_lightning_kernel')) {
         $info = Get-UsysRepoGitInfo (Join-Path $phoenixRoot $r)
         if (-not $info) { Write-Host "    $r : not a git repo (skipped)" -ForegroundColor DarkGray; continue }
         $flags = @()
@@ -483,20 +488,6 @@ function Invoke-UsysDoctor {
         } else {
             $msg = "$r : $($flags -join ', ') ($($info.Head))"
             Write-Host "    $msg" -ForegroundColor Yellow
-            $problems += $msg
-        }
-    }
-    Write-Host ''
-
-    Write-Host '  -- package-handler drift (3 copies, see their CONNECTIONS.md) --' -ForegroundColor Yellow
-    $a = Get-UsysRepoGitInfo (Join-Path $phoenixRoot 'Phoenix-Package_handler')
-    $b = Get-UsysRepoGitInfo (Join-Path $phoenixRoot 'package-handler')
-    if ($a -and $b) {
-        if ($a.Head -eq $b.Head) {
-            Write-Host "    Phoenix-Package_handler / package-handler : same commit ($($a.Head)) — no longer drifted" -ForegroundColor Green
-        } else {
-            $msg = "Phoenix-Package_handler ($($a.Head)) and package-handler ($($b.Head)) are at different commits — still drifted"
-            Write-Host "    $msg" -ForegroundColor Red
             $problems += $msg
         }
     }
