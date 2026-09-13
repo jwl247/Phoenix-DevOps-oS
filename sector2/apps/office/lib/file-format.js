@@ -13,7 +13,7 @@
 // BigInt instead of shelling out to Python.
 
 const fs = require('fs');
-const crypto = require('crypto');
+const { sha3_512Hex } = require('./hash');
 const { contentHash, hashesMatch } = require('./document');
 
 const B58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -51,7 +51,7 @@ function shortAddress(sha3Hex) {
 function documentIdentityHash(doc) {
   const forged = doc.history[0];
   const s = JSON.stringify({ at: forged.at, by: forged.by });
-  return crypto.createHash('sha3-512').update(s, 'utf8').digest('hex');
+  return sha3_512Hex(s);
 }
 
 function buildHeader(doc) {

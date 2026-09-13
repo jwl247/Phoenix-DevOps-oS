@@ -9,7 +9,7 @@
 // identity" for why Windows/Google sign-in exist alongside this rather
 // than forcing hardware fingerprinting everywhere.
 
-const crypto = require('crypto');
+const { sha3_512Hex, blake2b512Hex } = require('./hash');
 const { execFileSync } = require('child_process');
 
 function safeRun(cmd, args) {
@@ -60,9 +60,9 @@ function getSignals() {
 // blake2b = BLAKE2b-512(combined), final = SHA3-512(sha3_hex + blake2b_hex).
 function doubleHash(signals) {
   const combined = signals.join('|');
-  const sha3 = crypto.createHash('sha3-512').update(combined, 'utf8').digest('hex');
-  const blake2b = crypto.createHash('blake2b512').update(combined, 'utf8').digest('hex');
-  return crypto.createHash('sha3-512').update(sha3 + blake2b, 'utf8').digest('hex');
+  const sha3 = sha3_512Hex(combined);
+  const blake2b = blake2b512Hex(combined);
+  return sha3_512Hex(sha3 + blake2b);
 }
 
 function machineFingerprint() {

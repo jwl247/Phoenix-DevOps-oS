@@ -28,7 +28,7 @@
 //   const me = await resolveAuthor({ prefer: 'windows', store }); // or 'fingerprint'
 //   let doc = document.createDocument({ fieldNames, authorFingerprint: me.author_id, counterparty });
 
-const crypto = require('crypto');
+const { sha3_512Hex } = require('./hash');
 const { machineFingerprint, safeRun } = require('./fingerprint');
 
 const CRED_TYPES = ['fingerprint', 'windows', 'google'];
@@ -78,9 +78,7 @@ function deriveAuthorId(credential) {
   if (!credential || !credential.type || !credential.value) {
     throw new Error('deriveAuthorId needs a { type, value } credential');
   }
-  const h = crypto.createHash('sha3-512')
-    .update(`${credential.type}|${credential.value}`, 'utf8')
-    .digest('hex');
+  const h = sha3_512Hex(`${credential.type}|${credential.value}`);
   return `a_${credential.type[0]}${h.slice(0, 30)}`;
 }
 

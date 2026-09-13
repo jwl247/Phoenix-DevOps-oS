@@ -110,7 +110,16 @@ function workerTransport({ workerUrl, auth, docHex, fetchImpl } = {}) {
     });
     const text = await res.text();
     if (!res.ok) throw new Error(`office-notify-worker ${res.status}: ${text.slice(0, 300)}`);
-    try { return JSON.parse(text); } catch { return { ok: true, raw: text }; }
+    let body;
+    try { body = JSON.parse(text); } catch { return { ok: true, raw: text }; }
+    // The worker returns 200 even when the row was recorded but delivery
+    // failed (no transport configured yet, a carrier bounce, …) so retries
+    // don't double-insert. Surface that as a send failure to the caller —
+    // the notice is logged and the worker's cron will keep retrying.
+    if (body && body.recorded && body.sent === false) {
+      throw new Error(body.error || 'office-notify-worker recorded the notice but could not deliver it');
+    }
+    return body;
   };
 }
 

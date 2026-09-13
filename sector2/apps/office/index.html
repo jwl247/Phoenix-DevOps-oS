@@ -161,18 +161,20 @@
 <div class="scrim" id="scrim">
   <div class="modal">
     <h3>New document</h3>
+    <h2 style="margin:0 0 8px">1 · Choose a template</h2>
     <div class="tpl-grid" id="tpl-grid"></div>
     <div id="blank-fields" hidden>
       <div class="field"><label>Field names (comma-separated)</label>
         <div class="row"><input id="blank-input" placeholder="customer, description, total"></div></div>
     </div>
-    <h2 style="margin:14px 0 6px">Counterparty contact <span class="muted">— who gets alerted if a signed copy is altered</span></h2>
+    <h2 style="margin:14px 0 6px">2 · Counterparty contact <span class="muted">— who gets alerted if a signed copy is altered (optional, can skip)</span></h2>
     <div class="cp-grid">
       <div class="field"><label>phone</label><div class="row"><input id="cp-phone"></div></div>
       <div class="field"><label>carrier</label><div class="row"><input id="cp-carrier" placeholder="verizon / att / …"></div></div>
       <div class="field"><label>email</label><div class="row"><input id="cp-email"></div></div>
     </div>
     <div class="modal-actions">
+      <span class="muted" id="m-hint" style="margin-right:auto">Pick a template above to continue</span>
       <button id="m-cancel">Cancel</button>
       <button class="primary" id="m-create" disabled>Create</button>
     </div>
@@ -225,9 +227,11 @@ function openModal(){
     b.classList.add('sel'); selTpl = b.dataset.t;
     $('#blank-fields').hidden = (selTpl !== 'blank');
     $('#m-create').disabled = false;
+    $('#m-hint').hidden = true;
   }));
   $('#cp-phone').value = $('#cp-carrier').value = $('#cp-email').value = '';
-  $('#blank-input').value = ''; $('#blank-fields').hidden = true; $('#m-create').disabled = true;
+  $('#blank-input').value = ''; $('#blank-fields').hidden = true;
+  $('#m-create').disabled = true; $('#m-hint').hidden = false;
   $('#scrim').classList.add('show');
 }
 function closeModal(){ $('#scrim').classList.remove('show'); }
