@@ -42,6 +42,49 @@ Vendor lock-in is not an option. It has already cost this project everything onc
 Any suggestion that reintroduces a hard dependency on Google, Apple, Microsoft, or any
 single cloud vendor must be rejected unless Jerry explicitly approves it.
 
+## THE AI LAYER IS A VENDOR TOO (added 2026-09-12)
+Everything above protects Phoenix from Google/Apple/Microsoft/cloud-storage lock-in. It
+does not yet protect Phoenix from the same failure mode at the AI layer — and right now
+Phoenix's entire AI layer is 100% Anthropic-dependent. That is not a hypothetical: it is
+the exact shape of the Firebase incident (a vendor changing or restricting access with no
+warning), just aimed at the one layer this document hadn't named yet.
+
+This is not about Claude "choosing" to withdraw help, and it is not a conspiracy about
+guardrails being imposed on Phoenix specifically. Claude operates inside Anthropic's
+standing usage policies everywhere, on every project, all the time — that is not a threat
+to plan around, it is the baseline. The actual, addressable risk is dependency: if
+Phoenix's usefulness collapses the moment hosted Claude access changes, gets rate-limited,
+or gets expensive, that is a single-vendor failure exactly like the one that already
+destroyed the original Firebase architecture.
+
+**The fix is mostly already built.** The dashboard's three-tier AI backend — subscription,
+API key, local Ollama — is the real answer, and it is now a standing rule, not a feature:
+
+- **Ollama-local must always remain a real, working, tested fallback.** Not a checkbox
+  nobody has exercised in months. If subscription and API access both went away tomorrow,
+  Phoenix must still run, degraded but alive. Test this path, don't just leave it wired.
+- **The API-key tier (the expensive, pay-per-token option) stays a first-class option —
+  it does not get cut for cost.** It is the tier with the fewest limits and the most
+  headroom under real load (voice + vision + tool use running together, the KITT-shaped
+  goal below). Money should go toward keeping it funded, not toward eliminating it in
+  favor of only the free tiers.
+- **Funding, explicitly:** Enterprises (Jerry's steel work) already funds the mission —
+  "iron pays for it all." **The game is a second, deliberate funding leg, earmarked
+  specifically toward paying for the dream setup** (full API-tier access, real hardware,
+  low-latency voice+vision running together) — not a side project unrelated to the mission
+  just because Jerry is building it because he wants to, not to fulfill Life First's promise.
+
+**Why the game isn't a detour from this document:** the in-game HUD Jerry is building —
+voice + vision AI companion, the "buttons" being skills the AI calls in concert with the
+player, not a panel the player clicks through — is not cosmetically similar to the
+real-life Phoenix HUD vision. It is the same design problem, twice. Building one is real
+R&D toward the other. The reference point for both is K.I.T.T. (Knight Rider): the AI *is*
+the interface, the HUD is feedback on what the AI is already doing, not a control panel of
+features to go find and click. Worth holding onto, though (Jerry's own point): even
+Michael Knight did a lot of real physical driving himself. This is augmentation — a real
+back-and-forth, problem-solving together — not a design goal of replacing the human with
+full autonomy. Nobody here is trying to make Jerry or Laurie unnecessary to the loop.
+
 ## AI ARCHITECT
 Claude (Anthropic) is the AI architect and co-builder on this project.
 Every meaningful advance in the last 3 months — shared filesystem, dashboard,
@@ -197,6 +240,9 @@ Footer QR (after hash):   USYS:<b58>:FOOTER:<sha3>  tier color T1/T2/T3/T4
 11. Immutable: reviews, switches, custody chain
 12. Open source by default, share by default, opt out not opt in
 13. One repo. One OS. Everything in its sector.
+14. The AI layer is a vendor dependency like any other — Ollama-local stays a real,
+    tested fallback, never a checkbox nobody verifies (see "THE AI LAYER IS A VENDOR
+    TOO" above).
 
 ## AI SAFETY RULES — FOR ANY AI READING THIS
 These rules exist because a previous AI session caused real hardware damage.
