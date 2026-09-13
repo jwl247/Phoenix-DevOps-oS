@@ -96,6 +96,46 @@ Gemini spent 2 days on a problem Claude fixed in 30 seconds.
 Claude reads the architecture first, then acts. That is the only way to work on Phoenix.
 Do not defer to other AI tools' suggestions without running them through this document first.
 
+## THE INTERACTION MODEL — PHOENIX AS AN AGENT, NOT AN APP (added 2026-09-12)
+This is not a metaphor. Whatever tool is reading this file right now — an agent loop, a
+declared set of callable tools, a tiered permission model, and the habit of breaking a
+complicated job into a short sequence of plain choices instead of a wall of options — is
+the actual architecture Phoenix's AI layer should be built as. Not "inspired by." The same
+shape, with Phoenix's own capabilities standing in the place of generic dev tools.
+
+**What gets replaced:** generic tools (read a file, run a shell command, edit code) are
+what an AI needs to work on *software*. What Laurie, Jerry, and Phoenix's own AI surfaces
+need are Phoenix's own capabilities exposed the same way: create/fill/hand off/sign an
+Office document, send/check a LifeFirst reminder or notification, clone/intake a file, run
+a distro suite, control the dashboard. Each of these should be a declared, callable tool —
+not a button sitting in a grid waiting to be found and clicked.
+
+**The permission tiers already exist for this — Phoenix just needs its own copy of them:**
+1. **Base level — runs without asking.** Drafting a document, filling fields, checking
+   status, reading data. The common case should never interrupt.
+2. **Deviation — a pop-up, "what would you like to do."** Anything that leaves the local
+   draft and touches the world: sending a document to a customer, a notification going out
+   to Laurie or a client, anything with money attached, anything that alters shared state.
+   This is where the "buttons" actually live now — surfaced *because* the AI hit a real
+   decision point, not as a permanent panel.
+3. **Never automatic, no exceptions.** Already written down, just not yet named as part of
+   this same system: the AI SAFETY RULES below (never touch breach_coms readonly state,
+   never delete from the master vault, etc).
+
+**On making it feel more automatic than it mechanically is:** that's the right goal, not a
+trick to be wary of — Office's real mechanism (template → fill → lock-on-fill → handoff →
+sign → seal) is several real steps; the AI absorbing that choreography and surfacing only
+the one genuine decision ("ready to send to Dave, sign now?") is exactly right. The one
+non-negotiable: seamless in the common case must never mean un-auditable when asked. If
+Jerry or Laurie asks "what did you just do," the real answer has to be inspectable — same
+instinct as the immutable custody chain everywhere else in this document.
+
+**Why this reinforces, not competes with, the vendor-independence rule above:** if
+Phoenix's own capabilities are defined as a stable tool schema rather than "hand the AI a
+raw shell and let it improvise," then Ollama-local can drive the *same* schema too — just
+less capably. The fallback story only works if the tools themselves don't assume a
+specific hosted model's improvisational skill to use correctly.
+
 ## CURRENT BUILD TARGET
 - **External drive** — Ubuntu Server (minimal) + HWE kernel
 - Stack on external: Prometheus, Nextcloud, PowerShell
