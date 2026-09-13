@@ -418,6 +418,147 @@ function Invoke-UsysStatus {
 }
 
 # =============================================================================
+# COMMAND: doctor — health/conflict report. Reports only. Fixes nothing.
+#
+# Checks live state against the facts recorded in CONNECTIONS.md (git drift
+# across the repos under Phoenix\, the 3-way package-handler split, deployed
+# worker reachability, and a small set of previously-documented known issues)
+# so a session doesn't have to re-derive any of it by hand. If a documented
+# bug turns out to be gone, that's ALSO reported — it means CONNECTIONS.md
+# has drifted from reality and needs a real update, not silent removal.
+# =============================================================================
+function Test-UsysWorkerHealth([string]$Name, [string]$Url, [switch]$Authed) {
+    try {
+        $headers = @{}
+        if ($Authed) {
+            $auth = [Environment]::GetEnvironmentVariable('PHOENIX_AUTH', 'User')
+            if (-not $auth) { $auth = $env:PHOENIX_AUTH }
+            if ($auth) { $headers['Authorization'] = "Bearer $auth" }
+        }
+        $resp = Invoke-WebRequest -Uri $Url -Headers $headers -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+        return @{ Name = $Name; Ok = $true; Detail = "$($resp.StatusCode)" }
+    } catch {
+        return @{ Name = $Name; Ok = $false; Detail = $_.Exception.Message }
+    }
+}
+
+function Get-UsysRepoGitInfo([string]$Path) {
+    if (-not (Test-Path (Join-Path $Path '.git'))) { return $null }
+    Push-Location $Path
+    try {
+        $branch = git rev-parse --abbrev-ref HEAD 2>$null
+        $head   = git rev-parse --short HEAD 2>$null
+        $dirty  = (git status --porcelain 2>$null)
+        $ahead  = git rev-list --count '@{u}..HEAD' 2>$null
+        $behind = git rev-list --count 'HEAD..@{u}' 2>$null
+        return @{
+            Branch = $branch; Head = $head
+            Dirty  = [bool]$dirty; DirtyN = ($dirty | Measure-Object).Count
+            Ahead  = [int]($ahead  | Select-Object -First 1)
+            Behind = [int]($behind | Select-Object -First 1)
+        }
+    } finally { Pop-Location }
+}
+
+function Invoke-UsysDoctor {
+    Write-Host ''
+    Write-Host '  === Phoenix Doctor ===' -ForegroundColor Cyan
+    Write-Host '  Reports problems/conflicts. Fixes nothing automatically.' -ForegroundColor DarkGray
+    Write-Host ''
+
+    $problems = @()
+    $repo = Get-UsysRepoRoot
+    $phoenixRoot = Split-Path $repo -Parent
+
+    Write-Host '  -- Git state (every repo under Phoenix\) --' -ForegroundColor Yellow
+    foreach ($r in @('Phoenix-DevOps-oS', 'Phoenix-Package_handler', 'package-handler', 'Helix_lightning_kernel')) {
+        $info = Get-UsysRepoGitInfo (Join-Path $phoenixRoot $r)
+        if (-not $info) { Write-Host "    $r : not a git repo (skipped)" -ForegroundColor DarkGray; continue }
+        $flags = @()
+        if ($info.Dirty)        { $flags += "$($info.DirtyN) uncommitted" }
+        if ($info.Ahead -gt 0)  { $flags += "$($info.Ahead) ahead" }
+        if ($info.Behind -gt 0) { $flags += "$($info.Behind) behind" }
+        if ($flags.Count -eq 0) {
+            Write-Host "    $r : clean, in sync ($($info.Head))" -ForegroundColor Green
+        } else {
+            $msg = "$r : $($flags -join ', ') ($($info.Head))"
+            Write-Host "    $msg" -ForegroundColor Yellow
+            $problems += $msg
+        }
+    }
+    Write-Host ''
+
+    Write-Host '  -- package-handler drift (3 copies, see their CONNECTIONS.md) --' -ForegroundColor Yellow
+    $a = Get-UsysRepoGitInfo (Join-Path $phoenixRoot 'Phoenix-Package_handler')
+    $b = Get-UsysRepoGitInfo (Join-Path $phoenixRoot 'package-handler')
+    if ($a -and $b) {
+        if ($a.Head -eq $b.Head) {
+            Write-Host "    Phoenix-Package_handler / package-handler : same commit ($($a.Head)) — no longer drifted" -ForegroundColor Green
+        } else {
+            $msg = "Phoenix-Package_handler ($($a.Head)) and package-handler ($($b.Head)) are at different commits — still drifted"
+            Write-Host "    $msg" -ForegroundColor Red
+            $problems += $msg
+        }
+    }
+    Write-Host ''
+
+    Write-Host '  -- Deployed worker health --' -ForegroundColor Yellow
+    foreach ($w in @(
+        @{ Name = 'packages-worker';      Url = 'https://packages-worker.phoenix-jwl.workers.dev/health'; Authed = $false }
+        @{ Name = 'phoenix-clonepool-r2'; Url = 'https://phoenix-clonepool-r2.phoenix-jwl.workers.dev/whoami'; Authed = $true }
+        @{ Name = 'office-notify-worker'; Url = 'https://office-notify-worker.phoenix-jwl.workers.dev/health'; Authed = $false }
+    )) {
+        $result = Test-UsysWorkerHealth -Name $w.Name -Url $w.Url -Authed:$w.Authed
+        if ($result.Ok) {
+            Write-Host "    $($w.Name) : reachable (HTTP $($result.Detail))" -ForegroundColor Green
+        } else {
+            $msg = "$($w.Name) unreachable: $($result.Detail)"
+            Write-Host "    $msg" -ForegroundColor Red
+            $problems += $msg
+        }
+    }
+    Write-Host ''
+
+    Write-Host '  -- Known issues (checking for regression OR for stale docs) --' -ForegroundColor Yellow
+    $s4intake = Join-Path $repo 'sector4\intake\intake.sh'
+    if (Test-Path $s4intake) {
+        if ((Get-Content $s4intake -Raw) -match '\*\(\.\)') {
+            Write-Host '    sector4/intake/intake.sh : zsh-glob bug still present (documented — use usys clone instead)' -ForegroundColor DarkYellow
+        } else {
+            $msg = 'sector4/intake/intake.sh : documented zsh-glob bug is GONE — CONNECTIONS.md is stale, re-verify and update it'
+            Write-Host "    $msg" -ForegroundColor Cyan
+            $problems += $msg
+        }
+    }
+    $dashMain = Join-Path $repo 'dashboard\main.js'
+    if (Test-Path $dashMain) {
+        if (Select-String -Path $dashMain -Pattern "'SECTOR4'" -Quiet) {
+            Write-Host '    dashboard/main.js : SECTOR4/sector4 casing bug still present (documented)' -ForegroundColor DarkYellow
+        } else {
+            $msg = 'dashboard/main.js : documented SECTOR4 casing bug is GONE — CONNECTIONS.md is stale, re-verify and update it'
+            Write-Host "    $msg" -ForegroundColor Cyan
+            $problems += $msg
+        }
+    }
+    $cloneDir = Get-UsysClonepoolDir
+    if (-not (Test-Path $cloneDir)) {
+        $msg = "CLONEPOOL_DIR resolves to '$cloneDir' which does not exist"
+        Write-Host "    $msg" -ForegroundColor Red
+        $problems += $msg
+    } else {
+        Write-Host "    CLONEPOOL_DIR ($cloneDir) : exists" -ForegroundColor Green
+    }
+    Write-Host ''
+
+    if ($problems.Count -eq 0) {
+        Write-UsysOk 'No problems found.'
+    } else {
+        Write-UsysWarn "$($problems.Count) problem(s) found — see above. Nothing was changed."
+    }
+    Write-Host ''
+}
+
+# =============================================================================
 # COMMAND: intake — Sector 4 TAV intake (vault / breach_coms4 path)
 # =============================================================================
 function Invoke-UsysIntake {
@@ -1274,7 +1415,17 @@ function Invoke-UsysRun {
 
                 if ($Accel -eq 'auto') {
                     if ($IsWindows -or $env:OS -eq 'Windows_NT') {
-                        $hvFeature = Get-WindowsOptionalFeature -Online -FeatureName 'HypervisorPlatform' -ErrorAction SilentlyContinue
+                        # Get-WindowsOptionalFeature -Online hits DISM and throws a raw
+                        # exception ("The requested operation requires elevation.") when
+                        # not run as admin — -ErrorAction does NOT suppress it. USys is
+                        # user-scope by design (see Test-UsysElevation above), so a failed
+                        # probe must fall back to 'tcg' exactly like "feature not enabled"
+                        # does, not abort the whole run.
+                        try {
+                            $hvFeature = Get-WindowsOptionalFeature -Online -FeatureName 'HypervisorPlatform' -ErrorAction SilentlyContinue
+                        } catch {
+                            $hvFeature = $null
+                        }
                         if ($hvFeature -and $hvFeature.State -eq 'Enabled') {
                             $resolvedAccel = 'whpx'
                         } else {
@@ -1909,6 +2060,7 @@ function global:usys {
     switch ($Command.ToLowerInvariant()) {
         'init'          { Invoke-UsysInit }
         'status'        { Invoke-UsysStatus }
+        'doctor'        { Invoke-UsysDoctor }
         'help'          { Show-UsysHelp }
         '--help'        { Show-UsysHelp }
         '-h'            { Show-UsysHelp }
