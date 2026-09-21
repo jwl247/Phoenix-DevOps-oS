@@ -37,6 +37,17 @@ WORKER_URL="${PHOENIX_WORKER_URL:-https://packages-worker.phoenix-jwl.workers.de
 # serves /versions and the tier-move PATCH). r2-worker/ code kept in the repo
 # for rollback but intake.sh no longer calls it.
 PHOENIX_AUTH="${PHOENIX_AUTH:-}"
+# Cloudflare Access sits IN FRONT of the worker's own PHOENIX_AUTH check — a
+# 2026-09-21 audit found a leftover "bypass, everyone" Access policy had been
+# silently letting all traffic through unauthenticated since March, making
+# PHOENIX_AUTH the only real gate despite Access being configured. Fixed by
+# removing that policy; these two headers are the "usys-cli" service token
+# Access now requires from non-interactive callers like this script. Get/store
+# them via F:\Phoenix\Vault\secrets\phoenix-secrets.env (CF_ACCESS_CLIENT_ID/
+# CF_ACCESS_CLIENT_SECRET) — rotate via the Cloudflare dashboard or API, never
+# by hand-editing the worker.
+CF_ACCESS_CLIENT_ID="${CF_ACCESS_CLIENT_ID:-}"
+CF_ACCESS_CLIENT_SECRET="${CF_ACCESS_CLIENT_SECRET:-}"
 
 # ── Python detection ──────────────────────────────────────────
 _find_python() {
@@ -441,7 +452,7 @@ SQL
 check_whoami() {
   local url="$1"
   curl -s -o /dev/null -w "%{http_code}" \
-    -H "Authorization: Bearer ${PHOENIX_AUTH}" \
+    -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
     "${url}/whoami" 2>/dev/null
 }
 
@@ -474,7 +485,7 @@ post_to_d1() {
   response=$(curl -s -w "\n%{http_code}" \
     -X POST \
     -H "Content-Type: application/json" \
-    -H "Authorization: Bearer ${PHOENIX_AUTH}" \
+    -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
     -d "${payload}" \
     "${WORKER_URL}${endpoint}" 2>/dev/null)
   http_code=$(echo "${response}" | tail -1)
@@ -503,7 +514,7 @@ upload_to_r2() {
   local http_code
   http_code=$(curl -s -o /dev/null -w "%{http_code}" \
     -X PUT \
-    -H "Authorization: Bearer ${PHOENIX_AUTH}" \
+    -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
     --data-binary "@${filepath}" \
     "${WORKER_URL}/clonepool/${hex}" 2>/dev/null)
   [[ "${http_code}" == "200" ]] \
@@ -623,7 +634,7 @@ verify_clonepool_copy() {
   local hex="$1" filepath="$2"
   [[ -z "${PHOENIX_AUTH}" || ! -f "${filepath}" ]] && { echo "no_baseline"; return; }
   local meta
-  meta=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
+  meta=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
   local baseline_sha3
   baseline_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
   [[ -z "${baseline_sha3}" ]] && { echo "no_baseline"; return; }
@@ -631,7 +642,7 @@ verify_clonepool_copy() {
   local actual_sha3
   actual_sha3=$(openssl dgst -sha3-512 -r "${filepath}" 2>/dev/null | awk '{print $1}')
   if [[ -n "${actual_sha3}" && "${actual_sha3}" == "${baseline_sha3}" ]]; then
-    curl -s -o /dev/null -X POST -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "Content-Type: application/json" \
+    curl -s -o /dev/null -X POST -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" -H "Content-Type: application/json" \
       -d "{\"hash_sha3\":\"${actual_sha3}\"}" "${WORKER_URL}/clonepool/${hex}/validate" 2>/dev/null
     echo "valid"
   else
@@ -1023,7 +1034,7 @@ rotate_clonepool_tiers() {
         mv "${entry_dir%/}" "${dest_root}/${hex}"
         log "INFO" "tier rotate: ${hex} T${from_num} -> T${to_num} (${age_days}d old)"
         [[ -n "${PHOENIX_AUTH}" ]] && curl -s -o /dev/null -X PATCH \
-          -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "Content-Type: application/json" \
+          -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" -H "Content-Type: application/json" \
           -d "{\"tier\":${to_num},\"pool_path\":\"$(json_escape "${dest_root}/${hex}")\"}" \
           "${WORKER_URL}/clonepool/${hex}/tier" 2>/dev/null
         (( moved++ )) || true
@@ -1031,7 +1042,7 @@ rotate_clonepool_tiers() {
         rm -rf "${entry_dir%/}"
         log "INFO" "tier evict: ${hex} (${age_days}d old, past 4-day window) — local copy cleared, D1 flagged black"
         [[ -n "${PHOENIX_AUTH}" ]] && curl -s -o /dev/null -X PATCH \
-          -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "Content-Type: application/json" \
+          -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" -H "Content-Type: application/json" \
           -d '{"tier":4,"pool_path":"evicted","state":"black"}' \
           "${WORKER_URL}/clonepool/${hex}/tier" 2>/dev/null
         (( evicted++ )) || true

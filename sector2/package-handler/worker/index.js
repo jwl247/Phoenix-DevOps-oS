@@ -609,6 +609,7 @@ export default {
           await env.CLONEPOOL_BUCKET.put(key, bytes);
           return ok({ ok: true, key, bytes: bytes.byteLength });
         }
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const obj = await env.CLONEPOOL_BUCKET.get(key);
         if (!obj) return err('not found', 404);
         return new Response(obj.body, { status: 200, headers: { 'Content-Type': 'application/octet-stream' } });
@@ -698,6 +699,7 @@ export default {
 
       // GET /custody — ledger view
       if (path === '/custody' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const hex = url.searchParams.get('hex');
         const limit = parseInt(url.searchParams.get('limit') || '50', 10);
         const params = [];
@@ -743,6 +745,7 @@ export default {
       // ══════════════════════════════════════════════════════════════════════
 
       if (path === '/clonepool' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const state = url.searchParams.get('state');
         const sensitive = url.searchParams.get('sensitive');
         const limit = parseInt(url.searchParams.get('limit') || '100', 10);
@@ -778,6 +781,7 @@ export default {
       // by the glossary's "show me the code" lookup (glossary.hex ==
       // clonepool.hex_id, so this same route serves glossary code content).
       if (path.startsWith('/clonepool/') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const id = decodeURIComponent(path.slice(11));
         const wantsMeta = url.searchParams.get('meta') === 'true';
         if (env.CLONEPOOL_BUCKET && !wantsMeta) {
@@ -854,6 +858,7 @@ export default {
       // ══════════════════════════════════════════════════════════════════════
 
       if (path === '/packages' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const limit = parseInt(url.searchParams.get('limit') || '100', 10);
         const result = await db
           .prepare('SELECT * FROM packages ORDER BY name LIMIT ?')
@@ -862,6 +867,7 @@ export default {
       }
 
       if (path.startsWith('/packages/') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const id = decodeURIComponent(path.slice(10));
         const row = await db
           .prepare('SELECT * FROM packages WHERE name = ? OR id = ?')
@@ -878,6 +884,7 @@ export default {
       // ══════════════════════════════════════════════════════════════════════
 
       if (path === '/glossary' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const search = url.searchParams.get('q');
         const cat = url.searchParams.get('category');
         const params = [];
@@ -939,6 +946,7 @@ export default {
       // GET /clonepool/:id does. Explicit endpoint so a glossary UI never has
       // to know that cross-reference exists — it just asks for the code.
       if (path.endsWith('/code') && path.startsWith('/glossary/') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const id = decodeURIComponent(path.slice(10, -'/code'.length));
         if (!id) return err('id required', 400);
         const entry = await db.prepare('SELECT hex, name FROM glossary WHERE hex = ? OR name = ?').bind(id, id).first();
@@ -950,6 +958,7 @@ export default {
       }
 
       if (path.startsWith('/glossary/') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const id = decodeURIComponent(path.slice(10));
         const row = await db
           .prepare('SELECT * FROM glossary g WHERE g.hex = ? OR g.name = ?')
@@ -994,6 +1003,7 @@ export default {
       // ══════════════════════════════════════════════════════════════════════
 
       if (path === '/categories' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const result = await db.prepare('SELECT * FROM categories ORDER BY name').all();
         return ok({ categories: result.results, count: result.results.length });
       }
@@ -1005,6 +1015,7 @@ export default {
       // ══════════════════════════════════════════════════════════════════════
 
       if (path === '/toc' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const [toc, entries, poolSummary] = await Promise.all([
           db.prepare('SELECT * FROM toc ORDER BY position, title').all(),
           db.prepare('SELECT * FROM toc_entries ORDER BY toc_id, position').all(),
@@ -1035,6 +1046,7 @@ export default {
       // ══════════════════════════════════════════════════════════════════════
 
       if (path === '/versions' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const pkg = url.searchParams.get('package');
         const limit = parseInt(url.searchParams.get('limit') || '50', 10);
         const params = [];
@@ -1057,6 +1069,7 @@ export default {
       // ══════════════════════════════════════════════════════════════════════
 
       if (path === '/deps' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const pkg = url.searchParams.get('package');
         const reverse = url.searchParams.get('reverse'); // ?reverse=true: what depends ON this package
         const params = [];
@@ -1095,6 +1108,7 @@ export default {
       // ══════════════════════════════════════════════════════════════════════
 
       if (path === '/search' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const q = url.searchParams.get('q');
         if (!q) return err('q required');
         const term = `%${q}%`;
@@ -1123,6 +1137,7 @@ export default {
 
       // GET /review — list all submissions (filter by ?status=pending|approved|rejected)
       if (path === '/review' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const status = url.searchParams.get('status');
         const limit = parseInt(url.searchParams.get('limit') || '50', 10);
         const params = [];
@@ -1138,6 +1153,7 @@ export default {
 
       // GET /review/:hex — fetch review record for a specific artifact
       if (path.startsWith('/review/') && !path.includes('/vote') && !path.includes('/revoke') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const hex = decodeURIComponent(path.slice(8));
         const [submission, reviewVotes] = await Promise.all([
           db.prepare('SELECT * FROM submissions WHERE hex = ?').bind(hex).first(),
@@ -1239,6 +1255,7 @@ export default {
 
       // GET /review/:hex/votes — view all votes on a submission
       if (path.match(/^\/review\/[^\/]+\/votes$/) && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const hex = decodeURIComponent(path.slice(8, path.lastIndexOf('/votes')));
         const result = await db.prepare(
           'SELECT * FROM reviews WHERE submission_hex = ? ORDER BY voted_at DESC'
@@ -1280,6 +1297,7 @@ export default {
 
       // GET /verify/:hex — verify an artifact — returns status + review provenance
       if (path.startsWith('/verify/') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const hex = decodeURIComponent(path.slice(8));
         const [submission, revocation, feedEntry] = await Promise.all([
           db.prepare('SELECT hex, name, status, submitted_at FROM submissions WHERE hex = ?').bind(hex).first(),
@@ -1322,6 +1340,7 @@ export default {
 
       // GET /feed — opt-in availability feed of approved artifacts
       if (path === '/feed' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const category = url.searchParams.get('category');
         const platform = url.searchParams.get('platform');
         const limit = parseInt(url.searchParams.get('limit') || '50', 10);
