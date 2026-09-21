@@ -89,6 +89,7 @@ translate_cmd() {
                 search)    echo "apt-cache search ${pkg}" ;;
                 info)      echo "apt-cache show ${pkg}" ;;
                 list)      echo "dpkg --get-selections" ;;
+                deps)      echo "apt-cache depends ${pkg}" ;;
                 clean)     echo "apt-get autoremove -y && apt-get clean" ;;
                 *)         echo "UNKNOWN_VERB:${verb}" ; return 1 ;;
             esac ;;
@@ -101,6 +102,7 @@ translate_cmd() {
                 search)    echo "dnf search ${pkg}" ;;
                 info)      echo "dnf info ${pkg}" ;;
                 list)      echo "dnf list installed" ;;
+                deps)      echo "dnf repoquery --requires --resolve ${pkg}" ;;
                 clean)     echo "dnf autoremove -y && dnf clean all" ;;
                 *)         echo "UNKNOWN_VERB:${verb}" ; return 1 ;;
             esac ;;
@@ -113,6 +115,7 @@ translate_cmd() {
                 search)    echo "pacman -Ss ${pkg}" ;;
                 info)      echo "pacman -Si ${pkg}" ;;
                 list)      echo "pacman -Q" ;;
+                deps)      echo "pacman -Qi ${pkg}" ;;
                 clean)     echo "pacman -Sc --noconfirm" ;;
                 *)         echo "UNKNOWN_VERB:${verb}" ; return 1 ;;
             esac ;;
@@ -125,6 +128,7 @@ translate_cmd() {
                 search)    echo "zypper search ${pkg}" ;;
                 info)      echo "zypper info ${pkg}" ;;
                 list)      echo "zypper packages --installed-only" ;;
+                deps)      echo "zypper info --requires ${pkg}" ;;
                 clean)     echo "zypper clean" ;;
                 *)         echo "UNKNOWN_VERB:${verb}" ; return 1 ;;
             esac ;;
@@ -137,6 +141,7 @@ translate_cmd() {
                 search)    echo "apk search ${pkg}" ;;
                 info)      echo "apk info ${pkg}" ;;
                 list)      echo "apk list --installed" ;;
+                deps)      echo "apk info -R ${pkg}" ;;
                 clean)     echo "apk cache clean" ;;
                 *)         echo "UNKNOWN_VERB:${verb}" ; return 1 ;;
             esac ;;
@@ -149,6 +154,7 @@ translate_cmd() {
                 search)    echo "xbps-query -Rs ${pkg}" ;;
                 info)      echo "xbps-query -RS ${pkg}" ;;
                 list)      echo "xbps-query -l" ;;
+                deps)      echo "xbps-query -x ${pkg}" ;;
                 clean)     echo "xbps-remove -Oo" ;;
                 *)         echo "UNKNOWN_VERB:${verb}" ; return 1 ;;
             esac ;;
@@ -161,6 +167,7 @@ translate_cmd() {
                 search)    echo "emerge --search ${pkg}" ;;
                 info)      echo "emerge --info ${pkg}" ;;
                 list)      echo "qlist -I" ;;
+                deps)      echo "qdepends -Q ${pkg}" ;;
                 clean)     echo "emerge --depclean" ;;
                 *)         echo "UNKNOWN_VERB:${verb}" ; return 1 ;;
             esac ;;
@@ -173,6 +180,7 @@ translate_cmd() {
                 search)    echo "winget search ${pkg}" ;;
                 info)      echo "winget show ${pkg}" ;;
                 list)      echo "winget list" ;;
+                deps)      echo "winget show ${pkg} --include-versions" ;;
                 clean)     echo "echo 'winget: no clean verb'" ;;
                 *)         echo "UNKNOWN_VERB:${verb}" ; return 1 ;;
             esac ;;
@@ -185,6 +193,7 @@ translate_cmd() {
                 search)    echo "choco search ${pkg}" ;;
                 info)      echo "choco info ${pkg}" ;;
                 list)      echo "choco list --local-only" ;;
+                deps)      echo "choco info ${pkg}" ;;
                 clean)     echo "echo 'choco: no clean verb'" ;;
                 *)         echo "UNKNOWN_VERB:${verb}" ; return 1 ;;
             esac ;;
@@ -302,6 +311,7 @@ Verbs:
   search  <pkg>   Search for a package
   info    <pkg>   Show package info
   list            List installed packages
+  deps    <pkg>   Show raw dependency info (best-effort; winget/choco unsupported)
   clean           Clean package cache
 
 Backends supported:

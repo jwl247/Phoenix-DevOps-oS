@@ -25,6 +25,7 @@ MAX_VERSIONS=7   # keep 7 versions per file — a new intake bumps the oldest ou
 
 # ── Config ────────────────────────────────────────────────────
 CLONEPOOL_DIR="${CLONEPOOL_DIR:-${HOME}/Phoenix/clonepool}"
+CLONEPOOL_DIR="${CLONEPOOL_DIR//\\//}"  # see normalize_path() below for why
 CATALOG_DB="${HOME}/.catalog/catalog.db"
 LOG_DIR="${HOME}/.unitedsys/logs"
 LOG_FILE="${LOG_DIR}/intake.log"
@@ -97,6 +98,52 @@ log() {
 
 # ── Hex ───────────────────────────────────────────────────────
 to_hex() { echo -n "$1" | xxd -p | tr -d '\n'; }
+
+# ── Path normalization — slash-direction agnostic ──────────────
+# Root cause of tonight's JSON-500s, the tier-rotation [[ -f ]] mismatch,
+# and CLONEPOOL_DIR's own backslash problem: this machine hands bash a mix
+# of Windows paths (F:\Phoenix\clonepool) and POSIX-style ones, and bash's
+# own builtins ([[ -f ]], [[ -d ]]) resolve a mixed-separator path
+# differently than external commands (grep, cp, curl) given the identical
+# string. Git Bash/MSYS accepts forward-slash Windows paths (F:/Phoenix/...)
+# everywhere a backslash one works, so normalizing to forward slashes here
+# — once, at every path boundary — is the actual fix, not patching each
+# symptom separately. Call this on any path before storing, comparing, or
+# embedding it in JSON/QR strings.
+normalize_path() { printf '%s' "${1//\\//}"; }
+
+# ── JSON string escaping ─────────────────────────────────────
+# Every report_* function below builds JSON via raw string interpolation.
+# CLONEPOOL_DIR on Windows is a backslash path (F:\Phoenix\clonepool), and
+# an unescaped backslash in a JSON string is invalid — every POST /clonepool
+# call was silently 500ing on this until this was added (2026-09-20). Wrap
+# every interpolated string value in this before it goes into a JSON body.
+# ── Tier placement ───────────────────────────────────────────
+# T1=primary/newest, T2=secondary, T3=tertiary, T4=oldest before eviction.
+# New intakes always land in T1; rotate_clonepool_tiers() (see intake_prune)
+# ages them down T1→T2→T3→T4→evicted over 4 days. R2 is unaffected — R2
+# objects are keyed by hex_id alone, never by tier, so rotation only ever
+# touches local disk + D1's tier/pool_path columns.
+resolve_pool_dir() {
+  local hex="$1"
+  local t
+  for t in T1 T2 T3 T4; do
+    [[ -d "${CLONEPOOL_DIR}/${t}/${hex}" ]] && { echo "${CLONEPOOL_DIR}/${t}/${hex}"; return 0; }
+  done
+  # Not found anywhere — legacy pre-tier layout (flat, no T1-T4 folder) or
+  # genuinely new. Check the old flat location before giving up.
+  [[ -d "${CLONEPOOL_DIR}/${hex}" ]] && { echo "${CLONEPOOL_DIR}/${hex}"; return 0; }
+  echo "${CLONEPOOL_DIR}/T1/${hex}"
+}
+
+json_escape() {
+  local s="${1//\\/\\\\}"   # backslash first, or later escapes double-escape
+  s="${s//\"/\\\"}"          # double quote
+  s="${s//$'\n'/\\n}"        # newline
+  s="${s//$'\r'/\\r}"        # carriage return
+  s="${s//$'\t'/\\t}"        # tab
+  printf '%s' "${s}"
+}
 
 # ── Sensitive-name heuristic — shared by single-file and directory intake ──
 is_sensitive_name() {
@@ -305,18 +352,18 @@ write_sidecar_basic() {
   cat > "${sidecar}" <<SIDECAR
 {
   "usys_intake": "1.5",
-  "hex_name": "${hex}",
-  "original_name": "${orig}",
+  "hex_name": "$(json_escape "${hex}")",
+  "original_name": "$(json_escape "${orig}")",
   "state": "white",
-  "version": "${version}",
-  "filetype": "${filetype}",
-  "category_hex": "${category_hex}",
+  "version": "$(json_escape "${version}")",
+  "filetype": "$(json_escape "${filetype}")",
+  "category_hex": "$(json_escape "${category_hex}")",
   "size_bytes": ${size},
-  "sha256": "${checksum}",
-  "backend": "${backend}",
-  "notes": "${notes}",
+  "sha256": "$(json_escape "${checksum}")",
+  "backend": "$(json_escape "${backend}")",
+  "notes": "$(json_escape "${notes}")",
   "sensitive": ${sensitive},
-  "pool_path": "${CLONEPOOL_DIR}/${hex}",
+  "pool_path": "$(json_escape "${CLONEPOOL_DIR}/${hex}")",
   "companions": [],
   "qr": {
     "header": {"role": "state", "state": "white"},
@@ -325,7 +372,7 @@ write_sidecar_basic() {
   "auto_hotswap": false,
   "registered_at": "${now}",
   "updated_at": "${now}",
-  "clone_history": [{"version": "${version}", "at": "${now}"}]
+  "clone_history": [{"version": "$(json_escape "${version}")", "at": "${now}"}]
 }
 SIDECAR
   log "INFO" "sidecar written: ${sidecar}"
@@ -429,15 +476,28 @@ upload_to_r2() {
 # and directory summaries have no single file to hash, so it's optional;
 # omitted, hash_sha3/hash_blake2 stay null and COALESCE on the D1 side
 # leaves any prior value alone.
+# location (11th, optional) is the file's original relative path — hex-encoded
+# and appended to both QR strings so the QR payload is location-aware without
+# a D1 round trip (the system's speed need) and human-decodable (hex-decode
+# the trailing segment to read the path — the human need). Top QR = shade for
+# status (white/grey/black, state param). Bottom QR = identical payload,
+# colored by tier (T1 primary/T2 secondary/T3 tertiary/T4) for location.
 report_clonepool() {
   local hex="${1}"
   local sensitive="${9:-false}"
   local stored_filepath="${10:-}"
+  local location="${11:-}"
   local b58; b58=$(_base58_from_hex "${hex:0:16}")
   local header_qr="" footer_qr=""
   if [[ -n "${b58}" ]]; then
-    header_qr="USYS:${b58}:HEADER"
-    footer_qr="USYS:${b58}:FOOTER:${hex}"
+    if [[ -n "${location}" ]]; then
+      local loc_hex; loc_hex=$(to_hex "${location}")
+      header_qr="USYS:${b58}:HEADER:${loc_hex}"
+      footer_qr="USYS:${b58}:FOOTER:${hex}:${loc_hex}"
+    else
+      header_qr="USYS:${b58}:HEADER"
+      footer_qr="USYS:${b58}:FOOTER:${hex}"
+    fi
   fi
   local hash_sha3="" hash_blake2=""
   if [[ -n "${stored_filepath}" && -f "${stored_filepath}" ]]; then
@@ -445,18 +505,70 @@ report_clonepool() {
     hash_blake2=$(openssl dgst -blake2b512 -r "${stored_filepath}" 2>/dev/null | awk '{print $1}')
   fi
   post_to_d1 "/clonepool" \
-    "{\"hex_id\":\"${hex}\",\"b58\":\"${b58:-${hex}}\",\"name\":\"${2}\",\"version\":\"${3}\",\"state\":\"${4}\",\"pool_path\":\"${5}\",\"sidecar_path\":\"${6}\",\"tier\":${7},\"size\":${8},\"sensitive\":${sensitive},\"header_qr\":\"${header_qr}\",\"footer_qr\":\"${footer_qr}\",\"hash_sha3\":\"${hash_sha3}\",\"hash_blake2\":\"${hash_blake2}\"}"
+    "{\"hex_id\":\"$(json_escape "${hex}")\",\"b58\":\"$(json_escape "${b58:-${hex}}")\",\"name\":\"$(json_escape "${2}")\",\"version\":\"$(json_escape "${3}")\",\"state\":\"$(json_escape "${4}")\",\"pool_path\":\"$(json_escape "${5}")\",\"sidecar_path\":\"$(json_escape "${6}")\",\"tier\":${7},\"size\":${8},\"sensitive\":${sensitive},\"header_qr\":\"$(json_escape "${header_qr}")\",\"footer_qr\":\"$(json_escape "${footer_qr}")\",\"hash_sha3\":\"$(json_escape "${hash_sha3}")\",\"hash_blake2\":\"$(json_escape "${hash_blake2}")\"}"
 }
 report_custody() {
   local hex="${1}"
+  local location="${6:-}"
   local b58; b58=$(_base58_from_hex "${hex:0:16}")
   local qr_top="" qr_bottom=""
   if [[ -n "${b58}" ]]; then
-    qr_top="USYS:${b58}:HEADER"
-    qr_bottom="USYS:${b58}:FOOTER:${hex}"
+    if [[ -n "${location}" ]]; then
+      local loc_hex; loc_hex=$(to_hex "${location}")
+      qr_top="USYS:${b58}:HEADER:${loc_hex}"
+      qr_bottom="USYS:${b58}:FOOTER:${hex}:${loc_hex}"
+    else
+      qr_top="USYS:${b58}:HEADER"
+      qr_bottom="USYS:${b58}:FOOTER:${hex}"
+    fi
   fi
   post_to_d1 "/custody" \
-    "{\"hex_id\":\"${hex}\",\"name\":\"${2}\",\"action\":\"${3}\",\"state\":\"${4}\",\"actor\":\"${5}\",\"qr_top\":\"${qr_top}\",\"qr_bottom\":\"${qr_bottom}\"}"
+    "{\"hex_id\":\"$(json_escape "${hex}")\",\"name\":\"$(json_escape "${2}")\",\"action\":\"$(json_escape "${3}")\",\"state\":\"$(json_escape "${4}")\",\"actor\":\"$(json_escape "${5}")\",\"qr_top\":\"$(json_escape "${qr_top}")\",\"qr_bottom\":\"$(json_escape "${qr_bottom}")\"}"
+}
+report_deps() {
+  local pkg="${1}" depends_on="${2}" version_req="${3:-}" optional="${4:-false}"
+  post_to_d1 "/deps" \
+    "{\"package\":\"$(json_escape "${pkg}")\",\"depends_on\":\"$(json_escape "${depends_on}")\",\"version_req\":\"$(json_escape "${version_req}")\",\"optional\":${optional}}"
+}
+# ── Dependency extraction — best effort per backend ────────────
+# translator.sh's `deps` verb was only added tonight and its output format
+# varies wildly by native package manager. This is intentionally simple
+# regex parsing, not a real dependency solver: winget/choco in particular
+# don't expose structured dependency data reliably and may report nothing.
+# Never blocks intake — a parse failure here just means zero edges logged,
+# same as before this existed.
+TRANSLATOR_SH="$( (cd "$(dirname "${BASH_SOURCE[0]}")/../../sector3/translator" 2>/dev/null && pwd) || true)/translator.sh"
+intake_deps_from_backend() {
+  local pkg_name="${1}" backend="${2}"
+  [[ -x "${TRANSLATOR_SH}" ]] || return 0
+
+  local raw
+  raw=$("${TRANSLATOR_SH}" deps "${pkg_name}" 2>/dev/null) || return 0
+  [[ -z "${raw}" ]] && return 0
+
+  local dep
+  case "${backend}" in
+    apt)
+      grep -oE '^\s*Depends:\s*\S+' <<< "${raw}" | awk '{print $2}' ;;
+    dnf)
+      grep -oE '^[A-Za-z0-9_.+-]+-[0-9][^ ]*' <<< "${raw}" | sed -E 's/-[0-9].*$//' ;;
+    pacman)
+      grep '^Depends On' <<< "${raw}" | sed -E 's/^Depends On\s*:\s*//' | tr -s ' ' '\n' ;;
+    zypper)
+      awk '/^Requires:/{flag=1;next}/^$/{flag=0}flag' <<< "${raw}" ;;
+    apk)
+      tail -n +2 <<< "${raw}" ;;
+    xbps)
+      cat <<< "${raw}" ;;
+    portage)
+      sed -E 's/^[^:]+:\s*//' <<< "${raw}" | tr -s ' ' '\n' ;;
+    *)
+      return 0 ;;  # winget/choco: no reliable structured dep list
+  esac | while IFS= read -r dep; do
+    dep="${dep//[[:space:]]/}"
+    [[ -z "${dep}" || "${dep}" == "-" || "${dep}" == "None" ]] && continue
+    report_deps "${pkg_name}" "${dep}" "" "false"
+  done
 }
 # ── Integrity check — clone-to-workdir / hot-swap gate ────────
 # The local clonepool copy is what's actually handed to the working
@@ -472,7 +584,7 @@ verify_clonepool_copy() {
   local meta
   meta=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
   local baseline_sha3
-  baseline_sha3=$(echo "${meta}" | grep -o '"hash_sha3":"[^"]*"' | head -1 | sed -E 's/.*:"([^"]*)"/\1/')
+  baseline_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
   [[ -z "${baseline_sha3}" ]] && { echo "no_baseline"; return; }
 
   local actual_sha3
@@ -507,7 +619,7 @@ verify_directory_snapshot() {
 }
 report_glossary() {
   post_to_d1 "/glossary" \
-    "{\"hex\":\"${1}\",\"name\":\"${2}\",\"description\":\"${3}\",\"category_hex\":\"${4}\",\"version\":\"${5}\",\"size\":${6},\"pool_path\":\"${7}\",\"state\":\"white\"}"
+    "{\"hex\":\"$(json_escape "${1}")\",\"name\":\"$(json_escape "${2}")\",\"description\":\"$(json_escape "${3}")\",\"category_hex\":\"$(json_escape "${4}")\",\"version\":\"$(json_escape "${5}")\",\"size\":${6},\"pool_path\":\"$(json_escape "${7}")\",\"state\":\"white\"}"
 }
 
 # ── Self registration ─────────────────────────────────────────
@@ -542,13 +654,14 @@ self_register() {
 # ══════════════════════════════════════════════════════════════
 intake_file() {
   local filepath="${1:-}" backend="${2:-direct}" notes="${3:-}"
+  filepath="$(normalize_path "${filepath}")"
 
   [[ -z "${filepath}" ]] && { echo "[intake] Usage: intake <file> [backend] [notes]"; return 1; }
   [[ ! -f "${filepath}" ]] && { echo "[intake:MISS] File not found: ${filepath}"; return 1; }
 
   local orig; orig=$(basename "${filepath}")
   local hex;  hex=$(to_hex "${orig}")
-  local pool_dir="${CLONEPOOL_DIR}/${hex}"
+  local pool_dir="${CLONEPOOL_DIR}/T1/${hex}"
   local sidecar="${pool_dir}/${hex}.sidecar.json"
 
   mkdir -p "${pool_dir}"
@@ -635,9 +748,9 @@ intake_file() {
   custody_log_local "${hex}" "${orig}" "intake" "${version}" \
     "${filepath}" "${pool_dir}/${version}_${orig}" "white" "${backend}"
   report_clonepool "${hex}" "${orig}" "${version}" "white" \
-    "${pool_dir}" "${sidecar}" "1" "${size}" "${sensitive}" "${pool_dir}/${version}_${orig}"
+    "${pool_dir}" "${sidecar}" "1" "${size}" "${sensitive}" "${pool_dir}/${version}_${orig}" "${filepath}"
   upload_to_r2 "${hex}" "${pool_dir}/${version}_${orig}"
-  report_custody  "${hex}" "${orig}" "intake" "white" "${backend}"
+  report_custody  "${hex}" "${orig}" "intake" "white" "${backend}" "${filepath}"
   report_glossary "${hex}" "${orig}" "Intaked via ${backend}: ${filetype}" \
     "${category_hex}" "${version}" "${size}" "${pool_dir}"
 
@@ -693,7 +806,7 @@ intake_clone() {
   [[ "${name}" == *.lol ]] && name="${name%.lol}"
 
   local hex; hex=$(to_hex "${name}")
-  local pool_dir="${CLONEPOOL_DIR}/${hex}"
+  local pool_dir; pool_dir=$(resolve_pool_dir "${hex}")
 
   if [[ ! -d "${pool_dir}" ]]; then
     echo "[intake:MISS] '${name}' not found in clonepool"
@@ -776,9 +889,13 @@ intake_prune() {
   local total_evicted=0
   local files_checked=0
 
-  # Walk every hex directory in the clonepool
-  for pool_dir in "${CLONEPOOL_DIR}"/*/; do
+  # Walk every hex directory in the clonepool. Tiered layout (T1-T4/<hex>/)
+  # plus the legacy flat layout (<hex>/ directly, pre-2026-09-20 intakes not
+  # yet rotated/re-intaked) — glob both so nothing already in the pool is
+  # silently skipped just for predating the tier folders.
+  for pool_dir in "${CLONEPOOL_DIR}"/T[1-4]/*/ "${CLONEPOOL_DIR}"/*/; do
     [[ ! -d "${pool_dir}" ]] && continue
+    case "${pool_dir}" in "${CLONEPOOL_DIR}"/T[1-4]/) continue ;; esac  # skip the tier dirs themselves
 
     # Find all unique file names in this pool dir
     local names=()
@@ -817,6 +934,73 @@ intake_prune() {
   echo " Retention        : ${MAX_VERSIONS} versions per file"
   echo " Latest version   : always kept"
   echo ""
+
+  rotate_clonepool_tiers
+}
+
+# ── Tier rotation + 4-day eviction ─────────────────────────────
+# T1(newest)→T2→T3→T4→evicted, aged by days since ORIGINAL intake (sidecar's
+# registered_at — moving a file must never reset its own clock or it would
+# never reach eviction). R2 bytes are untouched by T1-T3 moves (hex-keyed,
+# tier-agnostic, see resolve_pool_dir); eviction from T4 clears the local
+# copy and flags D1 state=black, but never deletes the D1 row itself — the
+# custody ledger and any logged versions (both append-only) stay intact.
+# R2 "current" bytes are left as-is on eviction (cheap to keep, and deleting
+# them would need a dedicated endpoint since DELETE /clonepool/:id also
+# drops the D1 row's metadata history, which is exactly what this avoids).
+rotate_clonepool_tiers() {
+  echo " Rotating clonepool tiers (4-day window)..."
+  echo ""
+
+  local moved=0 evicted=0 from_num to_num
+
+  for from_num in 1 2 3 4; do
+    local tier_root="${CLONEPOOL_DIR}/T${from_num}"
+    [[ -d "${tier_root}" ]] || continue
+
+    for entry_dir in "${tier_root}"/*/; do
+      [[ -d "${entry_dir}" ]] || continue
+      local hex; hex=$(basename "${entry_dir}")
+      local sidecar="${entry_dir}${hex}.sidecar.json"
+      [[ -f "${sidecar}" ]] || continue
+
+      local registered_at
+      registered_at=$(grep -o '"registered_at"[[:space:]]*:[[:space:]]*"[^"]*"' "${sidecar}" \
+        | head -1 | sed -E 's/.*"registered_at"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+      [[ -z "${registered_at}" ]] && continue
+
+      local reg_epoch now_epoch age_days
+      reg_epoch=$(date -d "${registered_at}" +%s 2>/dev/null || echo 0)
+      [[ "${reg_epoch}" == "0" ]] && continue
+      now_epoch=$(date -u +%s)
+      age_days=$(( (now_epoch - reg_epoch) / 86400 ))
+
+      if (( from_num < 4 && age_days > from_num )); then
+        to_num=$(( from_num + 1 ))
+        local dest_root="${CLONEPOOL_DIR}/T${to_num}"
+        mkdir -p "${dest_root}"
+        mv "${entry_dir%/}" "${dest_root}/${hex}"
+        log "INFO" "tier rotate: ${hex} T${from_num} -> T${to_num} (${age_days}d old)"
+        [[ -n "${PHOENIX_AUTH}" ]] && curl -s -o /dev/null -X PATCH \
+          -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "Content-Type: application/json" \
+          -d "{\"tier\":${to_num},\"pool_path\":\"$(json_escape "${dest_root}/${hex}")\"}" \
+          "${WORKER_URL}/clonepool/${hex}/tier" 2>/dev/null
+        (( moved++ )) || true
+      elif (( from_num == 4 && age_days > 4 )); then
+        rm -rf "${entry_dir%/}"
+        log "INFO" "tier evict: ${hex} (${age_days}d old, past 4-day window) — local copy cleared, D1 flagged black"
+        [[ -n "${PHOENIX_AUTH}" ]] && curl -s -o /dev/null -X PATCH \
+          -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "Content-Type: application/json" \
+          -d '{"tier":4,"pool_path":"evicted","state":"black"}' \
+          "${WORKER_URL}/clonepool/${hex}/tier" 2>/dev/null
+        (( evicted++ )) || true
+      fi
+    done
+  done
+
+  echo " Tier moves       : ${moved}"
+  echo " Evicted (>4d)    : ${evicted}"
+  echo ""
 }
 
 # ── Intake from backend ───────────────────────────────────────
@@ -833,11 +1017,13 @@ intake_from_backend() {
 
   if [[ -n "${install_path}" && -f "${install_path}" ]]; then
     intake_file "${install_path}" "${backend}" "installed from ${backend} ${version}"
-    return $?
+    local rc=$?
+    intake_deps_from_backend "${pkg_name}" "${backend}"
+    return "${rc}"
   fi
 
   local hex; hex=$(to_hex "${pkg_name}")
-  local pool_dir="${CLONEPOOL_DIR}/${hex}"
+  local pool_dir="${CLONEPOOL_DIR}/T1/${hex}"
   local sidecar="${pool_dir}/${hex}.sidecar.json"
   local sensitive="false"
   is_sensitive_name "${pkg_name}" && sensitive="true"
@@ -853,6 +1039,7 @@ intake_from_backend() {
   report_custody  "${hex}" "${pkg_name}" "backend_install" "white" "${backend}"
   report_glossary "${hex}" "${pkg_name}" "Package installed from ${backend} v${version}" \
     "7061636b61676573" "${version}" "0" "${pool_dir}"
+  intake_deps_from_backend "${pkg_name}" "${backend}"
 
   echo "[intake:OK] ${pkg_name} (${backend} ${version}) → D1"
 }
@@ -997,6 +1184,7 @@ intake_directory() {
   local dirpath="${1:-}"
   local backend="${2:-direct}"
   local notes="${3:-}"
+  dirpath="$(normalize_path "${dirpath}")"
 
   # Strip trailing slash
   dirpath="${dirpath%/}"
@@ -1007,7 +1195,7 @@ intake_directory() {
 
   local dirname; dirname=$(basename "${dirpath}")
   local hex;     hex=$(to_hex "${dirname}")
-  local pool_dir="${CLONEPOOL_DIR}/${hex}"
+  local pool_dir="${CLONEPOOL_DIR}/T1/${hex}"
   local version; version=$(get_next_version "${pool_dir}")
 
   echo ""
@@ -1155,7 +1343,7 @@ intake_directory() {
     local rel="${f#${dirpath}/}"
     local file_orig; file_orig=$(basename "${f}")
     local file_hex;  file_hex=$(to_hex "${file_orig}")
-    local file_pool="${CLONEPOOL_DIR}/${file_hex}"
+    local file_pool="${CLONEPOOL_DIR}/T1/${file_hex}"
     local file_version; file_version=$(get_next_version "${file_pool}")
     local filetype;  filetype=$(detect_filetype "${file_orig}")
     local category_hex; category_hex=$(filetype_to_category "${filetype}")
@@ -1195,14 +1383,14 @@ intake_directory() {
       "${file_version}" "${f}" "${file_pool}/${file_version}_${file_orig}" \
       "white" "${backend}"
     report_clonepool "${file_hex}" "${file_orig}" "${file_version}" "white" \
-      "${file_pool}" "${sidecar}" "1" "${size}" "${file_sensitive}" "${file_pool}/${file_version}_${file_orig}"
+      "${file_pool}" "${sidecar}" "1" "${size}" "${file_sensitive}" "${file_pool}/${file_version}_${file_orig}" "${rel}"
     upload_to_r2 "${file_hex}" "${file_pool}/${file_version}_${file_orig}"
-    report_custody "${file_hex}" "${file_orig}" "dir_intake" "white" "${backend}"
+    report_custody "${file_hex}" "${file_orig}" "dir_intake" "white" "${backend}" "${rel}"
 
     # Auto evict old versions
     evict_old_versions "${file_pool}" "${file_orig}" "true"
 
-    manifest_entries+="  {\"hex\":\"${file_hex}\",\"name\":\"${file_orig}\",\"path\":\"${rel}\",\"version\":\"${file_version}\",\"checksum\":\"${checksum}\"},"
+    manifest_entries+="  {\"hex\":\"$(json_escape "${file_hex}")\",\"name\":\"$(json_escape "${file_orig}")\",\"path\":\"$(json_escape "${rel}")\",\"version\":\"$(json_escape "${file_version}")\",\"checksum\":\"$(json_escape "${checksum}")\"},"
     (( success++ )) || true
     # Phoenix progress line — single in-place update, no per-file scroll
     printf "\r  Phoenix  %d / %d  %-60s" "${success}" "${#known_files[@]}" "${rel}"
@@ -1219,23 +1407,23 @@ intake_directory() {
 {
   "usys_intake": "1.6",
   "type": "directory",
-  "hex_name": "${hex}",
-  "original_name": "${dirname}",
+  "hex_name": "$(json_escape "${hex}")",
+  "original_name": "$(json_escape "${dirname}")",
   "state": "white",
-  "version": "${version}",
-  "snapshot_path": "${snapshot_dir}",
+  "version": "$(json_escape "${version}")",
+  "snapshot_path": "$(json_escape "${snapshot_dir}")",
   "file_count": ${success},
   "size_bytes": ${total_size},
-  "backend": "${backend}",
-  "notes": "${notes}",
+  "backend": "$(json_escape "${backend}")",
+  "notes": "$(json_escape "${notes}")",
   "sensitive": ${any_sensitive_included},
-  "pool_path": "${pool_dir}",
+  "pool_path": "$(json_escape "${pool_dir}")",
   "registered_at": "${now}",
   "updated_at": "${now}",
   "files": [
 ${manifest_entries%,}
   ],
-  "clone_history": [{"version": "${version}", "at": "${now}"}]
+  "clone_history": [{"version": "$(json_escape "${version}")", "at": "${now}"}]
 }
 DIRSIDECAR
 
@@ -1275,7 +1463,7 @@ intake_clone_directory() {
   local version="${2:-latest}"
 
   local hex; hex=$(to_hex "${name}")
-  local pool_dir="${CLONEPOOL_DIR}/${hex}"
+  local pool_dir; pool_dir=$(resolve_pool_dir "${hex}")
   local sidecar="${pool_dir}/${hex}.sidecar.json"
 
   if [[ ! -d "${pool_dir}" ]]; then
@@ -1378,7 +1566,7 @@ case "${1:-help}" in
   prune)          intake_prune ;;
   backend)        shift; intake_from_backend "$@" ;;
   *)
-    first_arg=$(resolve_lol "${1:-}")
+    first_arg=$(normalize_path "$(resolve_lol "${1:-}")")
     shift || true
     # Directory or file?
     if [[ -d "${first_arg}" ]]; then
