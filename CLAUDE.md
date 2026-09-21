@@ -140,7 +140,7 @@ specific hosted model's improvisational skill to use correctly.
 - **External drive** — Ubuntu Server (minimal) + HWE kernel
 - Stack on external: Prometheus, Nextcloud, PowerShell
 - Phoenix builds on top of that as the OS layer
-- Work from: Windows PS7 or WSL (SSH or direct when booted)
+- Work from: Windows PS7 (SSH or direct when booted) — Phoenix's own Debian VM (QEMU, `usys run debian`) is the Linux-side environment; no WSL, not planned
 - Custom GRUB added AFTER Phoenix is standing — not before
 - External plugs in → boots → Phoenix is the OS
 
@@ -232,12 +232,12 @@ sector4/
 - What was it + custody = complete file history
 - breach_coms are **physical drives** — renamed by Frank, mounted by label
 - Frank is the hardware orchestrator — he knows the drives, routes by pressure
-- WSL is the bridge: Windows drives appear as /mnt/d /mnt/e /mnt/f /mnt/g in Debian
-- align_dirs.sh maintains path parity between WSL dev and bare metal Debian
+- Phoenix's own Debian VM (QEMU, `usys run debian`) is the bridge — no WSL, not planned: Windows drives appear as /mnt/d /mnt/e /mnt/f /mnt/g in Debian
+- align_dirs.sh maintains path parity between the Debian VM and bare metal Debian
 - Drive labels (not UUIDs) — stable across machine changes, Frank-managed
 
   ```
-  Physical drive label    WSL/Debian mount    Role
+  Physical drive label    Debian VM mount      Role
   breach_coms4          → /mnt/g             T1 PRIMARY — master vault, intake writes here
   breach_coms3          → /mnt/f             T2 SECONDARY — day-1 mirror
   breach_coms2          → /mnt/e             T3 TERTIARY — day-2 mirror (CLONEPOOL primary)
@@ -271,7 +271,7 @@ Footer QR (after hash):   USYS:<b58>:FOOTER:<sha3>  tier color T1/T2/T3/T4
 2. translator.sh fires on OUTPUT ONLY — never on intake or clone
 3. Romeo handles ingress / Juliet handles egress at sector3
 4. breach_coms drives hold quadralingual vault — never translate inside them
-5. All scripts: #!/usr/bin/env bash (external Ubuntu) or zsh (WSL dev)
+5. All scripts: #!/usr/bin/env bash (external Ubuntu) or zsh (Debian VM dev — no WSL, not planned; a zsh script invoked via Windows Git Bash, as `usys.ps1` does, is a real syntax-error trap — see `sector4/intake/intake.sh`'s 2026-09-21 fix)
 6. GPU drivers blacklisted — never suggest GPU-dependent solutions
 7. Header QR BEFORE hashing / Footer QR AFTER hashing — never swap
 8. Never delete from breach_coms4 (master vault)
@@ -325,7 +325,7 @@ Import sequence:
 - [ ] Prometheus installed
 - [ ] Nextcloud installed
 - [ ] PowerShell installed
-- [ ] SSH access confirmed from WSL/PS7
+- [ ] SSH access confirmed from PS7 (no WSL, not planned)
 
 ### Phase 2 — Sector 1 (Boot/Kernel)
 - [ ] frank3_slot_a.c + frank3_slot_b.c placed in sector1/kernels/
