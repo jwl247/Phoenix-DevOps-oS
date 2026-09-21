@@ -125,6 +125,33 @@ function ConvertTo-GitBashPath([string]$WindowsPath) {
     return $p
 }
 
+function Get-UsysWorkerHeaders {
+    # Every packages-worker route now sits behind Cloudflare Access (Gap 1
+    # fix, 2026-09-21) — a leftover "bypass, everyone" policy was removed, so
+    # non-interactive callers need the usys-cli service token on top of
+    # PHOENIX_AUTH or they get bounced to the Access HTML login page instead
+    # of JSON (silently "not found"/empty-looking responses, not a clean
+    # 401). intake.sh already sends both; this is the same pair for every
+    # direct PS7 call to the worker. Falls back to User-scope env if the
+    # current process env is unset — same pattern as PHOENIX_AUTH.
+    [CmdletBinding()]
+    param([switch]$Accept)
+
+    $auth = $env:PHOENIX_AUTH
+    if (-not $auth) { $auth = [Environment]::GetEnvironmentVariable('PHOENIX_AUTH', 'User') }
+    $cfId = $env:CF_ACCESS_CLIENT_ID
+    if (-not $cfId) { $cfId = [Environment]::GetEnvironmentVariable('CF_ACCESS_CLIENT_ID', 'User') }
+    $cfSecret = $env:CF_ACCESS_CLIENT_SECRET
+    if (-not $cfSecret) { $cfSecret = [Environment]::GetEnvironmentVariable('CF_ACCESS_CLIENT_SECRET', 'User') }
+
+    $headers = @{}
+    if ($Accept)    { $headers['Accept'] = 'application/json' }
+    if ($auth)      { $headers['Authorization'] = "Bearer $auth" }
+    if ($cfId)      { $headers['CF-Access-Client-Id'] = $cfId }
+    if ($cfSecret)  { $headers['CF-Access-Client-Secret'] = $cfSecret }
+    return $headers
+}
+
 function ConvertTo-QemuHostPath([string]$WindowsPath) {
     # C:\Users\jerry\Phoenix -> C:/Users/jerry/Phoenix
     # F:\Phoenix\Desktop     -> F:/Phoenix/Desktop
@@ -429,12 +456,7 @@ function Invoke-UsysStatus {
 # =============================================================================
 function Test-UsysWorkerHealth([string]$Name, [string]$Url, [switch]$Authed) {
     try {
-        $headers = @{}
-        if ($Authed) {
-            $auth = [Environment]::GetEnvironmentVariable('PHOENIX_AUTH', 'User')
-            if (-not $auth) { $auth = $env:PHOENIX_AUTH }
-            if ($auth) { $headers['Authorization'] = "Bearer $auth" }
-        }
+        $headers = if ($Authed) { Get-UsysWorkerHeaders } else { @{} }
         $resp = Invoke-WebRequest -Uri $Url -Headers $headers -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
         return @{ Name = $Name; Ok = $true; Detail = "$($resp.StatusCode)" }
     } catch {
@@ -830,7 +852,6 @@ function Invoke-UsysPull {
     )
 
     $workerUrl  = $env:PHOENIX_WORKER_URL
-    $workerAuth = $env:PHOENIX_AUTH
 
     if (-not $workerUrl) {
         Write-UsysErr 'PHOENIX_WORKER_URL not set — cannot pull from D1'
@@ -843,8 +864,7 @@ function Invoke-UsysPull {
     # Ask D1 for the record
     try {
         $uri = "$($workerUrl.TrimEnd('/'))/clonepool/$([Uri]::EscapeDataString($SuiteName))"
-        $headers = @{ 'Accept' = 'application/json' }
-        if ($workerAuth) { $headers['Authorization'] = "Bearer $workerAuth" }
+        $headers = Get-UsysWorkerHeaders -Accept
         $resp = Invoke-RestMethod -Uri $uri -Headers $headers -Method GET -ErrorAction Stop
     } catch {
         Write-UsysErr "Suite '$SuiteName' not found in D1 — has it been intaked?"
@@ -865,19 +885,18 @@ function Invoke-UsysPull {
     }
 
     # -Destination given: this is a real pull-to-workdir request (the .lol
-    # clone-to-workdir alias), not suite staging. Fetch the actual bytes from
-    # phoenix-clonepool-r2 — a separate worker from packages-worker, bound to
-    # the R2 bucket the D1 row's hex_id was supposed to have landed in.
+    # clone-to-workdir alias), not suite staging. Fetch the actual bytes.
+    # phoenix-clonepool-r2 was retired 2026-09-21 (see CLAUDE.md SESSION LOG)
+    # in favor of packages-worker's own integrated R2 binding — same
+    # GET /clonepool/:id route as the metadata lookup above, just keyed by
+    # hex_id instead of name so it hits the R2 object directly.
     if ($Destination) {
         if (-not $resp.hex_id) {
             Write-UsysErr "'$SuiteName' has no hex_id in D1 — can't fetch content."
             return
         }
-        $r2Url  = $env:PHOENIX_R2_WORKER_URL
-        if (-not $r2Url) { $r2Url = 'https://phoenix-clonepool-r2.phoenix-jwl.workers.dev' }
-        $objUri = "$($r2Url.TrimEnd('/'))/object/$([Uri]::EscapeDataString($resp.hex_id))"
-        $headers = @{}
-        if ($workerAuth) { $headers['Authorization'] = "Bearer $workerAuth" }
+        $objUri = "$($workerUrl.TrimEnd('/'))/clonepool/$([Uri]::EscapeDataString($resp.hex_id))"
+        $headers = Get-UsysWorkerHeaders
 
         New-Item -ItemType Directory -Path $Destination -Force | Out-Null
         $outFile = Join-Path $Destination $resp.name

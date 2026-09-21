@@ -23,6 +23,13 @@ MAX_VERSIONS=7   # keep 7 versions per file — a new intake bumps the oldest ou
                  # act before a new intake can displace an old version), not a
                  # forced deletion timer. nothing is ever deleted just for being old.
 
+# Days per tier hop in rotate_clonepool_tiers(): T1->T2->T3->T4->evicted is
+# always 4 hops (the tier count is fixed), but how many days each hop takes
+# is adjustable — total window = 4 * TIER_DAY_STEP. Default 1 => 4-day window
+# (the original design). Override: PHOENIX_TIER_DAY_STEP=2 in the environment
+# for an 8-day window, etc. Must be a positive integer (bash arithmetic).
+TIER_DAY_STEP="${PHOENIX_TIER_DAY_STEP:-1}"
+
 # ── Config ────────────────────────────────────────────────────
 CLONEPOOL_DIR="${CLONEPOOL_DIR:-${HOME}/Phoenix/clonepool}"
 CLONEPOOL_DIR="${CLONEPOOL_DIR//\\//}"  # see normalize_path() below for why
@@ -949,7 +956,16 @@ intake_prune() {
     [[ ! -d "${pool_dir}" ]] && continue
     case "${pool_dir}" in "${CLONEPOOL_DIR}"/T[1-4]/) continue ;; esac  # skip the tier dirs themselves
 
-    # Find all unique file names in this pool dir
+    # Find all unique file names in this pool dir. -d is load-bearing: a
+    # directory-snapshot bucket's versioned entry (v1_<dirname>/) is itself a
+    # directory, and plain `ls` without -d lists ITS CONTENTS instead of its
+    # own name — corrupting `names` with the snapshot's inner filenames
+    # (alpha.txt, sub, ...) instead of one real entry. Those bogus names then
+    # match nothing in the per-name eviction-count glob below, and under
+    # `set -euo pipefail` that empty-glob `ls` failure silently kills the
+    # whole prune run. Found 2026-09-21 running prune against a real
+    # directory-intake snapshot; -d is the actual fix, the || true below is
+    # defense in depth for any other empty-glob edge case.
     local names=()
     while IFS= read -r f; do
       local base; base=$(basename "${f}")
@@ -959,19 +975,19 @@ intake_prune() {
       local found=false
       for n in "${names[@]:-}"; do [[ "${n}" == "${name}" ]] && found=true && break; done
       [[ "${found}" == "false" ]] && names+=("${name}")
-    done < <(ls "${pool_dir}"v*_* 2>/dev/null || true)
+    done < <(ls -d "${pool_dir}"v*_* 2>/dev/null || true)
 
     for name in "${names[@]:-}"; do
       [[ -z "${name}" ]] && continue
       (( files_checked++ )) || true
 
       # Count versions before eviction
-      local before; before=$(ls "${pool_dir}"v*_"${name}" 2>/dev/null | wc -l | tr -d ' ')
+      local before; before=$( { ls -d "${pool_dir}"v*_"${name}" 2>/dev/null || true; } | wc -l | tr -d ' ')
       [[ "${before}" -le 1 ]] && continue  # only one version — never evict
 
       evict_old_versions "${pool_dir}" "${name}" "false"
 
-      local after; after=$(ls "${pool_dir}"v*_"${name}" 2>/dev/null | wc -l | tr -d ' ')
+      local after; after=$( { ls -d "${pool_dir}"v*_"${name}" 2>/dev/null || true; } | wc -l | tr -d ' ')
       local evicted=$(( before - after ))
       (( total_evicted += evicted )) || true
     done
@@ -990,7 +1006,7 @@ intake_prune() {
   rotate_clonepool_tiers
 }
 
-# ── Tier rotation + 4-day eviction ─────────────────────────────
+# ── Tier rotation + eviction (window adjustable via TIER_DAY_STEP) ─────
 # T1(newest)→T2→T3→T4→evicted, aged by days since ORIGINAL intake (sidecar's
 # registered_at — moving a file must never reset its own clock or it would
 # never reach eviction). R2 bytes are untouched by T1-T3 moves (hex-keyed,
@@ -1000,8 +1016,10 @@ intake_prune() {
 # R2 "current" bytes are left as-is on eviction (cheap to keep, and deleting
 # them would need a dedicated endpoint since DELETE /clonepool/:id also
 # drops the D1 row's metadata history, which is exactly what this avoids).
+# Total window = 4 * TIER_DAY_STEP days (see TIER_DAY_STEP above).
 rotate_clonepool_tiers() {
-  echo " Rotating clonepool tiers (4-day window)..."
+  local total_window=$(( 4 * TIER_DAY_STEP ))
+  echo " Rotating clonepool tiers (${total_window}-day window)..."
   echo ""
 
   local moved=0 evicted=0 from_num to_num
@@ -1027,7 +1045,8 @@ rotate_clonepool_tiers() {
       now_epoch=$(date -u +%s)
       age_days=$(( (now_epoch - reg_epoch) / 86400 ))
 
-      if (( from_num < 4 && age_days > from_num )); then
+      local tier_threshold=$(( from_num * TIER_DAY_STEP ))
+      if (( from_num < 4 && age_days > tier_threshold )); then
         to_num=$(( from_num + 1 ))
         local dest_root="${CLONEPOOL_DIR}/T${to_num}"
         mkdir -p "${dest_root}"
@@ -1038,9 +1057,9 @@ rotate_clonepool_tiers() {
           -d "{\"tier\":${to_num},\"pool_path\":\"$(json_escape "${dest_root}/${hex}")\"}" \
           "${WORKER_URL}/clonepool/${hex}/tier" 2>/dev/null
         (( moved++ )) || true
-      elif (( from_num == 4 && age_days > 4 )); then
+      elif (( from_num == 4 && age_days > total_window )); then
         rm -rf "${entry_dir%/}"
-        log "INFO" "tier evict: ${hex} (${age_days}d old, past 4-day window) — local copy cleared, D1 flagged black"
+        log "INFO" "tier evict: ${hex} (${age_days}d old, past ${total_window}-day window) — local copy cleared, D1 flagged black"
         [[ -n "${PHOENIX_AUTH}" ]] && curl -s -o /dev/null -X PATCH \
           -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" -H "Content-Type: application/json" \
           -d '{"tier":4,"pool_path":"evicted","state":"black"}' \
@@ -1051,7 +1070,7 @@ rotate_clonepool_tiers() {
   done
 
   echo " Tier moves       : ${moved}"
-  echo " Evicted (>4d)    : ${evicted}"
+  echo " Evicted (>${total_window}d) : ${evicted}"
   echo ""
 }
 
