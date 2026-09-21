@@ -60,6 +60,11 @@ WORKER_URL       = _raw_worker_url.rstrip("/")
 WORKER_AUTH      = os.environ.get("PHOENIX_AUTH", "").strip()
 if WORKER_AUTH.upper().startswith("PHOENIX_AUTH="):
     WORKER_AUTH  = WORKER_AUTH.split("=", 1)[1].strip()
+# CF Access service token — required since the 2026-09-21 Gap 1 fix put every
+# packages-worker route behind Cloudflare Access. Without these, a POST here
+# gets redirected to the Access login page instead of reaching the worker.
+CF_ACCESS_CLIENT_ID     = os.environ.get("CF_ACCESS_CLIENT_ID", "").strip()
+CF_ACCESS_CLIENT_SECRET = os.environ.get("CF_ACCESS_CLIENT_SECRET", "").strip()
 VERSION = "0.3.0"
 
 
@@ -289,20 +294,35 @@ def d1_sync(
         "Authorization":    f"Bearer {WORKER_AUTH}",
         "User-Agent":    "Phoenix-Intake/0.3.0",
     }
+    if CF_ACCESS_CLIENT_ID:     headers["CF-Access-Client-Id"]     = CF_ACCESS_CLIENT_ID
+    if CF_ACCESS_CLIENT_SECRET: headers["CF-Access-Client-Secret"] = CF_ACCESS_CLIENT_SECRET
 
     for endpoint, payload in (
         ("/clonepool", clonepool_payload),
         ("/custody",   custody_payload),
     ):
         try:
+            url = f"{WORKER_URL}{endpoint}"
             req = urllib.request.Request(
-                f"{WORKER_URL}{endpoint}",
+                url,
                 data=payload,
                 headers=headers,
                 method="POST",
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
-                pass  # 200 is enough — no body needed
+                # urlopen follows redirects silently and reports 200 for the
+                # page it lands on — without the CF-Access headers above, a
+                # Cloudflare Access login page IS that page, and a bare
+                # "no exception raised" check would report success while
+                # nothing was actually written. Confirmed live 2026-09-21.
+                # A legitimate D1 POST never redirects, so any URL change or
+                # non-200 status here is a real failure, not just "no body".
+                if resp.status != 200 or resp.geturl() != url:
+                    print(f"  [warn] D1 sync {endpoint} failed: "
+                          f"unexpected response (status={resp.status}, "
+                          f"landed on {resp.geturl()}) — likely an "
+                          f"auth/Access rejection, not a real success")
+                    return False
         except Exception as e:
             print(f"  [warn] D1 sync {endpoint} failed: {e}")
             return False

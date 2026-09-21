@@ -28,8 +28,8 @@ fi
 
 mkdir -p "${LOG_DIR}"
 
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG_FILE}" }
-die() { log "ERROR: $*"; exit 1 }
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG_FILE}"; }
+die() { log "ERROR: $*"; exit 1; }
 
 check_vault() {
     [[ -d "${VAULT_MOUNT}" ]] || die "breach_coms4 not mounted at ${VAULT_MOUNT} -- run: sudo mount -a"
@@ -56,9 +56,13 @@ cmd_dir() {
     check_python
     log "intake-dir: ${target}"
     local count=0
-    for f in "${target}"/**/*(.); do
+    # find + NUL-delimited read, not a shell glob — the zsh-only **/*(.)
+    # syntax broke under bash (this script's actual invocation path via
+    # usys.ps1's Get-UsysGitBash is always bash, never zsh, despite the
+    # #!/usr/bin/env zsh shebang above). find works identically under both.
+    while IFS= read -r -d '' f; do
         python3 "${INTAKE_PY}" "${f}" && (( count++ ))
-    done
+    done < <(find "${target}" -type f -print0)
     log "intake-dir complete: ${count} files processed"
 }
 
