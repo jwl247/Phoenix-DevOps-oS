@@ -17,8 +17,9 @@ const err = (msg, status = 400) => ok({ error: msg }, status);
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 function isAuthorized(req, env) {
-  const token = req.headers.get('Authorization')?.replace('Bearer ', '').trim();
-  return token && token === env.PHOENIX_AUTH;
+  const authorization = req.headers.get('Authorization') || '';
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  return !!match && match[1] === env.PHOENIX_AUTH;
 }
 
 // ── Platform HTML ───────────────────────────────────────────────────────────
@@ -588,34 +589,111 @@ export default {
       // All writes require auth
       // ══════════════════════════════════════════════════════════════════════
 
+      // ── /clonepool/:hex/versions/:hashPrefix — immutable per-version bytes ──
+      // clonepool's own hex_id is filename-based (to_hex(name) in intake.sh),
+      // stable across re-intakes, so PUT /clonepool/:hex always overwrites the
+      // same "current" key. This sub-route is the actual byte-retrievable
+      // history: each distinct content hash gets its own permanent R2 key,
+      // written once and never overwritten (re-uploading identical bytes to
+      // the same key is harmless). The `versions` D1 table's store_path
+      // points here. Checked before the generic /clonepool/:id routes below
+      // since both start with the same prefix.
+      const vMatch = path.match(/^\/clonepool\/([^/]+)\/versions\/([^/]+)$/);
+      if (vMatch && (req.method === 'PUT' || req.method === 'GET')) {
+        const [, hexId, hashPrefix] = vMatch;
+        const key = `${hexId}/versions/${hashPrefix}`;
+        if (!env.CLONEPOOL_BUCKET) return err('R2 bucket not bound to this worker', 500);
+        if (req.method === 'PUT') {
+          if (!isAuthorized(req, env)) return err('unauthorized', 401);
+          const bytes = await req.arrayBuffer();
+          await env.CLONEPOOL_BUCKET.put(key, bytes);
+          return ok({ ok: true, key, bytes: bytes.byteLength });
+        }
+        const obj = await env.CLONEPOOL_BUCKET.get(key);
+        if (!obj) return err('not found', 404);
+        return new Response(obj.body, { status: 200, headers: { 'Content-Type': 'application/octet-stream' } });
+      }
+
       // POST /clonepool — intake.sh reports a new file into the pool
       if (path === '/clonepool' && req.method === 'POST') {
         if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const body = await req.json();
         if (!body.hex_id || !body.name) return err('hex_id and name required');
 
+        // Look up the prior hash BEFORE overwriting — this is how we know
+        // whether the content actually changed and a version row is owed.
+        const prior = await db.prepare('SELECT hash_sha3 FROM clonepool WHERE hex_id = ?').bind(body.hex_id).first();
+
         await db.prepare(`
           INSERT INTO clonepool (hex_id, b58, name, original_name, pool_path, sidecar_path,
-            state, tier, size, version)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            state, tier, size, version, hash_sha3, hash_blake2, header_qr, footer_qr,
+            source_path, notes, addr_scheme, sensitive)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(hex_id) DO UPDATE SET
             state = excluded.state,
             version = excluded.version,
+            tier = excluded.tier,
+            pool_path = excluded.pool_path,
+            hash_sha3 = COALESCE(excluded.hash_sha3, clonepool.hash_sha3),
+            hash_blake2 = COALESCE(excluded.hash_blake2, clonepool.hash_blake2),
+            header_qr = COALESCE(excluded.header_qr, clonepool.header_qr),
+            footer_qr = COALESCE(excluded.footer_qr, clonepool.footer_qr),
+            addr_scheme = excluded.addr_scheme,
+            sensitive = excluded.sensitive,
             updated_at = CURRENT_TIMESTAMP
         `).bind(
           body.hex_id,
           body.b58 || body.hex_id,
           body.name,
-          body.original_name|| body.name,
+          body.original_name || body.name,
           body.pool_path || null,
           body.sidecar_path || null,
           body.state || 'white',
           body.tier || 1,
           body.size || 0,
           body.version || 'v1',
+          body.hash_sha3 || null,
+          body.hash_blake2 || null,
+          body.header_qr || null,
+          body.footer_qr || null,
+          body.source_path || null,
+          body.notes || null,
+          (body.hash_sha3 ? 'content-v2' : 'filename-hex-v1'),
+          body.sensitive ? 1 : 0,
         ).run();
 
-        return ok({ ok: true, hex_id: body.hex_id, name: body.name });
+        // Log an immutable version row whenever content actually changed
+        // (new hash, or first hash ever seen for this hex_id). This is the
+        // real append-only history — clonepool above only ever holds current
+        // state. store_path matches the key the client should PUT/GET bytes
+        // at via /clonepool/:hex/versions/:hashPrefix.
+        let versionLogged = null;
+        if (body.hash_sha3 && (!prior || prior.hash_sha3 !== body.hash_sha3)) {
+          const countRow = await db.prepare('SELECT COUNT(*) AS n FROM versions WHERE package = ?').bind(body.name).first();
+          const versionLabel = `v${(countRow?.n || 0) + 1}`;
+          const hashPrefix = body.hash_sha3.slice(0, 16);
+          const storePath = `${body.hex_id}/versions/${hashPrefix}`;
+          // versions.package has a FOREIGN KEY on packages(name) — most
+          // clonepool files aren't registered "packages," so satisfy the
+          // constraint with a harmless stub row rather than touching schema.
+          await db.prepare('INSERT OR IGNORE INTO packages (name) VALUES (?)').bind(body.name).run();
+          await db.prepare(`
+            INSERT INTO versions (package, version, store_path, hash_sha3, hash_blake2, size, note, signed_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            body.name,
+            versionLabel,
+            storePath,
+            body.hash_sha3,
+            body.hash_blake2 || null,
+            body.size || 0,
+            body.notes || '',
+            body.actor || null,
+          ).run();
+          versionLogged = { version: versionLabel, store_path: storePath };
+        }
+
+        return ok({ ok: true, hex_id: body.hex_id, name: body.name, version_logged: versionLogged });
       }
 
       // GET /custody — ledger view
@@ -666,11 +744,15 @@ export default {
 
       if (path === '/clonepool' && req.method === 'GET') {
         const state = url.searchParams.get('state');
+        const sensitive = url.searchParams.get('sensitive');
         const limit = parseInt(url.searchParams.get('limit') || '100', 10);
         const params = [];
+        const conditions = [];
         let query = 'SELECT * FROM clonepool';
 
-        if (state) { query += ' WHERE state = ?'; params.push(state); }
+        if (state) { conditions.push('state = ?'); params.push(state); }
+        if (sensitive !== null) { conditions.push('sensitive = ?'); params.push(sensitive === 'true' || sensitive === '1' ? 1 : 0); }
+        if (conditions.length) { query += ' WHERE ' + conditions.join(' AND '); }
         query += ' ORDER BY intaked_at DESC LIMIT ?';
         params.push(limit);
 
@@ -678,22 +760,92 @@ export default {
         return ok({ clonepool: result.results, count: result.results.length, filter: state || 'all' });
       }
 
+      // PUT /clonepool/:id — upload the CURRENT bytes for a hex_id (overwritten
+      // on every re-intake — this is "latest," not history; see /versions/ above
+      // for the immutable per-content copy).
+      if (path.startsWith('/clonepool/') && req.method === 'PUT') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const hex_id = decodeURIComponent(path.slice(11));
+        if (!hex_id) return err('hex_id required', 400);
+        if (!env.CLONEPOOL_BUCKET) return err('R2 bucket not bound to this worker', 500);
+        const bytes = await req.arrayBuffer();
+        await env.CLONEPOOL_BUCKET.put(hex_id, bytes);
+        return ok({ ok: true, hex_id, bytes: bytes.byteLength });
+      }
+
+      // GET /clonepool/:id — bytes by default (R2), ?meta=true forces the D1
+      // row (hash baseline, qr_valid, etc.) — needed by the validate flow and
+      // by the glossary's "show me the code" lookup (glossary.hex ==
+      // clonepool.hex_id, so this same route serves glossary code content).
       if (path.startsWith('/clonepool/') && req.method === 'GET') {
         const id = decodeURIComponent(path.slice(11));
+        const wantsMeta = url.searchParams.get('meta') === 'true';
+        if (env.CLONEPOOL_BUCKET && !wantsMeta) {
+          const obj = await env.CLONEPOOL_BUCKET.get(id);
+          if (obj) {
+            return new Response(obj.body, { status: 200, headers: { 'Content-Type': 'application/octet-stream' } });
+          }
+        }
         const row = await db
           .prepare('SELECT * FROM clonepool WHERE hex_id = ? OR name = ?')
           .bind(id, id).first();
         return row ? ok(row) : err('not found', 404);
       }
-      // DELETE /clonepool/:id — remove entry by hex_id or name (auth required)
+      // DELETE /clonepool/:id — remove catalog metadata and R2 bytes (auth required)
       if (path.startsWith('/clonepool/') && req.method === 'DELETE') {
         if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const id = decodeURIComponent(path.slice(11));
         if (!id) return err('id required', 400);
         const existing = await db.prepare('SELECT id FROM clonepool WHERE hex_id = ? OR name = ?').bind(id, id).first();
         if (!existing) return err('not found', 404);
+        if (env.CLONEPOOL_BUCKET) await env.CLONEPOOL_BUCKET.delete(id);
         await db.prepare('DELETE FROM clonepool WHERE hex_id = ? OR name = ?').bind(id, id).run();
         return ok({ ok: true, deleted: id });
+      }
+
+      // POST /clonepool/:hex/validate — integrity check at point of use. See
+      // intake.sh's verify_clonepool_copy(): it hashes what it actually
+      // received client-side (Workers' Web Crypto has neither SHA3 nor
+      // BLAKE2b) and reports the result here. A match flips qr_valid on and
+      // stamps verified_at; a mismatch flips it off.
+      if (path.startsWith('/clonepool/') && path.endsWith('/validate') && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const hex_id = decodeURIComponent(path.slice(11, -'/validate'.length));
+        if (!hex_id) return err('hex_id required', 400);
+        const body = await req.json();
+        const row = await db.prepare('SELECT hash_sha3, hash_blake2 FROM clonepool WHERE hex_id = ?').bind(hex_id).first();
+        if (!row) return err('not found', 404);
+
+        const hasBaseline = !!(row.hash_sha3 || row.hash_blake2);
+        const sha3Match = !row.hash_sha3 || row.hash_sha3 === body.hash_sha3;
+        const blake2Match = !row.hash_blake2 || row.hash_blake2 === body.hash_blake2;
+        const valid = hasBaseline && sha3Match && blake2Match;
+
+        await db.prepare(
+          'UPDATE clonepool SET qr_valid = ?, verified_at = CURRENT_TIMESTAMP WHERE hex_id = ?'
+        ).bind(valid ? 1 : 0, hex_id).run();
+
+        return ok({ ok: true, hex_id, valid, has_baseline: hasBaseline });
+      }
+
+      // PATCH /clonepool/:hex/tier — lightweight tier move for rotation.
+      // T1=primary/newest, T4=oldest before eviction — see intake.sh's
+      // rotate_clonepool_tiers(). body.state lets eviction flip state to
+      // 'black' in the same call instead of a second round trip.
+      if (path.startsWith('/clonepool/') && path.endsWith('/tier') && req.method === 'PATCH') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const hex_id = decodeURIComponent(path.slice(11, -'/tier'.length));
+        if (!hex_id) return err('hex_id required', 400);
+        const body = await req.json();
+        if (!body.tier) return err('tier required', 400);
+
+        await db.prepare(`
+          UPDATE clonepool SET tier = ?, pool_path = COALESCE(?, pool_path),
+            state = COALESCE(?, state), updated_at = CURRENT_TIMESTAMP
+          WHERE hex_id = ?
+        `).bind(body.tier, body.pool_path || null, body.state || null, hex_id).run();
+
+        return ok({ ok: true, hex_id, tier: body.tier });
       }
 
 
@@ -730,7 +882,14 @@ export default {
         const cat = url.searchParams.get('category');
         const params = [];
         const conditions = [];
-        let query = 'SELECT * FROM glossary g';
+        // tier/qr_valid live on clonepool (glossary.hex == clonepool.hex_id),
+        // joined in so a caller gets location/integrity status with the entry
+        // in one round trip — and, via GET /clonepool/:hex (bytes by default),
+        // the same hex is how you pull the actual code/content for an entry.
+        let query = `SELECT g.*, c.name AS category, cp.tier AS tier, cp.qr_valid AS qr_valid
+                      FROM glossary g
+                      LEFT JOIN categories c ON c.hex = g.category_hex
+                      LEFT JOIN clonepool cp ON cp.hex_id = g.hex`;
 
         if (search) { conditions.push('g.name LIKE ?'); params.push(`%${search}%`); }
         if (cat) { conditions.push('c.name = ?'); params.push(cat); }
@@ -772,6 +931,22 @@ export default {
         ).run();
 
         return ok({ ok: true, hex: body.hex, name: body.name });
+      }
+
+      // GET /glossary/:id/code — the actual file bytes behind a glossary entry.
+      // glossary.hex == clonepool.hex_id (see the JOIN in GET /glossary above),
+      // so this just resolves the entry and re-serves R2 bytes the same way
+      // GET /clonepool/:id does. Explicit endpoint so a glossary UI never has
+      // to know that cross-reference exists — it just asks for the code.
+      if (path.endsWith('/code') && path.startsWith('/glossary/') && req.method === 'GET') {
+        const id = decodeURIComponent(path.slice(10, -'/code'.length));
+        if (!id) return err('id required', 400);
+        const entry = await db.prepare('SELECT hex, name FROM glossary WHERE hex = ? OR name = ?').bind(id, id).first();
+        if (!entry) return err('glossary entry not found', 404);
+        if (!env.CLONEPOOL_BUCKET) return err('R2 bucket not bound to this worker', 500);
+        const obj = await env.CLONEPOOL_BUCKET.get(entry.hex);
+        if (!obj) return err(`no stored code for "${entry.name}" (hex ${entry.hex}) — not uploaded to R2 or not intaked yet`, 404);
+        return new Response(obj.body, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
       }
 
       if (path.startsWith('/glossary/') && req.method === 'GET') {
@@ -865,12 +1040,54 @@ export default {
         const params = [];
         let query = 'SELECT * FROM versions';
 
-        if (pkg) { query += ' WHERE package_name = ?'; params.push(pkg); }
+        if (pkg) { query += ' WHERE package = ?'; params.push(pkg); }
         query += ' ORDER BY created_at DESC LIMIT ?';
         params.push(limit);
 
         const result = await db.prepare(query).bind(...params).all();
         return ok({ versions: result.results, count: result.results.length });
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+      // DEPS — package dependency edges, reported by translator.sh's new
+      // `deps` verb via intake.sh's intake_from_backend(). Canonical table is
+      // `deps` (package, depends_on) — name-keyed like clonepool/versions/
+      // custody, not the integer-package_id `dependencies` table, which is
+      // an older unreconciled design and stays unused.
+      // ══════════════════════════════════════════════════════════════════════
+
+      if (path === '/deps' && req.method === 'GET') {
+        const pkg = url.searchParams.get('package');
+        const reverse = url.searchParams.get('reverse'); // ?reverse=true: what depends ON this package
+        const params = [];
+        let query = 'SELECT * FROM deps';
+        if (pkg && reverse === 'true') { query += ' WHERE depends_on = ?'; params.push(pkg); }
+        else if (pkg) { query += ' WHERE package = ?'; params.push(pkg); }
+        const result = await db.prepare(query).bind(...params).all();
+        return ok({ deps: result.results, count: result.results.length });
+      }
+
+      // POST /deps — record one dependency edge (idempotent: same
+      // package+depends_on pair just updates version_req/optional).
+      if (path === '/deps' && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const body = await req.json();
+        if (!body.package || !body.depends_on) return err('package and depends_on required');
+
+        await db.prepare(`
+          INSERT INTO deps (package, depends_on, version_req, optional)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(package, depends_on) DO UPDATE SET
+            version_req = excluded.version_req,
+            optional = excluded.optional
+        `).bind(
+          body.package,
+          body.depends_on,
+          body.version_req || null,
+          body.optional ? 1 : 0,
+        ).run();
+
+        return ok({ ok: true, package: body.package, depends_on: body.depends_on });
       }
 
       // ══════════════════════════════════════════════════════════════════════

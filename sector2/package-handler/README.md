@@ -3,6 +3,29 @@
 **License:** GPL-3.0
 **Part of:** Phoenix DevOps OS
 
+> **Standalone-readiness (as of 2026-09-20):** this is already a real `git subtree`
+> of the standalone `Phoenix-Package_handler` GitHub repo (not just a copy —
+> `git subtree push` works today), and none of its core logic hard-depends on
+> the rest of Phoenix. It is NOT yet a one-command deploy elsewhere. To get there:
+> 1. **Write a full `schema.sql`.** Only `peer-review/schema.sql` exists today
+>    (just the review-voting tables). The other ~40 tables that make this
+>    system work — `clonepool`, `custody`, `glossary`, `versions`, `deps`,
+>    `mirrors`, `manifests`, etc. — only exist as whatever's live on
+>    `phoenix_dev_db` right now, never captured as migrations. Without this,
+>    standing up a second independent instance means manually reverse-engineering
+>    the schema from a live database.
+> 2. **Decide what belongs in that schema.** `phoenix_dev_db` is shared across
+>    more than just this system — exclude tables that belong to other Phoenix
+>    apps sharing the same database (e.g. `office_authors`/`office_documents`/
+>    `office_notifications` belong to the separate Office app, not here).
+> 3. **Know the one soft coupling:** `intake.sh`'s dependency-tracking feature
+>    (added 2026-09-20) calls `sector3/translator/translator.sh` by relative
+>    path, which sits outside this subtree. It degrades gracefully if that path
+>    doesn't exist (dependency-edge tracking just silently no-ops), so it won't
+>    break a standalone deploy — but it's worth knowing about before showcasing.
+>
+> None of this is urgent — parked until it's actually needed.
+
 ---
 
 ## What This Is
@@ -73,6 +96,8 @@ filename heuristic caught (`*auth*`, `*secret*`, `*password*`, `*credential*`,
 whether it's active. Set automatically by intake.sh when a matching file is
 intaked and the operator confirms; not inferred by the worker.
 | GET | /versions | — | Version history. Filter by `?package=`. Paginate with `?limit=` |
+| GET | /deps | — | Dependency edges. Filter by `?package=`, or `?package=&reverse=true` for reverse lookup (what depends on this) |
+| POST | /deps | ✓ | Record a dependency edge (package, depends_on, version_req, optional) — reported by `intake_from_backend()` via `translator.sh`'s `deps` verb |
 | GET | /search | — | Cross-search clonepool + glossary + packages. Requires `?q=` |
 
 **Auth:** All write endpoints (POST, PUT, DELETE) require `Authorization: Bearer <PHOENIX_AUTH>` header.

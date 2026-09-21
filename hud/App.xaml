@@ -1,0 +1,61 @@
+﻿<Application x:Class="Hud.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Hud"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <!-- Same palette as dashboard/styles.css :root tokens — the HUD is a
+             native rewrite, not a reuse of that CSS, but it should read as
+             unmistakably the same system. -->
+        <SolidColorBrush x:Key="PrimaryGreen" Color="#00FF88"/>
+        <SolidColorBrush x:Key="DarkGreen" Color="#00CC66"/>
+        <SolidColorBrush x:Key="HoloCyan" Color="#3DE8FF"/>
+        <SolidColorBrush x:Key="PhoenixGold" Color="#FFCC33"/>
+        <SolidColorBrush x:Key="PhoenixOrange" Color="#FF6600"/>
+        <SolidColorBrush x:Key="PhoenixEmber" Color="#FF3300"/>
+        <SolidColorBrush x:Key="TextDim" Color="#4D7C5E"/>
+        <SolidColorBrush x:Key="PanelFill" Color="#0C0E12"/>
+
+        <Style x:Key="HudPanel" TargetType="Border">
+            <Setter Property="Background">
+                <Setter.Value>
+                    <SolidColorBrush Color="#0C0E12" Opacity="0.28"/>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="BorderBrush" Value="{StaticResource PrimaryGreen}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="#00FF88" BlurRadius="18" ShadowDepth="0" Opacity="0.35"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="HudButton" TargetType="Button">
+            <Setter Property="Background">
+                <Setter.Value>
+                    <SolidColorBrush Color="#0C0E12" Opacity="0.4"/>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Foreground" Value="{StaticResource HoloCyan}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource HoloCyan}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Application.Resources>
+</Application>

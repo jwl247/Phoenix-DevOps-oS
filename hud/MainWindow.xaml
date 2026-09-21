@@ -1,0 +1,81 @@
+<Window x:Class="Hud.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Hud"
+        mc:Ignorable="d"
+        Title="Phoenix HUD — H.L.K-10"
+        Width="1440" Height="900"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ResizeMode="CanResizeWithGrip"
+        FontFamily="Consolas">
+
+    <Grid Margin="16">
+
+        <!-- Top status strip — draggable, doubles as the window's title bar -->
+        <Border Style="{StaticResource HudPanel}" Height="52" VerticalAlignment="Top"
+                MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid Margin="16,0">
+                <TextBlock Text="PHOENIX HUD — H.L.K-10" Foreground="White" FontWeight="Bold"
+                           FontSize="16" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                <TextBlock x:Name="ProviderLabel" Text="provider: —" Foreground="{StaticResource TextDim}"
+                           FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,90,0"/>
+                <Button Content="✕" Width="28" Height="28" HorizontalAlignment="Right"
+                        Style="{StaticResource HudButton}" Click="Close_Click"/>
+            </Grid>
+        </Border>
+
+        <!-- Live Monitor — continuous desktop capture, top-right corner, edge-anchored -->
+        <Border Style="{StaticResource HudPanel}" Width="340" Height="200"
+                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,64,0,0">
+            <Grid>
+                <TextBlock Text="LIVE MONITOR" Foreground="{StaticResource HoloCyan}" FontSize="11"
+                           FontWeight="Bold" Margin="10,8,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                <Image x:Name="LiveMonitorImage" Margin="8,28,8,8" Stretch="Uniform"/>
+            </Grid>
+        </Border>
+
+        <!-- AI Chat — H.L.K-10's comms panel, bottom-right, edge-anchored -->
+        <Border Style="{StaticResource HudPanel}" Width="340" HorizontalAlignment="Right"
+                VerticalAlignment="Bottom" Margin="0,0,0,0" Height="440">
+            <Grid Margin="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="H.L.K-10" Foreground="{StaticResource HoloCyan}"
+                           FontSize="13" FontWeight="Bold" Margin="0,0,0,8"/>
+
+                <ScrollViewer Grid.Row="1" x:Name="ChatScroll" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="ChatLog">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" TextWrapping="Wrap" Foreground="#D8FFE9"
+                                           FontSize="12" Margin="0,0,0,8"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <Grid Grid.Row="2" Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="ChatInput" Grid.Column="0" Background="#0A0D10" Foreground="White"
+                             BorderBrush="{StaticResource HoloCyan}" BorderThickness="1" Padding="6"
+                             KeyDown="ChatInput_KeyDown"/>
+                    <Button Grid.Column="1" Content="SEND" Style="{StaticResource HudButton}"
+                            Margin="6,0,0,0" Click="Send_Click"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+    </Grid>
+</Window>

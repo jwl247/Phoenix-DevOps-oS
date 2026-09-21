@@ -4,9 +4,10 @@
   // Deploy: wrangler deploy
   // Tail:   wrangler tail
   // Secret: do NOT run `wrangler secret put PHOENIX_AUTH` here by hand — it
-  //         must match phoenix-clonepool-r2's secret AND the local registry
-  //         value. Use ../rotate-phoenix-auth.sh, which sets and verifies
-  //         all three together.
+  //         must match the local registry value too. Use
+  //         ../rotate-phoenix-auth.sh, which sets and verifies both together.
+  //         (phoenix-clonepool-r2 no longer needs to be kept in sync — retired
+  //         2026-09-21, see sector2/package-handler/r2-worker/.)
 
   "name": "packages-worker",
   "main": "index.js",
@@ -19,6 +20,17 @@
       "binding":       "PHOENIX_DB",
       "database_name": "phoenix_dev_db",
       "database_id":   "27958687-4349-47ed-8b6a-dbc4ab29730f"
+    }
+  ],
+
+  // ── R2 Binding ─────────────────────────────────────────────────────────────
+  // CLONEPOOL_BUCKET → phoenix-clonepool (actual file bytes; D1 clonepool table
+  // holds metadata/hashes only — this is what PUT/GET/DELETE /clonepool/:hex
+  // and the /versions/:hash sub-routes read and write)
+  "r2_buckets": [
+    {
+      "binding":     "CLONEPOOL_BUCKET",
+      "bucket_name": "phoenix-clonepool"
     }
   ]
 
