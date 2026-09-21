@@ -6,7 +6,9 @@
         xmlns:local="clr-namespace:Hud"
         mc:Ignorable="d"
         Title="Phoenix HUD — H.L.K-10"
-        Width="1440" Height="900"
+        Left="0" Top="0"
+        Width="{x:Static SystemParameters.PrimaryScreenWidth}"
+        Height="{x:Static SystemParameters.PrimaryScreenHeight}"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
@@ -28,6 +30,16 @@
                         Style="{StaticResource HudButton}" Click="Close_Click"/>
             </Grid>
         </Border>
+
+        <!-- CLAUDE CLI dock anchor — invisible layout placeholder only. The real
+             terminal pane is a separate, non-transparent top-level window
+             (ClaudeCliWindow) kept synced to this rectangle's screen bounds.
+             WPF cannot host a native ConPTY-backed control inside a window
+             with AllowsTransparency="True" (it never renders — see
+             MainWindow.xaml.cs / ClaudeCliWindow.xaml.cs for the full note),
+             so this anchor exists purely to tell that window where to sit. -->
+        <Border x:Name="ClaudeCliDockAnchor" HorizontalAlignment="Stretch" VerticalAlignment="Top"
+                Margin="0,64,356,0" Background="Transparent"/>
 
         <!-- Live Monitor — continuous desktop capture, top-right corner, edge-anchored -->
         <Border Style="{StaticResource HudPanel}" Width="340" Height="200"

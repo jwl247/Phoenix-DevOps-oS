@@ -1,0 +1,44 @@
+<Window x:Class="Hud.ClaudeCliWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:term="clr-namespace:EasyWindowsTerminalControl;assembly=EasyWindowsTerminalControl"
+        Title="Phoenix HUD — CLAUDE CLI"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Background="#0C0E12"
+        FontFamily="Consolas">
+    <!--
+        Deliberately NOT AllowsTransparency="True". EasyTerminalControl hosts
+        a real native ConPTY-backed HWND (the actual Windows Terminal render
+        backend) — WPF's HwndHost never renders inside a layered
+        (AllowsTransparency) window, full stop, so this pane has to be its
+        own ordinary opaque top-level window instead of living inside the
+        main HUD overlay. MainWindow.xaml.cs keeps this window's position and
+        size synced to an invisible anchor rectangle in the main window so it
+        reads as one seamless HUD even though it's technically two windows.
+    -->
+    <Border BorderBrush="{StaticResource PrimaryGreen}" BorderThickness="1" CornerRadius="6">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="10,6" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <TextBlock Text="CLAUDE CLI" Foreground="{StaticResource HoloCyan}"
+                           FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+                <TextBlock x:Name="StatusLabel" Text="starting…" Foreground="{StaticResource TextDim}"
+                           FontSize="10" HorizontalAlignment="Right" Margin="0,0,36,0" VerticalAlignment="Center"/>
+                <Button x:Name="RestartButton" Content="⟳" Width="22" Height="22"
+                        HorizontalAlignment="Right" Style="{StaticResource HudButton}"
+                        Click="Restart_Click" ToolTip="Restart session"/>
+            </Grid>
+
+            <Border Grid.Row="1" Margin="1,0,1,1" Background="Black">
+                <term:EasyTerminalControl x:Name="Term"/>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
