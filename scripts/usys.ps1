@@ -685,6 +685,55 @@ function Invoke-UsysClone {
 }
 
 # =============================================================================
+# Invoke-UsysIntakeFile — shared single-file intake via the CANONICAL pipeline
+# (sector2/package-handler/intake.sh: real R2 upload, integrity baseline, QR,
+# sensitive-file flagging). Extracted from Invoke-UsysClone's own logic so
+# every caller that just needs "get this one file into the pool" — distro
+# intake-qemu, usys download, the watch-downloads prompt path — goes through
+# the same real pipeline instead of the deprecated phoenix-core/tools/
+# intake.py stub (no R2, no integrity baseline, and as of the 2026-09-21
+# Cloudflare Access change, its D1 sync silently reports fake success — see
+# audit doc T2 #7). Non-interactive: no prompts, just OK/fail. The background
+# watcher job (Start-UsysWatcher) can't call this directly — Start-Job runs
+# in a separate process with no access to functions defined here — so it
+# resolves the same bash/intake.sh paths itself and shells out the same way;
+# keep that call site's logic in sync with this one if either changes.
+# =============================================================================
+function Invoke-UsysIntakeFile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [string]$Path
+    )
+
+    $resolved = Resolve-Path -Path $Path -ErrorAction SilentlyContinue
+    if (-not $resolved) {
+        Write-UsysErr "path not found — '$Path'"
+        return $false
+    }
+    $fullPath = $resolved.Path
+
+    $bash   = Get-UsysGitBash
+    $intake = Get-UsysCloneIntakeSh
+
+    if (-not $bash)   { Write-UsysErr 'Git Bash not found. Install Git for Windows or set PHOENIX_BASH.'; return $false }
+    if (-not $intake) { Write-UsysErr 'intake.sh not found. Set PHOENIX_INTAKE or check sector2/package-handler.'; return $false }
+
+    if (-not $env:PHOENIX_AUTH)       { Write-UsysWarn 'PHOENIX_AUTH not set — D1 sync skipped' }
+    if (-not $env:PHOENIX_WORKER_URL) { Write-UsysWarn 'PHOENIX_WORKER_URL not set — D1 sync skipped' }
+    if (-not $env:CLONEPOOL_DIR)      { $env:CLONEPOOL_DIR = Get-UsysClonepoolDir }
+
+    $bashFile   = ConvertTo-GitBashPath $fullPath
+    $bashIntake = ConvertTo-GitBashPath $intake
+    $env:CLONEPOOL_DIR = ConvertTo-GitBashPath $env:CLONEPOOL_DIR
+
+    & $bash $bashIntake $bashFile
+    if ($LASTEXITCODE -eq 0) { return $true }
+    Write-UsysErr "intake exited $LASTEXITCODE for '$Path'"
+    return $false
+}
+
+# =============================================================================
 # COMMAND: search — grep clonepool + optional catalog sqlite
 # =============================================================================
 function Invoke-UsysSearch {
@@ -2307,9 +2356,7 @@ function global:usys {
                     $qemu = Get-UsysQemu
                     if (-not $qemu) { Write-UsysErr 'QEMU binary not found. Run: usys distro fetch-qemu'; return }
                     Write-UsysInfo "Intaking QEMU binary into Phoenix clone pool..."
-                    $pythonCmd = if (Get-Command python3 -ErrorAction SilentlyContinue) { 'python3' } else { 'python' }
-                    $intakePy = Join-Path (Get-UsysRepoRoot) 'phoenix-core\tools\intake.py'
-                    & $pythonCmd $intakePy $qemu
+                    if (Invoke-UsysIntakeFile -Path $qemu) { Write-UsysOk "Intaked: $qemu" }
                     Write-Host ''
                 }
                 default {
@@ -2406,10 +2453,7 @@ function global:Invoke-UsysDownload {
 
     if (-not $NoIntake) {
         Write-UsysInfo "Auto-intaking into Phoenix clonepool..."
-        $py = if (Get-Command python3 -ErrorAction SilentlyContinue) { 'python3' } else { 'python' }
-        $intakePy = Join-Path (Get-UsysRepoRoot) 'phoenix-core\tools\intake.py'
-        & $py $intakePy $OutFile
-        Write-UsysOk "Intaked: $OutFile"
+        if (Invoke-UsysIntakeFile -Path $OutFile) { Write-UsysOk "Intaked: $OutFile" }
     }
 }
 Set-Alias -Name usys-download -Value Invoke-UsysDownload -Scope Global -Force -ErrorAction SilentlyContinue
@@ -2438,12 +2482,26 @@ function Start-UsysWatcher {
         return
     }
 
-    $repoRoot  = Get-UsysRepoRoot
-    $intakePy  = Join-Path $repoRoot 'phoenix-core\tools\intake.py'
-    $auto      = $AutoIntake.IsPresent
+    $auto = $AutoIntake.IsPresent
+
+    # Resolve the CANONICAL intake pipeline (sector2/package-handler/intake.sh)
+    # here in the parent, where Get-UsysGitBash/Get-UsysCloneIntakeSh/
+    # ConvertTo-GitBashPath already exist — Start-Job's scriptblock runs in a
+    # separate process with none of this script's functions loaded, so the
+    # resolved paths are handed in as arguments instead. Was calling the
+    # deprecated phoenix-core/tools/intake.py stub (no R2, no integrity
+    # baseline, and its D1 sync now silently reports fake success under
+    # Cloudflare Access — see Invoke-UsysIntakeFile's comment / audit T2 #7).
+    $bash       = Get-UsysGitBash
+    $intakeSh   = Get-UsysCloneIntakeSh
+    if (-not $bash)     { Write-UsysErr 'Git Bash not found. Install Git for Windows or set PHOENIX_BASH.'; return }
+    if (-not $intakeSh) { Write-UsysErr 'intake.sh not found. Set PHOENIX_INTAKE or check sector2/package-handler.'; return }
+    if (-not $env:CLONEPOOL_DIR) { $env:CLONEPOOL_DIR = Get-UsysClonepoolDir }
+    $bashIntake = ConvertTo-GitBashPath $intakeSh
+    $bashPool   = ConvertTo-GitBashPath $env:CLONEPOOL_DIR
 
     $script:UsysWatcherJob = Start-Job -Name 'PhoenixWatcher' -ScriptBlock {
-        param($watchPath, $intakePy, $auto)
+        param($watchPath, $bash, $bashIntake, $bashPool, $auto)
 
         $watcher                     = New-Object System.IO.FileSystemWatcher
         $watcher.Path                = $watchPath
@@ -2461,8 +2519,10 @@ function Start-UsysWatcher {
             if (-not (Test-Path $file)) { return }
 
             if ($auto) {
-                $py = if (Get-Command python3 -ErrorAction SilentlyContinue) { 'python3' } else { 'python' }
-                & $py $intakePy $file
+                $env:CLONEPOOL_DIR = $bashPool
+                $p = $file.Replace([char]92, [char]47)
+                if ($p -match '^([A-Za-z]):(.*)') { $p = "/$($Matches[1].ToLower())$($Matches[2])" }
+                & $bash $bashIntake $p
             } else {
                 # Toast-style prompt via BurntToast if available, else console
                 $msg = "Phoenix: Intake '$([System.IO.Path]::GetFileName($file))'?"
@@ -2483,7 +2543,7 @@ function Start-UsysWatcher {
 
         # Keep alive — check for stop signal every second
         while ($true) { Start-Sleep -Seconds 1 }
-    } -ArgumentList $Path, $intakePy, $auto
+    } -ArgumentList $Path, $bash, $bashIntake, $bashPool, $auto
 
     # Poll for startup confirmation (up to 5s)
     $deadline = (Get-Date).AddSeconds(5)
@@ -2523,9 +2583,6 @@ function Get-UsysWatcherPending {
     }
     if (-not $script:UsysWatcherJob) { Write-UsysWarn 'Watcher not running.'; return }
 
-    $py       = if (Get-Command python3 -ErrorAction SilentlyContinue) { 'python3' } else { 'python' }
-    $intakePy = Join-Path (Get-UsysRepoRoot) 'phoenix-core\tools\intake.py'
-
     $lines = Receive-Job $script:UsysWatcherJob -Keep 2>$null | Where-Object { $_ -match '^INTAKE_PROMPT:' }
     if (-not $lines) { Write-UsysInfo 'No pending files.'; return }
 
@@ -2535,8 +2592,7 @@ function Get-UsysWatcherPending {
         Write-Host "  New file: $file" -ForegroundColor Yellow
         $choice = Read-Host '  Intake into Phoenix? [Y/n]'
         if ($choice -eq '' -or $choice -match '^[Yy]') {
-            & $py $intakePy $file
-            Write-UsysOk "Intaked: $([System.IO.Path]::GetFileName($file))"
+            if (Invoke-UsysIntakeFile -Path $file) { Write-UsysOk "Intaked: $([System.IO.Path]::GetFileName($file))" }
         } else {
             Write-UsysInfo "Skipped: $([System.IO.Path]::GetFileName($file))"
         }
