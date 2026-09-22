@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Hud"
+        xmlns:controls="clr-namespace:Hud.Controls"
         mc:Ignorable="d"
         Title="Phoenix HUD — H.L.K-10"
         Left="0" Top="0"
@@ -24,8 +25,12 @@
             <Grid Margin="16,0">
                 <TextBlock Text="PHOENIX HUD — H.L.K-10" Foreground="White" FontWeight="Bold"
                            FontSize="16" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                <controls:KnightRiderBar x:Name="VoiceIndicator" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 <TextBlock x:Name="ProviderLabel" Text="provider: —" Foreground="{StaticResource TextDim}"
-                           FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,90,0"/>
+                           FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,126,0"/>
+                <Button x:Name="CliToggleButton" Content="CLI" Width="40" Height="28" HorizontalAlignment="Right"
+                        Margin="0,0,36,0" Style="{StaticResource HudButton}" Click="ToggleCli_Click"
+                        ToolTip="Show/hide the CLAUDE CLI pane"/>
                 <Button Content="✕" Width="28" Height="28" HorizontalAlignment="Right"
                         Style="{StaticResource HudButton}" Click="Close_Click"/>
             </Grid>
@@ -64,16 +69,25 @@
                 <TextBlock Grid.Row="0" Text="H.L.K-10" Foreground="{StaticResource HoloCyan}"
                            FontSize="13" FontWeight="Bold" Margin="0,0,0,8"/>
 
-                <ScrollViewer Grid.Row="1" x:Name="ChatScroll" VerticalScrollBarVisibility="Auto">
-                    <ItemsControl x:Name="ChatLog">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding}" TextWrapping="Wrap" Foreground="#D8FFE9"
-                                           FontSize="12" Margin="0,0,0,8"/>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+                <!-- The rest of the HUD is deliberately near-transparent (HudPanel
+                     style, 28% opacity) so the desktop shows through — but that
+                     means text contrast depends on whatever's behind the HUD at
+                     the moment (white Explorer window, tan wallpaper, etc.), so
+                     no single text color reads reliably. Chat readability is the
+                     one place that tradeoff isn't worth it (Jerry, 2026-09-22:
+                     "the text needs to be bright yellow... i cant read it very
+                     well") — give just this panel a solid-enough backing instead. -->
+                <!-- A TextBlock/ItemsControl (the original approach) can't be
+                     selected or copied at all — a real WPF limitation, not a
+                     bug (Jerry, 2026-09-22: "i cant copy and paste from that
+                     box"). A read-only TextBox gives real click-drag-select +
+                     Ctrl+C, same as any normal text log. -->
+                <Border Grid.Row="1" Background="#0C0E12" Opacity="0.9" CornerRadius="4" Padding="6">
+                    <TextBox x:Name="ChatLog" IsReadOnly="True" IsReadOnlyCaretVisible="True"
+                             TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
+                             Background="Transparent" Foreground="#FFFF00" BorderThickness="0"
+                             FontSize="12" Cursor="IBeam"/>
+                </Border>
 
                 <Grid Grid.Row="2" Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>

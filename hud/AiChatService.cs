@@ -91,7 +91,17 @@ public class AiChatService
         Config = cfg;
     }
 
-    public async Task<AiChatResult> SendAsync(string message, Action<string>? onChunk = null)
+    /// <param name="imagePath">
+    /// Current Live Monitor frame, saved to disk by MainWindow just before this
+    /// call — ties the HUD's "see" half (ScreenCaptureService) to its "act" half
+    /// (this chat/voice loop), which previously sat side by side with no wiring
+    /// between them (Jerry, 2026-09-22: "they have to tie together"). The Claude
+    /// API path attaches it as a real vision content block; the CLI paths point
+    /// Claude at the file path (Read is never in the disallowed-tools list, so
+    /// even the restricted CLI can open it). Ollama's configured model
+    /// (llama3.2, text-only) gets no image — silently skipped there.
+    /// </param>
+    public async Task<AiChatResult> SendAsync(string message, string? imagePath = null, Action<string>? onChunk = null)
     {
         _history.Add(("user", message));
         var provider = (Config.Provider ?? "helpdesk").ToLowerInvariant();
@@ -118,7 +128,7 @@ public class AiChatService
         {
             try
             {
-                var reply = await ChatClaudeApiStreamAsync(systemPrompt, onChunk);
+                var reply = await ChatClaudeApiStreamAsync(systemPrompt, imagePath, onChunk);
                 _history.Add(("assistant", reply));
                 return new AiChatResult { Success = true, Provider = $"claude/{Config.Model ?? "claude-sonnet-5"}", Reply = reply };
             }
@@ -132,7 +142,7 @@ public class AiChatService
         {
             try
             {
-                var reply = await RunClaudeCliAsync(BuildFullPrompt(systemPrompt), fullTools: true, onChunk);
+                var reply = await RunClaudeCliAsync(BuildFullPrompt(systemPrompt, imagePath), fullTools: true, onChunk);
                 _history.Add(("assistant", reply));
                 return new AiChatResult { Success = true, Provider = "claude/subscription", Reply = reply };
             }
@@ -145,7 +155,7 @@ public class AiChatService
         // Ollama-failure fallback — restricted-tool Claude CLI, same safety net as main.js
         try
         {
-            var reply = await RunClaudeCliAsync(BuildFullPrompt(systemPrompt), fullTools: false, onChunk: null);
+            var reply = await RunClaudeCliAsync(BuildFullPrompt(systemPrompt, imagePath), fullTools: false, onChunk: null);
             _history.Add(("assistant", reply));
             return new AiChatResult { Success = true, Provider = "claude/subscription", Reply = reply };
         }
@@ -160,11 +170,14 @@ public class AiChatService
         }
     }
 
-    private string BuildFullPrompt(string systemPrompt)
+    private string BuildFullPrompt(string systemPrompt, string? imagePath)
     {
         var historyText = string.Join("\n", _history.SkipLast(1).Select(t => $"{(t.role == "user" ? "User" : "Assistant")}: {t.content}"));
         var last = _history.Last().content;
-        return $"{systemPrompt}\n\n{(historyText.Length > 0 ? historyText + "\n\n" : "")}User: {last}";
+        var imageNote = imagePath is not null && File.Exists(imagePath)
+            ? $"\n\n[Live Monitor screenshot of the current desktop is saved at: {imagePath} — Read it if it's relevant to answering.]"
+            : "";
+        return $"{systemPrompt}{imageNote}\n\n{(historyText.Length > 0 ? historyText + "\n\n" : "")}User: {last}";
     }
 
     private async Task<string> ChatOllamaAsync(string systemPrompt)
@@ -182,13 +195,37 @@ public class AiChatService
         return reply;
     }
 
-    private async Task<string> ChatClaudeApiStreamAsync(string systemPrompt, Action<string>? onChunk)
+    private async Task<string> ChatClaudeApiStreamAsync(string systemPrompt, string? imagePath, Action<string>? onChunk)
     {
         var apiKey = Config.Key ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
         if (string.IsNullOrEmpty(apiKey)) throw new Exception("No Anthropic API key");
         var model = Config.Model ?? "claude-sonnet-5";
 
-        var messages = _history.Select(t => (object)new { role = t.role, content = t.content }).ToList();
+        // Real vision, not a file-path hint — only the last (current) user
+        // turn gets the image, so history doesn't re-send stale screenshots.
+        var messages = new List<object>();
+        for (var i = 0; i < _history.Count; i++)
+        {
+            var t = _history[i];
+            var isCurrentUserTurn = i == _history.Count - 1 && t.role == "user";
+            if (isCurrentUserTurn && imagePath is not null && File.Exists(imagePath))
+            {
+                var b64 = Convert.ToBase64String(File.ReadAllBytes(imagePath));
+                messages.Add(new
+                {
+                    role = "user",
+                    content = new object[]
+                    {
+                        new { type = "image", source = new { type = "base64", media_type = "image/png", data = b64 } },
+                        new { type = "text", text = t.content }
+                    }
+                });
+            }
+            else
+            {
+                messages.Add(new { role = t.role, content = t.content });
+            }
+        }
         var payload = JsonSerializer.Serialize(new { model, max_tokens = 1024, system = systemPrompt, messages, stream = true });
 
         using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages");
@@ -229,10 +266,24 @@ public class AiChatService
         return full.ToString();
     }
 
+    // Same fix as ClaudeCliWindow.xaml.cs's ResolveClaudeCli() (2026-09-21) —
+    // this machine's real install is a native binary at ~/.local/bin/claude.exe,
+    // not the npm-global claude.cmd this used to assume. That mismatch silently
+    // broke the "helpdesk" provider's Ollama-down fallback (confirmed live
+    // 2026-09-22: Ollama not running -> falls through to this CLI path -> cmd.exe
+    // can't find claude.cmd -> voice/chat gets no reply at all).
     private static string FindClaudeCli()
     {
-        var npmGlobal = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm", "claude.cmd");
-        return File.Exists(npmGlobal) ? $"\"{npmGlobal}\"" : "claude.cmd";
+        string[] candidates =
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin", "claude.exe"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm", "claude.cmd"),
+        };
+        foreach (var c in candidates)
+        {
+            if (File.Exists(c)) return $"\"{c}\"";
+        }
+        return "claude.cmd";
     }
 
     private static Task<string> RunClaudeCliAsync(string prompt, bool fullTools, Action<string>? onChunk)
