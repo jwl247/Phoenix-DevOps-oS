@@ -1,0 +1,21 @@
+{
+  "name": "phoenix-office",
+  "version": "1.0.0",
+  "description": "Phoenix Office — tamper-evident work orders, invoices, and signed records. Standalone product, no Phoenix installation required.",
+  "main": "main.js",
+  "license": "GPL-3.0",
+  "author": "jwl247",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/test.js",
+    "build-win": "electron-builder --win",
+    "build-mac": "electron-builder --mac",
+    "build-linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "electron": "^28.3.3"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.9.1"
+  }
+}

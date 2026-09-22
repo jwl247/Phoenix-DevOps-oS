@@ -1,0 +1,15 @@
+{
+  "template": "work-order",
+  "label": "Work order",
+  "fields": [
+    "customer_name",
+    "job_site",
+    "date",
+    "description_of_work",
+    "materials",
+    "labor_hours",
+    "rate",
+    "total",
+    "authorized_by"
+  ]
+}

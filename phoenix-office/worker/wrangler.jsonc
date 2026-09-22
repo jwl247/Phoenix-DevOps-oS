@@ -1,0 +1,78 @@
+{
+  // phoenix-office-worker — Phoenix Office (standalone product)
+  // UnitedSys — United Systems | jwl247 | GPL-3.0
+  //
+  // This product's OWN worker, cloned from sector2/apps/office/notify-worker/
+  // wrangler.jsonc (2026-09-22). Different name, different D1 database,
+  // different R2 bucket, different auth secret — nothing shared with
+  // Phoenix's own deployed workers. Deploying this file never touches
+  // office-notify-worker, packages-worker, or phoenix_dev_db.
+  //
+  // First-time deploy (needs your own Cloudflare auth):
+  //   wrangler login
+  //   wrangler d1 create phoenix_office_db
+  //     -> paste the returned database_id below
+  //   wrangler d1 execute phoenix_office_db --file=schema.sql --remote
+  //   wrangler r2 bucket create phoenix-office-documents
+  //   wrangler secret put OFFICE_AUTH        (generate a fresh random token —
+  //                                           NOT Phoenix's PHOENIX_AUTH)
+  //   wrangler secret put RESEND_API_KEY     (resend.com, free tier)
+  //   wrangler deploy
+  //
+  // Secrets (wrangler secret put <NAME>):
+  //   OFFICE_AUTH     — bearer for every authenticated route. Generate fresh
+  //                     (e.g. `openssl rand -hex 32`) — do not reuse any
+  //                     Phoenix token.
+  //   RESEND_API_KEY  — real arbitrary-recipient send (resend.com, free tier
+  //                     100/day).
+  // Optional:
+  //   NOTIFY_FROM     — From: header (default "Phoenix Office
+  //                     <office@authenticcoder.com>"; the domain must be
+  //                     verified in whichever transport is active).
+
+  "name": "phoenix-office-worker",
+  "main": "index.js",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "vars": {
+    "WORKER_PUBLIC_URL": "https://phoenix-office-worker.phoenix-jwl.workers.dev"
+  },
+
+  // ── D1 ────────────────────────────────────────────────────────────────────
+  // Own database. Fill in database_id after `wrangler d1 create
+  // phoenix_office_db` — left blank on purpose so this file can't
+  // accidentally deploy against a real database id nobody's checked.
+  "d1_databases": [
+    {
+      "binding": "OFFICE_DB",
+      "database_name": "phoenix_office_db",
+      "database_id": "15dfc525-adee-4177-b007-2f89d4a0e275"
+    }
+  ],
+
+  // ── R2 ────────────────────────────────────────────────────────────────────
+  // Signed documents, keyed by the document's own content-identity hash
+  // (never a filename). No tiering, no eviction config here on purpose.
+  "r2_buckets": [
+    {
+      "binding": "OFFICE_DOCS",
+      "bucket_name": "phoenix-office-documents"
+    },
+    {
+      "binding": "OFFICE_RUNTIME",
+      "bucket_name": "phoenix-office-runtime"
+    }
+  ],
+
+  // ── Scheduled re-scan ─────────────────────────────────────────────────────
+  // Same shape as office-notify-worker: Cloudflare cron minimum is 1 minute.
+  "triggers": {
+    "crons": ["* * * * *"]
+  }
+
+  // ── Email Routing send binding (optional, verified-recipients only) ────────
+  // "send_email": [
+  //   { "name": "ISSUER_COPY", "destination_address": "you@yourdomain.com" }
+  // ]
+}

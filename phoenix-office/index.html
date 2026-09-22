@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phoenix Office</title>
+<style>
+  :root {
+    --bg:#0a0c10; --panel:#12161d; --panel-2:#171c25; --line:#232b38;
+    --ink:#e8edf4; --ink-dim:#9aa7b8; --accent:#4da3ff; --accent-dim:#2b6db0;
+    --ok:#43d19e; --warn:#ffb454; --bad:#ff5c6c; --lock:#6b7688;
+    --draft:#6b7688; --review:#ffb454; --signed:#43d19e;
+  }
+  * { box-sizing:border-box; }
+  html,body { height:100%; margin:0; }
+  body { background:var(--bg); color:var(--ink); overflow:hidden;
+    font:15px/1.5 -apple-system,"Segoe UI",system-ui,sans-serif; display:flex; flex-direction:column; }
+
+  header { display:flex; align-items:center; gap:14px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:var(--panel); flex:none; }
+  header .brand { font-weight:700; letter-spacing:.3px; }
+  header .brand small { color:var(--ink-dim); font-weight:400; margin-left:6px; }
+  header .spacer { flex:1; }
+  header .who { color:var(--ink-dim); font-size:13px; }
+  header .who b { color:var(--ink); font-weight:600; }
+  header .saved { color:var(--ok); font-size:12px; opacity:0; transition:opacity .3s; }
+  header .saved.show { opacity:.85; }
+
+  .badge { font-size:12px; font-weight:700; letter-spacing:.6px; padding:3px 9px;
+    border-radius:999px; border:1px solid var(--line); text-transform:uppercase; }
+  .badge.DRAFT { color:var(--draft); border-color:var(--draft); }
+  .badge.PENDING_REVIEW { color:var(--review); border-color:var(--review); }
+  .badge.SIGNED { color:var(--signed); border-color:var(--signed); }
+
+  button { font:inherit; font-size:13px; font-weight:600; color:var(--ink);
+    background:var(--panel-2); border:1px solid var(--line); border-radius:7px;
+    padding:7px 13px; cursor:pointer; }
+  button:hover:not(:disabled) { border-color:var(--accent-dim); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.primary { background:var(--accent-dim); border-color:var(--accent); }
+  button.danger { color:var(--bad); border-color:#5a2b30; }
+  select { font:inherit; font-size:13px; color:var(--ink); background:var(--panel-2);
+    border:1px solid var(--line); border-radius:7px; padding:6px 8px; }
+
+  main { flex:1; display:grid; grid-template-columns:1.35fr 1fr; overflow:hidden; }
+  .pane { overflow-y:auto; padding:18px 20px; }
+  .pane.left { border-right:1px solid var(--line); }
+  .pane.right { background:var(--panel); display:flex; flex-direction:column; gap:18px; }
+
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.7px; color:var(--ink-dim);
+    margin:0 0 12px; font-weight:700; }
+  .empty { color:var(--ink-dim); text-align:center; margin-top:16vh; }
+  .empty p { margin:6px 0 20px; }
+
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:13px; color:var(--ink-dim); margin-bottom:4px; }
+  .field .row { display:flex; gap:8px; align-items:center; }
+  .field input { flex:1; font:inherit; color:var(--ink); background:var(--panel-2);
+    border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
+  .field input:focus { outline:none; border-color:var(--accent); }
+  .field.filled input { background:transparent; border-style:dashed; color:var(--ink-dim); }
+  .field .lock { color:var(--lock); font-size:13px; white-space:nowrap; }
+
+  .section { margin:22px 0 8px; padding-top:16px; border-top:1px solid var(--line); }
+  .cp-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+  .cp-grid .field { margin-bottom:0; }
+  .muted { color:var(--ink-dim); font-size:12px; }
+
+  .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:20px; padding-top:16px;
+    border-top:1px solid var(--line); }
+
+  .qr { margin-top:18px; font:12px/1.6 ui-monospace,"Cascadia Code",monospace;
+    color:var(--ink-dim); word-break:break-all; }
+  .qr b { color:var(--ink); }
+  .sealed { margin-top:14px; font-size:13px; color:var(--ok); }
+
+  .banner { padding:10px 14px; border-radius:8px; margin-bottom:16px; font-size:14px; }
+  .banner.bad { background:#2a1418; border:1px solid #5a2b30; color:#ffb9c0; }
+  .banner.ok  { background:#10241d; border:1px solid #204a3c; color:#b6f0da; }
+
+  #copilot-out { white-space:pre-wrap; font-size:14px; color:var(--ink);
+    background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:14px; min-height:110px; }
+  .row-head { display:flex; align-items:center; gap:10px; }
+  .row-head .spacer { flex:1; }
+
+  .refs { flex:none; }
+  .ref-item { background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:10px 12px; margin-bottom:8px; }
+  .ref-item .name { font-weight:600; font-size:13px; }
+  .ref-item pre { margin:6px 0 0; font:11px/1.5 ui-monospace,monospace; color:var(--ink-dim);
+    max-height:120px; overflow:auto; white-space:pre-wrap; }
+  .ref-item .err { color:var(--warn); font-size:12px; }
+
+  /* modal */
+  .scrim { position:fixed; inset:0; background:#000a; display:none; align-items:center; justify-content:center; }
+  .scrim.show { display:flex; }
+  .modal { background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:22px; width:min(520px,92vw); }
+  .modal h3 { margin:0 0 14px; font-size:16px; }
+  .tpl-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+  .tpl { text-align:left; padding:12px 14px; }
+  .tpl.sel { border-color:var(--accent); background:var(--accent-dim); }
+  .tpl .n { font-weight:700; }
+  .tpl .f { font-size:11px; color:var(--ink-dim); margin-top:4px; }
+  .modal .cp-grid { margin-top:6px; }
+  .modal .field input { background:var(--panel-2); }
+  .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; }
+
+  .toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%);
+    background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:9px 16px; font-size:13px; box-shadow:0 8px 30px #0008; opacity:0;
+    transition:opacity .18s; pointer-events:none; }
+  .toast.show { opacity:1; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="brand">Phoenix Office<small id="doc-title"></small></span>
+  <span id="badge" class="badge DRAFT" hidden>DRAFT</span>
+  <span class="saved" id="saved">autosaved</span>
+  <span class="spacer"></span>
+  <span class="who" id="who">…</span>
+  <select id="recent" title="Recent documents"><option value="">Recent…</option></select>
+  <button id="btn-new" class="primary">New</button>
+  <button id="btn-open">Open…</button>
+  <select id="convert-format" title="Convert a file into this format">
+    <option value="">Convert a file…</option>
+  </select>
+</header>
+
+<main>
+  <section class="pane left" id="left">
+    <div class="empty" id="empty">
+      <p>Pick a template and start filling it in.<br>It saves itself — there is no Save button.</p>
+      <button class="primary" id="btn-new-2">New document</button>
+    </div>
+    <div id="doc-view" hidden></div>
+  </section>
+
+  <section class="pane right">
+    <div class="refs" id="refs-box">
+      <div class="row-head">
+        <h2 style="margin:0">Your workspace</h2>
+        <span class="spacer"></span>
+        <button id="btn-ref">Browse sealed documents</button>
+        <button id="btn-ref-clear" hidden>Clear</button>
+      </div>
+      <div id="refs"><span class="muted">Browse documents you've sealed before — pull one in to view or continue it. Delete any time; your workspace keeps the originals.</span></div>
+    </div>
+    <div style="flex:1; display:flex; flex-direction:column;">
+      <div class="row-head">
+        <h2 style="margin:0">Secretary</h2>
+        <span class="spacer"></span>
+        <button id="btn-copilot">Suggestions</button>
+      </div>
+      <div id="copilot-out" style="flex:1"><span class="muted">Start a document — your secretary's suggestions appear as you fill it in.</span></div>
+    </div>
+  </section>
+</main>
+
+<!-- Entry modal — process first, document second -->
+<div class="scrim" id="scrim">
+  <div class="modal">
+    <h3>What are you opening?</h3>
+    <div class="tpl-grid" id="app-grid"></div>
+
+    <div id="phoenix-steps" hidden>
+      <h2 style="margin:14px 0 8px">Choose a template</h2>
+      <div class="tpl-grid" id="tpl-grid"></div>
+      <div id="blank-fields" hidden>
+        <div class="field"><label>Field names (comma-separated)</label>
+          <div class="row"><input id="blank-input" placeholder="customer, description, total"></div></div>
+      </div>
+      <h2 style="margin:14px 0 6px">Counterparty contact <span class="muted">— who gets alerted if a signed copy is altered (optional, can skip)</span></h2>
+      <div class="cp-grid">
+        <div class="field"><label>phone</label><div class="row"><input id="cp-phone"></div></div>
+        <div class="field"><label>carrier</label><div class="row"><input id="cp-carrier" placeholder="verizon / att / …"></div></div>
+        <div class="field"><label>email</label><div class="row"><input id="cp-email"></div></div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <span class="muted" id="m-hint" style="margin-right:auto">Pick a process above to continue</span>
+      <button id="m-cancel">Cancel</button>
+      <button class="primary" id="m-create" hidden disabled>Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s,r=document) => r.querySelector(s);
+const api = window.office;
+let doc = null, me = null, filePath = null, copilotTimer = null;
+let templates = [], selTpl = null, bannerHtml = '';
+let apps = [];
+
+function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2200); }
+function flashSaved(){ const s=$('#saved'); s.classList.add('show'); clearTimeout(flashSaved._t);
+  flashSaved._t=setTimeout(()=>s.classList.remove('show'),1400); }
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function banner(kind,html){ bannerHtml=`<div class="banner ${kind}">${html}</div>`; render(); }
+
+async function boot(){
+  if (!api){ $('#empty').innerHTML='Open <b>Phoenix Office</b> from the Phoenix dashboard.'; return; }
+  const w = await api.invoke('office:whoami', {});
+  me = w.ok ? w : null;
+  $('#who').innerHTML = me
+    ? `signed in as <b>${me.author_id.slice(0,12)}…</b> <span>via ${esc(me.via)}</span>`
+    : 'identity unavailable';
+  const t = await api.invoke('office:templates', {});
+  templates = (t.ok && t.templates) || [];
+  const a = await api.invoke('office:apps', {});
+  apps = (a.ok && a.apps) || [];
+  await loadRecent();
+  const fmts = await api.invoke('office:convert-formats', {});
+  if (fmts.ok) {
+    const sel = $('#convert-format');
+    sel.innerHTML = '<option value="">Convert a file…</option>' +
+      fmts.formats.map(f => `<option value="${esc(f)}">→ .${esc(f)}</option>`).join('');
+  }
+}
+
+// ── general file conversion (any file -> whatever the next process needs) ──
+async function convertPickedFile(targetFormat){
+  toast('pick a file to convert…');
+  const off = api.on && api.on('office:export-progress', p => {
+    toast(p.total ? `Converting… ${Math.round(100*p.received/p.total)}%` : `Fetching LibreOffice… ${(p.received/1e6).toFixed(0)}MB`);
+  });
+  const r = await api.invoke('office:convert', { targetFormat });
+  if (off) off();
+  if (r.canceled) return;
+  if (!r.ok) return toast(r.error);
+  toast((r.downloaded ? 'LibreOffice fetched + ' : '') + 'converted: ' + r.path);
+}
+
+async function loadRecent(){
+  const r = await api.invoke('office:recent', {});
+  const sel = $('#recent');
+  sel.innerHTML = '<option value="">Recent…</option>' +
+    ((r.ok && r.items) || []).slice(0,12).map(i =>
+      `<option value="${esc(i.path)}">${esc(String(i.title).slice(0,40))} · ${i.state}</option>`).join('');
+}
+
+// ── entry modal — process first, document second ────────────────────────────
+// "Office should move processes, not docs" (Jerry, 2026-09-22): the first
+// question is WHICH PROCESS, not which template. Writer/Calc/Impress/Draw
+// hand straight off to the real LibreOffice app; "Phoenix" is the only
+// choice that leads into this product's own tamper-evident template picker.
+function openModal(){
+  selTpl = null;
+  $('#phoenix-steps').hidden = true;
+  $('#m-create').hidden = true; $('#m-create').disabled = true;
+  $('#m-hint').hidden = false; $('#m-hint').textContent = 'Pick a process above to continue';
+
+  const appCards = apps.map(a =>
+    `<button class="tpl" data-app="${esc(a.id)}"><div class="n">${esc(a.label)}</div>
+     <div class="f">${esc(a.kind)}</div></button>`).join('');
+  const phoenixCard =
+    `<button class="tpl" data-app="phoenix"><div class="n">Phoenix</div>
+     <div class="f">tamper-evident work orders, invoices, records</div></button>`;
+  $('#app-grid').innerHTML = appCards + phoenixCard;
+
+  $('#app-grid').querySelectorAll('button[data-app]').forEach(b => b.addEventListener('click', async () => {
+    const which = b.dataset.app;
+    if (which === 'phoenix') {
+      $('#app-grid').querySelectorAll('button').forEach(x => x.classList.remove('sel'));
+      b.classList.add('sel');
+      $('#phoenix-steps').hidden = false;
+      $('#m-create').hidden = false;
+      openPhoenixTemplates();
+      return;
+    }
+    closeModal();
+    toast(`Opening ${esc(b.querySelector('.n').textContent)}…`);
+    const r = await api.invoke('office:launch-app', { appId: which });
+    if (!r.ok) toast(r.error);
+  }));
+
+  $('#scrim').classList.add('show');
+}
+function closeModal(){ $('#scrim').classList.remove('show'); }
+
+function openPhoenixTemplates(){
+  $('#tpl-grid').innerHTML = templates.map(t =>
+    `<button class="tpl" data-t="${esc(t.template)}"><div class="n">${esc(t.label)}</div>
+     <div class="f">${t.fields.length ? esc(t.fields.join(', ')) : 'you name the fields'}</div></button>`).join('');
+  $('#tpl-grid').querySelectorAll('.tpl').forEach(b => b.addEventListener('click', () => {
+    $('#tpl-grid').querySelectorAll('.tpl').forEach(x => x.classList.remove('sel'));
+    b.classList.add('sel'); selTpl = b.dataset.t;
+    $('#blank-fields').hidden = (selTpl !== 'blank');
+    $('#m-create').disabled = false;
+    $('#m-hint').hidden = true;
+  }));
+  $('#cp-phone').value = $('#cp-carrier').value = $('#cp-email').value = '';
+  $('#blank-input').value = ''; $('#blank-fields').hidden = true;
+  $('#m-create').disabled = true;
+  $('#m-hint').hidden = false; $('#m-hint').textContent = 'Pick a template above to continue';
+}
+
+async function createFromModal(){
+  const phone = $('#cp-phone').value.trim(), carrier = $('#cp-carrier').value.trim(), email = $('#cp-email').value.trim();
+  const counterparty = (phone || email) ? { phone: phone||undefined, carrier: carrier||undefined, email: email||undefined } : null;
+  const body = { counterparty, authorId: me && me.author_id };
+  if (selTpl === 'blank') {
+    const f = $('#blank-input').value.split(',').map(s=>s.trim()).filter(Boolean);
+    if (!f.length) return toast('name at least one field');
+    body.fieldNames = f;
+  } else {
+    body.template = selTpl;
+  }
+  const r = await api.invoke('office:new', body);
+  if (!r.ok) return toast(r.error);
+  doc = r.document; filePath = r.path; closeModal();
+  render(); flashSaved(); refreshCopilot(true);
+}
+
+// ── open / recent ───────────────────────────────────────────────────────────
+async function openDoc(){
+  const r = await api.invoke('office:open', {});
+  if (r.canceled) return;
+  if (!r.ok) return toast(r.error);
+  applyLoaded(r);
+}
+function applyLoaded(r){
+  doc = r.document; filePath = r.filePath || r.path || filePath;
+  render();
+  if (r.tampered) banner('bad', '⚠ This signed document has been ALTERED since it was signed. ' + esc(r.reason||''));
+  else if (doc.state === 'SIGNED') banner('ok', '✓ Signature verified — the document is intact.');
+  refreshCopilot(true);
+}
+
+// ── fields ──────────────────────────────────────────────────────────────────
+async function fill(field, value){
+  if (!value) return;
+  const r = await api.invoke('office:fill', { document: doc, field, value, by: me && me.author_id });
+  if (!r.ok){ toast(r.error || r.reason); render(); return; }
+  doc = r.document; filePath = r.path || filePath; render(); flashSaved(); refreshCopilot();
+}
+
+// ── handoffs ────────────────────────────────────────────────────────────────
+async function hand(){
+  const r = await api.invoke('office:hand', { document: doc });
+  if (!r.ok) return toast(r.error);
+  doc = r.document; render(); flashSaved(); refreshCopilot(true); toast('Handed to client for review');
+}
+async function sign(){
+  if (!confirm('Sign and LOCK this document?\nAfter this, no field can be changed by anyone — and it is sealed into the vault.')) return;
+  const r = await api.invoke('office:sign', { document: doc, by: me && me.author_id });
+  if (!r.ok) return toast(r.error);
+  doc = r.document; render();
+  const s = r.sealed || {};
+  banner('ok', '✓ Signed, locked, and ' + (s.ok
+    ? `sealed to your Phoenix Office workspace (${s.bytes || '?'} bytes). It's recoverable from any machine — the local copy is now disposable.`
+    : 'saved locally. (Remote seal: ' + esc(s.error || 'pending') + ' — retry from Verify.)'));
+  refreshCopilot(true); loadRecent();
+}
+async function reject(){
+  const reason = prompt('Send back for changes. Reason (optional):') || '';
+  const r = await api.invoke('office:reject', { document: doc, by: me && me.author_id, reason });
+  if (!r.ok) return toast(r.error);
+  doc = r.document; render(); flashSaved(); toast('Sent back to draft');
+}
+async function verify(){
+  const r = await api.invoke('office:verify', { document: doc });
+  if (!r.ok) return toast(r.error);
+  if (r.integrity.tampered) banner('bad', '⚠ TAMPERED — fields no longer match the signed baseline. '
+    + (r.notified && r.notified.sent ? 'The counterparty has been notified.'
+      : r.notified ? 'Notification: ' + esc(r.notified.error || 'not sent') : ''));
+  else banner('ok', '✓ Verified — the document matches its signed baseline exactly.');
+}
+async function changeOrder(){
+  const r = await api.invoke('office:change-order', {
+    document: doc, fieldNames: ['references_document','reason_for_change','revised_scope','cost_impact','approved_by'],
+    authorId: me && me.author_id });
+  if (!r.ok) return toast(r.error);
+  doc = r.document; filePath = null; render(); flashSaved();
+  toast('Change order created — linked to the original, original untouched'); refreshCopilot(true);
+}
+
+// ── browse / pull from workspace ─────────────────────────────────────────────
+async function pullRefs(){
+  $('#refs').innerHTML = '<span class="muted">loading your workspace…</span>';
+  const r = await api.invoke('office:browse', { limit: 20 });
+  if (!r.ok){ $('#refs').innerHTML = '<span class="err">' + esc(r.error) + '</span>'; return; }
+  if (!r.items.length){ $('#refs').innerHTML = '<span class="muted">no sealed documents yet — sign one first</span>'; return; }
+  $('#refs').innerHTML = r.items.map(it =>
+    `<div class="ref-item">
+       <div class="name">${esc(it.state)} · ${esc(String(it.hex).slice(0,14))}…</div>
+       <div class="muted">${esc(it.created_at||'')}${it.signed_at ? ' · signed '+esc(it.signed_at) : ''}</div>
+       <button data-pull="${esc(it.hex)}">Pull into workspace</button>
+     </div>`).join('');
+  $('#refs').querySelectorAll('button[data-pull]').forEach(b =>
+    b.addEventListener('click', () => pullOne(b.dataset.pull, b)));
+}
+async function pullOne(hex, btn){
+  if (btn){ btn.disabled = true; btn.textContent = 'pulling…'; }
+  const r = await api.invoke('office:reference', { hex });
+  if (!r.ok) return toast(r.error);
+  $('#btn-ref-clear').hidden = false;
+  const title = Object.values(r.document.fields||{}).find(v=>v) || hex.slice(0,14);
+  const div = document.createElement('div');
+  div.className = 'ref-item';
+  div.innerHTML = `<div class="name">📄 ${esc(title)}</div><div class="muted">${esc(r.path)}</div><button>Open</button>`;
+  div.querySelector('button').addEventListener('click', () => applyLoaded(r));
+  $('#refs').appendChild(div);
+  toast('pulled — click Open to view or continue it');
+}
+async function clearRefs(){
+  await api.invoke('office:reference-clear', {});
+  $('#refs').innerHTML = '<span class="muted">cleared local pulls. your workspace still has the originals.</span>';
+  $('#btn-ref-clear').hidden = true;
+}
+
+// ── export ────────────────────────────────────────────────────────────────────
+async function exportPdf(btn){
+  if (!doc) return;
+  btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Converting…';
+  const off = api.on && api.on('office:export-progress', p => {
+    if (p.total) btn.textContent = `Converting… ${Math.round(100*p.received/p.total)}%`;
+    else btn.textContent = `Fetching LibreOffice… ${(p.received/1e6).toFixed(0)}MB`;
+  });
+  const r = await api.invoke('office:export-pdf', { document: doc });
+  if (off) off();
+  btn.disabled = false; btn.textContent = orig;
+  if (!r.ok) return toast(r.error);
+  toast((r.downloaded ? 'LibreOffice fetched + ' : '') + 'PDF saved: ' + r.path);
+}
+
+// ── copilot ─────────────────────────────────────────────────────────────────
+function refreshCopilot(now){ clearTimeout(copilotTimer); copilotTimer = setTimeout(runCopilot, now ? 0 : 1400); }
+async function runCopilot(){
+  if (!doc) return;
+  const out = $('#copilot-out'); out.innerHTML = '<span class="muted">thinking…</span>';
+  const r = await api.invoke('office:copilot', { document: doc });
+  out.textContent = r.ok ? (r.suggestions || 'No suggestions right now.') : ('· ' + r.error);
+}
+
+// ── render ──────────────────────────────────────────────────────────────────
+function render(){
+  if (!doc){ $('#empty').hidden = false; $('#doc-view').hidden = true; $('#badge').hidden = true; $('#doc-title').textContent=''; return; }
+  $('#empty').hidden = true; $('#doc-view').hidden = false;
+
+  const b = $('#badge'); b.hidden = false; b.className = 'badge ' + doc.state; b.textContent = doc.state.replace('_',' ');
+  $('#doc-title').textContent = doc.supersedes ? ' — change order' : '';
+
+  const locked = doc.state === 'SIGNED';
+  const fieldsHtml = Object.entries(doc.fields).map(([name,val]) => {
+    const filled = val !== null;
+    return `<div class="field ${filled ? 'filled':''}">
+      <label>${esc(name)}</label>
+      <div class="row">
+        <input data-field="${esc(name)}" value="${filled ? esc(val):''}" ${filled||locked ? 'readonly':''}
+               placeholder="${locked ? '' : 'type, then Enter'}">
+        ${filled ? '<span class="lock">🔒 filled</span>' : locked ? '<span class="lock">locked</span>'
+          : `<button data-compose="${esc(name)}" title="AI: draft this field">✨</button>`}
+      </div></div>`;
+  }).join('');
+
+  const cp = doc.counterparty || {};
+  const cpHtml = `<div class="section"><h2>Counterparty contact</h2>
+    <div class="cp-grid">
+      <div class="field"><label>phone</label><div class="row"><input value="${esc(cp.phone||'')}" readonly></div></div>
+      <div class="field"><label>carrier</label><div class="row"><input value="${esc(cp.carrier||'')}" readonly></div></div>
+      <div class="field"><label>email</label><div class="row"><input value="${esc(cp.email||'')}" readonly></div></div>
+    </div>
+    <p class="muted" style="margin-top:8px">Set when the document was created. This is who gets the alert if a signed copy is altered.</p></div>`;
+
+  let actions = '';
+  if (doc.state === 'DRAFT') actions = `<button class="primary" id="a-hand">Hand to client</button>`;
+  else if (doc.state === 'PENDING_REVIEW') actions = `<button class="primary" id="a-sign">Client signs</button><button class="danger" id="a-reject">Send back</button>`;
+  else if (doc.state === 'SIGNED') actions = `<button id="a-verify">Verify integrity</button><button id="a-co">New change order</button>`;
+  actions += `<button id="a-export">Export PDF</button>`;
+
+  const historyHtml = `<div class="section" id="history-section"><h2>Version history</h2>
+    <div id="history-list" class="muted">loading…</div></div>`;
+
+  $('#doc-view').innerHTML = bannerHtml + fieldsHtml + cpHtml + historyHtml
+    + `<div class="actions">${actions}</div><div class="qr" id="qr"></div>`;
+  bannerHtml = '';
+
+  api.invoke('office:qr', { document: doc }).then(q => {
+    if (!q.ok) return;
+    $('#qr').innerHTML = `<b>header</b> ${esc(q.header)}<br>` +
+      (q.footer ? `<b>footer</b> ${esc(q.footer)}` : '<span class="muted">footer QR appears once signed</span>');
+  });
+
+  api.invoke('office:history', { document: doc }).then(h => {
+    const el = $('#history-list'); if (!el) return;
+    if (!h.ok || !h.chain || !h.chain.length) { el.textContent = 'Not sealed yet — history appears once signed.'; return; }
+    el.innerHTML = h.chain.map(c =>
+      `<div>${esc(c.state)} · ${esc(String(c.hex).slice(0,14))}…`
+      + (c.signed_at ? ` · signed ${esc(c.signed_at)}` : '')
+      + (c.supersedes_hex ? ` · supersedes ${esc(String(c.supersedes_hex).slice(0,10))}…` : '')
+      + `</div>`).join('');
+  });
+
+  $('#doc-view').querySelectorAll('input[data-field]').forEach(inp => {
+    const f = inp.dataset.field;
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fill(f, inp.value.trim()); }});
+    inp.addEventListener('blur', () => { if (!inp.readOnly && inp.value.trim()) fill(f, inp.value.trim()); });
+  });
+  $('#doc-view').querySelectorAll('button[data-compose]').forEach(b => b.addEventListener('click', async () => {
+    const f = b.dataset.compose;
+    b.disabled = true; const orig = b.textContent; b.textContent = '…';
+    const r = await api.invoke('office:compose', { document: doc, field: f });
+    b.disabled = false; b.textContent = orig;
+    if (!r.ok) return toast(r.error);
+    const inp = $(`#doc-view input[data-field="${f.replace(/"/g,'\\"')}"]`);
+    if (inp){ inp.value = r.value; inp.focus(); }
+  }));
+  const bind = (id,fn) => { const el = $('#'+id); if (el) el.addEventListener('click', fn); };
+  bind('a-hand',hand); bind('a-sign',sign); bind('a-reject',reject); bind('a-verify',verify); bind('a-co',changeOrder);
+  const exportBtn = $('#a-export'); if (exportBtn) exportBtn.addEventListener('click', () => exportPdf(exportBtn));
+}
+
+// ── wire ────────────────────────────────────────────────────────────────────
+$('#btn-new').addEventListener('click', openModal);
+$('#btn-new-2').addEventListener('click', openModal);
+$('#btn-open').addEventListener('click', () => openDoc());
+$('#convert-format').addEventListener('change', e => {
+  const fmt = e.target.value; e.target.value = '';
+  if (fmt) convertPickedFile(fmt);
+});
+$('#m-cancel').addEventListener('click', closeModal);
+$('#m-create').addEventListener('click', createFromModal);
+$('#btn-copilot').addEventListener('click', runCopilot);
+$('#btn-ref').addEventListener('click', pullRefs);
+$('#btn-ref-clear').addEventListener('click', clearRefs);
+$('#recent').addEventListener('change', async e => {
+  const p = e.target.value; e.target.value = '';
+  if (!p) return;
+  const r = await api.invoke('office:open-path', { path: p });
+  if (!r.ok) return toast(r.error);
+  applyLoaded(r);
+});
+window.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's'){ e.preventDefault(); flashSaved(); toast('Already saved — Office saves every change'); }
+});
+
+boot();
+</script>
+</body>
+</html>
