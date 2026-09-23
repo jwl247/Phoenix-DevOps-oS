@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="64" viewBox="0 0 220 64">
+  <!-- Placeholder wordmark — swap this file out for a real logo whenever
+       one exists. brand.json's logoPath just needs to keep pointing at
+       whatever file replaces it. -->
+  <rect x="0" y="6" width="52" height="52" rx="10" fill="#1a2740"/>
+  <text x="26" y="42" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700"
+        fill="#ffffff" text-anchor="middle">PBM</text>
+  <text x="64" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="19" font-weight="700"
+        fill="#1a2740">PBM Consulting</text>
+  <text x="64" y="49" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#5a6472">Service</text>
+</svg>

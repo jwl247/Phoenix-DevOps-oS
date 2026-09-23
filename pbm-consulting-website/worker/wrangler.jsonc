@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pbm-leads-worker",
+  "main": "index.js",
+  "compatibility_date": "2026-09-22",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pbm_leads_db",
+      "database_id": "dc710dd3-8e1a-4d22-8d7b-486e540bff17"
+    }
+  ]
+}

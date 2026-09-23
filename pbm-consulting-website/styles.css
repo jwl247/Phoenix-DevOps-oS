@@ -1,0 +1,191 @@
+/* PBM Consulting Service — the case-file/certificate concept:
+   left-aligned, folder-tab section markers, one bold stamp moment in the
+   hero, everything else quiet and disciplined. */
+
+:root {
+  --paper: #EFEAD9;
+  --paper-dark: #E4DDC6;
+  --ink: #2B2620;
+  --forest: #1F3D2B;
+  --oxblood: #8C2F1B;
+  --brass: #A6832E;
+  --line: #CFC6A8;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+h1, h2, h3 {
+  font-family: 'Fraunces', Georgia, serif;
+  color: var(--forest);
+  margin: 0 0 0.5em;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+p { margin: 0 0 1em; max-width: 62ch; }
+
+a { color: var(--oxblood); }
+
+/* ── masthead ─────────────────────────────────────────────────────── */
+.masthead {
+  padding: 28px clamp(20px, 6vw, 64px) 0;
+}
+.wordmark { height: 44px; width: auto; display: block; }
+
+/* ── hero ─────────────────────────────────────────────────────────── */
+.hero {
+  padding: 40px clamp(20px, 6vw, 64px) 64px;
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 40px;
+  align-items: start;
+}
+.hero h1 {
+  font-size: clamp(28px, 4vw, 44px);
+  max-width: 16ch;
+}
+.hero .lede { font-size: 18px; }
+
+.stamp {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  justify-self: end;
+  width: 200px;
+  transform: rotate(-9deg);
+  opacity: 0.94;
+}
+.stamp svg { width: 100%; height: auto; }
+
+.cta {
+  display: inline-block;
+  background: var(--oxblood);
+  color: var(--paper);
+  text-decoration: none;
+  font-weight: 600;
+  padding: 14px 28px;
+  border-radius: 3px;
+  margin-top: 8px;
+}
+.cta:hover { background: #6f2414; }
+.cta-outline {
+  background: transparent;
+  border: 2px solid var(--oxblood);
+  color: var(--oxblood);
+  padding: 12px 26px;
+}
+.cta-outline:hover { background: var(--oxblood); color: var(--paper); }
+
+/* ── folio sections (the case-file device) ───────────────────────── */
+.folio {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  border-top: 1px solid var(--line);
+}
+.folio:last-of-type { border-bottom: 1px solid var(--line); }
+
+.tab {
+  background: var(--forest);
+  color: var(--paper);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  padding: 24px 0;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.folio-body {
+  padding: 40px clamp(20px, 5vw, 56px) 44px;
+  background: var(--paper-dark);
+}
+.folio.start .folio-body { background: var(--paper); }
+
+/* ── categories ───────────────────────────────────────────────────── */
+.cat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px 40px;
+}
+.cat h3 { font-size: 19px; margin-bottom: 0.3em; }
+.cat p { margin: 0; font-size: 15px; }
+
+/* ── process steps ────────────────────────────────────────────────── */
+.steps { list-style: none; margin: 0; padding: 0; }
+.steps li {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+}
+.steps li:first-child { border-top: none; }
+.steps .num {
+  font-family: 'Fraunces', serif;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--brass);
+  min-width: 1.4ch;
+}
+.steps h3 { font-size: 18px; margin-bottom: 0.2em; }
+.steps p { margin: 0; font-size: 15px; }
+
+/* ── footer ───────────────────────────────────────────────────────── */
+footer {
+  padding: 32px clamp(20px, 6vw, 64px) 48px;
+  font-size: 14px;
+  color: var(--ink);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 40px;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+}
+footer strong { color: var(--forest); }
+.disclaimer { max-width: 40ch; opacity: 0.75; }
+
+/* ── focus visibility ─────────────────────────────────────────────── */
+a:focus-visible, .cta:focus-visible {
+  outline: 3px solid var(--brass);
+  outline-offset: 2px;
+}
+
+/* ── motion respect ───────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+/* ── mobile ───────────────────────────────────────────────────────── */
+@media (max-width: 760px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+  .stamp {
+    grid-row: 1;
+    grid-column: 1;
+    justify-self: start;
+    width: 140px;
+    margin-bottom: 8px;
+  }
+  .folio { grid-template-columns: 1fr; }
+  .tab {
+    writing-mode: horizontal-tb;
+    transform: none;
+    text-align: left;
+    padding: 10px 20px;
+  }
+  .cat-grid { grid-template-columns: 1fr; }
+}
