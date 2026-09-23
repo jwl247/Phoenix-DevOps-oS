@@ -67,8 +67,8 @@ test/test.js         the 53-test engine suite (unchanged from Office)
   `supersedes_hex` chain is walkable end to end (`office:history` /
   `GET /documents/:hex/history`) — the original and every correction that
   followed it, in order, from either end of the chain.
-- **A restricted "Secretary" pane that can also compose.** UI label is
-  "Secretary," not "Copilot" — deliberately, to avoid any confusion with
+- **A restricted "Secretariat" pane that can also compose.** UI label is
+  "Secretariat," not "Copilot" — deliberately, to avoid any confusion with
   Microsoft/GitHub Copilot; it's Claude-powered, zero Microsoft dependency
   (channel names `office:copilot`/`office:compose` are just internal wiring,
   unchanged for stability). Gives standing suggestions; `office:compose`
@@ -78,6 +78,28 @@ test/test.js         the 53-test engine suite (unchanged from Office)
   filesystem/tool access, since this app runs on other people's computers,
   not just Jerry's. Entirely optional: nothing else in the app depends on
   it, and it degrades to a clear "offline" message if `claude` isn't found.
+- **A tool-using Secretariat agent, additive to the pane above.** "Ask
+  Secretariat" (new, next to the original Suggestions box, which is
+  untouched) can actually act — start a document, draft/fill fields,
+  search this product's own sealed documents, hand off, sign, export — not
+  just suggest. It acts ONLY through a fixed, declared tool catalog
+  (`lib/agent-tools.js`); the model is never given a shell or filesystem
+  access. Two permission tiers: 'base' tools run immediately (search,
+  draft, fill, export); 'deviation' tools (hand-off, sign — anything that
+  leaves the local draft) show an inline confirm card with the exact
+  tool+args and wait for an explicit Approve/Deny. Offline-first on
+  purpose (`lib/ai-provider.js`): local Ollama is tried before any API
+  key, since these are often confidential business records that shouldn't
+  need to leave the machine by default; the restricted Claude CLI is a
+  dev-only last resort (not installed on the machines this app ships to).
+  A CSS-only "KITT bar" (`.kitt-bar`) shows idle/thinking/acting/confirm
+  at a glance. Search results render into the same DB-backed workspace
+  pane the "Browse sealed documents" button uses — one shared function,
+  one source of truth, not a separate results list buried in chat.
+  Code-complete and unit-tested (`test/test-agent.js`, 25 passing) as of
+  2026-09-22 — **not yet live-tested against a running Ollama or a real
+  multi-step document conversation.** See `project_phoenix_office_secretary_agent`
+  in Claude's memory for the full build log.
 - **Real PDF export, no Phoenix dependency.** `office:export-pdf` renders
   the document to HTML and shells a real LibreOffice headless conversion.
   "Library" pattern, not "universal kernel": it looks for an already-

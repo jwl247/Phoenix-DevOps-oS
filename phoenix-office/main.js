@@ -36,6 +36,17 @@ const lib = {
     documentHtml: require('./lib/document-html'),
 };
 
+const aiProvider = require('./lib/ai-provider');
+const { createAgentTools } = require('./lib/agent-tools');
+const { createAgentLoop } = require('./lib/agent-loop');
+
+// One live Secretariat-agent session at a time — this is a single-window
+// desktop app, not a multi-tenant server. Reset on office:agent-reset or
+// a fresh app launch. Holds the model's message history + whichever
+// document it's currently working, so a deviation-tier tool can pause
+// mid-turn and resume later without losing context.
+let agentSession = null;
+
 // ── config ───────────────────────────────────────────────────────────────────
 // This product's own worker — not office-notify-worker, not packages-worker.
 // Own deploy, own D1, own R2, own auth secret. See worker/README.md.
@@ -43,6 +54,23 @@ const WORKER_URL = process.env.PHOENIX_OFFICE_WORKER_URL || 'https://phoenix-off
 const WORKER_AUTH = process.env.PHOENIX_OFFICE_AUTH || '';
 
 let mainWindow = null;
+let splashWindow = null;
+
+// A minimum on-screen time for the splash so it reads as a real branded
+// loading moment rather than a one-frame flash — this app loads fast
+// enough locally that without a floor, "ready-to-show" would fire almost
+// immediately and the bird would never actually be seen.
+const SPLASH_MIN_MS = 1200;
+
+function createSplash() {
+    splashWindow = new BrowserWindow({
+        width: 520, height: 340, frame: false, resizable: false, movable: false,
+        center: true, alwaysOnTop: true, backgroundColor: '#0a0c10', show: true,
+        webPreferences: { contextIsolation: true, nodeIntegration: false },
+    });
+    splashWindow.loadFile(path.join(__dirname, 'splash.html'));
+    return Date.now();
+}
 
 // Standard per-user documents location — a real product's save location,
 // not a dotfile-style home-dir folder. Distinct from the Phoenix dashboard's
@@ -101,6 +129,61 @@ async function sealToWorker(hex, fileBytes) {
     }
 }
 
+// Shared by the office:browse IPC handler AND the Secretariat agent's
+// search_workspace tool — one code path, so the agent can never see a
+// different result set than the "Browse sealed documents" button does.
+async function browseDocuments({ limit, state } = {}) {
+    if (!WORKER_AUTH) return { ok: false, error: 'no worker configured (PHOENIX_OFFICE_AUTH not set)' };
+    try {
+        const qs = new URLSearchParams();
+        if (limit) qs.set('limit', String(limit));
+        if (state) qs.set('state', state);
+        const res = await fetch(`${WORKER_URL.replace(/\/+$/, '')}/documents?${qs}`, {
+            headers: { Authorization: `Bearer ${WORKER_AUTH}` },
+        });
+        if (!res.ok) return { ok: false, error: `worker ${res.status}` };
+        const body = await res.json();
+        return { ok: true, items: body.items || [] };
+    } catch (e) { return { ok: false, error: e.message }; }
+}
+
+// Shared by the office:export-pdf IPC handler AND the Secretariat agent's
+// export_pdf tool.
+async function exportDocumentPdf(document) {
+    try {
+        const { path: sofficePath, downloaded } = await lib.libreoffice.ensureSoffice({
+            workerUrl: WORKER_URL,
+            auth: WORKER_AUTH,
+            appDataDir: app.getPath('userData'),
+            onProgress: (received, total) => {
+                if (mainWindow) mainWindow.webContents.send('office:export-progress', { received, total });
+            },
+        });
+        const html = lib.documentHtml.renderDocumentHtml(document);
+        const outDir = workdir();
+        const b58 = lib.fileFormat.shortAddress(lib.fileFormat.documentIdentityHash(document));
+        const htmlPath = path.join(require('os').tmpdir(), `phoenix-office-${b58}.html`);
+        fs.writeFileSync(htmlPath, html, 'utf8');
+        const pdfPath = await lib.libreoffice.convertFile({ sofficePath, inputPath: htmlPath, outputDir: outDir, targetFormat: 'pdf' });
+        try { fs.unlinkSync(htmlPath); } catch (_) {}
+        return { ok: true, path: pdfPath, downloaded };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+}
+
+// Sign + seal in one step, for the Secretariat agent's sign_document tool
+// (lib.document.sign() itself is called by the tool — this just handles
+// the same "save locally, then seal to this product's own worker" tail
+// that office:sign's IPC handler does).
+async function signAndSeal(signedDocument) {
+    const p = docPath(signedDocument);
+    lib.fileFormat.saveOfficeFile(p, signedDocument);
+    const hex = lib.fileFormat.documentIdentityHash(signedDocument);
+    const bytes = fs.readFileSync(p);
+    return sealToWorker(hex, bytes);
+}
+
 // Restricted, read-only copilot — this product runs on other people's
 // machines, so it never gets --dangerously-skip-permissions or tool access,
 // unlike the dashboard's internal "subscription" chain. Just a text answer.
@@ -134,12 +217,13 @@ function askAI(prompt) {
 }
 
 // ── window ───────────────────────────────────────────────────────────────────
-function createWindow() {
+function createWindow(splashStartedAt) {
     mainWindow = new BrowserWindow({
         width: 1400, height: 900, minWidth: 1000, minHeight: 640,
         title: 'Phoenix Office',
         backgroundColor: '#0a0c10',
         autoHideMenuBar: true,
+        show: !splashStartedAt, // if there's no splash to hand off from, just show immediately
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             sandbox: true,
@@ -149,11 +233,33 @@ function createWindow() {
     });
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
     mainWindow.on('closed', () => { mainWindow = null; });
+
+    if (splashStartedAt) {
+        let handed = false;
+        const handOff = () => {
+            if (handed) return;
+            handed = true;
+            if (splashWindow) { splashWindow.close(); splashWindow = null; }
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+        };
+        mainWindow.once('ready-to-show', () => {
+            const elapsed = Date.now() - splashStartedAt;
+            setTimeout(handOff, Math.max(0, SPLASH_MIN_MS - elapsed));
+        });
+        // Safety net — if the main window never fires ready-to-show (a load
+        // error, a hung renderer), don't leave the user staring at the
+        // splash screen forever. Must stay longer than SPLASH_MIN_MS itself
+        // or it silently cuts the intended minimum short (caught live —
+        // this was hardcoded to 8000 independent of SPLASH_MIN_MS, so
+        // raising the minimum for a visual check didn't actually work).
+        setTimeout(handOff, SPLASH_MIN_MS + 8000);
+    }
 }
 
 app.whenReady().then(() => {
     registerIpc();
-    createWindow();
+    const splashStartedAt = createSplash();
+    createWindow(splashStartedAt);
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
@@ -290,29 +396,7 @@ function registerIpc() {
     // lib/libreoffice.js): finds an already-installed soffice, or fetches
     // this product's own portable copy from its own worker on first use —
     // never a dependency on Phoenix's own kernel/orchestration being present.
-    ipcMain.handle('office:export-pdf', async (_e, { document } = {}) => {
-        try {
-            const { path: sofficePath, downloaded } = await lib.libreoffice.ensureSoffice({
-                workerUrl: WORKER_URL,
-                auth: WORKER_AUTH,
-                appDataDir: app.getPath('userData'),
-                onProgress: (received, total) => {
-                    if (mainWindow) mainWindow.webContents.send('office:export-progress', { received, total });
-                },
-            });
-            const html = lib.documentHtml.renderDocumentHtml(document);
-            const outDir = workdir();
-            const b58 = lib.fileFormat.shortAddress(lib.fileFormat.documentIdentityHash(document));
-            const htmlPath = path.join(require('os').tmpdir(), `phoenix-office-${b58}.html`);
-            fs.writeFileSync(htmlPath, html, 'utf8');
-
-            const pdfPath = await lib.libreoffice.convertFile({ sofficePath, inputPath: htmlPath, outputDir: outDir, targetFormat: 'pdf' });
-            try { fs.unlinkSync(htmlPath); } catch (_) {}
-            return { ok: true, path: pdfPath, downloaded };
-        } catch (e) {
-            return { ok: false, error: e.message };
-        }
-    });
+    ipcMain.handle('office:export-pdf', async (_e, { document } = {}) => exportDocumentPdf(document));
 
     // General-purpose conversion: move a file from whatever process created
     // it into whatever format the NEXT process needs — not scoped to
@@ -400,20 +484,7 @@ function registerIpc() {
     // Not Phoenix's clone pool — this product's own worker + D1 + R2. Browse
     // lists what's been sealed (signed) before; reference pulls one down
     // into a local scratch dir for reference or to continue working from.
-    ipcMain.handle('office:browse', async (_e, { limit, state } = {}) => {
-        if (!WORKER_AUTH) return { ok: false, error: 'no worker configured (PHOENIX_OFFICE_AUTH not set)' };
-        try {
-            const qs = new URLSearchParams();
-            if (limit) qs.set('limit', String(limit));
-            if (state) qs.set('state', state);
-            const res = await fetch(`${WORKER_URL.replace(/\/+$/, '')}/documents?${qs}`, {
-                headers: { Authorization: `Bearer ${WORKER_AUTH}` },
-            });
-            if (!res.ok) return { ok: false, error: `worker ${res.status}` };
-            const body = await res.json();
-            return { ok: true, items: body.items || [] };
-        } catch (e) { return { ok: false, error: e.message }; }
-    });
+    ipcMain.handle('office:browse', async (_e, { limit, state } = {}) => browseDocuments({ limit, state }));
 
     ipcMain.handle('office:reference', async (_e, { hex } = {}) => {
         if (!hex) return { ok: false, error: 'hex required' };
@@ -483,6 +554,42 @@ function registerIpc() {
     // for review — never calls fillField itself. Fields are fill-once, so a
     // draft the author doesn't want must be editable/discardable before it's
     // committed, exactly like anything they'd have typed themselves.
+    // ── Secretariat agent (tool-using) ─────────────────────────────────────────
+    // Additive, next to office:copilot/office:compose above — those stay
+    // exactly as they were (proven, still the fallback). This is the new,
+    // real-actions path: offline-first (Ollama -> API key -> restricted CLI,
+    // see lib/ai-provider.js), acting only through the fixed tool catalog in
+    // lib/agent-tools.js, pausing on anything tier'd 'deviation' until the
+    // renderer calls office:agent-confirm with the user's decision.
+    const agentTools = createAgentTools({
+        lib,
+        listTemplates,
+        browseWorker: browseDocuments,
+        aiComplete: aiProvider.complete,
+    });
+    const agentLoop = createAgentLoop({
+        tools: agentTools,
+        aiComplete: aiProvider.complete,
+        sealDocument: signAndSeal,
+        exportPdf: exportDocumentPdf,
+    });
+
+    ipcMain.handle('office:agent-message', async (_e, { document, message } = {}) => {
+        if (!message) return { ok: false, error: 'message required' };
+        if (!agentSession) agentSession = agentLoop.newSession(document || null);
+        else if (document) agentSession.document = document;
+        try { return { ok: true, ...(await agentLoop.runTurn(agentSession, message)) }; }
+        catch (e) { return { ok: false, error: e.message }; }
+    });
+
+    ipcMain.handle('office:agent-confirm', async (_e, { approve } = {}) => {
+        if (!agentSession) return { ok: false, error: 'no active Secretariat session' };
+        try { return { ok: true, ...(await agentLoop.resolveConfirm(agentSession, !!approve)) }; }
+        catch (e) { return { ok: false, error: e.message }; }
+    });
+
+    ipcMain.handle('office:agent-reset', () => { agentSession = null; return { ok: true }; });
+
     ipcMain.handle('office:compose', async (_e, { document, field, instruction } = {}) => {
         if (!field) return { ok: false, error: 'field required' };
         const otherFields = Object.entries(document.fields || {})

@@ -1,0 +1,330 @@
+// test-agent.js — Phoenix Office (standalone) — Secretariat agent tests.
+// New for the tool-using agent (ai-provider / agent-tools / agent-loop).
+// Kept SEPARATE from test.js on purpose — that suite is the proven,
+// byte-identical-to-Office engine suite; this one covers only the new,
+// additive agent layer, so a failure here never gets confused with a
+// regression in the document engine itself.
+// Run: node test/test-agent.js
+
+const assert = require('assert');
+const { tryOllama, tryAnthropic } = require('../lib/ai-provider');
+const { createAgentTools } = require('../lib/agent-tools');
+const { createAgentLoop, parseModelReply } = require('../lib/agent-loop');
+const { renderDocumentHtml } = require('../lib/document-html');
+const documentLib = require('../lib/document');
+const fileFormat = require('../lib/file-format');
+
+const tests = [];
+function test(name, fn) { tests.push({ name, fn }); }
+
+// ── ai-provider.js ────────────────────────────────────────────────────────
+test('tryOllama resolves with text + via on a successful chat response', async () => {
+    global.fetch = async (url) => {
+        assert.ok(String(url).includes('/api/chat'));
+        return { ok: true, json: async () => ({ message: { content: 'hello from ollama' } }) };
+    };
+    const r = await tryOllama({ system: 's', messages: [{ role: 'user', content: 'hi' }] });
+    assert.strictEqual(r.text, 'hello from ollama');
+    assert.ok(r.via.startsWith('ollama:'));
+});
+
+test('tryOllama rejects when Ollama is unreachable', async () => {
+    global.fetch = async () => { throw new Error('ECONNREFUSED'); };
+    await assert.rejects(() => tryOllama({ system: 's', messages: [] }));
+});
+
+test('tryOllama rejects on a non-ok HTTP status', async () => {
+    global.fetch = async () => ({ ok: false, status: 500, json: async () => ({}) });
+    await assert.rejects(() => tryOllama({ system: 's', messages: [] }), /ollama 500/);
+});
+
+test('tryAnthropic rejects immediately with no API key configured', async () => {
+    delete process.env.PHOENIX_OFFICE_ANTHROPIC_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    await assert.rejects(() => tryAnthropic({ system: 's', messages: [] }), /no API key/);
+});
+
+test('tryAnthropic resolves with text + via when a key is set and the call succeeds', async () => {
+    process.env.PHOENIX_OFFICE_ANTHROPIC_KEY = 'test-key';
+    global.fetch = async (url, opts) => {
+        assert.ok(String(url).includes('api.anthropic.com'));
+        assert.strictEqual(JSON.parse(opts.body).system, 's');
+        return { ok: true, json: async () => ({ content: [{ text: 'hello from claude' }] }) };
+    };
+    const r = await tryAnthropic({ system: 's', messages: [{ role: 'user', content: 'hi' }] });
+    assert.strictEqual(r.text, 'hello from claude');
+    assert.ok(r.via.startsWith('api:'));
+    delete process.env.PHOENIX_OFFICE_ANTHROPIC_KEY;
+});
+
+// ── agent-tools.js ─────────────────────────────────────────────────────────
+function makeTools(overrides = {}) {
+    return createAgentTools({
+        lib: { document: documentLib },
+        listTemplates: overrides.listTemplates || (() => [
+            { template: 'work-order', label: 'Work Order', fields: ['customer', 'description', 'total'] },
+        ]),
+        browseWorker: overrides.browseWorker || (async () => ({ ok: true, items: [] })),
+        aiComplete: overrides.aiComplete || (async () => ({ text: 'drafted value', via: 'test' })),
+    });
+}
+
+test('agent tool catalog only exposes the intended tools, correctly tiered', () => {
+    const tools = makeTools();
+    const names = tools.list.map(t => t.name).sort();
+    assert.deepStrictEqual(names, [
+        'draft_field', 'export_pdf', 'fill_field', 'hand_to_client',
+        'new_document', 'search_templates', 'search_workspace', 'sign_document',
+    ]);
+    const tierOf = n => tools.get(n).tier;
+    ['search_workspace', 'search_templates', 'new_document', 'draft_field', 'fill_field', 'export_pdf']
+        .forEach(n => assert.strictEqual(tierOf(n), 'base', `${n} should be base tier`));
+    ['hand_to_client', 'sign_document'].forEach(n => assert.strictEqual(tierOf(n), 'deviation', `${n} should be deviation tier`));
+});
+
+test('never-exposed actions are simply absent from the catalog', () => {
+    const tools = makeTools();
+    ['delete_document', 'edit_signed_document', 'run_shell', 'send_notification', 'bypass_fill_once']
+        .forEach(n => assert.strictEqual(tools.get(n), undefined, `${n} must not exist as a tool`));
+});
+
+test('new_document from a template creates a DRAFT with the template fields', async () => {
+    const tools = makeTools();
+    const r = await tools.get('new_document').execute({ template: 'work-order' }, {});
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.document.state, 'DRAFT');
+    assert.deepStrictEqual(Object.keys(r.document.fields), ['customer', 'description', 'total']);
+});
+
+test('new_document rejects an unknown template', async () => {
+    const tools = makeTools();
+    const r = await tools.get('new_document').execute({ template: 'nope' }, {});
+    assert.strictEqual(r.ok, false);
+});
+
+test('fill_field fills an empty field on the session document', async () => {
+    const tools = makeTools();
+    const state = { document: documentLib.createDocument({ fieldNames: ['customer'], authorFingerprint: 'FP' }) };
+    const r = await tools.get('fill_field').execute({ field: 'customer', value: 'Dave' }, state);
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.document.fields.customer, 'Dave');
+});
+
+test('fill_field refuses to overwrite an already-filled field', async () => {
+    const tools = makeTools();
+    let doc = documentLib.createDocument({ fieldNames: ['customer'], authorFingerprint: 'FP' });
+    doc = documentLib.fillField(doc, 'customer', 'Dave', 'FP').document;
+    const state = { document: doc };
+    const r = await tools.get('fill_field').execute({ field: 'customer', value: 'Someone Else' }, state);
+    assert.strictEqual(r.ok, false);
+    assert.match(r.message, /FIELD_ALREADY_FILLED/);
+});
+
+test('fill_field refuses to touch a SIGNED document', async () => {
+    const tools = makeTools();
+    let doc = documentLib.createDocument({ fieldNames: ['customer'], authorFingerprint: 'FP' });
+    doc = documentLib.fillField(doc, 'customer', 'Dave', 'FP').document;
+    doc = documentLib.handToClient(doc);
+    doc = documentLib.sign(doc, 'FP');
+    const r = await tools.get('fill_field').execute({ field: 'customer', value: 'x' }, { document: doc });
+    assert.strictEqual(r.ok, false);
+    assert.match(r.message, /DOCUMENT_SIGNED/);
+});
+
+test('search_workspace filters the worker\'s items by a case-insensitive query', async () => {
+    const tools = makeTools({
+        browseWorker: async () => ({ ok: true, items: [{ hex: 'aaa', state: 'SIGNED', counterparty: 'Miller Farms' }, { hex: 'bbb', state: 'DRAFT' }] }),
+    });
+    const r = await tools.get('search_workspace').execute({ query: 'miller' }, {});
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.data.length, 1);
+    assert.strictEqual(r.data[0].hex, 'aaa');
+});
+
+test('search_workspace reports the worker error cleanly', async () => {
+    const tools = makeTools({ browseWorker: async () => ({ ok: false, error: 'no worker configured' }) });
+    const r = await tools.get('search_workspace').execute({}, {});
+    assert.strictEqual(r.ok, false);
+});
+
+test('draft_field never writes — it only returns a suggested value', async () => {
+    const tools = makeTools({ aiComplete: async () => ({ text: '"Replace worn brake pads"', via: 'test' }) });
+    const state = { document: documentLib.createDocument({ fieldNames: ['description'], authorFingerprint: 'FP' }) };
+    const r = await tools.get('draft_field').execute({ field: 'description' }, state);
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.data.value, 'Replace worn brake pads');
+    assert.strictEqual(state.document.fields.description, null); // untouched
+});
+
+test('sign_document tier is deviation and calls ctx.sealDocument', async () => {
+    const tools = makeTools();
+    let doc = documentLib.createDocument({ fieldNames: ['customer'], authorFingerprint: 'FP' });
+    doc = documentLib.fillField(doc, 'customer', 'Dave', 'FP').document;
+    doc = documentLib.handToClient(doc);
+    let sealed = false;
+    const r = await tools.get('sign_document').execute({ by: 'FP' }, { document: doc }, { sealDocument: async () => { sealed = true; return { ok: true }; } });
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.document.state, 'SIGNED');
+    assert.strictEqual(sealed, true);
+});
+
+// ── agent-loop.js ──────────────────────────────────────────────────────────
+function scriptedAi(replies) {
+    let i = 0;
+    return async () => {
+        if (i >= replies.length) throw new Error('scriptedAi ran out of replies');
+        const text = replies[i++];
+        return { text, via: 'test' };
+    };
+}
+
+test('runTurn returns a final answer directly when the model gives one', async () => {
+    const tools = makeTools();
+    const loop = createAgentLoop({ tools, aiComplete: scriptedAi(['{"final":"hello there"}']) });
+    const session = loop.newSession(null);
+    const r = await loop.runTurn(session, 'hi');
+    assert.strictEqual(r.state, 'done');
+    assert.strictEqual(r.message, 'hello there');
+});
+
+test('a base-tier tool call executes immediately and the loop continues to a final answer', async () => {
+    const tools = makeTools();
+    const loop = createAgentLoop({ tools, aiComplete: scriptedAi([
+        '{"tool":"new_document","args":{"fieldNames":["customer"]}}',
+        '{"final":"started a new document for you"}',
+    ]) });
+    const session = loop.newSession(null);
+    const r = await loop.runTurn(session, 'start a blank document');
+    assert.strictEqual(r.state, 'done');
+    assert.ok(r.document);
+    assert.strictEqual(r.document.state, 'DRAFT');
+    assert.ok(r.transcript.some(t => t.role === 'tool' && t.tool === 'new_document'));
+});
+
+test('a deviation-tier tool call pauses for confirmation instead of running', async () => {
+    const tools = makeTools();
+    const loop = createAgentLoop({ tools, aiComplete: scriptedAi([
+        '{"tool":"hand_to_client","args":{}}',
+    ]) });
+    let doc = documentLib.createDocument({ fieldNames: ['customer'], authorFingerprint: 'FP' });
+    const session = loop.newSession(doc);
+    const r = await loop.runTurn(session, 'send it to the client');
+    assert.strictEqual(r.state, 'confirm');
+    assert.strictEqual(r.pending.toolName, 'hand_to_client');
+    assert.strictEqual(r.document.state, 'DRAFT'); // not executed yet
+});
+
+test('approving a paused confirmation executes the tool and resumes the loop', async () => {
+    const tools = makeTools();
+    const loop = createAgentLoop({ tools, aiComplete: scriptedAi([
+        '{"tool":"hand_to_client","args":{}}',
+        '{"final":"handed off"}',
+    ]) });
+    const doc = documentLib.createDocument({ fieldNames: ['customer'], authorFingerprint: 'FP' });
+    const session = loop.newSession(doc);
+    await loop.runTurn(session, 'send it to the client');
+    const r = await loop.resolveConfirm(session, true);
+    assert.strictEqual(r.state, 'done');
+    assert.strictEqual(r.document.state, 'PENDING_REVIEW');
+});
+
+test('denying a paused confirmation leaves the document untouched and tells the model', async () => {
+    const tools = makeTools();
+    const loop = createAgentLoop({ tools, aiComplete: scriptedAi([
+        '{"tool":"sign_document","args":{}}',
+        '{"final":"ok, not signing"}',
+    ]) });
+    const doc = documentLib.createDocument({ fieldNames: ['customer'], authorFingerprint: 'FP' });
+    const session = loop.newSession(doc);
+    await loop.runTurn(session, 'sign it');
+    const r = await loop.resolveConfirm(session, false);
+    assert.strictEqual(r.state, 'done');
+    assert.strictEqual(r.document.state, 'DRAFT'); // sign never ran
+    assert.ok(session.transcript.some(t => t.role === 'system' && /declined/.test(t.content)));
+});
+
+test('an unknown tool name does not crash the loop — it is reported back to the model', async () => {
+    const tools = makeTools();
+    const loop = createAgentLoop({ tools, aiComplete: scriptedAi([
+        '{"tool":"delete_everything","args":{}}',
+        '{"final":"my mistake — that tool does not exist"}',
+    ]) });
+    const session = loop.newSession(null);
+    const r = await loop.runTurn(session, 'do something destructive');
+    assert.strictEqual(r.state, 'done');
+});
+
+test('the loop reports a stall instead of looping forever when the model never finalizes', async () => {
+    const tools = makeTools();
+    const alwaysSearch = async () => ({ text: '{"tool":"search_templates","args":{}}', via: 'test' });
+    const loop = createAgentLoop({ tools, aiComplete: alwaysSearch });
+    const session = loop.newSession(null);
+    const r = await loop.runTurn(session, 'keep searching forever');
+    assert.strictEqual(r.state, 'error');
+    assert.match(r.message, /stalled/);
+});
+
+test('plain non-JSON model text is treated as a final answer, not a crash', async () => {
+    const tools = makeTools();
+    const loop = createAgentLoop({ tools, aiComplete: scriptedAi(['Sure, I can help with that.']) });
+    const session = loop.newSession(null);
+    const r = await loop.runTurn(session, 'hi');
+    assert.strictEqual(r.state, 'done');
+    assert.strictEqual(r.message, 'Sure, I can help with that.');
+});
+
+test('a provider outage surfaces as a clean error state, not a throw', async () => {
+    const tools = makeTools();
+    const loop = createAgentLoop({ tools, aiComplete: async () => { throw new Error('no AI provider available'); } });
+    const session = loop.newSession(null);
+    const r = await loop.runTurn(session, 'hi');
+    assert.strictEqual(r.state, 'error');
+    assert.match(r.message, /no AI provider available/);
+});
+
+// ── document-html.js letterhead (brand.json is real on this checkout) ─────
+test('renderDocumentHtml includes the letterhead when brand.json is present', () => {
+    const html = renderDocumentHtml({ state: 'DRAFT', fields: { customer: 'Dave' }, counterparty: {} });
+    assert.ok(html.includes('PBM Consulting Service'));
+    assert.ok(html.includes('Chris Madsen'));
+    assert.ok(html.includes('<svg'));
+});
+
+// ── parseModelReply — small-model failure modes found live 2026-09-22 ─────
+test('parseModelReply flags near-miss JSON (missing brace) as malformed, not final', () => {
+    const r = parseModelReply('{"tool": "new_document", "args": {"template": "work-order"}');
+    assert.strictEqual(r.malformed, true);
+});
+
+test('parseModelReply flags valid JSON with the wrong shape as malformed, not final', () => {
+    const r = parseModelReply('{"new_document": {"template": "work-order"}}');
+    assert.strictEqual(r.malformed, true);
+});
+
+test('parseModelReply still treats genuine plain-text replies as final', () => {
+    const r = parseModelReply('Sure, happy to help with that.');
+    assert.strictEqual(r.final, 'Sure, happy to help with that.');
+});
+
+test('the loop repairs a malformed reply by re-prompting instead of surfacing broken JSON', async () => {
+    const tools = makeTools();
+    const loop = createAgentLoop({ tools, aiComplete: scriptedAi([
+        '{"tool": "search_templates", "args": {}', // malformed — missing closing brace
+        '{"final":"found your templates"}',
+    ]) });
+    const session = loop.newSession(null);
+    const r = await loop.runTurn(session, 'what templates do you have?');
+    assert.strictEqual(r.state, 'done');
+    assert.strictEqual(r.message, 'found your templates');
+});
+
+// ── run ──────────────────────────────────────────────────────────────────
+(async () => {
+    let pass = 0, fail = 0;
+    for (const t of tests) {
+        try { await t.fn(); pass++; console.log(`  ok  ${t.name}`); }
+        catch (e) { fail++; console.log(`FAIL  ${t.name}\n      ${e.message}`); }
+    }
+    console.log(`\n${pass} passed, ${fail} failed`);
+    process.exit(fail ? 1 : 0);
+})();

@@ -7,7 +7,8 @@
   "author": "jwl247",
   "scripts": {
     "start": "electron .",
-    "test": "node test/test.js",
+    "postinstall": "node scripts/fix-electron.js",
+    "test": "node test/test.js && node test/test-agent.js",
     "build-win": "electron-builder --win",
     "build-mac": "electron-builder --mac",
     "build-linux": "electron-builder --linux"
@@ -17,5 +18,8 @@
   },
   "devDependencies": {
     "electron-builder": "^24.9.1"
+  },
+  "allowScripts": {
+    "electron@28.3.3": true
   }
 }

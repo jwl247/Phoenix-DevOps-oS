@@ -15,6 +15,7 @@ const CHANNELS = new Set([
   'office:copilot', 'office:compose', 'office:export-pdf',
   'office:convert', 'office:convert-formats',
   'office:apps', 'office:launch-app',
+  'office:agent-message', 'office:agent-confirm', 'office:agent-reset',
 ]);
 
 const EVENTS = new Set(['office:export-progress']);
