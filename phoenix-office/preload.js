@@ -6,10 +6,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 const CHANNELS = new Set([
-  'office:whoami', 'office:templates',
+  'office:whoami', 'office:templates', 'office:libreoffice-status',
+  'office:google-signin-start', 'office:google-signin-poll', 'office:google-signin-cancel',
   'office:new', 'office:fill', 'office:hand', 'office:sign', 'office:reject',
   'office:change-order',
   'office:verify', 'office:qr',
+  'office:legal-hold', 'office:legal-hold-release', 'office:legal-hold-status', 'office:legal-holds-report',
   'office:autosave', 'office:open', 'office:open-path', 'office:recent',
   'office:browse', 'office:reference', 'office:reference-clear', 'office:history',
   'office:copilot', 'office:compose', 'office:export-pdf',

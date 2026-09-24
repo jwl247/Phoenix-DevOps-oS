@@ -60,6 +60,9 @@ CREATE TABLE IF NOT EXISTS office_documents (
   hash_blake2            TEXT    DEFAULT NULL,
   supersedes_hex         TEXT    DEFAULT NULL,           -- set on a change order; the hex it corrects
   file_path              TEXT    DEFAULT NULL,           -- where the .office file actually lives (local path or R2 pointer)
+  title                  TEXT    DEFAULT NULL,           -- human-readable label (first filled field's value), NOT identity — hex/b58 remain the real address. Browse list shows both.
+  legal_hold             INTEGER NOT NULL DEFAULT 0,      -- denormalized current status (0/1) — real audit trail lives in office_legal_holds below
+  legal_hold_reason      TEXT    DEFAULT NULL,            -- doubles as the legal matter/case reference, same pattern Microsoft 365 ties a hold to an eDiscovery case
   signed_at              TEXT    DEFAULT NULL,
   created_at             TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at             TEXT    DEFAULT NULL
@@ -68,6 +71,49 @@ CREATE TABLE IF NOT EXISTS office_documents (
 CREATE INDEX IF NOT EXISTS idx_documents_author ON office_documents(author_id);
 CREATE INDEX IF NOT EXISTS idx_documents_state  ON office_documents(state);
 CREATE INDEX IF NOT EXISTS idx_documents_supersedes ON office_documents(supersedes_hex);
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- TABLE: office_legal_holds   (2026-09-23)
+-- Append-only audit trail — the real record of who placed/released a hold,
+-- when, and why. office_documents.legal_hold is a denormalized "current
+-- status" flag for fast filtering; this table is the actual history, same
+-- relationship as versions/custody elsewhere in Phoenix. A document can be
+-- placed and released more than once (e.g. two unrelated matters over its
+-- life) — each event gets its own permanent row, never overwritten.
+--
+-- Modeled after Microsoft 365's eDiscovery hold: a hold ties to a legal
+-- matter (the `reason` field doubles as the case/matter reference — no
+-- separate "cases" table, this product's scale doesn't need one) and
+-- preserves everything, including what would otherwise be removed. Since
+-- phoenix-office never deletes a sealed document at all, "block deletion"
+-- is already unconditionally true — this table's real job is the audit
+-- trail + the visible flag, not enforcement against a delete path that
+-- doesn't exist.
+-- ══════════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS office_legal_holds (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  doc_hex     TEXT    NOT NULL,
+  action      TEXT    NOT NULL CHECK(action IN ('placed','released')),
+  by          TEXT    NOT NULL,               -- author_id who placed/released it
+  reason      TEXT    DEFAULT NULL,           -- doubles as the legal matter/case reference
+  at          TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_legal_holds_doc ON office_legal_holds(doc_hex);
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- MIGRATION — apply once against the already-deployed DB (2026-09-23).
+-- CREATE TABLE IF NOT EXISTS above only helps a fresh install; this table
+-- was already live before the `title`/`legal_hold`/`legal_hold_reason`
+-- columns existed. No migration framework here (see the note at the top) —
+-- same hand-applied precedent, run each of these once:
+--   wrangler d1 execute phoenix_office_db --command="ALTER TABLE office_documents ADD COLUMN title TEXT DEFAULT NULL" --remote
+--   wrangler d1 execute phoenix_office_db --command="ALTER TABLE office_documents ADD COLUMN legal_hold INTEGER NOT NULL DEFAULT 0" --remote
+--   wrangler d1 execute phoenix_office_db --command="ALTER TABLE office_documents ADD COLUMN legal_hold_reason TEXT DEFAULT NULL" --remote
+--   wrangler d1 execute phoenix_office_db --file=schema.sql --remote   (picks up the new office_legal_holds table + index, both CREATE IF NOT EXISTS so safe to re-run)
+-- Safe to run even if already applied — D1/SQLite errors cleanly on a
+-- duplicate column rather than corrupting anything.
+-- ══════════════════════════════════════════════════════════════════════════════
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- TABLE: office_notifications   (Module 3 — 2026-09-07)

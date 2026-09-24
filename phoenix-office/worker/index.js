@@ -35,6 +35,12 @@
 //   GET  /documents                    browse recent documents, newest first (Bearer)
 //                                      query: ?limit=30&state=SIGNED
 //   GET  /documents/:hex/history       the full supersedes_hex chain, oldest first (Bearer)
+//   POST /documents/:hex/legal-hold           place a legal hold (Bearer)
+//                                              body: { by, reason } — reason doubles as the matter/case reference
+//   POST /documents/:hex/legal-hold/release   release a legal hold (Bearer)
+//                                              body: { by, reason? }
+//   GET  /documents/:hex/legal-hold           place/release audit trail for one document (Bearer)
+//   GET  /legal-holds                         every document currently on hold, for a discovery/subpoena response (Bearer)
 //   GET  /runtime/:name                fetch a shared runtime asset, e.g. a
 //                                      portable LibreOffice zip (Bearer)
 //   HEAD /runtime/:name                check size/existence without downloading
@@ -306,25 +312,36 @@ async function handleHeadRuntime(name, env) {
 // worker never derives or trusts a filename for anything.
 const HEX_RE = /^[0-9a-f]{16,}$/i;
 
+// Human-readable label, NOT identity — hex/b58 stay the real address, this
+// is purely for a person scanning the browse list. Same rule the client
+// side's docTitle() uses (index.html): first non-empty field value, since
+// no template name is ever stored on the document itself.
+function deriveTitle(fields) {
+  const val = Object.values(fields || {}).find(v => v);
+  return val ? String(val).slice(0, 80) : null;
+}
+
 function upsertDocumentRecord(env, hex, doc) {
   const now = new Date().toISOString();
   const fields = doc.fields || {};
   const cp = doc.counterparty || {};
   const hash = doc.hash || {};
+  const title = deriveTitle(fields);
   return env.OFFICE_DB.prepare(
     `INSERT INTO office_documents
        (hex, b58, state, author_id, counterparty_phone, counterparty_carrier, counterparty_email,
-        hash_sha3, hash_blake2, supersedes_hex, signed_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        hash_sha3, hash_blake2, supersedes_hex, title, signed_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(hex) DO UPDATE SET
        state = excluded.state, hash_sha3 = excluded.hash_sha3, hash_blake2 = excluded.hash_blake2,
-       signed_at = excluded.signed_at, updated_at = excluded.updated_at`
+       title = excluded.title, signed_at = excluded.signed_at, updated_at = excluded.updated_at`
   ).bind(
     hex, null, doc.state || 'DRAFT',
     (doc.history && doc.history[0] && doc.history[0].by) || 'unknown',
     cp.phone || null, cp.carrier || null, cp.email || null,
     hash.sha3 || null, hash.blake2 || null,
-    doc.supersedes_hex || null, doc.signed_at || null,
+    doc.supersedes_hex || null, title,
+    doc.signed_at || null,
     now, now
   ).run();
 }
@@ -364,8 +381,10 @@ async function handleGetDocument(hex, req, env) {
 }
 
 // List documents for the "pull into your workspace" browser — reference
-// material or continued editing. Ordered newest-first. No field contents
-// here (those live only in R2, per-document) — just enough to pick one.
+// material or continued editing. Ordered newest-first. Full field contents
+// still live only in R2, per-document — `title` is just a one-line human
+// label (first filled field's value, see deriveTitle), enough to recognize
+// a document without an R2 round-trip per row in the list.
 async function handleListDocuments(req, env) {
   if (!isAuthorized(req, env)) return err('unauthorized', 401);
   const url = new URL(req.url);
@@ -373,10 +392,10 @@ async function handleListDocuments(req, env) {
   const state = url.searchParams.get('state');
   const rows = state
     ? await env.OFFICE_DB.prepare(
-        'SELECT hex, b58, state, author_id, counterparty_email, supersedes_hex, created_at, signed_at, updated_at FROM office_documents WHERE state = ? ORDER BY updated_at DESC LIMIT ?'
+        'SELECT hex, b58, state, author_id, counterparty_email, supersedes_hex, title, created_at, signed_at, updated_at FROM office_documents WHERE state = ? ORDER BY updated_at DESC LIMIT ?'
       ).bind(state, limit).all()
     : await env.OFFICE_DB.prepare(
-        'SELECT hex, b58, state, author_id, counterparty_email, supersedes_hex, created_at, signed_at, updated_at FROM office_documents ORDER BY updated_at DESC LIMIT ?'
+        'SELECT hex, b58, state, author_id, counterparty_email, supersedes_hex, title, created_at, signed_at, updated_at FROM office_documents ORDER BY updated_at DESC LIMIT ?'
       ).bind(limit).all();
   return json({ ok: true, items: rows.results || [] });
 }
@@ -429,6 +448,82 @@ async function handleDocumentHistory(hex, req, env) {
 
   chain.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
   return json({ ok: true, chain });
+}
+
+// Legal hold — modeled after Microsoft 365's eDiscovery hold (see
+// schema.sql's office_legal_holds comment). Scoped to sealed documents
+// only: a document has no office_documents row at all until it's PUT here
+// on signing, so there's nothing to hold before that point. Two writes per
+// action on purpose: the append-only office_legal_holds row is the real
+// audit record (who, when, why — never overwritten), office_documents'
+// legal_hold/legal_hold_reason columns are a denormalized "current status"
+// for fast filtering (GET /legal-holds, and the browse list's flag).
+async function handleLegalHoldPlace(hex, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  if (!HEX_RE.test(hex)) return err('invalid document hex', 400);
+  let body;
+  try { body = await req.json(); } catch (_) { return err('invalid JSON body', 400); }
+  const by = body && body.by;
+  const reason = (body && body.reason) || null;
+  if (!by) return err('by (author_id) required', 400);
+
+  const doc = await env.OFFICE_DB.prepare('SELECT hex FROM office_documents WHERE hex = ?').bind(hex).first();
+  if (!doc) return err('document not found — only sealed documents can be placed on hold', 404);
+
+  const now = new Date().toISOString();
+  await env.OFFICE_DB.prepare(
+    'UPDATE office_documents SET legal_hold = 1, legal_hold_reason = ?, updated_at = ? WHERE hex = ?'
+  ).bind(reason, now, hex).run();
+  await env.OFFICE_DB.prepare(
+    'INSERT INTO office_legal_holds (doc_hex, action, by, reason, at) VALUES (?, ?, ?, ?, ?)'
+  ).bind(hex, 'placed', by, reason, now).run();
+
+  return json({ ok: true, hex, legal_hold: true, reason });
+}
+
+async function handleLegalHoldRelease(hex, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  if (!HEX_RE.test(hex)) return err('invalid document hex', 400);
+  let body;
+  try { body = await req.json(); } catch (_) { body = {}; }
+  const by = body && body.by;
+  const reason = (body && body.reason) || null;
+  if (!by) return err('by (author_id) required', 400);
+
+  const doc = await env.OFFICE_DB.prepare('SELECT hex FROM office_documents WHERE hex = ?').bind(hex).first();
+  if (!doc) return err('document not found', 404);
+
+  const now = new Date().toISOString();
+  await env.OFFICE_DB.prepare(
+    'UPDATE office_documents SET legal_hold = 0, legal_hold_reason = NULL, updated_at = ? WHERE hex = ?'
+  ).bind(now, hex).run();
+  await env.OFFICE_DB.prepare(
+    'INSERT INTO office_legal_holds (doc_hex, action, by, reason, at) VALUES (?, ?, ?, ?, ?)'
+  ).bind(hex, 'released', by, reason, now).run();
+
+  return json({ ok: true, hex, legal_hold: false });
+}
+
+// The report/export: every document currently under hold, for a real
+// discovery/subpoena response — not just a per-document status check.
+async function handleLegalHoldsReport(req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  const rows = await env.OFFICE_DB.prepare(
+    'SELECT hex, b58, state, author_id, title, legal_hold_reason, signed_at, created_at, updated_at FROM office_documents WHERE legal_hold = 1 ORDER BY updated_at DESC'
+  ).all();
+  return json({ ok: true, items: rows.results || [] });
+}
+
+// Full place/release audit trail for one document — the actual history
+// behind the current legal_hold flag, same relationship handleDocumentHistory
+// has to a document's version chain.
+async function handleLegalHoldHistory(hex, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  if (!HEX_RE.test(hex)) return err('invalid document hex', 400);
+  const rows = await env.OFFICE_DB.prepare(
+    'SELECT action, by, reason, at FROM office_legal_holds WHERE doc_hex = ? ORDER BY at ASC'
+  ).bind(hex).all();
+  return json({ ok: true, events: rows.results || [] });
 }
 
 function ackPage(message, ok) {
@@ -532,10 +627,23 @@ export default {
     }
 
     if (path === '/documents' && req.method === 'GET') return handleListDocuments(req, env);
+    if (path === '/legal-holds' && req.method === 'GET') return handleLegalHoldsReport(req, env);
 
     if (path.startsWith('/documents/') && path.endsWith('/history')) {
       const hex = decodeURIComponent(path.slice('/documents/'.length, -'/history'.length));
       return handleDocumentHistory(hex, req, env);
+    }
+    if (path.startsWith('/documents/') && path.endsWith('/legal-hold/release') && req.method === 'POST') {
+      const hex = decodeURIComponent(path.slice('/documents/'.length, -'/legal-hold/release'.length));
+      return handleLegalHoldRelease(hex, req, env);
+    }
+    if (path.startsWith('/documents/') && path.endsWith('/legal-hold') && req.method === 'POST') {
+      const hex = decodeURIComponent(path.slice('/documents/'.length, -'/legal-hold'.length));
+      return handleLegalHoldPlace(hex, req, env);
+    }
+    if (path.startsWith('/documents/') && path.endsWith('/legal-hold') && req.method === 'GET') {
+      const hex = decodeURIComponent(path.slice('/documents/'.length, -'/legal-hold'.length));
+      return handleLegalHoldHistory(hex, req, env);
     }
 
     if (path.startsWith('/documents/')) {

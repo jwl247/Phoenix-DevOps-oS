@@ -52,9 +52,18 @@ let agentSession = null;
 // Own deploy, own D1, own R2, own auth secret. See worker/README.md.
 const WORKER_URL = process.env.PHOENIX_OFFICE_WORKER_URL || 'https://phoenix-office-worker.phoenix-jwl.workers.dev';
 const WORKER_AUTH = process.env.PHOENIX_OFFICE_AUTH || '';
+const GOOGLE_CLIENT_ID = process.env.PHOENIX_OFFICE_GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.PHOENIX_OFFICE_GOOGLE_CLIENT_SECRET || '';
 
 let mainWindow = null;
 let splashWindow = null;
+
+// Session-scoped only, never written to disk — the whole point of requiring
+// Google identity for Sign/Legal-hold is a real verified person, re-proven
+// each app launch, not a cached credential sitting in a file. Cleared by
+// simply never persisting it in the first place.
+let googleIdentity = null;      // { idToken, email, sub } once a device-flow completes
+let pendingDeviceCode = null;   // in flight between office:google-signin-start and -poll
 
 // A minimum on-screen time for the splash so it reads as a real branded
 // loading moment rather than a one-frame flash — this app loads fast
@@ -266,14 +275,71 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 
 // ── IPC ──────────────────────────────────────────────────────────────────────
 function registerIpc() {
-    ipcMain.handle('office:whoami', async (_e, { prefer } = {}) => {
+    // requireGoogle pins prefer:'google' AND turns off fallback — a caller
+    // asking "am I Google-verified" must get a real answer, not a silent
+    // drop to the weaker fingerprint credential (which defeats the entire
+    // point of requiring it for Sign/Legal-hold — see office:sign below).
+    ipcMain.handle('office:whoami', async (_e, { prefer, requireGoogle } = {}) => {
         try {
-            const me = await lib.identity.resolveAuthor({ prefer: prefer || 'fingerprint', store: authStore() });
-            return { ok: true, author_id: me.author_id, via: me.credential.type, source: me.source };
+            const me = await lib.identity.resolveAuthor({
+                prefer: requireGoogle ? 'google' : (prefer || 'fingerprint'),
+                fallback: !requireGoogle,
+                googleIdToken: googleIdentity && googleIdentity.idToken,
+                store: authStore(),
+            });
+            return { ok: true, author_id: me.author_id, via: me.credential.type, source: me.source, email: (me.credential && me.credential.email) || null };
         } catch (e) { return { ok: false, error: e.message }; }
     });
 
+    // ── Google sign-in (device-code flow) ───────────────────────────────
+    // Needed for the eIDAS AdES / ESIGN Act hardening on Sign + Legal hold
+    // specifically (see README) — a hardware fingerprint identifies a
+    // *machine*, not a verified person; AdES Article 26 requires the
+    // latter. No browser embedding, no popup window: the classic
+    // device-code flow (show a short code, the user enters it at
+    // google.com/device in their own browser, this polls until they do).
+    ipcMain.handle('office:google-signin-start', async () => {
+        if (!GOOGLE_CLIENT_ID) return { ok: false, error: 'Google sign-in is not configured on this install (PHOENIX_OFFICE_GOOGLE_CLIENT_ID not set)' };
+        try {
+            const r = await lib.identity.googleDeviceCodeStart({ clientId: GOOGLE_CLIENT_ID, scope: 'openid email' });
+            pendingDeviceCode = r.device_code;
+            return { ok: true, user_code: r.user_code, verification_url: r.verification_url, interval: r.interval || 5, expires_in: r.expires_in };
+        } catch (e) { return { ok: false, error: e.message }; }
+    });
+
+    ipcMain.handle('office:google-signin-poll', async () => {
+        if (!pendingDeviceCode) return { ok: false, error: 'no sign-in in progress' };
+        try {
+            const token = await lib.identity.googleDeviceCodePoll({
+                clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET, deviceCode: pendingDeviceCode,
+            });
+            const claims = lib.identity.googleSubFromIdToken(token.id_token, { clientId: GOOGLE_CLIENT_ID });
+            googleIdentity = { idToken: token.id_token, email: claims.email, sub: claims.sub };
+            pendingDeviceCode = null;
+            return { ok: true, done: true, email: claims.email };
+        } catch (e) {
+            if (e.code === 'authorization_pending' || e.code === 'slow_down') return { ok: true, done: false };
+            pendingDeviceCode = null;
+            return { ok: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('office:google-signin-cancel', () => { pendingDeviceCode = null; return { ok: true }; });
+
     ipcMain.handle('office:templates', () => ({ ok: true, templates: listTemplates() }));
+
+    // First-run visibility, not a system-requirements gate — this app has no
+    // real hardware/OS floor beyond what Electron itself needs. The one
+    // thing worth surfacing upfront: whether the first PDF export/convert
+    // is going to silently trigger a ~300MB LibreOffice download. Cheap and
+    // synchronous (findLocalSoffice just checks known install paths), so
+    // it's fine to call on every boot rather than caching a result.
+    ipcMain.handle('office:libreoffice-status', () => {
+        try {
+            const local = lib.libreoffice.findLocalSoffice(app.getPath('userData'));
+            return { ok: true, found: !!local };
+        } catch (e) { return { ok: false, error: e.message }; }
+    });
 
     ipcMain.handle('office:new', async (_e, { template, fieldNames, counterparty, authorId } = {}) => {
         try {
@@ -526,6 +592,73 @@ function registerIpc() {
             if (!res.ok) return { ok: false, error: `worker ${res.status}` };
             const body = await res.json();
             return { ok: true, chain: body.chain || [] };
+        } catch (e) { return { ok: false, error: e.message }; }
+    });
+
+    // Legal hold — see worker/index.js and worker/schema.sql's
+    // office_legal_holds comment. Only meaningful for a sealed document
+    // (a DRAFT has no worker row to hold at all), so these always resolve
+    // the hex from the document the same way office:history does.
+    ipcMain.handle('office:legal-hold', async (_e, { document, by, reason } = {}) => {
+        if (!WORKER_AUTH) return { ok: false, error: 'no worker configured (PHOENIX_OFFICE_AUTH not set)' };
+        try {
+            const hex = lib.fileFormat.documentIdentityHash(document);
+            const res = await fetch(`${WORKER_URL.replace(/\/+$/, '')}/documents/${encodeURIComponent(hex)}/legal-hold`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${WORKER_AUTH}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ by, reason }),
+            });
+            const body = await res.json();
+            if (!res.ok) return { ok: false, error: body.error || `worker ${res.status}` };
+            return { ok: true, legal_hold: body.legal_hold, reason: body.reason };
+        } catch (e) { return { ok: false, error: e.message }; }
+    });
+
+    ipcMain.handle('office:legal-hold-release', async (_e, { document, by, reason } = {}) => {
+        if (!WORKER_AUTH) return { ok: false, error: 'no worker configured (PHOENIX_OFFICE_AUTH not set)' };
+        try {
+            const hex = lib.fileFormat.documentIdentityHash(document);
+            const res = await fetch(`${WORKER_URL.replace(/\/+$/, '')}/documents/${encodeURIComponent(hex)}/legal-hold/release`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${WORKER_AUTH}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ by, reason }),
+            });
+            const body = await res.json();
+            if (!res.ok) return { ok: false, error: body.error || `worker ${res.status}` };
+            return { ok: true, legal_hold: body.legal_hold };
+        } catch (e) { return { ok: false, error: e.message }; }
+    });
+
+    // Current status + full audit trail in one call — the render() path
+    // needs to know "is this on hold right now" every time a document
+    // opens, and the About-style detail (who/when/why) is cheap to include
+    // alongside it rather than a second round-trip.
+    ipcMain.handle('office:legal-hold-status', async (_e, { document } = {}) => {
+        if (!WORKER_AUTH) return { ok: false, error: 'no worker configured (PHOENIX_OFFICE_AUTH not set)' };
+        try {
+            const hex = lib.fileFormat.documentIdentityHash(document);
+            const res = await fetch(`${WORKER_URL.replace(/\/+$/, '')}/documents/${encodeURIComponent(hex)}/legal-hold`, {
+                headers: { Authorization: `Bearer ${WORKER_AUTH}` },
+            });
+            if (!res.ok) return { ok: false, error: `worker ${res.status}` };
+            const body = await res.json();
+            const events = body.events || [];
+            const last = events[events.length - 1];
+            return { ok: true, held: !!(last && last.action === 'placed'), events };
+        } catch (e) { return { ok: false, error: e.message }; }
+    });
+
+    // The report/export — every document currently on hold, for an actual
+    // discovery/subpoena response, not just a per-document status check.
+    ipcMain.handle('office:legal-holds-report', async () => {
+        if (!WORKER_AUTH) return { ok: false, error: 'no worker configured (PHOENIX_OFFICE_AUTH not set)' };
+        try {
+            const res = await fetch(`${WORKER_URL.replace(/\/+$/, '')}/legal-holds`, {
+                headers: { Authorization: `Bearer ${WORKER_AUTH}` },
+            });
+            if (!res.ok) return { ok: false, error: `worker ${res.status}` };
+            const body = await res.json();
+            return { ok: true, items: body.items || [] };
         } catch (e) { return { ok: false, error: e.message }; }
     });
 

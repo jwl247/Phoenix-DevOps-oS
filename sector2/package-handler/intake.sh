@@ -1240,7 +1240,7 @@ is_known_type() {
     sh|bash|zsh|py|js|mjs|cjs|ts|json|yaml|yml|toml|env|\
     conf|cfg|ini|service|timer|socket|sql|md|markdown|txt|\
     xml|html|htm|css|c|h|cpp|hpp|rs|go|ps1|\
-    kt|kts|php|gradle|properties|bat|cmd|jsonc|spec) return 0 ;;
+    kt|kts|php|gradle|properties|bat|cmd|jsonc|spec|csv) return 0 ;;
     *) return 1 ;;
   esac
 }

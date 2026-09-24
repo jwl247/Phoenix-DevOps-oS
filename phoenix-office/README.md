@@ -118,13 +118,85 @@ test/test.js         the 53-test engine suite (unchanged from Office)
   Same local-first/R2-fallback resolution as PDF export. Live-verified: a
   real Word-compatible `.rtf` converted to both `.html` (what a design tool
   would import) and `.odt`, content intact in both.
+- **Legal hold, 2026-09-23.** Modeled on Microsoft 365's eDiscovery hold: a
+  sealed document can be flagged as under legal hold, tied to a matter/case
+  reference, with a real append-only audit trail (`office_legal_holds` —
+  who placed/released it, when, why) separate from the denormalized
+  current-status flag on `office_documents`. A worth-knowing honest point:
+  sealed documents were already permanent before this — nothing in the
+  worker has ever had a delete/purge route — so a hold's real job is the
+  compliance flag, audit trail, and discovery-response report
+  (`GET /legal-holds`), not blocking a deletion path that doesn't exist.
+  "⚖ Legal hold…" button on any signed document; "⚖ Legal holds" in the
+  workspace pane lists everything currently held. Backend fully tested
+  (8 new worker tests, 30/30 passing); needs the schema migration applied
+  and the worker redeployed before it's live (see `worker/schema.sql`'s
+  migration block).
+- **eIDAS/ESIGN-hardened signing, 2026-09-23.** Sign and Legal-hold-place
+  now require a **Google-verified identity**, not the fingerprint-based one
+  used everywhere else — a hardware fingerprint identifies a *machine*, and
+  eIDAS Article 26 (the EU's Advanced Electronic Signature standard, AdES)
+  requires identifying the actual *signatory*. Device-code OAuth flow (no
+  embedded browser — a short code shown in-app, entered at
+  `google.com/device` in the user's own browser), wired end to end
+  (`office:google-signin-start/poll/cancel`, `lib/identity.js`'s
+  already-tested Google functions, never previously wired to any UI).
+  Signing also now shows explicit ESIGN Act / UETA consent-and-intent
+  language (conduct electronically + affirmative intent to sign,
+  spelled out, not implied by a button click) before the existing
+  hash-lock/tamper-guard fires — that lock already satisfies AdES's other
+  three Article 26 requirements (uniquely linked, sole control, tamper-
+  detectable), so this closes the one gap.
+  **Real, permanent limitation, not a gap to close:** the EU's highest
+  tier, QES (Qualified Electronic Signature — the only one with automatic
+  legal parity with a handwritten signature across all 27 member states)
+  *requires* a government-licensed EU Qualified Trust Service Provider and
+  certified signature hardware. No self-sovereign system can ever reach
+  QES; it's a hard regulatory wall, not an engineering one. AdES is the
+  real, honest ceiling here, and AdES already has strong legal standing on
+  its own.
+  **Not yet done: requires a real Google Cloud OAuth client** — same class
+  of external dependency as the still-pending `RESEND_API_KEY`. In Google
+  Cloud Console, create an OAuth client ID with **Application type: "TVs
+  and Limited Input devices"** — that's the specific type Google requires
+  for the device-code flow (confirmed via Google's own docs 2026-09-23;
+  "Desktop app" is the wrong type and won't support this grant). Set
+  `PHOENIX_OFFICE_GOOGLE_CLIENT_ID` / `PHOENIX_OFFICE_GOOGLE_CLIENT_SECRET`
+  from it before this can actually complete a sign-in — until then,
+  Sign/Legal-hold will correctly report "Google sign-in is not configured"
+  rather than silently failing.
 
 ## Status
 
-Code-complete, 74 tests passing (53 engine + 21 worker). Deployed and
-live-verified end to end on 2026-09-22: real sign→seal→fetch round-trip,
-a real 2-link change-order history chain, browse+pull, a real AI-composed
-field value, and a real LibreOffice-converted PDF (57KB, valid PDF 1.7).
-Not yet packaged as an installer (`electron-builder` is wired in
-`package.json` but unexercised). `RESEND_API_KEY` still needed for real
-tamper-notification delivery — see `worker/README.md`.
+Code-complete, 83 tests passing (53 engine + 30 Secretariat-agent). Deployed
+and live-verified end to end: real sign→seal→fetch round-trip, a real
+2-link change-order history chain, browse+pull, a real AI-composed field
+value, and a real LibreOffice-converted PDF (57KB, valid PDF 1.7).
+
+**Packaged as a real installer, 2026-09-23** — `electron-builder`'s config
+was missing entirely (`electron` was even listed under `dependencies`
+instead of `devDependencies`, which electron-builder correctly refuses to
+build with). Fixed both; `npm run build-win` now produces a real NSIS
+installer (`Phoenix Office Setup 1.0.0.exe`) and a portable exe
+(`Phoenix Office 1.0.0.exe`), ~77MB each, verified to actually build (not
+just configured). App icon (`build/icon.png`, 1024x1024) is a real center
+crop of the phoenix bird art via a one-off script
+(`scripts/build-icon.js`, uses Electron's own `nativeImage` — no external
+image tool needed); electron-builder auto-generates `.ico`/`.icns` from it.
+mac/Linux builds are configured (`dmg`/`AppImage`) but unexercised — only
+tested on Windows so far.
+
+**Restyled to match LibreOffice's actual visual language, 2026-09-23** —
+was a near-black dev-dashboard theme (`#0a0c10` background, neon blue
+accent); now a light office-suite theme matched against a real LibreOffice
+26.8 (Colibre theme) screenshot: white/light-gray chrome, muted functional
+accent colors instead of one hero color, the document panel rendered as a
+white "page" on a gray canvas (echoing how LibreOffice itself renders a
+page). The DRAFT/PENDING_REVIEW/SIGNED badge is now a subtly-tilted
+bordered mark — a restrained nod to a physical document stamp, the one
+deliberate visual flourish, everything else kept quiet. Live-verified by
+launching the app and screenshotting it next to a real LibreOffice Writer
+window — genuinely reads as belonging alongside it now.
+
+`RESEND_API_KEY` still needed for real tamper-notification delivery — see
+`worker/README.md`.

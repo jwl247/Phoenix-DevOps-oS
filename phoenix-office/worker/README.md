@@ -55,6 +55,19 @@ README for the escalation/transport design — unchanged here), plus:
 - `GET /documents/:hex/history` (Bearer `OFFICE_AUTH`) — the full
   `supersedes_hex` chain (original + every change order), oldest first.
   Empty array (not an error) if the hex was never sealed.
+- `POST /documents/:hex/legal-hold` (Bearer `OFFICE_AUTH`, body `{by, reason}`)
+  — place a legal hold on a sealed document. 404 if the hex was never
+  sealed (nothing to hold). `reason` doubles as the legal matter/case
+  reference, modeled on Microsoft 365's eDiscovery hold.
+- `POST /documents/:hex/legal-hold/release` (Bearer, body `{by, reason?}`)
+  — release it.
+- `GET /documents/:hex/legal-hold` (Bearer) — the full place/release audit
+  trail for one document (`office_legal_holds`), not just current status.
+- `GET /legal-holds` (Bearer) — every document currently on hold, for a
+  real discovery/subpoena response. Sealed documents already have no
+  delete/purge path at all, so a hold's actual job here is the compliance
+  flag + audit trail + this report, not blocking a deletion that was never
+  possible in the first place.
 - `GET /runtime/:name` (Bearer `OFFICE_AUTH`) — fetch a shared runtime asset
   from the `OFFICE_RUNTIME` bucket (e.g. the portable LibreOffice zip). Name
   must match `^[a-zA-Z0-9._-]+$` — no slashes, so it can't address anything

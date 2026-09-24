@@ -3,7 +3,7 @@
 import worker from './index.js';
 
 // ---- tiny in-memory D1 shim ----
-const db = { office_notifications: [], office_authors: [], office_documents: [], _notifId: 0 };
+const db = { office_notifications: [], office_authors: [], office_documents: [], office_legal_holds: [], _notifId: 0, _holdId: 0 };
 const sent = [];
 
 globalThis.fetch = async (url, opts) => {
@@ -52,15 +52,15 @@ function exec(s, b) {
   if (s.startsWith('INSERT INTO office_documents')) {
     const hex = b[0];
     const existing = db.office_documents.find(r => r.hex === hex);
-    const row = { hex, b58: b[1], state: b[2], author_id: b[3], counterparty_phone: b[4], counterparty_carrier: b[5], counterparty_email: b[6], hash_sha3: b[7], hash_blake2: b[8], supersedes_hex: b[9], signed_at: b[10], created_at: b[11], updated_at: b[12] };
+    const row = { hex, b58: b[1], state: b[2], author_id: b[3], counterparty_phone: b[4], counterparty_carrier: b[5], counterparty_email: b[6], hash_sha3: b[7], hash_blake2: b[8], supersedes_hex: b[9], title: b[10], signed_at: b[11], created_at: b[12], updated_at: b[13] };
     if (existing) Object.assign(existing, row);
     else db.office_documents.push(row);
     return { rows: [] };
   }
-  if (s.startsWith('SELECT hex, b58, state, author_id, counterparty_email, supersedes_hex, created_at, signed_at, updated_at FROM office_documents WHERE state = ?')) {
+  if (s.startsWith('SELECT hex, b58, state, author_id, counterparty_email, supersedes_hex, title, created_at, signed_at, updated_at FROM office_documents WHERE state = ?')) {
     return { rows: db.office_documents.filter(r => r.state === b[0]).sort((a,c) => (c.updated_at||'').localeCompare(a.updated_at||'')).slice(0, b[1]) };
   }
-  if (s.startsWith('SELECT hex, b58, state, author_id, counterparty_email, supersedes_hex, created_at, signed_at, updated_at FROM office_documents ORDER BY')) {
+  if (s.startsWith('SELECT hex, b58, state, author_id, counterparty_email, supersedes_hex, title, created_at, signed_at, updated_at FROM office_documents ORDER BY')) {
     return { rows: [...db.office_documents].sort((a,c) => (c.updated_at||'').localeCompare(a.updated_at||'')).slice(0, b[0]) };
   }
   if (s.startsWith('SELECT hex, state, supersedes_hex, created_at, signed_at FROM office_documents WHERE hex = ?')) {
@@ -68,6 +68,30 @@ function exec(s, b) {
   }
   if (s.startsWith('SELECT hex, state, supersedes_hex, created_at, signed_at FROM office_documents WHERE supersedes_hex IN')) {
     return { rows: db.office_documents.filter(r => b.includes(r.supersedes_hex)) };
+  }
+
+  if (s.startsWith('SELECT hex FROM office_documents WHERE hex = ?')) {
+    return { rows: db.office_documents.filter(r => r.hex === b[0]) };
+  }
+  if (s.startsWith('UPDATE office_documents SET legal_hold = 1')) {
+    const r = db.office_documents.find(x => x.hex === b[2]);
+    if (r) { r.legal_hold = 1; r.legal_hold_reason = b[0]; r.updated_at = b[1]; }
+    return { rows: [] };
+  }
+  if (s.startsWith('UPDATE office_documents SET legal_hold = 0')) {
+    const r = db.office_documents.find(x => x.hex === b[1]);
+    if (r) { r.legal_hold = 0; r.legal_hold_reason = null; r.updated_at = b[0]; }
+    return { rows: [] };
+  }
+  if (s.startsWith('INSERT INTO office_legal_holds')) {
+    db.office_legal_holds.push({ id: ++db._holdId, doc_hex: b[0], action: b[1], by: b[2], reason: b[3], at: b[4] });
+    return { rows: [] };
+  }
+  if (s.startsWith('SELECT hex, b58, state, author_id, title, legal_hold_reason, signed_at, created_at, updated_at FROM office_documents WHERE legal_hold = 1')) {
+    return { rows: db.office_documents.filter(r => r.legal_hold === 1).sort((a,c) => (c.updated_at||'').localeCompare(a.updated_at||'')) };
+  }
+  if (s.startsWith('SELECT action, by, reason, at FROM office_legal_holds WHERE doc_hex = ?')) {
+    return { rows: db.office_legal_holds.filter(r => r.doc_hex === b[0]).sort((a,c) => (a.at||'').localeCompare(c.at||'')) };
   }
 
   throw new Error('unhandled SQL: ' + s);
@@ -199,6 +223,7 @@ const envelope2 = JSON.stringify({ header: 'x', footer: 'y', body: { state: 'SIG
   const j = await r.json();
   ok(r.status === 200 && j.ok && j.items.length === 2, 'GET /documents lists both sealed documents');
   ok(j.items[0].hex === hex2, 'GET /documents orders newest-first by updated_at');
+  ok(j.items[0].title === 'A Totally Different Customer', 'GET /documents includes a human-readable title alongside the hash');
 }
 
 // 11. browse: state filter narrows the list
@@ -259,6 +284,56 @@ const envelope3 = JSON.stringify({ header: 'x', footer: 'y', body: {
   // be used to address something outside the flat runtime-asset namespace.
   const r = await worker.fetch(new Request(B + '/runtime/foo%2Fbar', { headers: H }), env);
   ok(r.status === 400, 'GET /runtime/:name rejects a name containing an (encoded) slash');
+}
+
+// 15. legal hold: place, report, audit trail, release
+{
+  const r = await worker.fetch(new Request(B + '/documents/' + hex + '/legal-hold', { method: 'POST' }), env);
+  ok(r.status === 401, 'POST /documents/:hex/legal-hold without a bearer is rejected');
+}
+{
+  const unknown = 'e'.repeat(64);
+  const r = await worker.fetch(new Request(B + '/documents/' + unknown + '/legal-hold', {
+    method: 'POST', headers: H, body: JSON.stringify({ by: 'a_x', reason: 'Smith v. Jones' }),
+  }), env);
+  ok(r.status === 404, 'POST /documents/:hex/legal-hold on an unsealed/unknown hex is 404, not silently accepted');
+}
+{
+  const r = await worker.fetch(new Request(B + '/documents/' + hex + '/legal-hold', {
+    method: 'POST', headers: H, body: JSON.stringify({ by: 'a_x', reason: 'Smith v. Jones' }),
+  }), env);
+  const j = await r.json();
+  ok(r.status === 200 && j.ok && j.legal_hold === true, 'POST /documents/:hex/legal-hold places the hold');
+}
+{
+  const r = await worker.fetch(new Request(B + '/legal-holds', { headers: H }), env);
+  const j = await r.json();
+  ok(r.status === 200 && j.items.length === 1 && j.items[0].hex === hex && j.items[0].legal_hold_reason === 'Smith v. Jones',
+    'GET /legal-holds reports the held document with its matter/case reason — a real discovery-response export, not just a status flag');
+}
+{
+  const r = await worker.fetch(new Request(B + '/documents/' + hex + '/legal-hold', { headers: H }), env);
+  const j = await r.json();
+  ok(r.status === 200 && j.events.length === 1 && j.events[0].action === 'placed' && j.events[0].by === 'a_x',
+    'GET /documents/:hex/legal-hold returns the audit trail, not just current status');
+}
+{
+  const r = await worker.fetch(new Request(B + '/documents/' + hex + '/legal-hold/release', {
+    method: 'POST', headers: H, body: JSON.stringify({ by: 'a_x', reason: 'matter closed' }),
+  }), env);
+  const j = await r.json();
+  ok(r.status === 200 && j.ok && j.legal_hold === false, 'POST /documents/:hex/legal-hold/release releases the hold');
+}
+{
+  const r = await worker.fetch(new Request(B + '/legal-holds', { headers: H }), env);
+  const j = await r.json();
+  ok(j.items.length === 0, 'GET /legal-holds no longer lists a released document');
+}
+{
+  const r = await worker.fetch(new Request(B + '/documents/' + hex + '/legal-hold', { headers: H }), env);
+  const j = await r.json();
+  ok(j.events.length === 2 && j.events[0].action === 'placed' && j.events[1].action === 'released',
+    'the audit trail keeps both events in order — placing then releasing never overwrites history');
 }
 
 console.log(`\n${pass} passing, ${fail} failing`);

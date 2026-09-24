@@ -13,13 +13,50 @@
     "build-mac": "electron-builder --mac",
     "build-linux": "electron-builder --linux"
   },
-  "dependencies": {
-    "electron": "^28.3.3"
-  },
   "devDependencies": {
+    "electron": "^28.3.3",
     "electron-builder": "^24.9.1"
   },
   "allowScripts": {
     "electron@28.3.3": true
+  },
+  "build": {
+    "appId": "com.jwl247.phoenixoffice",
+    "productName": "Phoenix Office",
+    "icon": "build/icon.png",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "splash.html",
+      "brand.json",
+      "brand-logo.svg",
+      "lib/**/*",
+      "templates/**/*",
+      "assets/**/*",
+      "scripts/fix-electron.js",
+      "package.json",
+      "!node_modules/electron-builder",
+      "!node_modules/.bin"
+    ],
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.business"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Office"
+    }
   }
 }
