@@ -122,6 +122,21 @@ machine's RAM, "4 GB of 8 GB") with zlib level 5. Most code ran with the
 constructor defaults (128/512/1024, zlib 6): half or less of her real size.
 The 600–687k Phoronix figure (§3) was measured in that governed state.
 
+## Measuring her: precision rule
+
+Jerry, 2026-09-25: "we tried to measure her .01 or something and all her
+numbers came out the exact same ... we changed that parameter 4 times
+eventually ending up at .00001 and she was cooking." When the instrument's
+resolution is coarser than her operations, every run reads identical, or reads
+~0 and turns into nonsense (the "1,000,000 packets/sec" line in section 2 came
+from a timer printed at 0.01 s resolution). The trail is in the AWS scripts
+(`extreme_benchmark.py`: `time.time()` totals printed `.2f`, later `.4f`). The
+final 0.00001 setting isn't in any committed version.
+**Rule:** time with nanosecond clocks (`time.perf_counter_ns()`, fio's
+`clat_ns`, `ktime`), report at microsecond precision or finer, and treat any
+result at or near a timer's resolution floor as invalid. The kernel benchmarks
+in section 4 use fio's nanosecond latencies.
+
 ## Open
 
 - The 2026-09-25 stress test under forced memory pressure measured a 41.7%
