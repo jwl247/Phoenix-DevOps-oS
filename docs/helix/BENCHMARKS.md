@@ -97,6 +97,18 @@ this machine Linux's own cache could also hold 1.1 GB. Her edge over Linux
 must be shown with working sets larger than RAM and under memory pressure
 (planned: the Compaq, Phoronix, throttle open).
 
+**vs Linux, page cache LEFT ON (2026-09-25, same work, same machine):**
+raw 0.6-0.8 s search / 2.9-3.1 s checksum per pass; Helix identical within
+noise. Linux's page cache held all 1.1 GB and answered every read before it
+reached the block layer. Helix saw 45 hits / 233 misses the whole run and
+stayed cold. **A tie. When the data fits in RAM, Linux's own cache already
+does the job and Helix adds nothing.** (The copy-in 121 s vs 29 s is a test
+artifact: the raw run went first and left the source files cached. Not
+counted.) Her advantage has to be shown where Linux's cache runs out: working
+sets larger than RAM (Strand B: ~30x the raw disk, section 4), memory pressure
+(the "page cache dropped" runs simulate that case), and persistence and sharing
+beyond one kernel's cache.
+
 ## 5. Python Helix via FUSE on pbm3 — 2026-09-25
 
 The headless Python stack as a FUSE filesystem was **slower than plain Linux**
