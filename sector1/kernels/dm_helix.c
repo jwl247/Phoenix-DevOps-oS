@@ -70,10 +70,12 @@
 #define HX_Z_PER_TICK       256          /* relief work cap per tick */
 #define HX_PREDICT_GUARD_MS 2000         /* don't relieve what's due back soon */
 #define HX_B_WRITE_BATCH    64           /* B writer: blocks per lane per pass */
+#define HX_READ_WORKERS     8            /* parallel Strand B / slow-path readers */
+#define HX_PEAK_FLOOR       200          /* ops/s: never calibrate below this */
 
-static unsigned int dandelion_ops_ref = 20000;
+static unsigned int dandelion_ops_ref;     /* 0 = she calibrates herself */
 module_param(dandelion_ops_ref, uint, 0644);
-MODULE_PARM_DESC(dandelion_ops_ref, "Block ops/s that count as full I/O load for the Dandelion's heat");
+MODULE_PARM_DESC(dandelion_ops_ref, "Fixed ops/s that count as full load; 0 (default) = the Dandelion calibrates to her own peak on this machine");
 
 /* Shared with helix_kmod.c (/proc/helix, GET_STATS, Frank's slots). */
 atomic_t helix_dandelion_heat = ATOMIC_INIT(0);          /* 0..1000 */
@@ -134,7 +136,11 @@ struct hx_cache {
 	atomic64_t b_hits, b_writes, b_evictions, b_zero_copy, b_ioerr, b_freed;
 	struct workqueue_struct *wq;
 	struct work_struct b_write_work;
-	struct work_struct read_work;
+	struct hx_reader {
+		struct work_struct work;
+		struct hx_cache *hc;
+	} readers[HX_READ_WORKERS];
+	unsigned int next_reader;
 	spinlock_t defer_lock;
 	struct bio_list deferred;
 	void *worker_inflate_ws;    /* for the B writer (process context) */
@@ -144,6 +150,7 @@ struct hx_cache {
 	u32 compression;
 	int state;
 	u64 last_ops;
+	u64 peak_ops;               /* self-calibration: busiest tick seen (decays) */
 	unsigned int temps[5];
 	unsigned long rungs;        /* entries on A and B at once (last census) */
 	unsigned int next_lane;
@@ -844,22 +851,21 @@ static void hx_serve_deferred(struct hx_cache *hc, struct bio *bio)
 	bio_endio(bio);
 }
 
+/* HX_READ_WORKERS of these drain the deferred list together, one bio at a
+ * time, so Strand B reads run in parallel instead of queuing behind one. */
 static void hx_read_worker(struct work_struct *w)
 {
-	struct hx_cache *hc = container_of(w, struct hx_cache, read_work);
-	struct bio_list list;
+	struct hx_cache *hc = container_of(w, struct hx_reader, work)->hc;
 	struct bio *bio;
 	unsigned long flags;
 
 	for (;;) {
 		spin_lock_irqsave(&hc->defer_lock, flags);
-		list = hc->deferred;
-		bio_list_init(&hc->deferred);
+		bio = bio_list_pop(&hc->deferred);
 		spin_unlock_irqrestore(&hc->defer_lock, flags);
-		if (bio_list_empty(&list))
+		if (!bio)
 			return;
-		while ((bio = bio_list_pop(&list)))
-			hx_serve_deferred(hc, bio);
+		hx_serve_deferred(hc, bio);
 	}
 }
 
@@ -969,15 +975,26 @@ static void hx_dandelion_tick(struct work_struct *w)
 		  atomic64_read(&hc->b_hits);
 	u64 dops = ops - hc->last_ops;
 	u32 io_load, mem_load, load;
+	u64 ref;
 	unsigned int temps[5] = { 0 }, i;
 	unsigned long rungs = 0;
 	u64 freed = 0, held = 0, cool;
 	u8 *buf;
 
 	hc->last_ops = ops;
-	/* ops per second as a fraction (x1000) of dandelion_ops_ref */
-	io_load = (u32)min_t(u64, 1000, div64_u64(dops * 1000 * 1000,
-				(u64)HX_TICK_MS * max(1u, dandelion_ops_ref)));
+	/* Load = ops this tick against a reference. Default: HER OWN peak on this
+	 * machine (decaying ~1.5%/tick so she re-learns), never below a floor.
+	 * A fixed dandelion_ops_ref overrides. */
+	if (dandelion_ops_ref) {
+		ref = dandelion_ops_ref;
+	} else {
+		if (dops > hc->peak_ops)
+			hc->peak_ops = dops;
+		else
+			hc->peak_ops -= hc->peak_ops >> 6;
+		ref = max_t(u64, hc->peak_ops, HX_PEAK_FLOOR);
+	}
+	io_load = (u32)min_t(u64, 1000, div64_u64(dops * 1000 * 1000, (u64)HX_TICK_MS * ref));
 	mem_load = helix_mem_pressure_pct() * 10;
 	load = max(io_load, mem_load);
 
@@ -1065,7 +1082,7 @@ static int hx_map(struct dm_target *ti, struct bio *bio)
 			spin_lock_irqsave(&hc->defer_lock, flags);
 			bio_list_add(&hc->deferred, bio);
 			spin_unlock_irqrestore(&hc->defer_lock, flags);
-			queue_work(hc->wq, &hc->read_work);
+			queue_work(hc->wq, &hc->readers[hc->next_reader++ % HX_READ_WORKERS].work);
 			return DM_MAPIO_SUBMITTED;
 		case HX_MISS:
 			break;
@@ -1137,11 +1154,17 @@ static int hx_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	int r, cpu;
 
 	if (argc != 2 && argc != 4) {
-		ti->error = "usage: helix <origin_dev> <ram_mb> [<strandB_dev> <b_mb>]";
+		ti->error = "usage: helix <origin_dev> <ram_mb|auto> [<strandB_dev> <b_mb>]";
 		return -EINVAL;
 	}
-	if (kstrtouint(argv[1], 10, &ram_mb) || !ram_mb || ram_mb > 65536) {
-		ti->error = "ram_mb must be 1..65536";
+	/* "auto" = her real size: half the machine's RAM (her config was
+	 * L1 256 + L2 1024 + L3 3072 MB = "4GB of 8GB"). */
+	if (!strcmp(argv[1], "auto"))
+		ram_mb = (unsigned int)((totalram_pages() << PAGE_SHIFT) >> 21);
+	else if (kstrtouint(argv[1], 10, &ram_mb))
+		ram_mb = 0;
+	if (!ram_mb || ram_mb > 65536) {
+		ti->error = "ram_mb must be 1..65536 or auto";
 		return -EINVAL;
 	}
 	hc = kzalloc(sizeof(*hc), GFP_KERNEL);
@@ -1207,7 +1230,10 @@ static int hx_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	spin_lock_init(&hc->defer_lock);
 	bio_list_init(&hc->deferred);
 	INIT_WORK(&hc->b_write_work, hx_b_writer);
-	INIT_WORK(&hc->read_work, hx_read_worker);
+	for (i = 0; i < HX_READ_WORKERS; i++) {
+		hc->readers[i].hc = hc;
+		INIT_WORK(&hc->readers[i].work, hx_read_worker);
+	}
 
 	hc->ram_mb = ram_mb;
 	hc->lane_budget = ((u64)ram_mb << 20) / HX_LANES;

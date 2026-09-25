@@ -8,6 +8,8 @@
 # what compresses, what moves to Strand B, when she heats and cools. Her
 # telemetry is sampled every 2 s to show what she chose.
 #
+# Sizing: she takes her real size by default, half the machine's RAM ("auto"),
+# and an 8 GiB Strand B. Her heat calibrates itself to her own peak.
 # Fairness: Linux's own page cache is dropped between passes, otherwise we'd
 # be measuring Linux's RAM cache sitting on top of her rather than her.
 # Runs on image files only, never a real disk. Linux, root via sudo.
@@ -16,8 +18,9 @@ cd "$(dirname "$0")"
 LOG=${HELIX_FD_LOG:-./freedrive-$(date +%Y%m%d-%H%M%S).log}
 exec > >(tee "$LOG") 2>&1
 IMG=${HELIX_TEST_IMG:-$HOME/helixdm/origin.img}
-BIMG=${HELIX_B_IMG:-/mnt/helix/helix-strandB.img}
-RAM=${HELIX_RAM_MB:-512}
+BIMG=${HELIX_B_IMG:-/mnt/helix/helix-strandB-8g.img}
+RAM=${HELIX_RAM_MB:-auto}          # auto = her real size: half the machine's RAM
+BMB=${HELIX_B_MB:-8192}
 SRC=${HELIX_FD_SRC:-/usr/share/doc /usr/share/locale /usr/share/icons /usr/share/man /usr/include /usr/lib/python3 /usr/share/perl /usr/share/perl5}
 MNT=/mnt/hxfd
 
@@ -50,12 +53,13 @@ sudo mkfs.ext4 -q -F "$LOOP" && sudo mkdir -p $MNT && sudo mount "$LOOP" $MNT
 workload "raw   "
 sudo umount $MNT
 
-echo "== Helix double strand, driving herself (A ${RAM} MiB RAM, B 512 MiB SSD, defaults)"
-[ -f "$BIMG" ] || fallocate -l 512M "$BIMG"
+echo "== Helix double strand, driving herself (A ${RAM} RAM, B ${BMB} MiB SSD, defaults, self-calibrating heat)"
+[ -f "$BIMG" ] || fallocate -l ${BMB}M "$BIMG"
 LOOPB=$(sudo losetup --direct-io=on --show -f "$BIMG")
 sudo modprobe dm_mod
 sudo insmod ./helix.ko || { echo "insmod failed"; exit 1; }
-sudo dmsetup create hxfd --table "0 $SZ helix $LOOP $RAM $LOOPB 512"
+sudo dmsetup create hxfd --table "0 $SZ helix $LOOP $RAM $LOOPB $BMB"
+echo "   she took: $(sudo dmsetup table hxfd | cut -d' ' -f5) MiB of RAM for Strand A"
 D=/dev/mapper/hxfd
 # her telemetry, every 2 s, untouched by anything else
 ( while sudo dmsetup status hxfd >/dev/null 2>&1; do

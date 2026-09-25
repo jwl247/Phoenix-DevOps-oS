@@ -71,7 +71,31 @@ bypassed). Script: `sector1/kernels/dm_helix_test.sh`.
 Free drive (hands-off real work, 1.1 GB of system files, page cache dropped
 between passes), Strand A capped at 512 MiB, fixed heat scale: six
 search/checksum passes 581 s vs 639 s raw (9% faster; repeat searches 17%).
-The uncapped run (her real size) is recorded when it completes.
+**Unbridled free drive (2026-09-25, same work, same machine):** her real size
+(`auto`: 3,848 MiB Strand A = half the RAM), 8 GiB Strand B on the SSD,
+self-calibrating heat, 8 parallel Strand B readers, all defaults, hands off.
+
+| Pass | Raw disk | Helix unbridled | Speedup |
+|---|---|---|---|
+| Copy-in | 148.6 s | 149.9 s | 1.0x (writes pass through) |
+| Search 1 | 106.2 s | 110.8 s | first read |
+| Checksum 1 | 109.3 s | 31.8 s | 3.4x |
+| Search 2 | 105.7 s | 3.6 s | 29x |
+| Checksum 2 | 102.8 s | 5.5 s | 19x |
+| Search 3 | 104.3 s | 2.7 s | 39x |
+| Checksum 3 | 103.3 s | 5.6 s | 18x |
+| **Six passes** | **632 s** | **160 s** | **4.0x** |
+| **Passes 2-3 (learned)** | **416 s** | **17.4 s** | **24x** |
+
+She self-calibrated to heat 1.0 under the work and was cooling (0.387) at the end.
+She moved 28,630 blocks to Strand B on her own and served 28,089 reads from it;
+28,087 blocks were on both strands. The integrity suite with 8 parallel readers
+ran first: 0 failures.
+**Fine print:** 1.1 GB fits in her 3.8 GB Strand A, so passes 2-3 run at RAM
+speed. Linux's page cache was dropped between passes to measure her alone; on
+this machine Linux's own cache could also hold 1.1 GB. Her edge over Linux
+must be shown with working sets larger than RAM and under memory pressure
+(planned: the Compaq, Phoronix, throttle open).
 
 ## 5. Python Helix via FUSE on pbm3 — 2026-09-25
 
