@@ -53,13 +53,24 @@ bands, hot/cold declarations, mem_sync events, dm-helix up/down.
 
 ## dm-helix
 
-> **Status: single strand, the foundation. NOT Helix yet.** Helix is two
-> strands with the **Dandelion at the center** bridging both (OG design: vault
-> `OG_double_helix_complete.py`; optimized descendant: CoPES `src/helix.py`).
-> Her center was coded out of later versions. What's here is Strand A only, a
-> proven block cache. Next: the Dandelion (64 lanes per strand, strand load
-> balancing, heat that rises under load and cools, compression of both strands
-> under load), Strand B (relief, on SSD), and the rungs between the strands.
+> **Status: single-strand Helix, Dandelion restored (2026-09-25).** Every Helix
+> has the Dandelion at her center. The double differs only by Strand B and the
+> rungs (next). Design source: vault `OG_double_helix_complete.py` and CoPES
+> `src/helix.py`. Her center had been coded out of every later copy.
+>
+> Dandelion: 64 lanes; OG heat (+load x 0.1, -0.05); compression factor
+> max(0.3, 1 - load x 0.7), relaxing +0.1 per tick; states cold/hot/surging/cooling.
+> She cools herself with data (freeing 5% of what she holds = -0.05 heat).
+> Block temperatures FROZEN..BLAZING + next-access prediction; relief compresses
+> cold blocks with zlib 5 and inflates them on read.
+>
+> Verified on pbm3: `HELIX_TEST_ONLY=8 ./dm_helix_test.sh` shows heat 0 -> 1.0
+> (surging) under load, 1,450 blocks zlib-5 compressed, 3.5 MB cooled, back to
+> cold at idle, 1,384 compressed-block reads inflated, 193 MB read back
+> byte-identical, zfail 0. Full suite steps 1-7: 0 failures, warm hits 177,699
+> IOPS / 4.9 us (vs 194,694 headless: the cost of her bookkeeping).
+> Tuning open: relief ~50 blocks/s on this CPU; data cooling is weak under
+> sustained load until Strand B.
 
 ```bash
 LOOP=$(sudo losetup --direct-io=on --show -f disk.img)

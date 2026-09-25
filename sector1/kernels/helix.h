@@ -56,7 +56,17 @@ struct helix_stats {
 	__u32 apps;
 	__u32 slots;
 	__u32 intents_queued;
+	/* the Dandelion (her center), from the most recent dm-helix tick */
+	__u32 dandelion_heat;          /* 0..1000 = 0.0..1.0 */
+	__u32 dandelion_state;         /* HX_COOL_* */
+	__u32 dandelion_compression;   /* 300..1000 = 0.3..1.0 (1.0 = relaxed) */
+	__u32 _pad;
 };
+
+/* Dandelion cooling states (OG CoolingState) and block temperatures
+ * (OG PageTemperature). */
+enum { HX_COOL_COLD, HX_COOL_WARM, HX_COOL_HOT, HX_COOL_SURGING, HX_COOL_COOLING };
+enum { HX_TEMP_FROZEN, HX_TEMP_COLD, HX_TEMP_WARM, HX_TEMP_HOT, HX_TEMP_BLAZING };
 
 #define HELIX_IOCTL_REGISTER    _IOW(HELIX_IOCTL_MAGIC, 1, struct helix_register_data)
 #define HELIX_IOCTL_DECLARE_HOT _IOW(HELIX_IOCTL_MAGIC, 2, struct helix_hot_data)
@@ -81,9 +91,13 @@ void helix_slot_unregister(struct helix_slot *slot);
 /* Queue a one-line intent for userspace (read from /dev/helix_intent). */
 void helix_intent_post(const char *fmt, ...) __printf(1, 2);
 
-/* dm-helix block cache (dm_helix.c), registered by helix.ko at load */
+/* dm-helix (dm_helix.c), registered by helix.ko at load */
 int  dm_helix_init(void);
 void dm_helix_exit(void);
+u32  helix_mem_pressure_pct(void);          /* helix_kmod.c */
+extern atomic_t helix_dandelion_heat;       /* dm_helix.c */
+extern atomic_t helix_dandelion_state;
+extern atomic_t helix_dandelion_compression;
 #endif
 
 #endif /* PHOENIX_HELIX_H */

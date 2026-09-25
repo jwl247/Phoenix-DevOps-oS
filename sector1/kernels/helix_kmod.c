@@ -96,7 +96,7 @@ void helix_intent_post(const char *fmt, ...)
 }
 EXPORT_SYMBOL_GPL(helix_intent_post);
 
-static u32 helix_mem_pressure(void)
+u32 helix_mem_pressure_pct(void)
 {
 	unsigned long total = totalram_pages();
 	unsigned long avail = si_mem_available();
@@ -115,7 +115,10 @@ static void helix_fill_stats(struct helix_stats *st)
 	memset(st, 0, sizeof(*st));
 	st->uptime_s = jiffies_to_msecs(jiffies - load_jiffies) / 1000;
 	st->ticks = READ_ONCE(ticks);
-	st->mem_pressure_pct = helix_mem_pressure();
+	st->mem_pressure_pct = helix_mem_pressure_pct();
+	st->dandelion_heat = atomic_read(&helix_dandelion_heat);
+	st->dandelion_state = atomic_read(&helix_dandelion_state);
+	st->dandelion_compression = atomic_read(&helix_dandelion_compression);
 	st->apps = READ_ONCE(app_count);
 	st->slots = READ_ONCE(slot_count);
 	spin_lock_irqsave(&intent_lock, flags);
@@ -297,6 +300,9 @@ static int helix_proc_show(struct seq_file *m, void *v)
 	seq_printf(m, "helix %s\nuptime_s %llu\nticks %llu\ntick_ms %u\n",
 		   HELIX_VERSION, st.uptime_s, st.ticks, tick_ms);
 	seq_printf(m, "mem_pressure_pct %u\n", st.mem_pressure_pct);
+	seq_printf(m, "dandelion heat=%u.%03u state=%u compression=%u.%03u\n",
+		   st.dandelion_heat / 1000, st.dandelion_heat % 1000, st.dandelion_state,
+		   st.dandelion_compression / 1000, st.dandelion_compression % 1000);
 	for (i = 0; i <= HELIX_TIER_MAX; i++)
 		seq_printf(m, "mem_sync tier%d events=%lld bytes=%lld\n", i,
 			   atomic64_read(&memsync_events[i]),

@@ -31,8 +31,8 @@ static void slot_tick(struct helix_slot *slot, const struct helix_stats *st)
 	int band = pressure_band(st->mem_pressure_pct);
 
 	if (time_after(jiffies, last_beat + msecs_to_jiffies(30000))) {
-		pr_info("frank3_slot_b: heartbeat — slot %d active, pressure %u%%\n",
-			slot_id, st->mem_pressure_pct);
+		pr_info("frank3_slot_b: heartbeat — slot %d active, pressure %u%%, dandelion heat %u/1000 state %u\n",
+			slot_id, st->mem_pressure_pct, st->dandelion_heat, st->dandelion_state);
 		last_beat = jiffies;
 	}
 	if (band != last_band) {

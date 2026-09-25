@@ -18,7 +18,9 @@ sudo modprobe dm_mod
 sudo insmod ./helix.ko tick_ms=2000 || { echo "insmod failed"; sudo losetup -d "$LOOP"; exit 99; }
 sudo dmsetup create helix0 --table "0 $SZ helix $LOOP 256" && ok "dm target on $LOOP (256 MiB RAM cache)" || bad "dmsetup create"
 D=/dev/mapper/helix0
+ONLY=${HELIX_TEST_ONLY:-}          # e.g. HELIX_TEST_ONLY=8 runs just the Dandelion step
 
+if [ -z "$ONLY" ]; then
 echo "== 1. randomized write + verify (mixed 4k-64k, direct I/O)"
 sudo fio --name=wv --filename=$D --rw=randwrite --bs=4k-64k --size=512m --direct=1 \
   --verify=crc32c --do_verify=1 --verify_fatal=1 --randseed=42 --output-format=terse >/dev/null 2>&1 \
@@ -57,6 +59,31 @@ r(){ sudo fio --name=bench --filename=$2 --rw=randread --bs=4k --size=200m --dir
 r "raw disk (no helix)" "$LOOP"
 r "helix pass 1 (filling)" $D
 r "helix pass 2 (RAM hits)" $D
+fi   # end of steps 1-7
+echo "== 8. the Dandelion: heat under load, relief by zlib-5 compression, cooling with data"
+st(){ sudo dmsetup status helix0 | grep -oE "heat [0-9.]+ state [a-z]+ compression [0-9.]+|zlib5 [0-9]+|cooled_bytes [0-9]+|zhits [0-9]+|zfail [0-9]+" | tr '\n' ' '; echo; }
+SRC=/tmp/hx_docs.tar
+sudo tar -C /usr -cf $SRC share/doc 2>/dev/null
+SRCMB=$(( $(stat -c %s $SRC) / 1048576 ))
+# write compressible text straight onto the device, then read it once so she holds it
+sudo dd if=$SRC of=$D bs=1M oflag=direct status=none
+sudo dd if=$D of=/dev/null bs=1M count=$SRCMB iflag=direct status=none
+echo "  held ${SRCMB} MiB of text:  $(st)"
+# hammer a small hot region far from the text: her heat should rise
+sudo fio --name=heat --filename=$D --rw=randread --bs=4k --offset=1500m --size=16m --direct=1 \
+  --runtime=30 --time_based=1 --output-format=terse >/dev/null 2>&1 &
+FIO=$!
+for s in 5 10 15 20 25 30; do sleep 5; echo "  t=${s}s under load: $(st)"; done
+wait $FIO   # not a bare wait: that also waits on the tee process substitution forever
+for s in 5 10 15; do sleep 5; echo "  t=+${s}s idle:      $(st)"; done
+Z=$(sudo dmsetup status helix0 | grep -oE "zlib5 [0-9]+" | cut -d' ' -f2)
+F=$(sudo dmsetup status helix0 | grep -oE "zfail [0-9]+" | cut -d' ' -f2)
+[ "${Z:-0}" -gt 0 ] && ok "she compressed ${Z} cold blocks with zlib 5 under load" || bad "no compression happened under load"
+[ "${F:-1}" -eq 0 ] && ok "zero compression/decompression failures" || bad "zfail=$F"
+a=$(sudo dd if=$D bs=1M count=$SRCMB iflag=direct status=none | sha256sum | cut -d' ' -f1)
+b=$(head -c $((SRCMB * 1048576)) $SRC | sha256sum | cut -d' ' -f1)
+[ "$a" = "$b" ] && ok "text read back through her (compressed blocks inflated) == source" || bad "DATA MISMATCH after compression"
+echo "  after read-back:   $(st)"
 echo "== dm-helix status:"; sudo dmsetup status helix0
 sudo dmsetup remove helix0 && sudo rmmod helix && ok "clean teardown" || bad "teardown"
 sudo losetup -d "$LOOP"

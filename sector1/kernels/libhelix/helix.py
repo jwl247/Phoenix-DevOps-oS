@@ -38,6 +38,10 @@ class HelixStats(ctypes.Structure):
         ("apps", ctypes.c_uint32),
         ("slots", ctypes.c_uint32),
         ("intents_queued", ctypes.c_uint32),
+        ("dandelion_heat", ctypes.c_uint32),         # 0..1000
+        ("dandelion_state", ctypes.c_uint32),        # cold/warm/hot/surging/cooling
+        ("dandelion_compression", ctypes.c_uint32),  # 300..1000
+        ("_pad", ctypes.c_uint32),
     ]
 
     def as_dict(self):
