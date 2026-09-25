@@ -17,7 +17,7 @@ KDIR ?= /lib/modules/$(KVER)/build
 PWD  := $(shell pwd)
 
 obj-m := helix.o frank3_slot_a.o frank3_slot_b.o
-helix-objs := helix_kmod.o
+helix-objs := helix_kmod.o dm_helix.o
 
 all:
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
@@ -27,6 +27,7 @@ clean:
 	rm -f helix_test
 
 load: all
+	sudo modprobe dm_mod
 	sudo insmod helix.ko
 	sudo insmod frank3_slot_a.ko
 	sudo insmod frank3_slot_b.ko

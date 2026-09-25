@@ -30,6 +30,7 @@
 #include "helix.h"
 
 #define DEVICE_NAME   "helix_intent"
+#define DEVICE_ALIAS  "helix_bridge"   /* original libhelix device name */
 #define CLASS_NAME    "helix"
 #define HELIX_VERSION "2.0"
 #define MAX_APPS      256
@@ -43,6 +44,7 @@ MODULE_PARM_DESC(tick_ms, "Slot tick interval in ms (default 5000)");
 static int major_number;
 static struct class *helix_class;
 static struct device *helix_device;
+static struct device *helix_alias;
 static struct proc_dir_entry *helix_proc;
 static unsigned long load_jiffies;
 
@@ -61,6 +63,10 @@ static DEFINE_MUTEX(slots_lock);
 static unsigned int slot_count;
 static u64 ticks;
 static struct delayed_work tick_work;
+
+/* ── MEM_SYNC ledger: what the VMMU reports it placed in each tier ──────── */
+static atomic64_t memsync_events[HELIX_TIER_MAX + 1];
+static atomic64_t memsync_bytes[HELIX_TIER_MAX + 1];
 
 /* ── intent ring: kernel/slots post, userspace reads ────────────────────── */
 static char intents[INTENT_RING][HELIX_INTENT_LEN];
@@ -196,6 +202,8 @@ static long dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct helix_register_data reg;
 	struct helix_hot_data hot;
+	struct helix_cold_data cold;
+	struct helix_memory_event mev;
 	struct helix_stats st;
 	struct helix_app *app;
 
@@ -238,6 +246,26 @@ static long dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		helix_intent_post("hot %.100s", hot.data_types);
 		return 0;
 
+	case HELIX_IOCTL_DECLARE_COLD:
+		if (copy_from_user(&cold, (void __user *)arg, sizeof(cold)))
+			return -EFAULT;
+		cold.data_types[HELIX_HOT_LEN - 1] = '\0';
+		pr_info("helix: cold data types declared: %s\n", cold.data_types);
+		helix_intent_post("cold %.100s", cold.data_types);
+		return 0;
+
+	case HELIX_IOCTL_MEM_SYNC:
+		if (copy_from_user(&mev, (void __user *)arg, sizeof(mev)))
+			return -EFAULT;
+		if (mev.target_tier < 0 || mev.target_tier > HELIX_TIER_MAX)
+			return -EINVAL;
+		/* Ledger only: ptr is the VMMU's own address, never dereferenced here. */
+		atomic64_inc(&memsync_events[mev.target_tier]);
+		atomic64_add(mev.size, &memsync_bytes[mev.target_tier]);
+		helix_intent_post("mem_sync tier=%d size=%llu",
+				  mev.target_tier, (unsigned long long)mev.size);
+		return 0;
+
 	case HELIX_IOCTL_GET_STATS:
 		helix_fill_stats(&st);
 		if (copy_to_user((void __user *)arg, &st, sizeof(st)))
@@ -263,11 +291,16 @@ static int helix_proc_show(struct seq_file *m, void *v)
 	struct helix_stats st;
 	struct helix_app *app;
 	struct helix_slot *s;
+	int i;
 
 	helix_fill_stats(&st);
 	seq_printf(m, "helix %s\nuptime_s %llu\nticks %llu\ntick_ms %u\n",
 		   HELIX_VERSION, st.uptime_s, st.ticks, tick_ms);
 	seq_printf(m, "mem_pressure_pct %u\n", st.mem_pressure_pct);
+	for (i = 0; i <= HELIX_TIER_MAX; i++)
+		seq_printf(m, "mem_sync tier%d events=%lld bytes=%lld\n", i,
+			   atomic64_read(&memsync_events[i]),
+			   atomic64_read(&memsync_bytes[i]));
 	seq_printf(m, "intents queued=%u posted=%llu dropped=%llu\n",
 		   st.intents_queued, st.intents_posted, st.intents_dropped);
 	seq_printf(m, "slots %u\n", st.slots);
@@ -307,6 +340,21 @@ static int __init helix_init(void)
 		unregister_chrdev(major_number, DEVICE_NAME);
 		return PTR_ERR(helix_device);
 	}
+	/* Same driver under the original libhelix name (minor 1). Optional. */
+	helix_alias = device_create(helix_class, NULL, MKDEV(major_number, 1),
+				    NULL, DEVICE_ALIAS);
+	if (IS_ERR(helix_alias))
+		helix_alias = NULL;
+
+	if (dm_helix_init()) {
+		if (helix_alias)
+			device_destroy(helix_class, MKDEV(major_number, 1));
+		device_destroy(helix_class, MKDEV(major_number, 0));
+		class_destroy(helix_class);
+		unregister_chrdev(major_number, DEVICE_NAME);
+		pr_alert("helix: dm target registration failed (is dm_mod loaded?)\n");
+		return -EINVAL;
+	}
 	helix_proc = proc_create_single("helix", 0444, NULL, helix_proc_show);
 	if (!helix_proc)
 		pr_warn("helix: /proc/helix not created\n");
@@ -325,6 +373,7 @@ static void __exit helix_exit(void)
 	struct helix_app *app, *tmp;
 
 	cancel_delayed_work_sync(&tick_work);
+	dm_helix_exit();
 	proc_remove(helix_proc);
 
 	mutex_lock(&apps_lock);
@@ -334,6 +383,8 @@ static void __exit helix_exit(void)
 	}
 	mutex_unlock(&apps_lock);
 
+	if (helix_alias)
+		device_destroy(helix_class, MKDEV(major_number, 1));
 	device_destroy(helix_class, MKDEV(major_number, 0));
 	class_destroy(helix_class);   /* also unregisters; no class_unregister() */
 	unregister_chrdev(major_number, DEVICE_NAME);

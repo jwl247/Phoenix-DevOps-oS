@@ -65,6 +65,30 @@ int main(void)
 	}
 	CHECK(rc == 1, "registry capped (ENOSPC before 300 apps)");
 
+	{
+		struct helix_cold_data cold;
+		struct helix_memory_event mev;
+
+		memset(&cold, 0, sizeof(cold));
+		strcpy(cold.data_types, "old_logs,historical_patterns");
+		CHECK(ioctl(fd, HELIX_IOCTL_DECLARE_COLD, &cold) == 0, "DECLARE_COLD (original libhelix ABI nr 3)");
+
+		memset(&mev, 0, sizeof(mev));
+		mev.ptr = 0x7f0000001000ULL; mev.size = 4096; mev.target_tier = 0;
+		CHECK(ioctl(fd, HELIX_IOCTL_MEM_SYNC, &mev) == 0, "MEM_SYNC tier 0 (original ABI nr 4)");
+		mev.target_tier = 9;
+		errno = 0;
+		CHECK(ioctl(fd, HELIX_IOCTL_MEM_SYNC, &mev) == -1 && errno == EINVAL, "MEM_SYNC bad tier rejected");
+		CHECK(sizeof(mev) == 24, "helix_memory_event is 24 bytes (matches original struct)");
+	}
+	{
+		int fd2 = open("/dev/helix_bridge", O_RDONLY);
+
+		CHECK(fd2 >= 0, "alias /dev/helix_bridge opens (original device name)");
+		if (fd2 >= 0)
+			close(fd2);
+	}
+
 	errno = 0;
 	CHECK(ioctl(fd, 0xdead, 0) == -1 && errno == ENOTTY, "unknown ioctl -> ENOTTY");
 
