@@ -41,6 +41,10 @@
 //                                              body: { by, reason? }
 //   GET  /documents/:hex/legal-hold           place/release audit trail for one document (Bearer)
 //   GET  /legal-holds                         every document currently on hold, for a discovery/subpoena response (Bearer)
+//   GET  /jobs?author_id=...           list saved job profiles for the dropdown (Bearer)
+//   POST /jobs                         create/update a saved job profile (Bearer)
+//                                      body: { job_id?, author_id, label, fields, counterparty? }
+//   DELETE /jobs/:job_id                remove a saved job profile (Bearer)
 //   GET  /runtime/:name                fetch a shared runtime asset, e.g. a
 //                                      portable LibreOffice zip (Bearer)
 //   HEAD /runtime/:name                check size/existence without downloading
@@ -273,6 +277,59 @@ async function handleAuthorLink(req, env) {
     'INSERT INTO office_authors (author_id, credential_type, credential_value, linked_at) VALUES (?, ?, ?, ?)'
   ).bind(author_id, credential_type, credential_value, now).run();
   return json({ author_id, linked_at: now, already: false });
+}
+
+// ── jobs — saved customer/job profiles for the "pick one, it autofills" ─────
+// dropdown (Jerry, 2026-09-24). Scoped per author_id, same as documents.
+// job_id is client-generated (crypto.randomUUID in main.js) so renaming a
+// label is just an upsert, never a new row.
+function genJobId() {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+}
+
+async function handleListJobs(req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  const url = new URL(req.url);
+  const authorId = url.searchParams.get('author_id');
+  if (!authorId) return err('author_id required', 400);
+  const rows = await env.OFFICE_DB.prepare(
+    'SELECT job_id, label, fields, counterparty, created_at, updated_at FROM office_jobs WHERE author_id = ? ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 200'
+  ).bind(authorId).all();
+  const items = (rows.results || []).map(r => ({
+    job_id: r.job_id, label: r.label,
+    fields: JSON.parse(r.fields || '{}'),
+    counterparty: r.counterparty ? JSON.parse(r.counterparty) : null,
+    created_at: r.created_at, updated_at: r.updated_at,
+  }));
+  return json({ ok: true, items });
+}
+
+async function handleSaveJob(req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  let body;
+  try { body = await req.json(); } catch { return err('body must be JSON', 400); }
+  const { author_id, label, fields, counterparty } = body || {};
+  if (!author_id) return err('author_id required', 400);
+  if (!label || !String(label).trim()) return err('label required', 400);
+  if (!fields || typeof fields !== 'object') return err('fields (object) required', 400);
+  const jobId = (body.job_id && String(body.job_id)) || genJobId();
+  const now = new Date().toISOString();
+  await env.OFFICE_DB.prepare(
+    `INSERT INTO office_jobs (job_id, author_id, label, fields, counterparty, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(job_id) DO UPDATE SET
+       label = excluded.label, fields = excluded.fields, counterparty = excluded.counterparty, updated_at = excluded.updated_at`
+  ).bind(jobId, author_id, String(label).trim(), JSON.stringify(fields), counterparty ? JSON.stringify(counterparty) : null, now, now).run();
+  return json({ ok: true, job_id: jobId, label: String(label).trim() });
+}
+
+async function handleDeleteJob(jobId, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  if (!jobId) return err('job_id required', 400);
+  await env.OFFICE_DB.prepare('DELETE FROM office_jobs WHERE job_id = ?').bind(jobId).run();
+  return json({ ok: true });
 }
 
 // ── runtime assets — large shared binaries (e.g. a portable LibreOffice) ────
@@ -618,6 +675,12 @@ export default {
         decodeURIComponent(rest.slice(1).join('/') || ''),
         env
       );
+    }
+
+    if (path === '/jobs' && req.method === 'GET') return handleListJobs(req, env);
+    if (path === '/jobs' && req.method === 'POST') return handleSaveJob(req, env);
+    if (path.startsWith('/jobs/') && req.method === 'DELETE') {
+      return handleDeleteJob(decodeURIComponent(path.slice('/jobs/'.length)), req, env);
     }
 
     if (path.startsWith('/runtime/')) {

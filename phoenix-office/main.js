@@ -386,9 +386,9 @@ function registerIpc() {
 
     // Sign = the custody handoff that locks it. Then seal it into THIS
     // product's own storage (worker + R2), keyed by the document's own hash.
-    ipcMain.handle('office:sign', async (_e, { document, by }) => {
+    ipcMain.handle('office:sign', async (_e, { document, by, signatureImage, signerEmail }) => {
         try {
-            const d = lib.document.sign(document, by);
+            const d = lib.document.sign(document, by, signatureImage, signerEmail);
             const p = docPath(d);
             lib.fileFormat.saveOfficeFile(p, d);
             const hex = lib.fileFormat.documentIdentityHash(d);
@@ -659,6 +659,54 @@ function registerIpc() {
             if (!res.ok) return { ok: false, error: `worker ${res.status}` };
             const body = await res.json();
             return { ok: true, items: body.items || [] };
+        } catch (e) { return { ok: false, error: e.message }; }
+    });
+
+    // ── saved job profiles ───────────────────────────────────────────────────
+    // "picking a saved profile at the top that auto fills" (Jerry, 2026-09-24):
+    // a dropdown of previously-saved customer/job info, shown when starting a
+    // new document, so the same customer name/job site/contact doesn't get
+    // retyped every time. Server-side (worker + D1), not a local file — same
+    // "recoverable from any machine" principle as documents. See
+    // worker/index.js's /jobs routes + worker/schema.sql's office_jobs table.
+    ipcMain.handle('office:jobs-list', async (_e, { authorId } = {}) => {
+        if (!authorId) return { ok: false, error: 'authorId required' };
+        if (!WORKER_AUTH) return { ok: true, items: [] }; // no worker configured — dropdown is just empty, not an error the user needs to see
+        try {
+            const res = await fetch(`${WORKER_URL.replace(/\/+$/, '')}/jobs?author_id=${encodeURIComponent(authorId)}`, {
+                headers: { Authorization: `Bearer ${WORKER_AUTH}` },
+            });
+            if (!res.ok) return { ok: false, error: `worker ${res.status}` };
+            const body = await res.json();
+            return { ok: true, items: body.items || [] };
+        } catch (e) { return { ok: false, error: e.message }; }
+    });
+
+    ipcMain.handle('office:jobs-save', async (_e, { jobId, authorId, label, fields, counterparty } = {}) => {
+        if (!authorId) return { ok: false, error: 'authorId required' };
+        if (!label || !String(label).trim()) return { ok: false, error: 'label required' };
+        if (!WORKER_AUTH) return { ok: false, error: 'no worker configured (PHOENIX_OFFICE_AUTH not set) — saved jobs need the worker' };
+        try {
+            const res = await fetch(`${WORKER_URL.replace(/\/+$/, '')}/jobs`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${WORKER_AUTH}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ job_id: jobId || undefined, author_id: authorId, label, fields: fields || {}, counterparty: counterparty || undefined }),
+            });
+            const body = await res.json();
+            if (!res.ok) return { ok: false, error: body.error || `worker ${res.status}` };
+            return { ok: true, job_id: body.job_id, label: body.label };
+        } catch (e) { return { ok: false, error: e.message }; }
+    });
+
+    ipcMain.handle('office:jobs-delete', async (_e, { jobId } = {}) => {
+        if (!jobId) return { ok: false, error: 'jobId required' };
+        if (!WORKER_AUTH) return { ok: false, error: 'no worker configured (PHOENIX_OFFICE_AUTH not set)' };
+        try {
+            const res = await fetch(`${WORKER_URL.replace(/\/+$/, '')}/jobs/${encodeURIComponent(jobId)}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${WORKER_AUTH}` },
+            });
+            return { ok: res.ok };
         } catch (e) { return { ok: false, error: e.message }; }
     });
 

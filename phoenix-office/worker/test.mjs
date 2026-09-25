@@ -3,7 +3,7 @@
 import worker from './index.js';
 
 // ---- tiny in-memory D1 shim ----
-const db = { office_notifications: [], office_authors: [], office_documents: [], office_legal_holds: [], _notifId: 0, _holdId: 0 };
+const db = { office_notifications: [], office_authors: [], office_documents: [], office_legal_holds: [], office_jobs: [], _notifId: 0, _holdId: 0 };
 const sent = [];
 
 globalThis.fetch = async (url, opts) => {
@@ -92,6 +92,21 @@ function exec(s, b) {
   }
   if (s.startsWith('SELECT action, by, reason, at FROM office_legal_holds WHERE doc_hex = ?')) {
     return { rows: db.office_legal_holds.filter(r => r.doc_hex === b[0]).sort((a,c) => (a.at||'').localeCompare(c.at||'')) };
+  }
+
+  if (s.startsWith('SELECT job_id, label, fields, counterparty, created_at, updated_at FROM office_jobs WHERE author_id')) {
+    return { rows: db.office_jobs.filter(r => r.author_id === b[0]).sort((a,c) => (c.updated_at||'').localeCompare(a.updated_at||'')) };
+  }
+  if (s.startsWith('INSERT INTO office_jobs')) {
+    const [jobId, authorId, label, fields, counterparty, createdAt, updatedAt] = b;
+    const existing = db.office_jobs.find(r => r.job_id === jobId);
+    if (existing) Object.assign(existing, { label, fields, counterparty, updated_at: updatedAt });
+    else db.office_jobs.push({ job_id: jobId, author_id: authorId, label, fields, counterparty, created_at: createdAt, updated_at: updatedAt });
+    return { rows: [] };
+  }
+  if (s.startsWith('DELETE FROM office_jobs WHERE job_id')) {
+    db.office_jobs = db.office_jobs.filter(r => r.job_id !== b[0]);
+    return { rows: [] };
   }
 
   throw new Error('unhandled SQL: ' + s);
@@ -334,6 +349,49 @@ const envelope3 = JSON.stringify({ header: 'x', footer: 'y', body: {
   const j = await r.json();
   ok(j.events.length === 2 && j.events[0].action === 'placed' && j.events[1].action === 'released',
     'the audit trail keeps both events in order — placing then releasing never overwrites history');
+}
+
+// ── jobs — saved profiles for the "pick one, it autofills" dropdown ────────
+{
+  const r = await worker.fetch(new Request(B + '/jobs', { method: 'POST', body: JSON.stringify({ author_id: 'a_x', label: 'Dave', fields: {} }) }), env);
+  ok(r.status === 401, 'POST /jobs without a bearer is rejected');
+}
+{
+  const r = await worker.fetch(new Request(B + '/jobs', {
+    method: 'POST', headers: H,
+    body: JSON.stringify({ author_id: 'a_x', label: '  Dave — 123 Main St reroof  ', fields: { customer_name: 'Dave Smith', job_site: '123 Main St' }, counterparty: { phone: '5551234567', carrier: 'verizon' } }),
+  }), env);
+  const j = await r.json();
+  ok(r.status === 200 && j.ok && j.job_id && j.label === 'Dave — 123 Main St reroof', 'POST /jobs creates a saved job, trims the label, and returns a real job_id');
+  var jobId = j.job_id;
+}
+{
+  const r = await worker.fetch(new Request(B + '/jobs?author_id=a_x', { headers: H }), env);
+  const j = await r.json();
+  ok(r.status === 200 && j.items.length === 1 && j.items[0].job_id === jobId && j.items[0].fields.customer_name === 'Dave Smith' && j.items[0].counterparty.phone === '5551234567',
+    'GET /jobs?author_id lists the saved job with its fields and counterparty intact');
+}
+{
+  const r = await worker.fetch(new Request(B + '/jobs', {
+    method: 'POST', headers: H,
+    body: JSON.stringify({ job_id: jobId, author_id: 'a_x', label: 'Dave — updated address', fields: { customer_name: 'Dave Smith', job_site: '456 Oak Ave' } }),
+  }), env);
+  const j = await r.json();
+  ok(r.status === 200 && j.job_id === jobId, 'POST /jobs with an existing job_id upserts in place rather than creating a duplicate');
+  const list = await (await worker.fetch(new Request(B + '/jobs?author_id=a_x', { headers: H }), env)).json();
+  ok(list.items.length === 1 && list.items[0].label === 'Dave — updated address' && list.items[0].fields.job_site === '456 Oak Ave',
+    'the upsert replaced the row in place — still exactly one saved job for this author');
+}
+{
+  const r = await worker.fetch(new Request(B + '/jobs?author_id=a_other', { headers: H }), env);
+  const j = await r.json();
+  ok(r.status === 200 && j.items.length === 0, 'jobs are scoped per author_id — a different author sees none');
+}
+{
+  const r = await worker.fetch(new Request(B + '/jobs/' + jobId, { method: 'DELETE', headers: H }), env);
+  ok(r.status === 200, 'DELETE /jobs/:job_id removes it');
+  const list = await (await worker.fetch(new Request(B + '/jobs?author_id=a_x', { headers: H }), env)).json();
+  ok(list.items.length === 0, 'the deleted job no longer appears in the list');
 }
 
 console.log(`\n${pass} passing, ${fail} failing`);

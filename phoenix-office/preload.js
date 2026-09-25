@@ -12,6 +12,7 @@ const CHANNELS = new Set([
   'office:change-order',
   'office:verify', 'office:qr',
   'office:legal-hold', 'office:legal-hold-release', 'office:legal-hold-status', 'office:legal-holds-report',
+  'office:jobs-list', 'office:jobs-save', 'office:jobs-delete',
   'office:autosave', 'office:open', 'office:open-path', 'office:recent',
   'office:browse', 'office:reference', 'office:reference-clear', 'office:history',
   'office:copilot', 'office:compose', 'office:export-pdf',

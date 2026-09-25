@@ -153,3 +153,33 @@ CREATE TABLE IF NOT EXISTS office_notifications (
 CREATE INDEX IF NOT EXISTS idx_notif_doc  ON office_notifications(doc_hex);
 -- the scheduled re-scan's hot query: unacknowledged, not yet maxed, ordered by staleness
 CREATE INDEX IF NOT EXISTS idx_notif_open ON office_notifications(acknowledged_at, last_sent_at);
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- TABLE: office_jobs   (2026-09-24)
+-- Saved customer/job profiles — Jerry's ask: "picking a saved profile at
+-- the top that auto fills." A job is a reusable bundle of field values
+-- (customer_name, job_site, phone, etc.) picked once from a dropdown when
+-- starting a new document, instead of retyping the same customer/site
+-- info on every work order, inspection, invoice. Per-author (jobs you've
+-- saved are yours; there's no cross-author sharing here, same scoping as
+-- documents). Stored server-side (not a local file) on purpose — same
+-- "recoverable from any machine" principle as everything else in this
+-- worker, not a per-install convenience that vanishes on reinstall.
+-- ══════════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS office_jobs (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id        TEXT    NOT NULL UNIQUE,        -- client-generated stable id, survives a label rename
+  author_id     TEXT    NOT NULL,
+  label         TEXT    NOT NULL,               -- what shows in the dropdown, e.g. "Dave — 123 Main St reroof"
+  fields        TEXT    NOT NULL,               -- JSON: { customer_name: "...", job_site: "...", ... }
+  counterparty  TEXT    DEFAULT NULL,           -- JSON: { phone, carrier, email }
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT    DEFAULT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_jobs_author ON office_jobs(author_id);
+
+-- MIGRATION — apply once against the already-deployed DB:
+--   wrangler d1 execute phoenix_office_db --file=schema.sql --remote
+-- (CREATE TABLE/INDEX IF NOT EXISTS — safe to re-run against a DB that
+-- already has the other tables above.)

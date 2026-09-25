@@ -95,12 +95,20 @@ function handToClient(doc) {
 
 // The custody handoff that actually locks the document: client signs and
 // hands it back. Hash baseline covers every field as they stand right now.
-function sign(doc, signerFingerprint) {
+// signatureImage (optional): a data: URL of the drawn signature — the
+// visible mark on the document. It's not part of the tamper-evidence
+// baseline (that's the fields, per contentHash above); it's bound to the
+// signing event itself, same as `by`/`at`, and can't be added or changed
+// after the fact since the document is already immutable at that point.
+function sign(doc, signerFingerprint, signatureImage, signerEmail) {
   assertState(doc, 'PENDING_REVIEW');
   const next = deepClone(doc);
   next.state = 'SIGNED';
   next.hash = contentHash(doc.fields);
   next.signed_at = nowIso();
+  if (signatureImage) {
+    next.signature = { image: signatureImage, by: signerFingerprint || 'unknown', email: signerEmail || null, at: next.signed_at };
+  }
   next.history.push({ at: next.signed_at, event: 'SIGNED', by: signerFingerprint || 'unknown', state: 'SIGNED' });
   return next;
 }

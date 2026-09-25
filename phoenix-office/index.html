@@ -260,6 +260,9 @@
     <div class="tpl-grid" id="app-grid"></div>
 
     <div id="phoenix-steps" hidden>
+      <h2 style="margin:0 0 6px">Saved job <span class="muted">— pick one to auto-fill its info, or leave blank to start fresh</span></h2>
+      <div class="field"><div class="row"><select id="job-select" style="flex:1"></select></div></div>
+
       <h2 style="margin:14px 0 8px">Choose a template</h2>
       <div class="tpl-grid" id="tpl-grid"></div>
       <div id="blank-fields" hidden>
@@ -351,6 +354,29 @@
   </div>
 </div>
 
+<!-- Signature capture — replaces the old confirm()-dialog "signature".
+     ESIGN/UETA need consent + an affirmative act of intent (the text
+     here), and Jerry's own ask: a real place to actually sign, not just
+     a button. The drawn mark is cosmetic (visible on the document/PDF),
+     not the tamper-evidence mechanism — that's still the Google identity
+     + content hash lock in document.js/sign(). -->
+<div class="scrim" id="sig-scrim">
+  <div class="modal" style="width:min(480px,92vw)">
+    <h3>Sign this document</h3>
+    <p class="muted" id="sig-consent-text" style="margin:-6px 0 14px; white-space:pre-line"></p>
+    <canvas id="sig-canvas" width="440" height="160"
+      style="width:100%; height:160px; background:#fff; border:1px solid var(--line); border-radius:4px; touch-action:none; cursor:crosshair"></canvas>
+    <p class="muted" style="margin:6px 0 0; font-size:12px">Sign above with your mouse, pen, or finger.</p>
+    <div class="modal-actions" style="justify-content:space-between">
+      <button id="sig-clear">Clear</button>
+      <div style="display:flex; gap:10px">
+        <button id="sig-cancel">Cancel</button>
+        <button class="primary" id="sig-confirm" disabled>Sign</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -366,6 +392,77 @@ function flashSaved(){ const s=$('#saved'); s.classList.add('show'); clearTimeou
   flashSaved._t=setTimeout(()=>s.classList.remove('show'),1400); }
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function banner(kind,html){ bannerHtml=`<div class="banner ${kind}">${html}</div>`; render(); }
+
+// ── date fields ──────────────────────────────────────────────────────────
+// Any field named/ending in "date" (date, inspection_date, due_date, …)
+// gets a real calendar picker; the value stored on the document is always
+// M/D/YYYY — no leading zeros, no dashes — per Jerry's ask.
+function isDateField(name){ return /(^|_)date($|_)?$/i.test(name) || /^date$/i.test(name); }
+function formatDateSlash(isoYYYYMMDD){
+  const parts = String(isoYYYYMMDD).split('-');
+  if (parts.length !== 3) return isoYYYYMMDD;
+  const [y, m, d] = parts.map(Number);
+  return `${m}/${d}/${y}`;
+}
+
+// ── signature pad ────────────────────────────────────────────────────────
+// Resolves with a data:image/png URL once the user draws a signature and
+// hits Sign, or null on Cancel. Mouse + touch, scaled to the canvas's
+// internal resolution so it draws crisply regardless of display size.
+function captureSignature(consentText){
+  return new Promise(resolve => {
+    const scrim = $('#sig-scrim'), canvas = $('#sig-canvas'), ctx = canvas.getContext('2d');
+    $('#sig-consent-text').textContent = consentText;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#1a1a1a';
+    let drawing = false, hasMark = false, last = null;
+    const confirmBtn = $('#sig-confirm'); confirmBtn.disabled = true;
+
+    function pos(e){
+      const r = canvas.getBoundingClientRect();
+      const sx = canvas.width / r.width, sy = canvas.height / r.height;
+      const t = e.touches && e.touches[0];
+      return { x: ((t ? t.clientX : e.clientX) - r.left) * sx, y: ((t ? t.clientY : e.clientY) - r.top) * sy };
+    }
+    function start(e){ e.preventDefault(); drawing = true; last = pos(e); }
+    function move(e){
+      if (!drawing) return;
+      e.preventDefault();
+      const p = pos(e);
+      ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+      last = p;
+      if (!hasMark){ hasMark = true; confirmBtn.disabled = false; }
+    }
+    function end(){ drawing = false; }
+    function onClear(){ ctx.clearRect(0, 0, canvas.width, canvas.height); hasMark = false; confirmBtn.disabled = true; }
+    function onCancel(){ cleanup(); resolve(null); }
+    function onConfirm(){ const data = canvas.toDataURL('image/png'); cleanup(); resolve(data); }
+    function cleanup(){
+      canvas.removeEventListener('mousedown', start);
+      canvas.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', end);
+      canvas.removeEventListener('touchstart', start);
+      canvas.removeEventListener('touchmove', move);
+      canvas.removeEventListener('touchend', end);
+      $('#sig-clear').removeEventListener('click', onClear);
+      $('#sig-cancel').removeEventListener('click', onCancel);
+      confirmBtn.removeEventListener('click', onConfirm);
+      scrim.classList.remove('show');
+    }
+
+    canvas.addEventListener('mousedown', start);
+    canvas.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', end);
+    canvas.addEventListener('touchstart', start, { passive: false });
+    canvas.addEventListener('touchmove', move, { passive: false });
+    canvas.addEventListener('touchend', end);
+    $('#sig-clear').addEventListener('click', onClear);
+    $('#sig-cancel').addEventListener('click', onCancel);
+    confirmBtn.addEventListener('click', onConfirm);
+
+    scrim.classList.add('show');
+  });
+}
 
 // ── Google sign-in (required for Sign + Legal hold) ─────────────────────────
 // Checks first before ever showing the modal — if a Google identity was
@@ -502,6 +599,31 @@ function openModal(){
 }
 function closeModal(){ $('#scrim').classList.remove('show'); }
 
+// ── saved jobs (entry modal) ────────────────────────────────────────────────
+// "picking a saved profile at the top that auto fills" (Jerry, 2026-09-24).
+// Re-fetched every time the modal opens so a job saved mid-session shows up
+// immediately, not just after a restart.
+let savedJobs = [], selectedJob = null;
+async function loadJobSelect(){
+  const sel = $('#job-select');
+  sel.innerHTML = '<option value="">— none, start fresh —</option>';
+  selectedJob = null;
+  if (!me || !me.author_id) return;
+  const r = await api.invoke('office:jobs-list', { authorId: me.author_id });
+  savedJobs = (r.ok && r.items) || [];
+  sel.innerHTML += savedJobs.map(j => `<option value="${esc(j.job_id)}">${esc(j.label)}</option>`).join('');
+}
+function applySelectedJobToCounterparty(){
+  const cp = (selectedJob && selectedJob.counterparty) || {};
+  $('#cp-phone').value = cp.phone || '';
+  $('#cp-carrier').value = cp.carrier || '';
+  $('#cp-email').value = cp.email || '';
+}
+$('#job-select').addEventListener('change', e => {
+  selectedJob = savedJobs.find(j => j.job_id === e.target.value) || null;
+  applySelectedJobToCounterparty();
+});
+
 function openPhoenixTemplates(){
   $('#tpl-grid').innerHTML = templates.map(t =>
     `<button class="tpl" data-t="${esc(t.template)}"><div class="n">${esc(t.label)}</div>
@@ -517,6 +639,7 @@ function openPhoenixTemplates(){
   $('#blank-input').value = ''; $('#blank-fields').hidden = true;
   $('#m-create').disabled = true;
   $('#m-hint').hidden = false; $('#m-hint').textContent = 'Pick a template above to continue';
+  loadJobSelect();
 }
 
 async function createFromModal(){
@@ -533,7 +656,35 @@ async function createFromModal(){
   const r = await api.invoke('office:new', body);
   if (!r.ok) return toast(r.error);
   doc = r.document; filePath = r.path; closeModal();
+
+  // Auto-fill from the selected saved job — only fields that exist on this
+  // template and are still empty; fillField()'s read+fill rule means this
+  // has to go through the normal fill() path, not a bulk write.
+  if (selectedJob && selectedJob.fields) {
+    for (const [name, value] of Object.entries(selectedJob.fields)) {
+      if (value && name in doc.fields && doc.fields[name] === null) {
+        await fill(name, value);
+      }
+    }
+  }
+
   render(); flashSaved(); refreshCopilot(true);
+}
+
+// ── save current fields as a reusable job ───────────────────────────────────
+async function saveAsJob(){
+  if (!doc) return;
+  const filledCount = Object.values(doc.fields).filter(v => v !== null).length;
+  if (!filledCount) return toast('fill in at least one field first');
+  const label = prompt('Save this as a job profile — name it (e.g. "Dave — 123 Main St reroof"):');
+  if (!label || !label.trim()) return;
+  const fields = {};
+  Object.entries(doc.fields).forEach(([k, v]) => { if (v !== null && !isDateField(k)) fields[k] = v; });
+  const r = await api.invoke('office:jobs-save', {
+    authorId: me && me.author_id, label: label.trim(), fields, counterparty: doc.counterparty || undefined,
+  });
+  if (!r.ok) return toast(r.error);
+  toast(`Saved job: ${r.label}`);
 }
 
 // ── open / recent ───────────────────────────────────────────────────────────
@@ -575,15 +726,14 @@ async function hand(){
 async function sign(){
   const identity = await ensureGoogleIdentity();
   if (!identity.ok) { if (identity.error !== 'cancelled') toast(identity.error); return; }
-  const consent = confirm(
+  const consentText =
     'Electronic Signature — Consent & Intent to Sign\n\n' +
-    'By clicking OK, you consent to conduct this transaction electronically and confirm that your action here constitutes your legal signature on this document, with the same effect as a handwritten signature.\n\n' +
+    'By signing below, you consent to conduct this transaction electronically and confirm that this signature has the same legal effect as a handwritten signature.\n\n' +
     `Signing as: ${identity.email || identity.author_id}\n\n` +
-    'After this, no field can be changed by anyone — the document is permanently locked and sealed into the vault.\n\n' +
-    'OK to sign, Cancel to back out.'
-  );
-  if (!consent) return;
-  const r = await api.invoke('office:sign', { document: doc, by: identity.author_id });
+    'After this, no field can be changed by anyone — the document is permanently locked and sealed into the vault.';
+  const signatureImage = await captureSignature(consentText);
+  if (!signatureImage) return;
+  const r = await api.invoke('office:sign', { document: doc, by: identity.author_id, signatureImage, signerEmail: identity.email });
   if (!r.ok) return toast(r.error);
   doc = r.document; render();
   const s = r.sealed || {};
@@ -848,15 +998,26 @@ function render(){
   const locked = doc.state === 'SIGNED';
   const fieldsHtml = Object.entries(doc.fields).map(([name,val]) => {
     const filled = val !== null;
+    const dateField = isDateField(name);
+    const inputHtml = (dateField && !filled && !locked)
+      ? `<input type="date" data-field="${esc(name)}" data-kind="date">`
+      : `<input data-field="${esc(name)}" value="${filled ? esc(val):''}" ${filled||locked ? 'readonly':''}
+               placeholder="${locked ? '' : 'type, then Enter'}">`;
     return `<div class="field ${filled ? 'filled':''}">
       <label>${esc(name)}</label>
       <div class="row">
-        <input data-field="${esc(name)}" value="${filled ? esc(val):''}" ${filled||locked ? 'readonly':''}
-               placeholder="${locked ? '' : 'type, then Enter'}">
+        ${inputHtml}
         ${filled ? '<span class="lock">🔒 filled</span>' : locked ? '<span class="lock">locked</span>'
-          : `<button data-compose="${esc(name)}" title="AI: draft this field">✨</button>`}
+          : dateField ? '' : `<button data-compose="${esc(name)}" title="AI: draft this field">✨</button>`}
       </div></div>`;
   }).join('');
+
+  const sigHtml = (doc.signature && doc.signature.image)
+    ? `<div class="section"><h2>Signature</h2>
+        <img src="${esc(doc.signature.image)}" alt="signature" style="max-height:64px; background:#fff; border:1px solid var(--line); border-radius:4px; padding:4px">
+        <div class="muted" style="margin-top:6px">Signed by ${esc(doc.signature.email || doc.signature.by || '')} — ${esc(doc.signed_at || '')}</div>
+      </div>`
+    : '';
 
   const cp = doc.counterparty || {};
   const cpHtml = `<div class="section"><h2>Counterparty contact</h2>
@@ -872,11 +1033,12 @@ function render(){
   else if (doc.state === 'PENDING_REVIEW') actions = `<button class="primary" id="a-sign">Client signs</button><button class="danger" id="a-reject">Send back</button>`;
   else if (doc.state === 'SIGNED') actions = `<button id="a-verify">Verify integrity</button><button id="a-co">New change order</button><button id="a-legal-hold">Legal hold…</button>`;
   actions += `<button id="a-export">Export PDF</button>`;
+  actions += `<button id="a-save-job">💾 Save as job</button>`;
 
   const historyHtml = `<div class="section" id="history-section"><h2>Version history</h2>
     <div id="history-list" class="muted">loading…</div></div>`;
 
-  $('#doc-view').innerHTML = bannerHtml + fieldsHtml + cpHtml + historyHtml
+  $('#doc-view').innerHTML = bannerHtml + fieldsHtml + sigHtml + cpHtml + historyHtml
     + `<div class="actions">${actions}</div><div class="qr" id="qr"></div>`;
   bannerHtml = '';
 
@@ -912,6 +1074,10 @@ function render(){
 
   $('#doc-view').querySelectorAll('input[data-field]').forEach(inp => {
     const f = inp.dataset.field;
+    if (inp.dataset.kind === 'date') {
+      inp.addEventListener('change', () => { if (inp.value) fill(f, formatDateSlash(inp.value)); });
+      return;
+    }
     inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fill(f, inp.value.trim()); }});
     inp.addEventListener('blur', () => { if (!inp.readOnly && inp.value.trim()) fill(f, inp.value.trim()); });
   });
@@ -927,6 +1093,7 @@ function render(){
   const bind = (id,fn) => { const el = $('#'+id); if (el) el.addEventListener('click', fn); };
   bind('a-hand',hand); bind('a-sign',sign); bind('a-reject',reject); bind('a-verify',verify); bind('a-co',changeOrder);
   bind('a-legal-hold', toggleLegalHold);
+  bind('a-save-job', saveAsJob);
   const exportBtn = $('#a-export'); if (exportBtn) exportBtn.addEventListener('click', () => exportPdf(exportBtn));
 }
 

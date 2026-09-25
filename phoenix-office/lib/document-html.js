@@ -36,6 +36,13 @@ function renderDocumentHtml(doc) {
         `<tr><th>${esc(k.replace(/_/g, ' '))}</th><td>${esc(v == null ? '' : v)}</td></tr>`
     ).join('\n');
 
+    const sig = doc.signature && doc.signature.image
+        ? `<div class="signature">
+             <img src="${esc(doc.signature.image)}" alt="signature">
+             <div class="sig-caption">Signed by ${esc(doc.signature.email || doc.signature.by || '')} — ${esc(doc.signed_at || '')}</div>
+           </div>`
+        : '';
+
     const footer = doc.hash
         ? `<p class="footer">Signed ${esc(doc.signed_at || '')} — SHA3-512 ${esc(String(doc.hash.sha3 || '').slice(0, 24))}…</p>`
         : `<p class="footer">${esc(doc.state)} — not yet signed</p>`;
@@ -58,6 +65,9 @@ function renderDocumentHtml(doc) {
   th, td { text-align: left; padding: 8pt 10pt; border-bottom: 1px solid #ddd; vertical-align: top; }
   th { width: 32%; color: #555; font-weight: 600; text-transform: capitalize; }
   .cp { margin-top: 16pt; font-size: 10pt; color: #444; }
+  .signature { margin-top: 22pt; }
+  .signature img { max-height: 56pt; display: block; }
+  .sig-caption { font-size: 9pt; color: #555; border-top: 1px solid #333; padding-top: 4pt; margin-top: 2pt; width: fit-content; min-width: 220pt; }
   .footer { margin-top: 24pt; font-size: 9pt; color: #777; }
 </style></head>
 <body>
@@ -65,6 +75,7 @@ function renderDocumentHtml(doc) {
   <h1${h1Class}>Phoenix Office — ${esc(doc.state)}</h1>
   <table>${rows}</table>
   <p class="cp">Counterparty: ${esc(cp.phone || '')} ${esc(cp.carrier || '')} ${esc(cp.email || '')}</p>
+  ${sig}
   ${footer}
 </body></html>`;
 }
