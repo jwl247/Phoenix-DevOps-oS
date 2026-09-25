@@ -10,6 +10,11 @@
  * Zero external dependencies.  C11.  Compiles on MinGW-w64 + Linux gcc.
  */
 
+/* gmtime_r is POSIX, not C11: expose it under -std=c11 on Linux (MinGW uses gmtime). */
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "../include/helix.h"
 
 #include <stdio.h>
