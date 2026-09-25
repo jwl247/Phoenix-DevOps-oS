@@ -1,56 +1,54 @@
-# Makefile — frank3 kernel module
-# Usage:
-#   make              — build frank3.ko
-#   make clean        — clean build artifacts
-#   make load         — insmod (requires root)
-#   make unload       — rmmod  (requires root)
-#   make status       — cat /proc/frank3
-#   make dmesg        — tail kernel log
+# Makefile — Phoenix kernel modules: helix.ko + Frank3 sideload slots
+#
+#   make           build helix.ko, frank3_slot_a.ko, frank3_slot_b.ko
+#   make load      insmod helix, then sideload both Frank slots (root)
+#   make unload    remove slots, then helix (root)
+#   make status    cat /proc/helix
+#   make dmesg     recent helix/frank3 kernel log lines
+#   make test      userspace smoke test against /dev/helix_intent (root)
+#   make clean
+#
+# Linux only. Needs linux-headers-$(uname -r). Helix must be loaded before any
+# slot: slots link against helix.ko's exported symbols (helix_slot_register),
+# and the kernel refuses to unload helix while a slot still uses it.
 
-KVER    ?= $(shell uname -r)
-KDIR    ?= /lib/modules/$(KVER)/build
-PWD     := $(shell pwd)
+KVER ?= $(shell uname -r)
+KDIR ?= /lib/modules/$(KVER)/build
+PWD  := $(shell pwd)
 
-obj-m := frank3.o
+obj-m := helix.o frank3_slot_a.o frank3_slot_b.o
+helix-objs := helix_kmod.o
 
-# Default: build module
 all:
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
+	rm -f helix_test
 
-# ── LOAD / UNLOAD ─────────────────────────────────────────────────────────────
-# Edit DRIVES to match your breach_coms block devices
-# Check with: lsblk | grep -E 'sdb|sdc|sdd|sde'
-DRIVES ?= /dev/sdb,/dev/sdc,/dev/sdd,/dev/sde
-
-load: frank3.ko
-	sudo insmod frank3.ko \
-		drives="$(DRIVES)" \
-		pressure_low=60 \
-		pressure_med=75 \
-		pressure_high=88
-	@echo "Frank3 loaded. Check: cat /proc/frank3"
+load: all
+	sudo insmod helix.ko
+	sudo insmod frank3_slot_a.ko
+	sudo insmod frank3_slot_b.ko
+	@cat /proc/helix
 
 unload:
-	sudo rmmod frank3
-	@echo "Frank3 unloaded."
+	-sudo rmmod frank3_slot_b
+	-sudo rmmod frank3_slot_a
+	-sudo rmmod helix
 
 reload: unload load
 
 status:
-	@cat /proc/frank3
+	@cat /proc/helix
 
 dmesg:
-	@sudo dmesg | grep frank3 | tail -40
+	@sudo dmesg | grep -E 'helix|frank3' | tail -40
 
-# ── BENCH AGAINST HELIX USERSPACE ────────────────────────────────────────────
-bench:
-	@echo "=== userspace helix bench ==="
-	@cd ../helix-bench && ./helix_O3_v3
-	@echo ""
-	@echo "=== frank3 kernel stats ==="
-	@cat /proc/frank3
+helix_test: helix_test.c helix.h
+	$(CC) -Wall -Wextra -O2 -o $@ helix_test.c
 
-.PHONY: all clean load unload reload status dmesg bench
+test: helix_test
+	sudo ./helix_test
+
+.PHONY: all clean load unload reload status dmesg test

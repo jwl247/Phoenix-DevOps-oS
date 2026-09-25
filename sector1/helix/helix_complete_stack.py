@@ -233,6 +233,23 @@ class HelixCache:
             self._make_room_l1(size)
             self.l1_cache[key] = block
 
+    def drop(self, key: str) -> bool:
+        """Remove `key` from every tier, including its L5 disk page. Used when
+        the underlying data changes (write-through invalidation)."""
+        with self.lock:
+            found = False
+            for tier in (self.l1_cache, self.l2_cache, self.l3_cache):
+                if tier.pop(key, None) is not None:
+                    found = True
+            if key in self._disk_index:
+                path = self._page_path(key)
+                del self._disk_index[key]
+                if path and os.path.exists(path):
+                    try: os.unlink(path)
+                    except Exception: pass
+                found = True
+            return found
+
     # --- internal helpers ---
 
     def _get_tier_size(self, tier_dict: OrderedDict) -> int:
