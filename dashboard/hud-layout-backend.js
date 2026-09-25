@@ -58,6 +58,28 @@ function tryDefaultPs7Path() {
 
 const DEFAULT_SLOTS = [null, null, null, null, null, null];
 
+// Same header set as scripts/usys.ps1 Get-UsysWorkerHeaders: PHOENIX_AUTH
+// bearer + the usys-cli Cloudflare Access service token (User env vars).
+function workerHeaders() {
+    const h = { Accept: 'application/json' };
+    if (process.env.PHOENIX_AUTH) h.Authorization = `Bearer ${process.env.PHOENIX_AUTH}`;
+    if (process.env.CF_ACCESS_CLIENT_ID) h['CF-Access-Client-Id'] = process.env.CF_ACCESS_CLIENT_ID;
+    if (process.env.CF_ACCESS_CLIENT_SECRET) h['CF-Access-Client-Secret'] = process.env.CF_ACCESS_CLIENT_SECRET;
+    return h;
+}
+
+// A real worker response never redirects; a redirect means Cloudflare Access
+// bounced us to its login page (missing/invalid service token).
+async function workerGet(url) {
+    const res = await fetch(url, { headers: workerHeaders(), redirect: 'manual' });
+    if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
+        const e = new Error('Cloudflare Access redirected to login — set CF_ACCESS_CLIENT_ID / CF_ACCESS_CLIENT_SECRET and PHOENIX_AUTH.');
+        e.accessRedirect = true;
+        throw e;
+    }
+    return res;
+}
+
 function register({ ipcMain, spawn, dialog }) {
     // ── External app launchers (PS7 / Bash / GitHub Desktop) ──────────────
     ipcMain.handle('get-external-app-paths', async () => {
@@ -191,13 +213,18 @@ function register({ ipcMain, spawn, dialog }) {
         if (!activateScript || !fs.existsSync(activateScript)) {
             return { success: false, error: 'Activate script not found.' };
         }
+        // Only ever dot-source a real venv activation script (what
+        // detect-venv returns) — never an arbitrary renderer-supplied file.
+        if (!/^activate(\.ps1)?$/i.test(path.basename(activateScript))) {
+            return { success: false, error: 'Not a venv activate script.' };
+        }
         const apps = { ...DEFAULT_EXTERNAL_APPS, ...loadJson(EXTERNAL_APPS_FILE, {}) };
         const ps7Exe = apps.ps7.exe || tryDefaultPs7Path();
         if (!ps7Exe) {
             return { success: false, error: 'PS7 not configured — needed to launch an activated shell.' };
         }
         try {
-            const proc = spawn(ps7Exe, ['-NoExit', '-Command', `. '${activateScript}'`], {
+            const proc = spawn(ps7Exe, ['-NoExit', '-Command', `. '${String(activateScript).replace(/'/g, "''")}'`], {
                 detached: true,
                 stdio: 'ignore'
             });
@@ -209,9 +236,11 @@ function register({ ipcMain, spawn, dialog }) {
     });
 
     // ── Glossary — real fetch against the worker, honest on failure ───────
-    // Reads are public (no auth needed) per docs/GLOSSARY.md — only
-    // POST/PUT/DELETE require the Bearer token, and this dashboard panel
-    // is read-only.
+    // Every packages-worker route (reads included) sits behind Cloudflare
+    // Access + PHOENIX_AUTH since the Gap 1 fix (2026-09-21). Unauthenticated
+    // GETs get a 302 to the Access login page, which fetch() would follow to
+    // a 200 HTML page — so send the same header set usys.ps1's
+    // Get-UsysWorkerHeaders sends, and refuse to follow redirects.
     ipcMain.handle('get-glossary', async (event, { q, category } = {}) => {
         const workerUrl = process.env.PHOENIX_WORKER_URL || 'https://packages-worker.phoenix-jwl.workers.dev';
         const params = new URLSearchParams();
@@ -219,7 +248,7 @@ function register({ ipcMain, spawn, dialog }) {
         if (category) params.set('category', category);
         const qs = params.toString();
         try {
-            const res = await fetch(`${workerUrl}/glossary${qs ? `?${qs}` : ''}`);
+            const res = await workerGet(`${workerUrl}/glossary${qs ? `?${qs}` : ''}`);
             if (!res.ok) {
                 return {
                     success: false,
@@ -239,7 +268,7 @@ function register({ ipcMain, spawn, dialog }) {
         if (hex)   params.set('hex', hex);
         if (limit) params.set('limit', String(limit));
         try {
-            const res = await fetch(`${workerUrl}/custody?${params.toString()}`);
+            const res = await workerGet(`${workerUrl}/custody?${params.toString()}`);
             if (!res.ok) return { success: false, error: `Worker returned ${res.status} for /custody` };
             const data = await res.json();
             return { success: true, ...data };
@@ -251,7 +280,7 @@ function register({ ipcMain, spawn, dialog }) {
     ipcMain.handle('get-categories', async () => {
         const workerUrl = process.env.PHOENIX_WORKER_URL || 'https://packages-worker.phoenix-jwl.workers.dev';
         try {
-            const res = await fetch(`${workerUrl}/categories`);
+            const res = await workerGet(`${workerUrl}/categories`);
             if (!res.ok) {
                 return { success: false, error: `Worker returned ${res.status} for /categories.` };
             }

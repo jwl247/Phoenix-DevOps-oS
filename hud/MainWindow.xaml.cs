@@ -24,7 +24,7 @@ public partial class MainWindow : Window
     // "claude code in the hud" — the Live Monitor pane was decorative until
     // this existed.
     private static readonly string LiveMonitorFramePath =
-        Path.Combine("E:", "Phoenix", "hud-live-monitor", "current.png");
+        Path.Combine(@"E:\", "Phoenix", "hud-live-monitor", "current.png");
 
     // Same reasoning, but for the AI Chat pane's actual text instead of a
     // screenshot of it. Jerry, 2026-09-22: "you need to be able to see and
@@ -33,7 +33,7 @@ public partial class MainWindow : Window
     // it replied, any error text) needs to be readable as exact text by any
     // Claude Code session, not OCR'd off an image.
     private static readonly string ChatLogPath =
-        Path.Combine("E:", "Phoenix", "hud-live-monitor", "chat-log.txt");
+        Path.Combine(@"E:\", "Phoenix", "hud-live-monitor", "chat-log.txt");
 
     public MainWindow()
     {

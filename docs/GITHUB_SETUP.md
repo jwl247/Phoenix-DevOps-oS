@@ -159,9 +159,10 @@ https://raw.githubusercontent.com/YOUR_USERNAME/Phoenix-DevOps-oS/main/
 
 **Files to update:**
 - `README.md`
-- `docs/QUICK_START.md`
 - `docs/LOL_INSTALLER.md`
-- `docs/GLOBAL_COMMANDS.md`
+
+(`docs/QUICK_START.md` and `docs/GLOBAL_COMMANDS.md`, listed here previously, no
+longer exist.)
 
 ### Quick Replace Command
 
@@ -169,9 +170,7 @@ https://raw.githubusercontent.com/YOUR_USERNAME/Phoenix-DevOps-oS/main/
 ```powershell
 $files = @(
     "README.md",
-    "docs/QUICK_START.md",
-    "docs/LOL_INSTALLER.md",
-    "docs/GLOBAL_COMMANDS.md"
+    "docs/LOL_INSTALLER.md"
 )
 
 foreach ($file in $files) {

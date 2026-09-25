@@ -26,7 +26,10 @@ import time
 import hashlib
 import struct
 
-BRIDGE_HOST  = os.environ.get("PHOENIX_BRIDGE_HOST", "0.0.0.0")
+# Unauthenticated — anything that connects can write into Frank's vault via
+# /save. Loopback by default; set PHOENIX_BRIDGE_HOST=0.0.0.0 only when the
+# port is firewalled to trusted peers (e.g. a QEMU hostfwd).
+BRIDGE_HOST  = os.environ.get("PHOENIX_BRIDGE_HOST", "127.0.0.1")
 BRIDGE_PORT  = int(os.environ.get("PHOENIX_BRIDGE_PORT", "9900"))
 FRANK_HOST   = os.environ.get("PHOENIX_FRANK_HOST",  "127.0.0.1")
 FRANK_PORT   = int(os.environ.get("PHOENIX_FRANK_PORT",  "7347"))  # frank HTTP bridge
@@ -149,10 +152,16 @@ def handle(conn: socket.socket, addr):
     """
     try:
         chunks_raw = []
+        received = 0
+        max_bytes = CHUNK_SIZE * MAX_CHUNKS + 65536   # payload cap + envelope slack
+        conn.settimeout(30)
         while True:
             chunk = conn.recv(65536)
             if not chunk:
                 break
+            received += len(chunk)
+            if received > max_bytes:
+                raise ValueError(f"envelope exceeds {max_bytes} bytes")
             chunks_raw.append(chunk)
 
         raw = b"".join(chunks_raw)

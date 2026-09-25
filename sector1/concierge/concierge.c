@@ -212,14 +212,19 @@ static void server_mode(void) {
     struct sockaddr_in addr = {0};
     addr.sin_family      = AF_INET;
     addr.sin_port        = htons(CONCIERGE_PORT);
-    addr.sin_addr.s_addr = INADDR_ANY;
+    /* Unauthenticated relay into the bridge/Frank — loopback only. */
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
     int yes = 1;
     setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, (char *)&yes, sizeof(yes));
-    bind(srv, (struct sockaddr *)&addr, sizeof(addr));
-    listen(srv, 64);
+    if (bind(srv, (struct sockaddr *)&addr, sizeof(addr)) == SOCKET_ERROR ||
+        listen(srv, 64) == SOCKET_ERROR) {
+        printf("[concierge] could not bind/listen on 127.0.0.1:%d\n", CONCIERGE_PORT);
+        closesocket(srv);
+        return;
+    }
 
-    printf("[concierge] Windows server on 0.0.0.0:%d\n", CONCIERGE_PORT);
+    printf("[concierge] Windows server on 127.0.0.1:%d\n", CONCIERGE_PORT);
     printf("[concierge] forwarding to bridge %s:%d\n", BRIDGE_HOST, BRIDGE_PORT);
 
     while (1) {
@@ -227,7 +232,8 @@ static void server_mode(void) {
         if (client == INVALID_SOCKET) continue;
 
         /* read request */
-        char buf[MAX_PAYLOAD];
+        /* static: 1 MiB would overflow the default 1 MiB Windows thread stack */
+        static char buf[MAX_PAYLOAD];
         int  n = recv(client, buf, sizeof(buf)-1, 0);
         if (n <= 0) { closesocket(client); continue; }
         buf[n] = '\0';

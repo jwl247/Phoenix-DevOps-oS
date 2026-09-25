@@ -440,8 +440,26 @@ class LinuxSwapManager:
         self.lock         = threading.Lock()
         self._current_gb  = 0.0
 
+    # Real bug, found live 2026-09-25: mkswap/swapon/swapoff live in
+    # /usr/sbin (or /sbin on some distros), which is NOT on a normal
+    # user's PATH by default on Debian even when running under sudo --
+    # subprocess.run() with a bare command name then fails with
+    # FileNotFoundError even though the binary genuinely exists.
+    # fallocate happened to work because it's in /usr/bin. Resolve each
+    # binary's real path once instead of trusting PATH.
+    _BIN_SEARCH_DIRS = ('/usr/sbin', '/sbin', '/usr/bin', '/bin')
+
+    @staticmethod
+    def _resolve_bin(name: str) -> str:
+        for d in LinuxSwapManager._BIN_SEARCH_DIRS:
+            candidate = os.path.join(d, name)
+            if os.path.exists(candidate):
+                return candidate
+        return name  # fall back to bare name -- let subprocess raise its own clear error
+
     def _run(self, cmd: List[str], check: bool = True) -> subprocess.CompletedProcess:
-        return subprocess.run(cmd, capture_output=True, text=True,
+        resolved = [self._resolve_bin(cmd[0])] + cmd[1:]
+        return subprocess.run(resolved, capture_output=True, text=True,
                               timeout=120, check=check)
 
     def get_current_swap_gb(self) -> float:
@@ -662,13 +680,50 @@ class ControlSystem:
 # DASHBOARD
 # ============================================================================
 
+def _control_request_allowed(handler) -> bool:
+    """Guard for /api/control/* (swap/pagefile resize, emergency stop).
+
+    These are plain GETs with no auth, so without this any web page the user
+    visits could fire them cross-site (<img src="http://localhost:8888/api/
+    control/expand16">), and DNS rebinding could reach them by name. Allow only
+    a loopback Host header and same-origin (or direct, non-browser) requests.
+    """
+    host = (handler.headers.get('Host') or '').strip().lower()
+    if host.startswith('['):
+        host = host[1:].split(']')[0]
+    else:
+        host = host.split(':')[0]
+    if host not in ('', 'localhost', '127.0.0.1', '::1'):
+        return False
+    site = handler.headers.get('Sec-Fetch-Site')
+    if site and site.lower() not in ('same-origin', 'none'):
+        return False
+    origin = (handler.headers.get('Origin') or '').lower()
+    if origin and origin != 'null':
+        o = origin.split('://', 1)[-1].split('/')[0]
+        o = o[1:].split(']')[0] if o.startswith('[') else o.split(':')[0]
+        if o not in ('localhost', '127.0.0.1', '::1'):
+            return False
+    elif origin == 'null':
+        return False
+    return True
+
+
+def _dashboard_bind_addr() -> str:
+    # Loopback by default: the control API resizes swap / the pagefile and has
+    # no auth. Override deliberately with PHOENIX_PAGING_DASH_BIND.
+    return os.environ.get('PHOENIX_PAGING_DASH_BIND', '127.0.0.1')
+
+
 class DashboardHandler(BaseHTTPRequestHandler):
     manager = None
 
     def do_GET(self):
         if   self.path == '/':               self._html()
         elif self.path == '/api/status':     self._json(self.manager.get_status_dict())
-        elif self.path.startswith('/api/control/'): self._control(self.path.split('/')[-1])
+        elif self.path.startswith('/api/control/'):
+            if _control_request_allowed(self): self._control(self.path.split('/')[-1])
+            else:                            self.send_error(403, 'control API: local same-origin requests only')
         else:                                self.send_error(404)
 
     def _html(self):
@@ -842,7 +897,7 @@ class AIPagingManager:
         def run():
             try:
                 DashboardHandler.manager = self
-                srv = HTTPServer(('0.0.0.0', self.config.web_dashboard_port),
+                srv = HTTPServer((_dashboard_bind_addr(), self.config.web_dashboard_port),
                                  DashboardHandler)
                 logging.info(f"[DASH] http://localhost:{self.config.web_dashboard_port}")
                 srv.serve_forever()

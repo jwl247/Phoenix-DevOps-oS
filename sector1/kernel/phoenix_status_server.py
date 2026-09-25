@@ -143,11 +143,33 @@ class PhoenixStatusHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _local_only(self) -> bool:
+        """
+        File-tree and clone/intake endpoints read the user's filesystem and can
+        overwrite (rmtree) directories. Loopback binding alone doesn't stop a web
+        page in the user's browser from calling them (CORS is '*', and a
+        text/plain POST needs no preflight) or DNS rebinding. Require a loopback
+        Host header and, when the browser sends one, a loopback Origin.
+        """
+        from urllib.parse import urlparse
+        loop = ("127.0.0.1", "localhost", "::1")
+        host = urlparse("//" + (self.headers.get("Host") or "")).hostname
+        if host not in loop:
+            return False
+        origin = self.headers.get("Origin")
+        if origin and urlparse(origin).hostname not in loop:
+            return False
+        return True
+
     def do_GET(self):
         from urllib.parse import urlparse, parse_qs
         parsed = urlparse(self.path)
         path   = parsed.path.rstrip("/")
         params = {k: v[0] for k, v in parse_qs(parsed.query).items()}
+
+        if path in ("/tree", "/node", "/search") and not self._local_only():
+            self._send({"error": "forbidden"}, 403)
+            return
 
         if path == "/status":
             helix = get_helix_status()
@@ -197,6 +219,9 @@ class PhoenixStatusHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0].rstrip("/")
+        if not self._local_only():
+            self._send({"error": "forbidden"}, 403)
+            return
         length = int(self.headers.get("Content-Length", 0))
         body   = json.loads(self.rfile.read(length)) if length else {}
 

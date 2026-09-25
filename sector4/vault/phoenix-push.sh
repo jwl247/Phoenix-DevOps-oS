@@ -19,10 +19,10 @@ VERSION="0.1.0"
 
 mkdir -p "${LOG_DIR}"
 
-log()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG_FILE}" }
-die()  { log "ERROR: $*"; exit 1 }
-ok()   { log "OK: $*" }
-warn() { log "WARN: $*" }
+log()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG_FILE}"; }
+die()  { log "ERROR: $*"; exit 1; }
+ok()   { log "OK: $*"; }
+warn() { log "WARN: $*"; }
 
 check_vault() {
     [[ -d "${VAULT}" ]] || die "breach_coms4 not mounted at ${VAULT} -- run: sudo mount -a"
@@ -31,7 +31,9 @@ check_vault() {
 }
 
 catalog_push() {
-    local src="$1" dst="$2"
+    # Escape single quotes for SQL literals (e.g. "Jerry's notes.txt").
+    local q="'" qq="''"
+    local src="${1//$q/$qq}" dst="${2//$q/$qq}"
     sqlite3 "${CATALOG_DB}" 2>/dev/null <<SQL || warn "catalog log failed"
 CREATE TABLE IF NOT EXISTS vault_pushes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,14 +46,14 @@ SQL
 
 push_target() {
     local src="$1"
-    local dst="${CLONEPOOL}/$(basename ${src})"
+    local dst="${CLONEPOOL}/$(basename "${src}")"
     if [[ -e "${dst}" ]]; then
         warn "already in vault: ${dst} -- skipping (vault is append-only)"
         return
     fi
     log "pushing: ${src} -> ${dst}"
     rsync -a --progress "${src}" "${dst}" \
-        && ok "pushed: $(basename ${src})" \
+        && ok "pushed: $(basename "${src}")" \
         && catalog_push "${src}" "${dst}" \
         || die "rsync failed: ${src}"
 }

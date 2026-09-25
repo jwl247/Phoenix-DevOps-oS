@@ -16,7 +16,11 @@ import time
 from pathlib import Path
 
 # HLK is the sibling submodule in the phoenix-devops repo
-HLK = Path(__file__).parent.parent / "helix_lightning_kernel"
+# (in this repo it lives at sector1/helix-lightning; the old submodule name
+# helix_lightning_kernel is kept as a fallback)
+HLK = Path(__file__).parent.parent / "helix-lightning"
+if not HLK.is_dir():
+    HLK = Path(__file__).parent.parent / "helix_lightning_kernel"
 sys.path.insert(0, str(HLK))
 
 from franken5 import get_frank

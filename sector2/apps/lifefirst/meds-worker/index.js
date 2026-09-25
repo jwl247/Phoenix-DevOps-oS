@@ -331,7 +331,21 @@ function ackPage(message, ok) {
 </div>`;
 }
 
-async function handleAck(token, env) {
+// GET shows a one-button confirm page; only the POST records the dose.
+// Reason: link scanners and message-preview fetchers (SMS/iMessage link
+// previews, Outlook SafeLinks, corporate mail filters) GET every URL in a
+// message. If GET recorded the dose, a preview bot could close the cycle and
+// silence the reminders for a dose Laurie never took.
+function ackConfirmPage() {
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Life First</title>
+<div style="font:17px/1.6 system-ui,-apple-system,sans-serif;max-width:32rem;margin:16vh auto;padding:0 1.25rem;color:#1a1a1a;text-align:center">
+  <p style="margin:0 0 1.5rem;font-size:1.15rem">Have you taken your medication today?</p>
+  <form method="POST"><button type="submit" style="font:inherit;font-size:1.2rem;padding:.9rem 2.2rem;border:0;border-radius:.6rem;background:#2e7d32;color:#fff">Yes, I took it</button></form>
+</div>`;
+}
+
+async function handleAck(token, env, method = 'GET') {
   if (!token) return new Response(ackPage('This link is missing something.', false), {
     status: 400, headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS },
   });
@@ -342,6 +356,17 @@ async function handleAck(token, env) {
   if (!alert) return new Response(ackPage('This link is not valid.', false), {
     status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS },
   });
+
+  if (method !== 'POST') {
+    if (alert.acknowledged_at) {
+      return new Response(ackPage("You're already all set for today. Thank you, Laurie.", true), {
+        status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS },
+      });
+    }
+    return new Response(ackConfirmPage(), {
+      status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', ...CORS },
+    });
+  }
 
   if (!alert.acknowledged_at) {
     await recordDose(env, alert.user_id, { via: 'link-ack', note: `ack link, alert ${alert.id}` });
@@ -437,7 +462,9 @@ export default {
     }
 
     if (path.startsWith('/ack/')) {
-      return handleAck(decodeURIComponent(path.slice('/ack/'.length)), env);
+      let token;
+      try { token = decodeURIComponent(path.slice('/ack/'.length)); } catch { token = ''; }
+      return handleAck(token, env, req.method);
     }
 
     // everything below is Bearer PHOENIX_AUTH

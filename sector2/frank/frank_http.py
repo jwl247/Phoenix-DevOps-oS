@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 from frank_save import frank_save, frank_status, CATALOG_DB
 
 PORT = 7347   # F=6 R=17 A=1 N=13 K=10 → 7347 is just a clean unused port
+MAX_BODY = 50 * 1024 * 1024   # 50 MB cap on POST /save bodies
 
 class FrankHandler(BaseHTTPRequestHandler):
 
@@ -52,14 +53,36 @@ class FrankHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         if path == "/save":
-            length = int(self.headers.get("Content-Length", 0))
-            body   = json.loads(self.rfile.read(length))
-            result = frank_save(
-                doc_id   = body.get("doc_id", "unnamed"),
-                title    = body.get("title",  "Untitled"),
-                doc_type = body.get("doc_type","doc"),
-                content  = body.get("content",""),
-            )
+            # Require a real JSON content type. A browser page on ANY site can
+            # send a cross-origin "simple" POST (text/plain / form types) with
+            # no CORS preflight, so the Allow-Origin header alone never stopped
+            # drive-by writes. application/json forces a preflight, which the
+            # localhost-only Allow-Origin then refuses for foreign origins.
+            ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if ctype != "application/json":
+                self._json(415, {"error": "Content-Type must be application/json"})
+                return
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+            except ValueError:
+                self._json(400, {"error": "bad Content-Length"})
+                return
+            if length <= 0 or length > MAX_BODY:
+                self._json(413, {"error": f"body must be 1..{MAX_BODY} bytes"})
+                return
+            try:
+                body = json.loads(self.rfile.read(length))
+                if not isinstance(body, dict):
+                    raise ValueError("body must be a JSON object")
+                result = frank_save(
+                    doc_id   = body.get("doc_id", "unnamed"),
+                    title    = body.get("title",  "Untitled"),
+                    doc_type = body.get("doc_type","doc"),
+                    content  = body.get("content",""),
+                )
+            except ValueError as e:   # includes json.JSONDecodeError
+                self._json(400, {"error": str(e)})
+                return
             self._json(200, result)
         else:
             self._json(404, {"error": "not found"})

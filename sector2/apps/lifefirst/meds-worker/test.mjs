@@ -133,14 +133,23 @@ await cron();
 ok(!!db.med_alerts[0].caregiver_notified_at, 'caregiver_notified_at stamped past threshold');
 ok(sent.some(s => s.body && s.body.includes('jerry-key')), 'pushover sent to Jerry');
 
-// 7. ack link -> dose logged, cycle closed, window advanced
+// 7a. a bare GET (link-preview bot / mail scanner) must NOT record the dose
 r = await worker.fetch(new Request(B + '/ack/' + tok), env);
+ok(r.status === 200, 'ack confirm page 200');
+ok(db.medication_log.length === 0 && db.med_alerts[0].acknowledged_at == null, 'GET alone does not log a dose');
+
+// 7b. her tap on "Yes, I took it" (POST) -> dose logged, cycle closed, window advanced
+r = await worker.fetch(new Request(B + '/ack/' + tok, { method: 'POST' }), env);
 ok(r.status === 200, 'ack page 200');
 ok(db.medication_log.length === 1 && db.medication_log[0].recorded_via === 'link-ack', 'dose logged via link-ack');
 ok(db.med_alerts[0].acknowledged_at != null, 'alert cycle closed');
 const st = db.medication_state[0];
 const adv = new Date(st.next_check_at).getTime() - Date.now();
 ok(adv > 23 * 3600 * 1000 && adv < 25 * 3600 * 1000, 'next_check_at advanced ~24h');
+
+// 7c. malformed token encoding -> clean 400, no crash
+r = await worker.fetch(new Request(B + '/ack/%E0%A4%A'), env);
+ok(r.status === 400, 'malformed ack token -> 400, not a thrown 500');
 
 // 8. status now -> ask false
 r = await worker.fetch(new Request(B + '/status?user_id=2', { headers: H }), env);

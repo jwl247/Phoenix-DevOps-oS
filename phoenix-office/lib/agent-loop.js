@@ -73,7 +73,7 @@ function parseModelReply(text) {
     return { malformed: true, raw: cleaned };
 }
 
-function createAgentLoop({ tools, aiComplete, persona, sealDocument, exportPdf, projectStore, printPhase, authorId }) {
+function createAgentLoop({ tools, aiComplete, persona, sealDocument, resolveSigner, exportPdf, projectStore, printPhase, authorId }) {
     const SYSTEM_PERSONA = persona || DEFAULT_PERSONA;
 
     function newSession(document, project) {
@@ -105,7 +105,7 @@ function createAgentLoop({ tools, aiComplete, persona, sealDocument, exportPdf, 
             // getter lets the caller resolve identity asynchronously at app
             // startup without blocking IPC registration on it (see main.js).
             const resolvedAuthorId = typeof authorId === 'function' ? authorId() : authorId;
-            result = await tool.execute(args || {}, session, { sealDocument, exportPdf, projectStore, printPhase, authorId: resolvedAuthorId });
+            result = await tool.execute(args || {}, session, { sealDocument, resolveSigner, exportPdf, projectStore, printPhase, authorId: resolvedAuthorId });
         } catch (e) {
             result = { ok: false, message: e.message };
         }

@@ -18,9 +18,10 @@
  * ============================================
  */
 
-// Error reporting (turn off in production)
+// Error reporting: log everything, never print errors (paths/SQL) to callers.
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 
 // Allow cross-origin requests (for your phones)
 header('Access-Control-Allow-Origin: *');
@@ -89,17 +90,25 @@ function getDBConnection() {
 // ============================================
 
 function authenticate() {
-    $headers = getallheaders();
-    $token = $headers['Authorization'] ?? $_POST['token'] ?? $_GET['token'] ?? null;
-    
+    // Fail closed: an unset LF_API_SECRET used to mean the empty string, and a
+    // header of just "Bearer " stripped to '' and matched it.
+    if (API_SECRET === '') {
+        respondError('Server not configured', 503);
+    }
+
+    // Header names are case-insensitive (cloudflared/HTTP2 may lowercase them).
+    $headers = array_change_key_case(getallheaders() ?: [], CASE_LOWER);
+    // Query-string tokens are no longer accepted — they end up in access logs.
+    $token = $headers['authorization'] ?? $_SERVER['HTTP_AUTHORIZATION'] ?? $_POST['token'] ?? null;
+
     if (!$token) {
         respondError('Missing authentication token', 401);
     }
-    
+
     // Remove "Bearer " prefix if present
-    $token = str_replace('Bearer ', '', $token);
-    
-    if ($token !== API_SECRET) {
+    $token = trim(preg_replace('/^Bearer\s+/i', '', $token));
+
+    if ($token === '' || !hash_equals(API_SECRET, $token)) {
         respondError('Invalid authentication token', 401);
     }
     
@@ -340,7 +349,6 @@ function healthCheck() {
     $checks = [
         'database' => $conn->ping(),
         'timestamp' => date('Y-m-d H:i:s'),
-        'php_version' => PHP_VERSION,
         'modules_installed' => [
             'schedule' => file_exists(AI_SCHEDULE_PATH),
             'messenger' => file_exists(AI_MESSENGER_PATH),

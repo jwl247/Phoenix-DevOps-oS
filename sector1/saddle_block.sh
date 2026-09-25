@@ -5,6 +5,18 @@
 # Phoenix DevOps LLC — jwl247
 
 set -e
+
+# Guard: this OVERWRITES /etc/fstab, /etc/hosts, /etc/nsswitch.conf and
+# /etc/resolv.conf with WSL-only templates. On a real Debian/Ubuntu install
+# (bare metal or the QEMU VM) the fstab rewrite drops the root/EFI mounts and
+# leaves the machine unbootable. Phoenix no longer uses WSL — refuse unless
+# we're genuinely inside WSL, or the operator forces it knowingly.
+if ! grep -qi microsoft /proc/version 2>/dev/null && [[ "${SADDLE_FORCE:-}" != "1" ]]; then
+    echo "[saddle] Not running inside WSL — refusing to overwrite /etc/fstab et al." >&2
+    echo "[saddle] (set SADDLE_FORCE=1 only if you really mean it)" >&2
+    exit 1
+fi
+
 echo "[saddle] Blocking Windows control points...\n"
 
 # ─── /etc/wsl.conf ───────────────────────────────────────────────

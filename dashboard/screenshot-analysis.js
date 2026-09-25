@@ -168,6 +168,15 @@ function register({ ipcMain, desktopCapturer }) {
         if (!filePath || !fs.existsSync(filePath)) {
             return { success: false, error: `Screenshot not found: ${filePath}` };
         }
+        // Only this module's own captures (SCREENSHOT_DIR, incl. live/) — the
+        // renderer must not be able to upload an arbitrary local file to the
+        // Anthropic API by passing its path here.
+        const rel = fs.existsSync(SCREENSHOT_DIR)
+            ? path.relative(fs.realpathSync(SCREENSHOT_DIR), fs.realpathSync(filePath))
+            : '';
+        if (!rel || rel.startsWith('..') || path.isAbsolute(rel) || path.extname(filePath).toLowerCase() !== '.png') {
+            return { success: false, error: 'Only Phoenix HUD screenshots can be analyzed.' };
+        }
 
         let base64Image;
         try {

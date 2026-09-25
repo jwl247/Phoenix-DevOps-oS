@@ -137,7 +137,7 @@ What happens:
 ## Architecture principles
 
 - **No vendor lock-in.** D1 + R2 replace Firebase. Local LLM replaces cloud AI. GPL v3 locks it open.
-- **No elevation required.** Every Phoenix operation runs in user scope.
+- **No elevation required for the core.** `usys`, intake, and the clonepool run in user scope. Exception, by design: `dashboard\start.ps1` self-elevates once via UAC (opt out with `-NoElevate` / `PHOENIX_NO_ELEVATE=1`) and its autostart task runs at highest privilege, so its embedded shell/Claude panes are admin.
 - **No system writes.** All new filesystem activity confined to the user's drives until vetted.
 - **Quadralingual until output.** The vault speaks four languages. translator.sh fires on output only — never on intake or clone.
 - **The file is the unit.** Intake once. Run anywhere. No install. No manual clone step.

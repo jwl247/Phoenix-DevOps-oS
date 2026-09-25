@@ -57,7 +57,9 @@ echo ""
 # ---------------------------------------------------------------------------
 if [[ $EUID -ne 0 ]]; then
     echo "  Requires root. Re-running with sudo..."
-    exec sudo bash "$0" "$@"
+    # sudo resets the environment by default, which silently dropped the
+    # required SMB_PASS on re-exec -- preserve exactly the two vars we need.
+    exec sudo --preserve-env=SMB_PASS,SMB_USER bash "$0" "$@"
 fi
 
 # ---------------------------------------------------------------------------
@@ -82,8 +84,13 @@ mkdir -p "$(dirname "$CREDS_FILE")"
 
 if [[ -f "$CREDS_FILE" ]]; then
     # Check if it already has the right content
+    # Compare the whole file, not just the username -- after a password
+    # rotation the old check kept the stale password forever.
     EXISTING=$(cat "$CREDS_FILE" 2>/dev/null)
-    if echo "$EXISTING" | grep -q "username=${SMB_USER}"; then
+    WANTED=$(printf 'username=%s
+password=%s
+domain=%s' "$SMB_USER" "$SMB_PASS" "$SMB_DOMAIN")
+    if [[ "$EXISTING" == "$WANTED" ]]; then
         pass "Credentials file already exists: $CREDS_FILE"
     else
         warn "Credentials file exists but may be stale — overwriting"
@@ -94,11 +101,13 @@ else
 fi
 
 if [[ "${write_creds:-0}" == "1" ]]; then
-    cat > "$CREDS_FILE" << EOF
+    # umask 077 so the password is never briefly world-readable before chmod
+    ( umask 077; cat > "$CREDS_FILE" << EOF
 username=${SMB_USER}
 password=${SMB_PASS}
 domain=${SMB_DOMAIN}
 EOF
+    )
     chmod 600 "$CREDS_FILE"
     pass "Credentials written to $CREDS_FILE (mode 600)"
 fi

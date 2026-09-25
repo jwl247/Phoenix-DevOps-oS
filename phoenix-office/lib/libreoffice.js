@@ -13,9 +13,31 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { spawn } = require('child_process');
 
 const RUNTIME_ASSET_NAME = 'libreoffice-portable-win64.zip';
+
+// SHA-256 of the exact libreoffice-portable-win64.zip uploaded to the
+// phoenix-office-runtime R2 bucket. The downloaded zip is extracted and its
+// soffice.exe EXECUTED, so it must be verified against a value pinned in
+// the app itself — not one served by the same worker/bucket (anyone holding
+// the shared bearer or R2 write access could swap both). Until this is
+// filled in, the download path refuses to run (fail closed); a machine with
+// LibreOffice already installed never reaches it. Set it with:
+//   certutil -hashfile libreoffice-portable-win64.zip SHA256
+// or override per-machine via PHOENIX_OFFICE_RUNTIME_SHA256.
+const RUNTIME_ASSET_SHA256 = '';
+
+function expectedRuntimeSha256() {
+    return String(process.env.PHOENIX_OFFICE_RUNTIME_SHA256 || RUNTIME_ASSET_SHA256 || '').trim().toLowerCase();
+}
+
+// Single-quoted PowerShell literal — no $var / $(...) expansion, ever
+// (a Windows user name may legally contain '$', '(' and ')').
+function psLiteral(s) {
+    return `'${String(s).replace(/'/g, "''")}'`;
+}
 
 // Common install locations, checked before anything is downloaded.
 function knownInstallPaths() {
@@ -61,6 +83,10 @@ async function fetchAndExtract({ workerUrl, auth, appDataDir, onProgress }) {
     if (process.platform !== 'win32') {
         throw new Error(`no runtime asset packaged for platform "${process.platform}" yet — install LibreOffice manually`);
     }
+    const expected = expectedRuntimeSha256();
+    if (!/^[0-9a-f]{64}$/.test(expected)) {
+        throw new Error('LibreOffice is not installed, and the portable runtime download is disabled until its SHA-256 is pinned (RUNTIME_ASSET_SHA256 in lib/libreoffice.js) — install LibreOffice from libreoffice.org instead');
+    }
     const base = String(workerUrl).replace(/\/+$/, '');
     const res = await fetch(`${base}/runtime/${RUNTIME_ASSET_NAME}`, {
         headers: { Authorization: `Bearer ${auth}` },
@@ -71,21 +97,29 @@ async function fetchAndExtract({ workerUrl, auth, appDataDir, onProgress }) {
     const tmpZip = path.join(os.tmpdir(), `${RUNTIME_ASSET_NAME}.${process.pid}`);
     const fileStream = fs.createWriteStream(tmpZip);
     let received = 0;
+    const hasher = crypto.createHash('sha256');
     const reader = res.body.getReader();
     for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
         received += value.byteLength;
-        fileStream.write(Buffer.from(value));
+        const chunk = Buffer.from(value);
+        hasher.update(chunk);
+        fileStream.write(chunk);
         if (typeof onProgress === 'function') onProgress(received, total);
     }
     await new Promise((resolve, reject) => fileStream.end(err => err ? reject(err) : resolve()));
+    const actual = hasher.digest('hex');
+    if (actual !== expected) {
+        try { fs.unlinkSync(tmpZip); } catch (_) {}
+        throw new Error(`runtime download failed integrity check (sha256 ${actual.slice(0, 16)}… != pinned ${expected.slice(0, 16)}…) — refusing to extract or run it`);
+    }
 
     const dir = cacheDir(appDataDir);
     await new Promise((resolve, reject) => {
         const p = spawn('powershell.exe', [
             '-NoProfile', '-NonInteractive', '-Command',
-            `Expand-Archive -Path "${tmpZip}" -DestinationPath "${dir}" -Force`,
+            `Expand-Archive -LiteralPath ${psLiteral(tmpZip)} -DestinationPath ${psLiteral(dir)} -Force`,
         ], { windowsHide: true });
         let errOut = '';
         p.stderr.on('data', d => { errOut += d; });
@@ -127,6 +161,9 @@ function convertFile({ sofficePath, inputPath, outputDir, targetFormat }) {
     if (!SUPPORTED_TARGET_FORMATS.includes(targetFormat)) {
         throw new Error(`unsupported target format "${targetFormat}" — supported: ${SUPPORTED_TARGET_FORMATS.join(', ')}`);
     }
+    // Absolute path always — a relative name beginning with '-' would
+    // otherwise be parsed by soffice as an option, not a file.
+    inputPath = path.resolve(String(inputPath || ''));
     if (!fs.existsSync(inputPath)) throw new Error(`input file not found: ${inputPath}`);
     fs.mkdirSync(outputDir, { recursive: true });
 
@@ -167,7 +204,14 @@ function launchApp({ sofficePath, appId, filePath }) {
     const app = LAUNCHABLE_APPS.find(a => a.id === appId);
     if (!app) throw new Error(`unknown app "${appId}" — supported: ${LAUNCHABLE_APPS.map(a => a.id).join(', ')}`);
     const args = [app.flag];
-    if (filePath) args.push(filePath);
+    if (filePath) {
+        // Only a real, existing local file — never an arbitrary argv string
+        // (soffice treats macro:/// and vnd.sun.star.script: URLs, and
+        // '-'-prefixed args, as instructions, not documents).
+        const resolved = path.resolve(String(filePath));
+        if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) throw new Error(`not a file: ${filePath}`);
+        args.push(resolved);
+    }
     const child = spawn(sofficePath, args, { detached: true, stdio: 'ignore', windowsHide: false });
     child.unref();
     return { app: app.id, label: app.label };

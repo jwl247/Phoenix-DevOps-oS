@@ -14,7 +14,12 @@ const { execFileSync } = require('child_process');
 
 function safeRun(cmd, args) {
   try {
-    return execFileSync(cmd, args, { timeout: 3000, windowsHide: true }).toString().trim() || 'unavailable';
+    // 15s, not 3s: each Windows signal is its own powershell.exe spawn
+    // (~1s each, measured 2026-09-25: 7-10s for all nine), and one timeout
+    // silently turns that signal into 'unavailable' -- which CHANGES the
+    // fingerprint and therefore the author_id (projects/saved jobs are listed
+    // by author_id, so they would appear to vanish). Seen as a flaky test.
+    return execFileSync(cmd, args, { timeout: 15000, windowsHide: true }).toString().trim() || 'unavailable';
   } catch (_) {
     return 'unavailable';
   }
@@ -65,8 +70,13 @@ function doubleHash(signals) {
   return sha3_512Hex(sha3 + blake2b);
 }
 
+// Memoized per process: the hardware doesn't change mid-run, and every
+// resolveAuthor() call (startup, whoami, Sign, Legal hold) would otherwise
+// re-spawn nine PowerShell processes (~9s).
+let _fingerprint = null;
 function machineFingerprint() {
-  return doubleHash(getSignals());
+  if (_fingerprint === null) _fingerprint = doubleHash(getSignals());
+  return _fingerprint;
 }
 
 module.exports = {

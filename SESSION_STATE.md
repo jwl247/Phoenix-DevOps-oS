@@ -186,7 +186,7 @@ sudo journalctl -u phoenix-helix-kernel -f --no-pager
 | `CLAUDE.md` (repo root) | Full architecture reference + session log — read this first |
 | `sector2/package-handler/intake.sh` | Intake pipeline — hex identity, hashing, QR, R2, D1, integrity gate |
 | `sector2/package-handler/README.md` | Command reference + integrity verification docs |
-| `sector3/workers/packages-worker/index.js` | Cloudflare Worker — D1 + R2 API |
+| `sector2/package-handler/worker/index.js` | Cloudflare Worker — D1 + R2 API (live source; `sector3/workers/packages-worker/` is a stale, un-deployable copy — never deploy from it) |
 | `scripts/usys.ps1` | Global command layer (PowerShell) |
 | `dashboard/main.js` | Electron main process — D1/R2/Claude/Ollama wiring |
 | `sector3/services/phoenix-helix-kernel.service` | Debian systemd service for paging brain |

@@ -34,6 +34,25 @@ logging.basicConfig(
 )
 log = logging.getLogger("phoenix")
 
+# This listener runs arbitrary shell commands for whoever connects (the
+# "dangerous" substring list below is trivially bypassed and is NOT a control),
+# so it is loopback-only by default and a shared token is REQUIRED for any
+# other bind. Client protocol when a token is set: "AUTH <token>\n<command>".
+import hmac
+BIND_HOST = os.environ.get("PHOENIX_KERNEL_BIND", "127.0.0.1")
+AUTH_TOKEN = os.environ.get("PHOENIX_KERNEL_TOKEN", "")
+
+
+def _check_auth(data: str) -> Optional[str]:
+    """Return the command if authorized, else None."""
+    if not AUTH_TOKEN:
+        return data
+    first, _, rest = data.partition("\n")
+    if first.startswith("AUTH ") and hmac.compare_digest(first[5:].strip(), AUTH_TOKEN):
+        return rest.strip()
+    return None
+
+
 class PhoenixKernel:
     def __init__(self, config: dict = None):
         self._alive = True
@@ -45,6 +64,9 @@ class PhoenixKernel:
         signal.signal(signal.SIGINT, self._shutdown)
 
     def start(self):
+        if BIND_HOST not in ("127.0.0.1", "localhost", "::1") and not AUTH_TOKEN:
+            log.error("Refusing non-loopback bind %s without PHOENIX_KERNEL_TOKEN", BIND_HOST)
+            return
         log.info("🚀 Phoenix Universal Kernel v1.0 (Cross-Platform) Starting...")
         log.info(f"Logs: {LOG_FILE}")
         
@@ -52,7 +74,7 @@ class PhoenixKernel:
             port = 7700 + ch
             t = threading.Thread(target=self._listener, args=(ch, port), daemon=True)
             t.start()
-            log.info(f"✅ Channel {ch} listening on 0.0.0.0:{port}")
+            log.info(f"✅ Channel {ch} listening on {BIND_HOST}:{port}")
 
         try:
             while self._alive:
@@ -64,7 +86,7 @@ class PhoenixKernel:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            sock.bind(("0.0.0.0", port))
+            sock.bind((BIND_HOST, port))
             sock.listen(20)
         except Exception as e:
             log.error(f"Failed to bind port {port}: {e}")
@@ -74,6 +96,12 @@ class PhoenixKernel:
             try:
                 conn, addr = sock.accept()
                 data = conn.recv(65536).decode('utf-8', errors='ignore').strip()
+                if data and _check_auth(data) is None:
+                    log.warning(f"ch{channel} rejected unauthenticated request from {addr[0]}")
+                    conn.sendall(b"DENIED\n")
+                    conn.close()
+                    continue
+                data = _check_auth(data) if data else data
                 if data:
                     log.info(f"🚀 INTAKE ch{channel} from {addr[0]}: {data[:200]}")
                     output = self._safe_execute(data)

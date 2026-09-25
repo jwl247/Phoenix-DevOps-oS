@@ -107,14 +107,30 @@
   const $notifs = document.getElementById('notifications');
   const $sub = document.getElementById('subline');
 
+  // Her private key arrives once in the link's #fragment (never sent to the
+  // server), is remembered in this browser, then wiped from the address bar.
+  const KEY_NAME = 'lf_laurie_key';
+  function getKey() {
+    const m = location.hash.match(/(?:^#|&)k=([A-Za-z0-9_-]+)/);
+    if (m) {
+      try { localStorage.setItem(KEY_NAME, m[1]); } catch (e) {}
+      history.replaceState(null, '', location.pathname + location.search);
+      return m[1];
+    }
+    try { return localStorage.getItem(KEY_NAME) || ''; } catch (e) { return ''; }
+  }
+  const LF_KEY = getKey();
+
   async function callProxy(op, body) {
-    const opts = { method: body ? 'POST' : 'GET' };
+    const opts = { method: body ? 'POST' : 'GET', headers: { 'X-LF-Key': LF_KEY } };
     if (body) {
-      opts.headers = { 'Content-Type': 'application/json' };
+      opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body);
     }
     const res = await fetch(`proxy.php?op=${op}`, opts);
-    return res.json();
+    const json = await res.json();
+    if (json && json.code === 'need_link') throw new Error('need_link');
+    return json;
   }
 
   function extractText(resp) {
@@ -131,7 +147,9 @@
       $today.textContent = text || "Nothing on the books — a clear day.";
       $today.classList.remove('loading');
     } catch (e) {
-      $today.textContent = "Couldn't check just now — try again in a bit.";
+      $today.textContent = e.message === 'need_link'
+        ? "Please open Life First from the link Jerry gave you."
+        : "Couldn't check just now — try again in a bit.";
       $today.classList.remove('loading');
     }
   }
@@ -146,9 +164,9 @@
         return;
       }
       $notifs.innerHTML = list.map(n => `
-        <div class="notif" data-id="${n.notification_id}">
+        <div class="notif" data-id="${Number(n.notification_id)}">
           <div class="notif-text">${escapeHtml(n.message_text || '')}</div>
-          <button class="notif-btn" onclick="acknowledge(${n.notification_id}, this)">Got it</button>
+          <button class="notif-btn" onclick="acknowledge(${Number(n.notification_id)}, this)">Got it</button>
         </div>
       `).join('');
     } catch (e) {

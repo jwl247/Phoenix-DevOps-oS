@@ -36,7 +36,12 @@ function renderDocumentHtml(doc) {
         `<tr><th>${esc(k.replace(/_/g, ' '))}</th><td>${esc(v == null ? '' : v)}</td></tr>`
     ).join('\n');
 
-    const sig = doc.signature && doc.signature.image
+    // Inline data: images only. A file:/// or http(s) src would have
+    // LibreOffice fetch/embed an arbitrary local file or remote URL during
+    // conversion — a pulled/shared document must not be able to do that.
+    const sigImageOk = doc.signature && typeof doc.signature.image === 'string'
+        && /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=\s]+$/.test(doc.signature.image);
+    const sig = sigImageOk
         ? `<div class="signature">
              <img src="${esc(doc.signature.image)}" alt="signature">
              <div class="sig-caption">Signed by ${esc(doc.signature.email || doc.signature.by || '')} — ${esc(doc.signed_at || '')}</div>

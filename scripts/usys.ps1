@@ -180,11 +180,13 @@ function Get-UsysCloneIntakeSh {
     # Sector 2 package-handler intake (clone pipeline).
     $repo = Get-UsysRepoRoot
     $parent = Split-Path $repo -Parent
+    # Canonical in-repo pipeline first: the standalone Phoenix-Package_handler
+    # clones lack the CF-Access headers (2026-09-21) and would fail silently.
     $candidates = @(
         $env:PHOENIX_INTAKE,
+        (Join-Path $repo 'sector2\package-handler\intake.sh'),
         (Join-Path $parent 'Phoenix-Package_handler\intake\intake.sh'),
-        (Join-Path $HOME 'Phoenix\Phoenix-Package_handler\intake\intake.sh'),
-        (Join-Path $repo 'sector2\package-handler\intake.sh')
+        (Join-Path $HOME 'Phoenix\Phoenix-Package_handler\intake\intake.sh')
     ) | Where-Object { $_ -and (Test-Path $_) }
     return $candidates | Select-Object -First 1
 }
@@ -210,7 +212,14 @@ function Get-UsysQemu {
     $suites = Find-UsysSuites -Name 'qemu-system'
     if ($suites.Count -gt 0) {
         $candidate = Join-Path $suites[0].Path 'qemu-system-x86_64.exe'
-        if (Test-Path $candidate) { return $candidate }
+        # This binary runs on the HOST for every qemu-runtime suite, which the
+        # execution gate passes as "VM-contained" -- so a clonepool-supplied
+        # QEMU is only used when that suite is trust-stamped (usys suite-trust
+        # qemu-system). Otherwise fall through to the system install.
+        if (Test-Path $candidate) {
+            if ((Test-UsysSuiteTrusted -Suite $suites[0]).Trusted) { return $candidate }
+            Write-UsysWarn "clonepool qemu-system is not trust-stamped -- ignoring it (run: usys suite-trust qemu-system)"
+        }
     }
 
     $fromPath = Get-Command 'qemu-system-x86_64' -ErrorAction SilentlyContinue |
@@ -659,7 +668,7 @@ function Invoke-UsysClone {
     $bashIntake = ConvertTo-GitBashPath $intake
     $intakeArgs = @($bashFile)
     if ($Category) { $intakeArgs += $Category }
-    if ($Tag)      { $intakeArgs += "`"$Tag`"" }
+    if ($Tag)      { $intakeArgs += $Tag }  # PS 7.3+ passes args verbatim; embedded quotes became part of the tag
 
     if ($DryRun) {
         Write-Host ''
@@ -677,9 +686,12 @@ function Invoke-UsysClone {
     Write-Host ''
     Write-UsysInfo "clone -> $Path"
     $env:PHOENIX_DESTINATION = $Destination
+    # Git-Bash form only for the child; restore afterwards so later PowerShell
+    # calls in this session (search, list-suites, watcher) still see a real path.
+    $prevPool = $env:CLONEPOOL_DIR
     $env:CLONEPOOL_DIR       = ConvertTo-GitBashPath $env:CLONEPOOL_DIR
 
-    & $bash $bashIntake @intakeArgs
+    try { & $bash $bashIntake @intakeArgs } finally { $env:CLONEPOOL_DIR = $prevPool }
     if ($LASTEXITCODE -eq 0) { Write-UsysOk 'cloned OK' } else { Write-UsysErr "clone exited $LASTEXITCODE" }
     Write-Host ''
 }
@@ -725,9 +737,10 @@ function Invoke-UsysIntakeFile {
 
     $bashFile   = ConvertTo-GitBashPath $fullPath
     $bashIntake = ConvertTo-GitBashPath $intake
+    $prevPool = $env:CLONEPOOL_DIR
     $env:CLONEPOOL_DIR = ConvertTo-GitBashPath $env:CLONEPOOL_DIR
 
-    & $bash $bashIntake $bashFile
+    try { & $bash $bashIntake $bashFile } finally { $env:CLONEPOOL_DIR = $prevPool }
     if ($LASTEXITCODE -eq 0) { return $true }
     Write-UsysErr "intake exited $LASTEXITCODE for '$Path'"
     return $false
@@ -773,7 +786,8 @@ function Invoke-UsysSearch {
     $sqlite = Get-Command sqlite3 -ErrorAction SilentlyContinue
     if ($sqlite -and (Test-Path $db)) {
         Write-Host '  -- catalog --' -ForegroundColor Yellow
-        $rows = & sqlite3 $db "SELECT name, hex_id FROM packages WHERE name LIKE '%$Query%' LIMIT $Limit;" 2>$null
+        $q = $Query.Replace("'", "''")
+        $rows = & sqlite3 $db "SELECT name, hex_id FROM packages WHERE name LIKE '%$q%' LIMIT $Limit;" 2>$null
         if ($rows) {
             $rows | ForEach-Object { Write-Host "    $_"; $hits++ }
         }
@@ -948,7 +962,11 @@ function Invoke-UsysPull {
         $headers = Get-UsysWorkerHeaders
 
         New-Item -ItemType Directory -Path $Destination -Force | Out-Null
-        $outFile = Join-Path $Destination $resp.name
+        # resp.name comes from D1 -- strip any directory parts so a crafted
+        # record can't write outside the destination folder.
+        $safeName = [System.IO.Path]::GetFileName([string]$resp.name)
+        if (-not $safeName -or $safeName -in '.', '..') { Write-UsysErr "invalid name in D1 record: '$($resp.name)'"; return }
+        $outFile = Join-Path $Destination $safeName
 
         try {
             Invoke-WebRequest -Uri $objUri -Headers $headers -Method GET -OutFile $outFile -ErrorAction Stop | Out-Null
@@ -968,7 +986,9 @@ function Invoke-UsysPull {
 
     # If pool_path is a local path on the source machine it won't exist here —
     # that is expected on a second machine. We stage from what D1 knows.
-    $suiteDir = Join-Path (Get-UsysClonepoolDir) $resp.name
+    $safeSuite = [System.IO.Path]::GetFileName([string]$resp.name)
+    if (-not $safeSuite -or $safeSuite -in '.', '..') { Write-UsysErr "invalid name in D1 record: '$($resp.name)'"; return }
+    $suiteDir = Join-Path (Get-UsysClonepoolDir) $safeSuite
     New-Item -ItemType Directory -Path $suiteDir -Force | Out-Null
 
     # Write a stub .suite.json so the suite is runnable if the binary is already present
@@ -1103,13 +1123,18 @@ function Get-UsysSuiteStampValue {
     if (-not $key) { return $null }
     $entryHash = Get-UsysFileSha256 $EntryPath
     if (-not $entryHash) { return $null }
+    # v2: the manifest `environment` block is covered too -- Invoke-UsysRun
+    # applies it to the process before launch, so editing it after stamping
+    # (e.g. NODE_OPTIONS / PYTHONSTARTUP / PATH) must invalidate the stamp.
+    $envJson = if ($Manifest.environment) { $Manifest.environment | ConvertTo-Json -Compress -Depth 5 } else { '' }
     $msg = @(
-        'phoenix-suite-trust-v1',
+        'phoenix-suite-trust-v2',
         [string]$Manifest.name,
         [string]$Manifest.version,
         [string]$Manifest.runtime,
         [string]$Manifest.entry,
-        $entryHash
+        $entryHash,
+        $envJson
     ) -join "`n"
     $hmac = [System.Security.Cryptography.HMACSHA256]::new([Text.Encoding]::UTF8.GetBytes($key))
     try {
@@ -1397,9 +1422,15 @@ function Invoke-UsysRun {
         return
     }
     
-    # Set environment variables from manifest
-    if ($manifest.environment) {
+    # Set environment variables from manifest -- host runtimes only (the qemu
+    # branch reads PHOENIX_VM_* straight from the manifest, and a VM-contained
+    # suite must not be able to rewrite the host's PATH before QEMU is
+    # resolved). Previous values are restored after the run so a suite's
+    # environment never leaks into the user's shell session.
+    $savedEnv = @{}
+    if ($manifest.environment -and ([string]$manifest.runtime -in $script:UsysHostRuntimes)) {
         $manifest.environment.PSObject.Properties | ForEach-Object {
+            $savedEnv[$_.Name] = [Environment]::GetEnvironmentVariable($_.Name)
             $value = $_.Value
             # Handle variable substitution ${VAR:-default}
             if ($value -match '\$\{([^:}]+)(?::-(.*))?\}') {
@@ -1528,7 +1559,10 @@ function Invoke-UsysRun {
                             Write-UsysWarn 'python not found — cannot serve cloud-init seed. VM will boot with no login.'
                         }
                     }
-                    $netArgs = @('-net', "user,hostfwd=tcp::2222-:22", '-net', 'nic,model=virtio')
+                    # hostfwd bound to loopback: an empty host address makes QEMU listen on
+                    # 0.0.0.0, exposing the VM's phoenix/phoenix password SSH (NOPASSWD sudo)
+                    # to the whole LAN. Local SSH (ssh -p 2222 phoenix@127.0.0.1) is unchanged.
+                    $netArgs = @('-net', "user,hostfwd=tcp:127.0.0.1:2222-:22", '-net', 'nic,model=virtio')
                     $smbiosArg = @('-smbios', "type=1,serial=ds=nocloud-net;s=http://10.0.2.2:$seedPort/")
                     Write-UsysInfo "Cloud-init: user 'phoenix' / password 'phoenix' (sudo, no key needed) — SSH: ssh -p 2222 phoenix@127.0.0.1"
                 }
@@ -1566,7 +1600,7 @@ function Invoke-UsysRun {
                     '-m',       $ram,
                     '-smp',     $cpus,
                     '-display', $display,
-                    '-drive',   "file=$entryPath,format=$(if ($entryPath -like '*.img') { 'raw' } else { 'qcow2' }),if=virtio"
+                    '-drive',   "file=$($entryPath.Replace(',', ',,')),format=$(if ($entryPath -like '*.img') { 'raw' } else { 'qcow2' }),if=virtio"
                 ) + $netArgs
                 if ($smbiosArg)         { $qemuArgs += $smbiosArg }
                 if ($virtfsArgs.Count)  { $qemuArgs += $virtfsArgs }
@@ -1603,6 +1637,10 @@ function Invoke-UsysRun {
     } catch {
         Write-Host ''
         Write-UsysErr "Suite execution failed: $_"
+    } finally {
+        foreach ($k in $savedEnv.Keys) {
+            [Environment]::SetEnvironmentVariable($k, $savedEnv[$k])
+        }
     }
     
     Write-Host ''

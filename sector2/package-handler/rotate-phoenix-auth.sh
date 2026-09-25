@@ -34,6 +34,11 @@ command -v wrangler >/dev/null 2>&1 || { echo "wrangler CLI not found on PATH �
 command -v setx >/dev/null 2>&1     || { echo "setx.exe not found — this must run under Windows/Git Bash"; exit 1; }
 command -v curl >/dev/null 2>&1     || { echo "curl not found on PATH"; exit 1; }
 
+[[ -n "${CF_ACCESS_CLIENT_ID:-}" && -n "${CF_ACCESS_CLIENT_SECRET:-}" ]] || {
+  echo "CF_ACCESS_CLIENT_ID / CF_ACCESS_CLIENT_SECRET not set — packages-worker's"
+  echo "/whoami check can't get past Cloudflare Access without them. Nothing touched."
+  exit 1
+}
 [[ -d "${D1_WORKER_DIR}" ]] || { echo "missing ${D1_WORKER_DIR}"; exit 1; }
 [[ -d "${OFFICE_WORKER_DIR}" ]] || { echo "missing ${OFFICE_WORKER_DIR}"; exit 1; }
 
@@ -44,9 +49,17 @@ NEW_TOKEN="$(openssl rand -hex 32)"
 [[ -n "${NEW_TOKEN}" ]] || { echo "failed to generate a new token"; exit 1; }
 echo "Generated a new 64-char token (not printed)."
 
+# packages-worker's workers.dev hostname sits behind Cloudflare Access
+# (2026-09-21, Gap 1 fix) — without the usys-cli service-token headers,
+# /whoami gets a 302 to the Access login page, never a 200. Before this was
+# added, every rotation pushed the new secret to packages-worker, then
+# "failed" verification and aborted with the registry still on the OLD token
+# — i.e. the script itself caused exactly the drift it exists to prevent.
 check_whoami() {
   curl -s -o /dev/null -w "%{http_code}" \
     -H "Authorization: Bearer ${NEW_TOKEN}" \
+    -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" \
+    -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
     "$1/whoami" 2>/dev/null
 }
 

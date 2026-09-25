@@ -82,6 +82,12 @@ $saved = $env:PHOENIX_AUTH; $env:PHOENIX_AUTH = 'a-different-key'
 ok (-not (Test-UsysSuiteTrusted -Suite $net2).Trusted) 'stamp from a different PHOENIX_AUTH does not verify'
 $env:PHOENIX_AUTH = $saved
 
+# 8b. stamp covers the manifest environment block (v2) — editing it after
+#     stamping (e.g. adding NODE_OPTIONS) must invalidate the stamp
+ok ((Test-UsysSuiteTrusted -Suite $net2).Trusted) 'stamp verifies before environment edit'
+$net2.Manifest | Add-Member -NotePropertyName environment -NotePropertyValue ([pscustomobject]@{ NODE_OPTIONS = '--require evil.js' }) -Force
+ok (-not (Test-UsysSuiteTrusted -Suite $net2).Trusted) 'environment edit after stamping invalidates the stamp'
+
 # 9. audit log written
 ok (Test-Path $logf) 'suite_exec.jsonl created'
 $rows = Get-Content $logf | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json }

@@ -261,14 +261,14 @@ The peer review platform is built on top of the existing Phoenix infrastructure:
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | /review | — | List all submissions. Filter by `?status=` (pending/approved/rejected) |
-| GET | /review/:hex | — | Fetch review record for a specific artifact |
+| GET | /review | ✓ | List all submissions. Filter by `?status=` (pending/approved/rejected) |
+| GET | /review/:hex | ✓ | Fetch review record for a specific artifact |
 | POST | /review | ✓ | Submit an artifact for review |
 | POST | /review/:hex/vote | ✓ | Cast a review vote (approve/reject/abstain) |
-| GET | /review/:hex/votes | — | View all votes for a submission |
+| GET | /review/:hex/votes | ✓ | View all votes for a submission |
 | POST | /review/:hex/revoke | ✓ | Revoke an approved artifact |
-| GET | /verify/:hex | — | Verify an artifact by hex — returns current status + review provenance |
-| GET | /feed | — | Advertisement feed — approved artifacts available for opt-in pull |
+| GET | /verify/:hex | ✓ | Verify an artifact by hex — returns current status + review provenance |
+| GET | /feed | ✓ | Advertisement feed — approved artifacts available for opt-in pull |
 
 ---
 

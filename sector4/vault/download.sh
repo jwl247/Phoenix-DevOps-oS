@@ -20,10 +20,10 @@ VERSION="0.1.0"
 
 mkdir -p "${LOG_DIR}"
 
-log()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG_FILE}" }
-die()  { log "ERROR: $*"; exit 1 }
-ok()   { log "OK: $*" }
-warn() { log "WARN: $*" }
+log()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG_FILE}"; }
+die()  { log "ERROR: $*"; exit 1; }
+ok()   { log "OK: $*"; }
+warn() { log "WARN: $*"; }
 
 check_vault() {
     [[ -d "${VAULT}" ]] || die "breach_coms4 not mounted at ${VAULT} -- run: sudo mount -a"
@@ -35,7 +35,10 @@ check_network() {
 }
 
 catalog_download() {
-    local name="$1" src="$2" dst="$3"
+    # Escape single quotes for SQL literals -- a URL/filename containing ' would
+    # otherwise break (or inject into) the catalog INSERT below.
+    local q="'" qq="''"
+    local name="${1//$q/$qq}" src="${2//$q/$qq}" dst="${3//$q/$qq}"
     sqlite3 "${CATALOG_DB}" 2>/dev/null <<SQL || warn "catalog log failed"
 CREATE TABLE IF NOT EXISTS downloads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,7 +51,9 @@ SQL
 
 download_url() {
     local url="$1"
-    local filename="${2:-$(basename ${url})}"
+    local filename="${2:-$(basename "${url}")}"
+    # Filename must stay inside CLONEPOOL -- no path separators or dot-dirs.
+    [[ "${filename}" == */* || "${filename}" == "." || "${filename}" == ".." || -z "${filename}" ]]         && die "invalid filename: ${filename}"
     local dst="${CLONEPOOL}/${filename}"
     if [[ -f "${dst}" ]]; then
         warn "already in clonepool: ${filename} -- skipping"

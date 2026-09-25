@@ -58,7 +58,7 @@ function handleVoiceRequest($data) {
     $nowLocal    = (new DateTime('now', new DateTimeZone($timezone)))->format('l, F j Y g:i A T');
 
     // Detect likely intent so the caller can route to specialist if desired
-    $intent = detectIntent($message);
+    $intent = voiceDetectIntent($message);
 
     // Build system prompt
     $system = <<<PROMPT
@@ -100,14 +100,20 @@ PROMPT;
 
     // Log interaction
     $aiResponse = $response['content'] ?? 'No response';
-    $logStmt = $db->prepare("
-        INSERT INTO ai_interactions (user_id, ai_module, user_message, ai_response, intent, created_at)
-        VALUES (?, 'voice_commander', ?, ?, ?, NOW())
-    ");
-    if ($logStmt) {
-        $logStmt->bind_param('isss', $userId, $message, $aiResponse, $intent);
-        $logStmt->execute();
-        $logStmt->close();
+    // ai_interactions is not in module_1's schema; on PHP 8.1+ mysqli throws on
+    // prepare() of a missing table, so logging must never take the reply down.
+    try {
+        $logStmt = $db->prepare("
+            INSERT INTO ai_interactions (user_id, ai_module, user_message, ai_response, intent, created_at)
+            VALUES (?, 'voice_commander', ?, ?, ?, NOW())
+        ");
+        if ($logStmt) {
+            $logStmt->bind_param('isss', $userId, $message, $aiResponse, $intent);
+            $logStmt->execute();
+            $logStmt->close();
+        }
+    } catch (\Throwable $e) {
+        error_log('voice_commander log skipped: ' . $e->getMessage());
     }
 
     $db->close();
@@ -128,7 +134,10 @@ PROMPT;
 // can decide whether to re-route to a specialist AI.
 // ============================================
 
-function detectIntent($message) {
+// Renamed from detectIntent(): module_2_api_router.php already declares
+// detectIntent(), so require_once'ing this module from api.php was a fatal
+// "Cannot redeclare" — the default (voice) route never worked.
+function voiceDetectIntent($message) {
     $msg = strtolower($message);
 
     $patterns = [
@@ -193,9 +202,7 @@ function callClaude($system, $messages) {
     ];
 }
 
-// ============================================
-// ENTRY POINT
-// ============================================
-
-$data = json_decode(file_get_contents('php://input'), true) ?? [];
-echo json_encode(handleVoiceRequest($data));
+// No standalone entry point. This file used to read php://input and echo a
+// reply at include time — which (a) double-printed into api.php's response and
+// (b) let anyone POST {"user_id":2,...} straight to /module_7_voice_ai.php with
+// no auth. It is a library now; api.php (authenticated) is the only way in.

@@ -211,6 +211,11 @@ catalog_log() {
     local pkg="$3"
     local status="$4"
     local native_cmd="$5"
+    # SQL-escape single quotes (native_cmd itself contains them, e.g. the
+    # choco/winget "clean" echo) -- an unescaped ' broke the INSERT.
+    local q="'" qq="''"
+    backend="${backend//$q/$qq}"; verb="${verb//$q/$qq}"; pkg="${pkg//$q/$qq}"
+    status="${status//$q/$qq}"; native_cmd="${native_cmd//$q/$qq}"
 
     sqlite3 "${CATALOG_DB}" 2>/dev/null <<SQL
 CREATE TABLE IF NOT EXISTS translations (
@@ -234,6 +239,7 @@ VALUES (
     '$(hostname)'
 );
 SQL
+    return 0   # catalog logging is best-effort; never abort the run under set -e
 }
 
 # ── Output Translator ────────────────────────────────────────
@@ -257,6 +263,15 @@ translate_output() {
 main() {
     local verb="${1:-help}"
     local pkg="${2:-}"
+
+    # The translated command is run through eval, so the package name must be
+    # a plain package identifier -- never shell syntax. Covers apt (name=ver,
+    # name:arch), portage (cat/name), winget/choco IDs (Vendor.App), versions
+    # (1.2~rc+b1). A leading '-' is rejected too (option injection).
+    if [[ -n "${pkg}" ]] && { [[ ! "${pkg}" =~ ^[A-Za-z0-9][A-Za-z0-9._+:@/=~-]*$ ]] || [[ "$#" -gt 2 ]]; }; then
+        log "ERROR" "Rejected package argument (unsafe characters or extra args): ${pkg}"
+        exit 2
+    fi
 
     # Failover check before doing anything
     check_failover "$@"

@@ -52,6 +52,16 @@ warn()  { echo -e "${YELLOW}[usys]${RESET} $*"; }
 err()   { echo -e "${RED}[usys]${RESET} $*" >&2; }
 die()   { err "$*"; exit 1; }
 
+# ── Input guards ──────────────────────────────────────────────
+# Package names become file paths ($USYS_VERSIONS/<name>, $USYS_BIN/<name>)
+# and single-quoted SQL literals — restrict them to a safe charset.
+check_name() {
+    [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || \
+        die "Invalid name '$1' — use letters, digits, . _ + - only"
+}
+# Escape a value for a single-quoted sqlite literal ('' doubling).
+sq() { local v="$1" q="'"; printf '%s' "${v//$q/$q$q}"; }
+
 # ── Root warning ──────────────────────────────────────────────
 check_sudo() {
     if [[ $EUID -eq 0 ]]; then
@@ -272,6 +282,7 @@ cmd_register() {
 
     [[ -z "$src"  ]] && die "Usage: usys register <file> <name>"
     [[ -z "$name" ]] && die "Usage: usys register <file> <name>"
+    check_name "$name"
     [[ -f "$src"  ]] || die "File not found: $src"
 
     require_sqlite
@@ -306,10 +317,10 @@ cmd_register() {
     # Register in DB
     db << SQL
 INSERT INTO packages (name, current_ver, source_path, bin_path, filetype, description)
-VALUES ('$name', '$version', '$src', '$USYS_BIN/$name', '$filetype', '$desc');
+VALUES ('$name', '$version', '$(sq "$src")', '$USYS_BIN/$name', '$filetype', '$(sq "$desc")');
 
 INSERT INTO versions (package, version, store_path, hash, size)
-VALUES ('$name', '$version', '$store_path', '$hash', $size);
+VALUES ('$name', '$version', '$(sq "$store_path")', '$hash', $size);
 
 INSERT INTO swaplog (package, from_ver, to_ver, action, note)
 VALUES ('$name', NULL, '$version', 'register', 'initial registration');
@@ -332,6 +343,7 @@ SQL
 cmd_call() {
     local name="${1:-}"
     [[ -z "$name" ]] && die "Usage: usys call <name> [args...]"
+    check_name "$name"
     shift || true
 
     require_sqlite
@@ -359,6 +371,7 @@ cmd_swap() {
     local note="${3:-manual swap}"
 
     [[ -z "$name" ]] && die "Usage: usys swap <name> <newfile>"
+    check_name "$name"
     [[ -z "$src"  ]] && die "Usage: usys swap <name> <newfile>"
     [[ -f "$src"  ]] || die "File not found: $src"
 
@@ -386,17 +399,17 @@ cmd_swap() {
 
     db << SQL
 INSERT INTO versions (package, version, store_path, hash, size, note)
-VALUES ('$name', '$version', '$store_path', '$hash', $size, '$note');
+VALUES ('$name', '$version', '$(sq "$store_path")', '$hash', $size, '$(sq "$note")');
 
 UPDATE packages
 SET current_ver='$version',
-    source_path='$src',
+    source_path='$(sq "$src")',
     filetype='$filetype',
     updated=datetime('now')
 WHERE name='$name';
 
 INSERT INTO swaplog (package, from_ver, to_ver, action, note)
-VALUES ('$name', '$old_ver', '$version', 'swap', '$note');
+VALUES ('$name', '$old_ver', '$version', 'swap', '$(sq "$note")');
 SQL
 
     # Regenerate wrapper (points to new version via DB lookup)
@@ -418,6 +431,7 @@ cmd_rollback() {
     local target_ver="${2:-}"
 
     [[ -z "$name" ]] && die "Usage: usys rollback <name> [version]"
+    check_name "$name"
 
     require_sqlite
 
@@ -495,6 +509,7 @@ cmd_list() {
 cmd_info() {
     local name="${1:-}"
     [[ -z "$name" ]] && die "Usage: usys info <name>"
+    check_name "$name"
 
     require_sqlite
 
@@ -556,6 +571,7 @@ cmd_info() {
 cmd_remove() {
     local name="${1:-}"
     [[ -z "$name" ]] && die "Usage: usys remove <name>"
+    check_name "$name"
 
     require_sqlite
 
@@ -581,6 +597,7 @@ cmd_remove() {
 cmd_where() {
     local name="${1:-}"
     [[ -z "$name" ]] && die "Usage: usys where <name>"
+    check_name "$name"
 
     require_sqlite
 
@@ -609,6 +626,7 @@ cmd_sync() {
     local dest="${2:-}"
 
     [[ -z "$name" ]] && die "Usage: usys sync <name> <dest>"
+    check_name "$name"
     [[ -z "$dest" ]] && die "Usage: usys sync <name> <dest>"
 
     require_sqlite
@@ -636,6 +654,7 @@ cmd_clone() {
     local dest="${2:-}"
 
     [[ -z "$name" ]] && die "Usage: usys clone <name> <dest>"
+    check_name "$name"
     [[ -z "$dest" ]] && die "Usage: usys clone <name> <dest>"
 
     require_sqlite
@@ -685,9 +704,9 @@ cmd_search() {
     db -separator "|" \
        "SELECT name, current_ver, filetype, description
         FROM packages
-        WHERE name LIKE '%$query%'
-           OR description LIKE '%$query%'
-           OR filetype LIKE '%$query%'
+        WHERE name LIKE '%$q%'
+           OR description LIKE '%$q%'
+           OR filetype LIKE '%$q%'
         ORDER BY name;" \
     | while IFS="|" read -r name ver ftype desc; do
         printf "  ${GREEN}%-20s${RESET} %-8s %-10s  %s\n" \

@@ -211,21 +211,31 @@ class WarmPath:
     def __init__(self):
         os.makedirs(NVME_WARM_PATH, exist_ok=True)
 
+    @staticmethod
+    def _path(key):
+        # key embeds msg['id'], which arrives over the (unauthenticated,
+        # all-interfaces) ZMQ ring0 socket, so it must never pick the
+        # directory: anything outside [A-Za-z0-9._-] becomes "_" and ".."
+        # is broken up, so path separators can't escape NVME_WARM_PATH.
+        safe = "".join(c if (c.isascii() and (c.isalnum() or c in "._-")) else "_" for c in str(key))
+        safe = safe.replace("..", "__")[:200] or "_"
+        return os.path.join(NVME_WARM_PATH, f"{safe}.json")
+
     def prefetch(self, key, data):
-        path = os.path.join(NVME_WARM_PATH, f"{key}.json")
+        path = self._path(key)
         with open(path, "w") as f:
             json.dump({"ts": datetime.utcnow().isoformat(), "data": data}, f)
         log.debug(f"[WARM] Prefetched: {key}")
 
     def retrieve(self, key):
-        path = os.path.join(NVME_WARM_PATH, f"{key}.json")
+        path = self._path(key)
         if os.path.exists(path):
             with open(path) as f:
                 return json.load(f)
         return None
 
     def evict(self, key):
-        path = os.path.join(NVME_WARM_PATH, f"{key}.json")
+        path = self._path(key)
         if os.path.exists(path):
             os.remove(path)
             log.debug(f"[WARM] Evicted: {key}")

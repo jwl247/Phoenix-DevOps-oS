@@ -44,6 +44,10 @@ function register({ ipcMain, BrowserWindow, phoenixRoot }) {
             }
         });
 
+        // Same lock as the main window: this window's preload exposes
+        // privileged IPC, so it must never navigate to or open other content.
+        scriptforgeWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+        scriptforgeWindow.webContents.on('will-navigate', (event) => event.preventDefault());
         scriptforgeWindow.loadFile(filePath);
         scriptforgeWindow.on('closed', () => { scriptforgeWindow = null; });
 

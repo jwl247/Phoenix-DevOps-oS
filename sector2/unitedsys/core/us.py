@@ -177,10 +177,13 @@ def cmd_intake_dir(args):
     ok = fail = 0
     for f in files:
         desc = args.desc or str(f.relative_to(target))
+        # Pass values as positional args ($1..$4), never interpolated into
+        # the command string — a filename like  $(rm -rf ~).txt  or one
+        # containing a double quote would otherwise run as shell code.
         result = subprocess.run(
-            f'usys intake "{f}" "{args.pool}" "{args.state}" "{desc}"',
-            shell=True, capture_output=True, text=True,
-            executable='/usr/bin/zsh'
+            ['/usr/bin/zsh', '-c', 'usys intake "$1" "$2" "$3" "$4"', 'usys',
+             str(f), str(args.pool), str(args.state), str(desc)],
+            capture_output=True, text=True,
         )
         if 'Sidecar' in result.stdout or 'Registering' in result.stdout:
             ok += 1

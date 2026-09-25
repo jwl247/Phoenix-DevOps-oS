@@ -93,7 +93,7 @@ function Assert-Admin {
 
 function Ensure-PSWindowsUpdate {
     if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
-        Write-Host "Installing PSWindowsUpdate (official PowerShell Gallery module — Microsoft's own WU/WUA wrapper, MIT-licensed, no telemetry beyond what WU itself already does)..." -ForegroundColor Cyan
+        Write-Host "Installing PSWindowsUpdate (community PowerShell Gallery module by Michal Gajda — a wrapper over Windows' own WU/WUA API; the drivers themselves still come from Microsoft's signed catalog)..." -ForegroundColor Cyan
         Install-Module -Name PSWindowsUpdate -Force -Scope CurrentUser -Repository PSGallery
     }
     Import-Module PSWindowsUpdate -ErrorAction Stop

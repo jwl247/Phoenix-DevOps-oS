@@ -149,6 +149,18 @@ helix_result_t helix_egress_resolve(const char* identifier,
     *output_data = NULL;
     *output_size = 0;
 
+    /* identifier becomes a cache directory name — refuse path separators and
+     * dot-dot so it can't escape PHOENIX_CACHE (e.g. "../../.ssh"). */
+    if (identifier[0] == '\0' || identifier[0] == '.' ||
+        strchr(identifier, '/') || strchr(identifier, '\\') ||
+        strstr(identifier, "..")) {
+        helix_log_event("helix_egress", "resolve",
+                        HELIX_ERROR_INVALID_ARG,
+                        "identifier contains a path separator or '..'",
+                        "Pass a hex id or plain name, not a path.");
+        return HELIX_ERROR_INVALID_ARG;
+    }
+
     /* ── Step 1: Local cache check (fast path) ──────────────────────────── */
     if (_cache_hit(identifier)) {
         helix_result_t r = _read_from_cache(identifier, output_data, output_size);

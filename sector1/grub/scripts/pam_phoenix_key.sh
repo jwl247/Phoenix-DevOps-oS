@@ -50,12 +50,18 @@ check_dir() {
 }
 
 # ── 1. Scan already-mounted filesystems ──────────────────────
-while IFS= read -r mountpoint; do
+# Only block-device-backed mounts whose root is NOT world-writable.
+# Without this, any local user could drop a .phoenix_key into a tmpfs
+# (/run/user/<uid>, /dev/shm) or a 1777 /tmp mount root and pass
+# sudo/login/sshd auth — a local root escalation.
+while read -r src mountpoint _rest; do
+    [[ "$src" == /dev/* ]] || continue
+    [[ -n "$(find "$mountpoint" -maxdepth 0 -perm -o+w 2>/dev/null)" ]] && continue
     if check_dir "$mountpoint"; then
         log "OK" "key matched at $mountpoint"
         exit 0
     fi
-done < <(awk '{print $2}' /proc/mounts 2>/dev/null)
+done < /proc/mounts 2>/dev/null
 
 # ── 2. Try to find PHOENIX-KEY by label and mount it ─────────
 LABEL_DEV="/dev/disk/by-label/$KEY_LABEL"

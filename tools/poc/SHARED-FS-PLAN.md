@@ -191,7 +191,7 @@ the Glossary will call. It does not surface version lists — that is Glossary's
 - `sector2/package-handler/intake.sh` line 1287 — entry point, add version pass-through
 - `sector2/package-handler/intake.sh` lines 607-632 — pipeline tail, suite hook goes here
 - `scripts/usys.ps1` line 732 — `Get-UsysSuiteManifest` reads `<suitepath>/.suite.json`
-- `sector3/workers/packages-worker/index.js` line 944 — `/versions` endpoint already live
+- `sector2/package-handler/worker/index.js` — `/versions` endpoint (the live worker source; the old `sector3/workers/packages-worker/` copy this line used to cite is stale and must never be deployed)
 - D1 custody table — full action history, queryable at `GET /custody?hex=<hex>`
 - Suite name field: always a simple identifier like `"debian"`, `"yt-dlp"` — never a path
 

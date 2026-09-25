@@ -60,6 +60,13 @@ public sealed class PiperTextToSpeech : IDisposable
         };
 
         using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start piper.exe");
+        // Drain stdout/stderr: both are redirected, and piper logs per
+        // sentence to stderr — unread, a long reply can fill the pipe buffer
+        // and block piper forever (WaitForExitAsync never returns).
+        proc.OutputDataReceived += (_, _) => { };
+        proc.ErrorDataReceived += (_, _) => { };
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
         await using (proc.StandardInput)
         {
             await proc.StandardInput.WriteAsync(text.AsMemory(), ct);

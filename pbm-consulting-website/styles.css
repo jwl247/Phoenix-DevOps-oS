@@ -189,3 +189,8 @@ a:focus-visible, .cta:focus-visible {
   }
   .cat-grid { grid-template-columns: 1fr; }
 }
+
+/* legal pages — were inline style="" attributes, which the site CSP
+   (style-src without unsafe-inline) blocks */
+.no-rule { border-top: none; }
+.doc-meta { font-size: 13px; color: #5a5346; }

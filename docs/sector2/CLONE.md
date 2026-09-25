@@ -21,8 +21,8 @@ One command. Every platform. Everything tracked.
 |------|------|---------|
 | `tools/clone.ps1` | Phoenix-DevOps-oS | PS7 global function |
 | `tools/clone.sh` | Phoenix-DevOps-oS | Bash shim -- Linux/WSL/macOS |
-| `intake/intake.sh` | Phoenix-Package_handler | Intake engine (what clone wraps) |
-| `worker/index.js` | Phoenix-Package_handler | packages-worker -- D1 sync |
+| `sector2/package-handler/intake.sh` | Phoenix-DevOps-oS (git subtree of Phoenix-Package_handler) | Intake engine (what clone wraps) |
+| `sector2/package-handler/worker/index.js` | Phoenix-DevOps-oS (git subtree of Phoenix-Package_handler) | packages-worker -- D1 + R2 sync |
 
 ---
 
@@ -88,13 +88,14 @@ clone ./franken.py
         |
   clone.ps1 / clone.sh  (shim -- finds intake.sh, handles paths)
         |
-  intake.sh  (Phoenix-Package_handler/intake/)
+  intake.sh  (sector2/package-handler/)
         |
   hex identity generated from filename
   sidecar.json written
   clonepool versioned (v1, v2, v3...)
   custody receipt -- local sqlite3 (immutable)
-  D1 sync -> packages-worker -> phoenix-catalog
+  D1 sync -> packages-worker -> phoenix_dev_db (custody + glossary)
+  R2 upload -> packages-worker -> phoenix-clonepool bucket
         |
   File cataloged. Custody locked.
 ```

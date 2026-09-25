@@ -609,10 +609,18 @@ function getDirectorySize(dir) {
 ipcMain.handle('get-phoenix-stats', async () => {
     const workerUrl = process.env.PHOENIX_WORKER_URL || 'https://packages-worker.phoenix-jwl.workers.dev';
     const auth = process.env.PHOENIX_AUTH || '';
+    // Cloudflare Access fronts every route since Gap 1 (2026-09-21): send the
+    // usys-cli service token too, and never follow the Access login redirect
+    // (fetch would otherwise land on a 200 HTML page and fail at res.json()).
+    const headers = { Accept: 'application/json' };
+    if (auth) headers['Authorization'] = `Bearer ${auth}`;
+    if (process.env.CF_ACCESS_CLIENT_ID) headers['CF-Access-Client-Id'] = process.env.CF_ACCESS_CLIENT_ID;
+    if (process.env.CF_ACCESS_CLIENT_SECRET) headers['CF-Access-Client-Secret'] = process.env.CF_ACCESS_CLIENT_SECRET;
     try {
-        const res = await fetch(`${workerUrl}/stats`, {
-            headers: auth ? { 'Authorization': `Bearer ${auth}` } : {}
-        });
+        const res = await fetch(`${workerUrl}/stats`, { headers, redirect: 'manual' });
+        if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
+            return { success: false, error: 'Cloudflare Access redirected to login — CF_ACCESS_CLIENT_ID/SECRET not set' };
+        }
         if (!res.ok) return { success: false, error: `Worker returned ${res.status}` };
         const data = await res.json();
         return { success: true, ...data };
@@ -710,7 +718,12 @@ ipcMain.handle('move-pagefile', async (event, { targetDrive, sizeGB, confirm }) 
     if (!confirm) return { success: false, error: 'Refused: confirm:true required for a pagefile move.' };
     if (!targetDrive || !/^[A-Za-z]:$/.test(targetDrive)) return { success: false, error: 'targetDrive must look like "D:"' };
     if (!(await isElevated())) return { success: false, error: 'Requires Administrator — relaunch the dashboard elevated.' };
-    const sizeMB = Math.round((sizeGB || 4) * 1024);
+    const sizeNum = sizeGB === undefined || sizeGB === null ? 4 : Number(sizeGB);
+    if (!Number.isFinite(sizeNum) || sizeNum < 1 || sizeNum > 512) {
+        return { success: false, error: 'sizeGB must be a number between 1 and 512' };
+    }
+    sizeGB = sizeNum;
+    const sizeMB = Math.round(sizeNum * 1024);
     const script = `
 $targetName = "${targetDrive}\\pagefile.sys"
 Get-CimInstance -ClassName Win32_ComputerSystem | Set-CimInstance -Property @{ AutomaticManagedPagefile = $false }
@@ -814,11 +827,12 @@ loadPhoenixEnv(); // phoenix.env overrides saved auth for boot settings
 // Check if the Claude Code CLI is installed and logged in
 ipcMain.handle('check-claude-cli', async () => {
     return new Promise(resolve => {
-        const cliName = process.platform === 'win32' ? 'claude.cmd' : 'claude';
-        exec(`${cliName} --version`, { timeout: 6000 }, (err, stdout) => {
+        const { execFile } = require('child_process');
+        const cli = _findClaudeCli();
+        execFile(cli.file, [...cli.prefix, '--version'], { timeout: 6000 }, (err, stdout) => {
             if (err) return resolve({ available: false, reason: 'claude CLI not found — install with: npm install -g @anthropic-ai/claude-code' });
             // Check auth by running a no-op to see if we get an auth error
-            exec(`${cliName} --print "ping"`, { timeout: 10000 }, (err2, stdout2, stderr2) => {
+            execFile(cli.file, [...cli.prefix, '--print', 'ping'], { timeout: 10000 }, (err2, stdout2, stderr2) => {
                 const output = (stdout2 || '') + (stderr2 || '');
                 const needsLogin = output.toLowerCase().includes('login') || output.toLowerCase().includes('auth') || output.toLowerCase().includes('not logged');
                 resolve({
@@ -1235,12 +1249,27 @@ async function _chatClaudeApiStream(systemPrompt, messages, onChunk) {
     return { provider: `claude/${model}`, reply: full };
 }
 
-// Find the Claude Code CLI on Windows — tries PATH then npm global bin
+// Find the Claude Code CLI. Same resolution order as hud/AiChatService.cs's
+// FindClaudeCli() (fixed there 2026-09-22): the native installer's
+// ~/.local/bin/claude.exe first (this machine's real install), then the
+// npm-global claude.cmd, then bare PATH lookup. Before this, every dashboard
+// CLI path assumed claude.cmd — which doesn't exist on this machine — so the
+// subscription tier, Laurie's Ollama-down fallback, the helpdesk safety net,
+// and Office's copilot all failed with "not recognized".
+// Returns { file, prefix }: spawn(file, [...prefix, ...args]).
 function _findClaudeCli() {
-    if (process.platform !== 'win32') return 'claude';
+    if (process.platform !== 'win32') return { file: 'claude', prefix: [] };
+    const nativeExe = path.join(os.homedir(), '.local', 'bin', 'claude.exe');
+    if (fs.existsSync(nativeExe)) return { file: nativeExe, prefix: [] };
     const npmGlobal = path.join(os.homedir(), 'AppData', 'Roaming', 'npm', 'claude.cmd');
-    if (fs.existsSync(npmGlobal)) return `"${npmGlobal}"`;
-    return 'claude.cmd';
+    if (fs.existsSync(npmGlobal)) return { file: 'cmd.exe', prefix: ['/c', npmGlobal] };
+    // Last resort: let cmd.exe resolve `claude` via PATH/PATHEXT (.exe or .cmd).
+    return { file: 'cmd.exe', prefix: ['/c', 'claude'] };
+}
+
+function _spawnClaudeCli(args, spawnOpts) {
+    const cli = _findClaudeCli();
+    return spawn(cli.file, [...cli.prefix, ...args], spawnOpts);
 }
 
 // Run Claude Code CLI — spawn so we can write the full prompt to stdin
@@ -1251,10 +1280,6 @@ function _findClaudeCli() {
 // "broken" and she won't come back.
 function _runClaudeCli(prompt, onChunk) {
     return new Promise((resolve, reject) => {
-        const isWin = process.platform === 'win32';
-        const npmGlobal = path.join(os.homedir(), 'AppData', 'Roaming', 'npm', 'claude.cmd');
-        const cliResolved = (isWin && fs.existsSync(npmGlobal)) ? npmGlobal : (isWin ? 'claude.cmd' : 'claude');
-
         // Strip API-key auth from the child's env so this call cannot silently
         // fall back to pay-per-token billing when the whole point of this tier
         // is to spend subscription usage, not API credit.
@@ -1268,9 +1293,7 @@ function _runClaudeCli(prompt, onChunk) {
         // it's about to do.
         const args = ['--print', '--disallowedTools', 'Bash,Write,Edit,WebFetch,WebSearch'];
         const spawnOpts = { timeout: 60000, env: subscriptionOnlyEnv };
-        const proc = isWin
-            ? spawn('cmd.exe', ['/c', cliResolved, ...args], spawnOpts)
-            : spawn(cliResolved, args, spawnOpts);
+        const proc = _spawnClaudeCli(args, spawnOpts);
 
         let stdout = '';
         let stderr = '';
@@ -1300,19 +1323,13 @@ function _runClaudeCli(prompt, onChunk) {
 // Streams stdout chunks as they arrive, same shape as the API streaming path.
 function _runClaudeCliFull(prompt, onChunk) {
     return new Promise((resolve, reject) => {
-        const isWin = process.platform === 'win32';
-        const npmGlobal = path.join(os.homedir(), 'AppData', 'Roaming', 'npm', 'claude.cmd');
-        const cliResolved = (isWin && fs.existsSync(npmGlobal)) ? npmGlobal : (isWin ? 'claude.cmd' : 'claude');
-
         const subscriptionOnlyEnv = { ...process.env };
         delete subscriptionOnlyEnv.ANTHROPIC_API_KEY;
         delete subscriptionOnlyEnv.ANTHROPIC_AUTH_TOKEN;
 
         const args = ['--print', '--dangerously-skip-permissions'];
         const spawnOpts = { timeout: 120000, env: subscriptionOnlyEnv };
-        const proc = isWin
-            ? spawn('cmd.exe', ['/c', cliResolved, ...args], spawnOpts)
-            : spawn(cliResolved, args, spawnOpts);
+        const proc = _spawnClaudeCli(args, spawnOpts);
 
         let stdout = '';
         let stderr = '';

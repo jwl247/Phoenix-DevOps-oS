@@ -50,6 +50,9 @@ log = logging.getLogger("phoenix_filetree")
 
 TREE_PORT   = int(os.environ.get("PHOENIX_TREE_PORT",  "7703"))
 CLONE_PORT  = int(os.environ.get("PHOENIX_CLONE_PORT", "7704"))
+# Unauthenticated protocol (tree/read/clone-with-overwrite) — loopback only by
+# default. Set PHOENIX_TREE_BIND=0.0.0.0 only on a trusted, firewalled network.
+TREE_BIND   = os.environ.get("PHOENIX_TREE_BIND", "127.0.0.1")
 MAX_DEPTH   = int(os.environ.get("PHOENIX_TREE_DEPTH", "5"))
 COPES_PATH  = os.environ.get("COPES_PATH", str(Path(__file__).parent.parent / "CoPES"))
 
@@ -311,9 +314,13 @@ def _handle_conn(conn: socket.socket, addr):
 def _serve(port: int):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("0.0.0.0", port))
+    try:
+        sock.bind((TREE_BIND, port))
+    except OSError as e:
+        log.error(f"FileTree service could not bind {TREE_BIND}:{port}: {e}")
+        return
     sock.listen(20)
-    log.info(f"FileTree service listening on port {port}")
+    log.info(f"FileTree service listening on {TREE_BIND}:{port}")
     while True:
         try:
             conn, addr = sock.accept()

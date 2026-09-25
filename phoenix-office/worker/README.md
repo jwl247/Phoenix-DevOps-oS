@@ -48,6 +48,12 @@ README for the escalation/transport design — unchanged here), plus:
   `office_documents` if the body parses as a real document envelope; the R2
   write is what actually matters — the D1 row is a reference, not the
   source of truth (same principle as the rest of Office's design).
+  **Write-once (2026-09-25):** re-PUT of identical bytes is a no-op
+  (`already:true`); different bytes under an existing hex get **409**.
+- Ack links: `GET /ack/:token` only shows a confirm page; the button's
+  `POST /ack/:token` records the acknowledgement (link-preview bots GET every
+  URL). Escalation backs off per level and stops after 12 sends. `HEAD
+  /runtime/:name` now needs the bearer too.
 - `GET /documents/:hex` (Bearer `OFFICE_AUTH`) — fetch the bytes back.
 - `GET /documents` (Bearer `OFFICE_AUTH`) — browse recent documents, newest
   first. `?limit=30&state=SIGNED` to narrow. Powers the app's "Browse sealed

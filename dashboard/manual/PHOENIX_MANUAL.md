@@ -71,7 +71,7 @@ subscriptions, no vendor lock-in:
 **Windows (development / daily use):**
 - PowerShell 7 (`winget install Microsoft.PowerShell`)
 - Git for Windows (`winget install Git.Git`)
-- WSL2 with Debian or Ubuntu recommended for full sector access
+- Phoenix's own Debian VM (`usys run debian`, QEMU) for the Linux side — Phoenix does not use WSL
 
 **Linux (bare metal / external drive target):**
 - Ubuntu Server 22.04+ minimal (HWE kernel recommended)
@@ -343,7 +343,7 @@ intake .\myfile.py
 intake status
 ```
 
-**Bash / WSL:**
+**Bash (Git Bash, or inside the Phoenix Debian VM):**
 ```bash
 intake ./myfile.py
 ```
@@ -491,7 +491,7 @@ breach_coms2  →  /mnt/e  →  T3 TERTIARY  (clone pool primary)
 breach_coms1  →  /mnt/d  →  T4 TERTIARY  (4-day window)
 ```
 
-In WSL the same drives appear at `/mnt/d` through `/mnt/g` automatically.
+Inside Phoenix's Debian VM (`usys run debian`) the same drives appear at `/mnt/d` through `/mnt/g`. (Phoenix does not use WSL.)
 The fstab template is in `sector1/saddle_block.sh` — uncomment 4 lines to
 mount by label.
 

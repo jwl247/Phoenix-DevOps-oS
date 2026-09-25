@@ -44,6 +44,11 @@ VERSION          = "2.0.0"
 # Ports
 JULIET_RECV_PORT = 5581   # inbound from Romeo
 JULIET_SEND_PORT = 5582   # egress outbound
+# Listeners are unauthenticated (plain ZMQ PULL -> package install/remove via
+# translator.sh), so they bind to loopback only. Every in-tree peer
+# (romeo->juliet, dbl_juliet, quadengine) connects via localhost. Widen only
+# deliberately, e.g. PHOENIX_RJ_BIND=0.0.0.0, and only behind real auth.
+BIND_ADDR = os.environ.get("PHOENIX_RJ_BIND", "127.0.0.1")
 
 os.makedirs(LOG_DIR, exist_ok=True)
 logging.basicConfig(
@@ -161,8 +166,8 @@ class Juliet:
         recv_sock = self.context.socket(zmq.PULL)
         send_sock = self.context.socket(zmq.PUSH)
 
-        recv_sock.bind(f"tcp://*:{JULIET_RECV_PORT + (self.barrel_id - 1)}")
-        send_sock.bind(f"tcp://*:{JULIET_SEND_PORT + (self.barrel_id - 1)}")
+        recv_sock.bind(f"tcp://{BIND_ADDR}:{JULIET_RECV_PORT + (self.barrel_id - 1)}")
+        send_sock.bind(f"tcp://{BIND_ADDR}:{JULIET_SEND_PORT + (self.barrel_id - 1)}")
         recv_sock.setsockopt(zmq.RCVTIMEO, 1000)
 
         catalog_init()

@@ -115,7 +115,17 @@ function createAgentTools({ lib, listTemplates, browseWorker, aiComplete }) {
             args: '{ by?: string }',
             async execute(args, state, ctx) {
                 if (!state.document) return { ok: false, message: 'no current document' };
-                const d = lib.document.sign(state.document, args.by);
+                // The signer is NEVER the model's own `args.by` claim — when the
+                // app wires ctx.resolveSigner (main.js does), the verified
+                // Google identity from this session is required and used, same
+                // as the plain Sign button. args.by is only honored in bare
+                // library/test use with no resolver wired.
+                let signerId = args.by, signerEmail;
+                if (ctx && typeof ctx.resolveSigner === 'function') {
+                    const signer = await ctx.resolveSigner();
+                    signerId = signer.author_id; signerEmail = signer.email;
+                }
+                const d = lib.document.sign(state.document, signerId, undefined, signerEmail);
                 const sealed = ctx && ctx.sealDocument ? await ctx.sealDocument(d) : { ok: false, error: 'no seal handler wired' };
                 return { ok: true, message: sealed.ok ? 'signed and sealed' : `signed (seal pending: ${sealed.error})`, document: d, data: { sealed } };
             },

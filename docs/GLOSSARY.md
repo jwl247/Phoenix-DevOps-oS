@@ -13,34 +13,46 @@ hex identity, searchable by name or category. It's one of the Entourage apps
 - **Population: automatic.** `intake.sh` calls `report_glossary()` after every
   file, directory, or package intake. You don't add glossary entries by hand
   — they arrive as a side effect of `usys clone` / `usys intake`.
-- **Dashboard panel: not built yet.** There's no UI for this in `dashboard/`
-  yet — see `CLAUDE.md` BUILD STATUS, Phase 6. Everything below is API-level,
-  useful for scripting or `curl` until that panel exists.
+- **Dashboard panel: built.** The Electron dashboard has a GLOSSARY pane
+  (`dashboard/index.html` `#hud-pane-glossary` — search + category/state
+  filters + version history). Per `CLAUDE.md` (2026-09-20), the WPF `hud/`
+  gets Glossary as a chat-driven Claude Skill rather than a coded pane.
+  Everything below is the API level, for scripting or `curl`.
 
 ## Prerequisites
 
 - `PHOENIX_WORKER_URL` and `PHOENIX_AUTH` set (see `dashboard/manual/PHOENIX_MANUAL.md`
-  §8, or run `usys init`). Reads are public; writes (`POST`, `PUT`, `DELETE`) require the
-  `Authorization: Bearer $PHOENIX_AUTH` header and must match the worker's
+  §8, or run `usys init`). **Every route — reads included — requires the
+  `Authorization: Bearer $PHOENIX_AUTH` header** (Security Gap 1, fixed
+  2026-09-21; unauthenticated GETs return `401`). On the
+  `packages-worker.phoenix-jwl.workers.dev` hostname, Cloudflare Access also sits
+  in front, so add `-H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H
+  "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET"` or you get a `302` to the
+  Access login page (the `get.authenticcoder.com` custom domain skips Access but
+  still enforces the bearer token). The token must match the worker's
   deployed secret — `usys status` shows what's set locally, but that's no
   guarantee it matches the Cloudflare secret. If writes 401, the two are out
-  of sync; regenerate and set both sides (`wrangler secret put PHOENIX_AUTH`
-  and `[Environment]::SetEnvironmentVariable('PHOENIX_AUTH', ..., 'User')`).
+  of sync — fix it only with `sector2/package-handler/rotate-phoenix-auth.sh`
+  (see `docs/SECRETS.md`); hand-setting one side is what caused the
+  2026-08-21 / 08-22 / 09-21 drift incidents.
 
 ## Querying
 
 ```bash
+# All examples need the auth headers from Prerequisites, e.g.:
+H=(-H "Authorization: Bearer $PHOENIX_AUTH" -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET")
+
 # Browse everything (paginated)
-curl "$PHOENIX_WORKER_URL/glossary?limit=25"
+curl "${H[@]}" "$PHOENIX_WORKER_URL/glossary?limit=25"
 
 # Search by name substring
-curl "$PHOENIX_WORKER_URL/glossary?q=phoenix_auth"
+curl "${H[@]}" "$PHOENIX_WORKER_URL/glossary?q=phoenix_auth"
 
 # Filter by category
-curl "$PHOENIX_WORKER_URL/glossary?category=scripts"
+curl "${H[@]}" "$PHOENIX_WORKER_URL/glossary?category=scripts"
 
 # Fetch one entry by hex or name
-curl "$PHOENIX_WORKER_URL/glossary/phoenix_auth.py"
+curl "${H[@]}" "$PHOENIX_WORKER_URL/glossary/phoenix_auth.py"
 ```
 
 ## Writing
@@ -51,12 +63,12 @@ you. Direct writes are for corrections or manual registration:
 ```bash
 # Add or upsert an entry
 curl -X POST "$PHOENIX_WORKER_URL/glossary" \
-  -H "Authorization: Bearer $PHOENIX_AUTH" -H "Content-Type: application/json" \
+  "${H[@]}" -H "Content-Type: application/json" \
   -d '{"hex":"...", "name":"nginx.conf", "description":"Production config", "state":"white"}'
 
 # Amend description/category/state/notes on an existing entry
 curl -X PUT "$PHOENIX_WORKER_URL/glossary/nginx.conf" \
-  -H "Authorization: Bearer $PHOENIX_AUTH" -H "Content-Type: application/json" \
+  "${H[@]}" -H "Content-Type: application/json" \
   -d '{"description":"Updated production config", "state":"grey"}'
 ```
 

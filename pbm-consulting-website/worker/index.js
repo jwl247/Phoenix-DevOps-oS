@@ -41,7 +41,21 @@ function referenceNumber(leadId) {
 }
 
 function isValidEmail(email) {
-  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  return typeof email === 'string' && email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// Visitor-supplied text goes into an HTML email sent from PBM's own domain
+// to an address the visitor also chose — unescaped, that's a free branded
+// phishing relay (arbitrary links/markup under PBM's letterhead).
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Plain length caps so a scripted client can't park megabytes per row in D1
+// or in the HubSpot contact.
+const MAX_FIELD = { name: 120, business_name: 200, phone: 40 };
+function tooLong(v, max) {
+  return v != null && (typeof v !== 'string' || v.length > max);
 }
 
 // Turnstile enforcement is off until TURNSTILE_SECRET is actually set
@@ -89,7 +103,7 @@ function officialEmailHtml({ name, referenceNo, code }) {
       <div style="font-size:12px;color:#5a5346;">6814 Chris Madsen Rd, Guthrie, OK 73044</div>
     </div>
     <p style="font-size:13px;color:#5a5346;margin:0 0 4px;">Reference No. ${referenceNo}</p>
-    <p>Dear ${name ? name : 'Sir or Madam'},</p>
+    <p>Dear ${name ? escapeHtml(name) : 'Sir or Madam'},</p>
     <p>You have requested a federal set-aside eligibility review with PBM
     Consulting Service. To confirm this request came from you, enter the
     verification code below where you submitted your information.</p>
@@ -130,6 +144,9 @@ async function handleLead(req, env) {
   const { name, business_name, email, phone, turnstile_token } = body || {};
   if (!business_name || typeof business_name !== 'string') return jsonResponse({ ok: false, error: 'business_name required' }, 400);
   if (!isValidEmail(email)) return jsonResponse({ ok: false, error: 'a valid email is required' }, 400);
+  if (tooLong(name, MAX_FIELD.name) || tooLong(business_name, MAX_FIELD.business_name) || tooLong(phone, MAX_FIELD.phone)) {
+    return jsonResponse({ ok: false, error: 'one of the fields is too long' }, 400);
+  }
 
   const ip = req.headers.get('CF-Connecting-IP');
   const turnstile = await verifyTurnstile(turnstile_token, ip, env);
@@ -196,7 +213,7 @@ async function handleVerify(req, env) {
   return jsonResponse({ ok: true, reference: referenceNumber(row.id), hubspotSynced });
 }
 
-export { isValidEmail, referenceNumber, sha256Hex, generateCode };
+export { isValidEmail, referenceNumber, sha256Hex, generateCode, escapeHtml };
 
 export default {
   async fetch(req, env) {

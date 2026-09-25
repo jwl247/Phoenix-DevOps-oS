@@ -88,6 +88,19 @@ static CURL* _curl_init(const char* url, const char* auth_token,
     struct curl_slist* hdrs = NULL;
     hdrs = curl_slist_append(hdrs, "Content-Type: application/json");
     hdrs = curl_slist_append(hdrs, auth_hdr);
+
+    /* Cloudflare Access service token — every packages-worker route sits behind
+     * Access since the 2026-09-21 Gap 1 fix; without these the worker answers
+     * with a 302 to the Access login page and every sync fails. */
+    const char* cf_id  = getenv("CF_ACCESS_CLIENT_ID");
+    const char* cf_sec = getenv("CF_ACCESS_CLIENT_SECRET");
+    if (cf_id && *cf_id && cf_sec && *cf_sec) {
+        char cf_hdr[512];
+        snprintf(cf_hdr, sizeof(cf_hdr), "CF-Access-Client-Id: %s", cf_id);
+        hdrs = curl_slist_append(hdrs, cf_hdr);
+        snprintf(cf_hdr, sizeof(cf_hdr), "CF-Access-Client-Secret: %s", cf_sec);
+        hdrs = curl_slist_append(hdrs, cf_hdr);
+    }
     *hdrs_out = hdrs;
 
     resp->ptr = NULL;

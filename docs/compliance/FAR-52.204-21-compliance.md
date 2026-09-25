@@ -20,7 +20,7 @@ Source: [48 CFR § 52.204-21(b)(1)](https://www.law.cornell.edu/cfr/text/48/52.2
 
 | # | Control | Status | Evidence |
 |---|---|---|---|
-| 1 | Limit system access to authorized users/processes/devices | **Above standard** | Cloudflare Access (identity + service-token policies) + `isAuthorized()` on every route in `sector2/package-handler/worker/index.js` — two independent layers |
+| 1 | Limit system access to authorized users/processes/devices | **Above standard** | Cloudflare Access (identity + service-token policies) + `isAuthorized()` on every route in `sector2/package-handler/worker/index.js` — two independent layers on the `packages-worker.phoenix-jwl.workers.dev` hostname. **Caveat (verified 2026-09-25):** the `get.authenticcoder.com` custom domain routes to the same worker *without* the Access layer — only the bearer-token check applies there (probe: unauthenticated `GET /glossary` → `401`, `GET /health` → `200`) |
 | 2 | Limit access to permitted transactions/functions | **Above standard** | `sector1/security` / `franken5.py`'s `Ball` + `FAMILY_PERMISSIONS` — least-privilege by device family, explicit grant required for delete/translate/kernel |
 | 3 | Verify/control external system connections | **Meets** | `translator.sh` OUTPUT ONLY boundary, sector3 romeo/juliet ingress/egress split — architecturally sound; romeo.py/juliet.py themselves are still Phase 5 (unbuilt) per CLAUDE.md, so the rule is enforced by convention today, not yet by code on that specific pair |
 | 4 | Control info posted on publicly accessible systems | **Fixed 2026-09-23** | See [FCI Publishing Policy](#fci-publishing-policy) below |
@@ -214,8 +214,9 @@ covered only implicitly by the general scorecard above.
    ever pass through here: "disposable" and "sanitization-exempt because
    it's disposable" are not automatically the same claim, and haven't been
    tested against that specific question yet.
-5. **Gap, honestly:** `RESEND_API_KEY` still isn't set on either notify
-   worker (see CLAUDE.md NEXT SESSION) — until it is, Office's tamper
-   notifications record and retry but never actually deliver. That's a real
-   functional gap in control #12's "timely" requirement specifically, not
-   just a nice-to-have.
+5. **Closed 2026-09-23:** `RESEND_API_KEY` is now set on both notify
+   workers — `office-notify-worker` and `phoenix-office-worker` `/health`
+   both report `"transport":"resend"` (re-verified 2026-09-25), so tamper
+   notifications actually deliver. (Previously a real functional gap in
+   control #12's "timely" requirement.) `pbm-leads-worker` still reports
+   `"transport":"NONE"`, but it carries no FCI.

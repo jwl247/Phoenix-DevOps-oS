@@ -31,6 +31,9 @@ die()  { echo -e "${RED}[FATAL]${RESET} $*"; exit 1; }
 [[ $EUID -ne 0 ]] && die "Must run as root"
 [[ -z "$TARGET" ]] && die "Usage: $0 /dev/sdX"
 [[ -b "$TARGET" ]] || die "Device $TARGET not found"
+if lsblk -no LABEL "$TARGET" 2>/dev/null | grep -qi 'breach_coms'; then
+    die "$TARGET carries a breach_coms label — refusing to erase a vault drive"
+fi
 
 echo -e "${BOLD}╔══════════════════════════════════════════════════╗${RESET}"
 echo -e "${BOLD}║     PHOENIX USB BOOT KEY BUILDER                 ║${RESET}"

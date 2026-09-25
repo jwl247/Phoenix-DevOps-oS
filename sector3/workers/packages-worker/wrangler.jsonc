@@ -1,6 +1,12 @@
+// STALE COPY -- DO NOT DEPLOY. The canonical, live packages-worker source is
+// sector2/package-handler/worker/ (merged there 2026-09-20). This copy predates
+// the 2026-09-21 Gap 1 fix: /custody, /clonepool and /packages GETs here have NO
+// auth, and "name" matches the live worker, so a `wrangler deploy` from this
+// folder would silently overwrite production and re-open those routes.
+// "main" points at a file that does not exist so any deploy fails loudly.
 {
   "name": "packages-worker",
-  "main": "index.js",
+  "main": "STALE-COPY-DO-NOT-DEPLOY--use-sector2-package-handler-worker.js",
   "compatibility_date": "2025-01-01",
   "d1_databases": [
     {

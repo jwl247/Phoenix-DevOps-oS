@@ -10,7 +10,14 @@
 $ErrorActionPreference = "Stop"
 
 # ── Config ───────────────────────────────────────────────────
-$WORKER_URL  = "https://pho-installer-worker.phoenix-jwl.workers.dev"
+# pho-installer-worker was deleted 2026-09-25 (pentest Round 1 — dormant
+# fossil); packages-worker is the live catalog worker intake.sh talks to.
+$WORKER_URL  = "https://packages-worker.phoenix-jwl.workers.dev"
+# Was never defined before, so the User env var write below set CLONEPOOL_DIR
+# to $null — i.e. DELETED any existing value (e.g. E:/Phoenix/clonepool).
+# Keep an existing value; otherwise default to the path the bash env files
+# below already use. Forward slashes on purpose (intake.sh JSON/path handling).
+$CLONEPOOL_DIR = if ($env:CLONEPOOL_DIR) { $env:CLONEPOOL_DIR } else { ("$env:USERPROFILE\Phoenix\clonepool" -replace '\\','/') }
 $REPO_URL    = "https://github.com/jwl247/Phoenix-Package_handler.git"
 $INSTALL_DIR = "$env:USERPROFILE\Phoenix\package-handler"
 $ENV_FILE    = "$env:USERPROFILE\.phoenix_env.ps1"
@@ -82,11 +89,15 @@ PHX-Info "Running in PS $($PSVersionTable.PSVersion) — good."
 
 # ── Health check ─────────────────────────────────────────────
 PHX-Info "Checking worker health..."
+# Non-fatal: the worker only matters for D1/R2 sync, not for installing the
+# local tooling. (It sits behind Cloudflare Access, so an unauthenticated
+# probe may be redirected — that still proves the network path works.)
 try {
-    Invoke-RestMethod -Uri "$WORKER_URL/health" -TimeoutSec 10 | Out-Null
-    PHX-OK "Worker is live."
+    Invoke-WebRequest -Uri "$WORKER_URL/health" -TimeoutSec 10 -UseBasicParsing -MaximumRedirection 0 -ErrorAction Stop | Out-Null
+    PHX-OK "Worker is reachable."
 } catch {
-    PHX-Error "Worker unreachable. Check your internet connection."
+    if ($_.Exception.Response) { PHX-OK "Worker is reachable (auth-gated)." }
+    else { PHX-Warn "Worker unreachable right now — continuing; D1/R2 sync will retry later." }
 }
 
 # ── Install Git ───────────────────────────────────────────────
@@ -158,7 +169,7 @@ if (Test-Path $ENV_FILE) {
 if (-not $env:PHOENIX_AUTH) {
     Write-Host ""
     Write-Host "  Enter your PHOENIX_AUTH token." -ForegroundColor Yellow
-    Write-Host "  (Cloudflare -> pho-installer-worker -> Settings -> Variables)" -ForegroundColor DarkGray
+    Write-Host "  (stored in F:\Phoenix\Vault\secrets\phoenix-secrets.env — never in Cloudflare's UI)" -ForegroundColor DarkGray
     Write-Host ""
     $secureToken = Read-Host "  PHOENIX_AUTH" -AsSecureString
     $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)

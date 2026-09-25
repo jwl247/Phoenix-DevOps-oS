@@ -37,10 +37,14 @@ import hashlib
 
 FRANK_VERSION   = "5.1.0-alpha"
 FRANK_IDENT     = "FRANK5"
-SHM_PATH        = Path(os.environ.get("PHOENIX_SHM", "/tmp/phoenix_shm"))
+# Defaults use the platform temp dir (/tmp on Linux — unchanged; %TEMP% on
+# Windows, where a literal "/tmp" resolved to <drive>:\tmp and crashed import).
+import tempfile as _tempfile
+_TMP            = _tempfile.gettempdir()
+SHM_PATH        = Path(os.environ.get("PHOENIX_SHM", os.path.join(_TMP, "phoenix_shm")))
 STAGE_SLOT_SIZE = 4096        # bytes per stage slot in shared memory
 MAX_RINGS       = 64          # max concurrent Frank rings alive at once
-AUDIT_PATH      = Path(os.environ.get("PHOENIX_AUDIT", "/tmp/phoenix_audit.log"))
+AUDIT_PATH      = Path(os.environ.get("PHOENIX_AUDIT", os.path.join(_TMP, "phoenix_audit.log")))
 
 
 logging.basicConfig(

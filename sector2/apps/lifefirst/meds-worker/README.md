@@ -32,7 +32,8 @@ Control lives with Jerry, structurally:
 | GET  | `/status?user_id=2` | `Bearer PHOENIX_AUTH` | current state + `ask` flag for the assistant |
 | POST | `/configure` | `Bearer PHOENIX_AUTH` | Jerry sets up / adjusts a guardrail |
 | POST | `/record-dose` | `Bearer PHOENIX_AUTH` | log a confirmed dose, advance the window, close open cycles |
-| GET  | `/ack/:token` | the token itself | Laurie taps the reminder link → dose logged, cycle closed |
+| GET  | `/ack/:token` | the token itself | Laurie taps the reminder link → a one-button "Yes, I took it" page (GET alone never logs a dose — link-preview bots/mail scanners fetch every URL) |
+| POST | `/ack/:token` | the token itself | her tap on that button → dose logged, cycle closed |
 
 `POST /configure` body: `{ user_id, med_label?, window_hours?, grace_minutes?, active? }`
 `POST /record-dose` body: `{ user_id, dose_at?, via?, note? }` (`via` ∈ `assistant`|`manual`)

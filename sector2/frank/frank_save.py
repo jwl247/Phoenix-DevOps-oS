@@ -103,12 +103,27 @@ def catalog_register(doc_id, title, doc_type, vault_path, checksum, drive, size)
     return version
 
 # ── VAULT WRITE ───────────────────────────────────────────────────────────────
+# doc_id / doc_type become directory names under <drive>/VAULT/. They arrive
+# from frank_http.py's POST /save body, so they must be a single plain path
+# segment: no "/" or "\", no "..", and not absolute (pathlib silently discards
+# everything before an absolute component — Path("/mnt/e")/"VAULT"/"/etc"
+# is "/etc"). Without this, a /save body could write into any directory.
+import re as _re
+_SAFE_SEGMENT = _re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+def _require_safe_segment(field: str, value) -> None:
+    if not isinstance(value, str) or not _SAFE_SEGMENT.match(value) or ".." in value:
+        raise ValueError(f"invalid {field}: must match [A-Za-z0-9][A-Za-z0-9._-]{{0,127}} and contain no '..'")
+
 def vault_write(doc_id: str, title: str, doc_type: str, content: str | bytes, drive: str) -> dict:
     """
     Write document into the vault with versioned path:
       <drive>/VAULT/<doc_type>/<doc_id>/<timestamp>.<ext>
     Returns metadata dict.
     """
+    _require_safe_segment("doc_id", doc_id)
+    _require_safe_segment("doc_type", doc_type)
+
     if isinstance(content, str):
         content = content.encode("utf-8")
 
@@ -205,6 +220,11 @@ def frank_save(doc_id: str, title: str, doc_type: str, content: str | bytes) -> 
     Returns:
         { status, drive, pressure, version, vault_path, buffered }
     """
+    # Validate up front — a bad id must be rejected, not buffered (the L2
+    # flush thread would otherwise re-queue it forever).
+    _require_safe_segment("doc_id", doc_id)
+    _require_safe_segment("doc_type", doc_type)
+
     pressures = system_pressure()
     drive = best_drive()
 

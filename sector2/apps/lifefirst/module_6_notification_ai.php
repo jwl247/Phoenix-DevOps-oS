@@ -46,7 +46,11 @@ function handleNotificationRequest($data) {
         case 'check':
             return checkPendingNotifications($userId);
         case 'escalate':
-            return escalateNotifications($userId);
+            // The escalator service (install.sh) asks for scope "all" so every
+            // user's notifications escalate — it used to only escalate the
+            // caller's ("you"), so Laurie's never did.
+            $scope = $data['raw_data']['scope'] ?? null;
+            return escalateNotifications($scope === 'all' ? null : $userId);
         default:
             return sendNotification($userId, $data);
     }
@@ -229,7 +233,7 @@ function escalateNotifications($userId = null) {
     ";
     
     if ($userId) {
-        $query .= " AND user_id = $userId";
+        $query .= " AND user_id = " . (int)$userId;
     }
     
     $result = $conn->query($query);

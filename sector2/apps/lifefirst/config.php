@@ -23,6 +23,19 @@ if (!defined('OLLAMA_URL')) {
 if (!defined('OLLAMA_MODEL_LIFEFIRST')) {
     define('OLLAMA_MODEL_LIFEFIRST', getenv('OLLAMA_MODEL_LIFEFIRST') ?: 'llama3.1');
 }
+// Size ladder used by ollamaModelForIntent() + callOllama()'s fallback.
+// These were referenced but never defined — on PHP 8 an undefined constant is a
+// fatal Error, so every schedule/voice AI call (incl. Laurie's "Today" card)
+// died with a 500. All default to the one configured model; override per box.
+if (!defined('OLLAMA_MODEL_SMALL')) {
+    define('OLLAMA_MODEL_SMALL', getenv('OLLAMA_MODEL_SMALL') ?: OLLAMA_MODEL_LIFEFIRST);
+}
+if (!defined('OLLAMA_MODEL_MEDIUM')) {
+    define('OLLAMA_MODEL_MEDIUM', getenv('OLLAMA_MODEL_MEDIUM') ?: OLLAMA_MODEL_LIFEFIRST);
+}
+if (!defined('OLLAMA_MODEL_LARGE')) {
+    define('OLLAMA_MODEL_LARGE', getenv('OLLAMA_MODEL_LARGE') ?: OLLAMA_MODEL_LIFEFIRST);
+}
 
 if (!function_exists('ollamaModelForIntent')) {
     /**

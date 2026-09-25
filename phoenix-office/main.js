@@ -21,7 +21,7 @@
 // sealing a signed document PUTs it straight to this product's own worker,
 // keyed by the document's own content hash — see sealToWorker() below.
 
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -80,6 +80,7 @@ function createSplash() {
         center: true, alwaysOnTop: true, backgroundColor: '#0a0c10', show: true,
         webPreferences: { contextIsolation: true, nodeIntegration: false },
     });
+    hardenWebContents(splashWindow);
     splashWindow.loadFile(path.join(__dirname, 'splash.html'));
     return Date.now();
 }
@@ -110,6 +111,28 @@ function listTemplates() {
 function docPath(doc) {
     const b58 = lib.fileFormat.shortAddress(lib.fileFormat.documentIdentityHash(doc));
     return path.join(workdir(), `${b58}.office.json`);
+}
+
+// True only if `p` resolves to a location INSIDE the Office workdir. A plain
+// startsWith() prefix check is not enough ("...\\Phoenix Office2\\x" starts
+// with "...\\Phoenix Office"), so compare via path.relative instead. Keeps
+// every renderer-supplied path confined — the renderer is sandboxed, but
+// main must not become an arbitrary file read/write primitive if it's ever
+// compromised (e.g. via a malicious document's contents).
+function insideWorkdir(p) {
+    const rel = path.relative(path.resolve(workdir()), path.resolve(String(p || '')));
+    return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+// Links in the UI (About box, google.com/device) open in the user's real
+// browser — never as a new Electron window inside this app — and the app
+// window itself never navigates away from its own page.
+function hardenWebContents(win) {
+    win.webContents.setWindowOpenHandler(({ url }) => {
+        if (/^https:\/\//i.test(url)) shell.openExternal(url).catch(() => {});
+        return { action: 'deny' };
+    });
+    win.webContents.on('will-navigate', (e) => e.preventDefault());
 }
 
 // Optional D1-backed identity store — degrades cleanly (fingerprint-only
@@ -262,7 +285,7 @@ async function exportPhasePdf(projectId, phaseId) {
         });
         const html = lib.phaseHtml.renderPhaseHtml({ project, phase, checklistItems: checklist.items || [], linkedDocs: docs.items || [] });
         const outDir = workdir();
-        const htmlPath = path.join(require('os').tmpdir(), `phoenix-office-phase-${phaseId}.html`);
+        const htmlPath = path.join(require('os').tmpdir(), `phoenix-office-phase-${String(phaseId).replace(/[^A-Za-z0-9_-]/g, '_')}.html`);
         fs.writeFileSync(htmlPath, html, 'utf8');
         const pdfPath = await lib.libreoffice.convertFile({ sofficePath, inputPath: htmlPath, outputDir: outDir, targetFormat: 'pdf' });
         try { fs.unlinkSync(htmlPath); } catch (_) {}
@@ -292,11 +315,17 @@ function askAI(prompt) {
     return new Promise((resolve, reject) => {
         const bin = findClaudeCli();
         if (!bin) return reject(new Error('Claude CLI not found on this machine'));
-        const p = spawn(bin, ['--print', prompt], { timeout: 30000, windowsHide: true });
+        // --tools "" + --strict-mcp-config: genuinely no tools (not even
+        // Read/Glob, which --print alone still allows) and no MCP servers.
+        // Prompt goes over stdin, not argv — no Windows command-line length
+        // cap, and document text can never be parsed as a CLI flag.
+        const p = spawn(bin, ['--tools', '', '--strict-mcp-config', '--print'], { timeout: 30000, windowsHide: true });
         let out = '', errOut = '';
         p.stdout.on('data', d => { out += d; });
         p.stderr.on('data', d => { errOut += d; });
         p.on('error', reject);
+        p.stdin.on('error', () => {});
+        p.stdin.end(prompt);
         p.on('close', code => {
             if (code === 0) resolve(out.trim());
             else reject(new Error(errOut.trim() || `claude exited ${code}`));
@@ -319,6 +348,7 @@ function createWindow(splashStartedAt) {
             nodeIntegration: false,
         },
     });
+    hardenWebContents(mainWindow);
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
     mainWindow.on('closed', () => { mainWindow = null; });
 
@@ -367,6 +397,22 @@ let resolvedAuthorId = 'a_unknown';
         resolvedAuthorId = me.author_id;
     } catch (_) { /* stays 'a_unknown' — agent tools still work, just without real attribution until this resolves */ }
 })();
+
+// The verified Google signer, resolved HERE in main from this session's own
+// device-flow id_token — never taken from the renderer's `by`/`signerEmail`
+// or from a model-supplied tool arg. Sign and Legal-hold both require it
+// (eIDAS AdES "identifies the signatory"). Before 2026-09-25 this was
+// enforced only in the renderer, so the Secretariat agent's sign_document
+// path (and any compromised renderer) bypassed it entirely.
+async function requireGoogleSigner() {
+    if (!googleIdentity || !googleIdentity.idToken) {
+        throw new Error('Google sign-in required — Sign and Legal hold need a verified person, not just this machine');
+    }
+    const me = await lib.identity.resolveAuthor({
+        prefer: 'google', fallback: false, googleIdToken: googleIdentity.idToken, store: authStore(),
+    });
+    return { author_id: me.author_id, email: (me.credential && me.credential.email) || googleIdentity.email || null };
+}
 
 // ── IPC ──────────────────────────────────────────────────────────────────────
 function registerIpc() {
@@ -459,6 +505,7 @@ function registerIpc() {
     ipcMain.handle('office:autosave', (_e, { document, path: p } = {}) => {
         try {
             const target = p || docPath(document);
+            if (!insideWorkdir(target)) return { ok: false, error: 'outside the Office workdir' };
             lib.fileFormat.saveOfficeFile(target, document);
             return { ok: true, path: target };
         } catch (e) { return { ok: false, error: e.message }; }
@@ -481,9 +528,10 @@ function registerIpc() {
 
     // Sign = the custody handoff that locks it. Then seal it into THIS
     // product's own storage (worker + R2), keyed by the document's own hash.
-    ipcMain.handle('office:sign', async (_e, { document, by, signatureImage, signerEmail }) => {
+    ipcMain.handle('office:sign', async (_e, { document, signatureImage } = {}) => {
         try {
-            const d = lib.document.sign(document, by, signatureImage, signerEmail);
+            const signer = await requireGoogleSigner();
+            const d = lib.document.sign(document, signer.author_id, signatureImage, signer.email);
             const p = docPath(d);
             lib.fileFormat.saveOfficeFile(p, d);
             const hex = lib.fileFormat.documentIdentityHash(d);
@@ -538,7 +586,10 @@ function registerIpc() {
     // this product's own tamper-evident template picker.
     ipcMain.handle('office:apps', () => ({ ok: true, apps: lib.libreoffice.LAUNCHABLE_APPS }));
 
-    ipcMain.handle('office:launch-app', async (_e, { appId, filePath } = {}) => {
+    // The renderer picks WHICH app only — never a file/argument handed to
+    // soffice (a renderer-chosen argv entry could be a macro:/// or
+    // vnd.sun.star.script: URL, i.e. code execution through LibreOffice).
+    ipcMain.handle('office:launch-app', async (_e, { appId } = {}) => {
         try {
             const { path: sofficePath, downloaded } = await lib.libreoffice.ensureSoffice({
                 workerUrl: WORKER_URL,
@@ -548,7 +599,7 @@ function registerIpc() {
                     if (mainWindow) mainWindow.webContents.send('office:export-progress', { received, total });
                 },
             });
-            const result = lib.libreoffice.launchApp({ sofficePath, appId, filePath });
+            const result = lib.libreoffice.launchApp({ sofficePath, appId });
             return { ok: true, ...result, downloaded };
         } catch (e) { return { ok: false, error: e.message }; }
     });
@@ -565,11 +616,14 @@ function registerIpc() {
     // for a design tool, or .xlsx -> .csv for something that only reads
     // plain rows. Same "library" resolution as export-pdf: local soffice
     // first, this product's own R2 copy only if nothing local is found.
-    ipcMain.handle('office:convert', async (_e, { targetFormat, filePath } = {}) => {
+    // The input file is ALWAYS chosen by the user in a native dialog — never a
+    // renderer-supplied path (that would let a compromised renderer read any
+    // file on disk and have its converted copy written next to it).
+    ipcMain.handle('office:convert', async (_e, { targetFormat } = {}) => {
         try {
             if (!targetFormat) return { ok: false, error: 'targetFormat required' };
-            let inputPath = filePath;
-            if (!inputPath) {
+            let inputPath = null;
+            {
                 const res = await dialog.showOpenDialog(mainWindow, {
                     title: 'Choose a file to convert',
                     properties: ['openFile'],
@@ -613,7 +667,7 @@ function registerIpc() {
     ipcMain.handle('office:open-path', (_e, { path: p } = {}) => {
         try {
             const resolved = path.resolve(p || '');
-            if (!resolved.startsWith(path.resolve(workdir()))) return { ok: false, error: 'outside the Office workdir' };
+            if (!insideWorkdir(resolved)) return { ok: false, error: 'outside the Office workdir' };
             const loaded = lib.fileFormat.loadOfficeFile(resolved);
             return { ok: true, filePath: resolved, ...loaded };
         } catch (e) { return { ok: false, error: e.message }; }
@@ -694,9 +748,10 @@ function registerIpc() {
     // office_legal_holds comment. Only meaningful for a sealed document
     // (a DRAFT has no worker row to hold at all), so these always resolve
     // the hex from the document the same way office:history does.
-    ipcMain.handle('office:legal-hold', async (_e, { document, by, reason } = {}) => {
+    ipcMain.handle('office:legal-hold', async (_e, { document, reason } = {}) => {
         if (!WORKER_AUTH) return { ok: false, error: 'no worker configured (PHOENIX_OFFICE_AUTH not set)' };
         try {
+            const by = (await requireGoogleSigner()).author_id;
             const hex = lib.fileFormat.documentIdentityHash(document);
             const res = await fetch(`${WORKER_URL.replace(/\/+$/, '')}/documents/${encodeURIComponent(hex)}/legal-hold`, {
                 method: 'POST',
@@ -709,9 +764,10 @@ function registerIpc() {
         } catch (e) { return { ok: false, error: e.message }; }
     });
 
-    ipcMain.handle('office:legal-hold-release', async (_e, { document, by, reason } = {}) => {
+    ipcMain.handle('office:legal-hold-release', async (_e, { document, reason } = {}) => {
         if (!WORKER_AUTH) return { ok: false, error: 'no worker configured (PHOENIX_OFFICE_AUTH not set)' };
         try {
+            const by = (await requireGoogleSigner()).author_id;
             const hex = lib.fileFormat.documentIdentityHash(document);
             const res = await fetch(`${WORKER_URL.replace(/\/+$/, '')}/documents/${encodeURIComponent(hex)}/legal-hold/release`, {
                 method: 'POST',
@@ -933,6 +989,7 @@ function registerIpc() {
         tools: agentTools,
         aiComplete: aiProvider.complete,
         sealDocument: signAndSeal,
+        resolveSigner: requireGoogleSigner,
         exportPdf: exportDocumentPdf,
         projectStore,
         printPhase: exportPhasePdf,

@@ -1171,7 +1171,7 @@ function runConsole(code) {
     } else {
       out.innerHTML = logs.map(l => {
         const cls = l.type === 'err' ? 'err-line' : l.type === 'warn' ? 'warn-line' : '';
-        return `<span class="${cls}">${escHtml(l.msg)}</span>`;
+        return `<span class="${cls}">${escHtml(l && l.msg)}</span>`;
       }).join('\n');
     }
     document.getElementById('badge-console').textContent = (logs && logs.length) || '0';
@@ -1184,6 +1184,9 @@ function runConsole(code) {
   }, 1500);
 
   function onMsg(e) {
+    // only trust results from the frame we just created (pasted code can
+    // postMessage too, and run ids are predictable)
+    if (e.source !== frame.contentWindow) return;
     if (!e.data || !e.data.sfSandboxResult || e.data.id !== id) return;
     clearTimeout(timeout);
     window.removeEventListener('message', onMsg);
@@ -1195,7 +1198,7 @@ function runConsole(code) {
 }
 
 function escHtml(s) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 // ── Convert ──────────────────────────────────────────────────────

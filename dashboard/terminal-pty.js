@@ -103,7 +103,14 @@ function spawnSession(sessionName, cols, rows) {
     // The claude hotline: run claude straight away in the working dir. If it
     // exits, the shell stays.
     if (sessionName === 'claude') {
-        const cli = process.platform === 'win32' ? 'claude.cmd' : 'claude';
+        // Native installer's ~/.local/bin/claude.exe first (this machine's
+        // real install — claude.cmd doesn't exist here), invoked with the
+        // call operator since it's a quoted path; else let the shell resolve
+        // `claude` via PATH/PATHEXT (.exe or npm's .cmd).
+        const nativeExe = path.join(os.homedir(), '.local', 'bin', 'claude.exe');
+        const cli = process.platform === 'win32'
+            ? (fs.existsSync(nativeExe) ? `& ${quoteForShell(nativeExe)}` : 'claude')
+            : 'claude';
         setTimeout(() => { try { term.write(`${cli}\r`); } catch (_) {} }, 300);
     }
     return { term, shell };

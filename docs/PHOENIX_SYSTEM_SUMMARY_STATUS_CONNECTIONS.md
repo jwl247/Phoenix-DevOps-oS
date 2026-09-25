@@ -189,9 +189,9 @@ breach_coms4 (master) ←rsync— breach_coms3 ← breach_coms2 ← breach_coms1
 
 **Cloudflare**
 - Worker: packages-worker.phoenix-jwl.workers.dev
-- D1 Primary: phoenix_dev_db (id: 27958687-4349-47ed-8b6a-dbc4ab29730f) bound as DEV_DB
-- D1 Secondary: phoenix-catalog (id: 0514d761-1db4-4e4f-8d1b-e5657909c0c0) bound as CATALOG_DB
-- R2: primary clonepool storage (per latest CLAUDE notes)
+- D1: phoenix_dev_db (id: 27958687-4349-47ed-8b6a-dbc4ab29730f) bound as `PHOENIX_DB` — the only D1 binding on the live worker (verified via the Workers API 2026-09-25). The old `DEV_DB` name broke every DB endpoint until 2026-08-21; `phoenix-catalog` (`CATALOG_DB`) is no longer bound by any deployed worker.
+- R2: `phoenix-clonepool` bucket bound as `CLONEPOOL_BUCKET` (packages-worker handles R2 itself since 2026-09-21; the separate `phoenix-clonepool-r2` worker is retired)
+- Live source: `sector2/package-handler/worker/` — `sector3/workers/packages-worker/` is a stale 2026-08-23 copy that still binds `DEV_DB` + `CATALOG_DB`; never deploy from it
 - Wrangler deploy for worker
 - Possible Pages for website
 
@@ -208,7 +208,7 @@ breach_coms4 (master) ←rsync— breach_coms3 ← breach_coms2 ← breach_coms1
 - MySQL (Life First scheduler/budget)
 - Git + SSH from Win/WSL to external
 
-**PHOENIX_AUTH token** — required for all worker write endpoints (D1 custody/glossary updates).
+**PHOENIX_AUTH token** — required for **every** packages-worker route, reads included (Security Gap 1, 2026-09-21). The `packages-worker.phoenix-jwl.workers.dev` hostname is additionally behind Cloudflare Access (needs `CF-Access-Client-Id`/`-Secret` service-token headers); the `get.authenticcoder.com` custom domain enforces the bearer token only.
 
 ---
 
@@ -231,7 +231,7 @@ S4 (intake → vault master + rsync timer to T2/T3/T4)
 | 5561 (ZMQ PUSH) | juliet.py | Egress | S3 boundary |
 | 11434 (HTTP) | ollama | Local LLM | phoenix-ollama.service |
 | 2003 | unoserver (LibreOffice) | Doc worker | phoenix-unoserver.service |
-| HTTPS (packages-worker.phoenix-jwl.workers.dev) | packages-worker | Intake custody + glossary + health | POST needs auth header |
+| HTTPS (packages-worker.phoenix-jwl.workers.dev) | packages-worker | Intake custody + glossary + health | Every route needs `Authorization: Bearer` (+ CF-Access headers on the workers.dev host) |
 | File + sidecar | Intake everywhere | All files | Companions travel together |
 | rsync (timer) | S4 vault | Mirror chain | 15 min, breach_coms4→3→2→1 |
 | dispatch.json targets | Propagator | Multi | vault, sql (~/.catalog), d1, frank3 (ZMQ), peer, windows (via translator) |
@@ -349,7 +349,7 @@ Cross-ref: See New folder/Lost_Ark_Connections_Wiring_Map.md and Phoenix_Structu
 - phoenix-core: libhelix.a, 5 .o files, all src + include, phoenix-intake.exe, Makefile, tests — ✅ built
 - dashboard/: package.json (electron 28 + builder), full node_modules tree (thousands files), start.ps1, html/js/css — ✅
 - sector3/services/: 21 .service/.target files + install scripts — ✅
-- packages-worker/: wrangler.jsonc (exact 2 D1 bindings + ids), index.js (full endpoints, health, auth, tables) — ✅
+- packages-worker: live source is `sector2/package-handler/worker/` (1 D1 binding `PHOENIX_DB` + R2 `CLONEPOOL_BUCKET`); `sector3/workers/packages-worker/` is a stale copy — ✅ (as of 2026-09-25)
 - clonepool/ (II workspace): multiple hex dirs with sidecar.json + v1.. files (e.g. README.md snapshot) — active
 - bin/: all 7 cmds + .cmd — ✅
 - SECTOR4/coms1-4 + other sectors: full py/sh/json structure duplicated for com layers — ✅
@@ -474,8 +474,8 @@ For deeper: read the originals. All paths relative to the OS repo root unless no
 { "targets": { "vault": {...}, "d1": {...}, "frank3": {"zmq_port": 5555}, "peer": {"zmq_port": 5560} }, "com_chain": ["COM4","COM3","COM2","COM1"] }
 ```
 
-**wrangler bindings (exact):**
-D1 phoenix_dev_db + phoenix-catalog.
+**wrangler bindings (exact, live 2026-09-25):**
+D1 phoenix_dev_db as `PHOENIX_DB` + R2 `phoenix-clonepool` as `CLONEPOOL_BUCKET` + secret `PHOENIX_AUTH`.
 
 **Ollama service (template):**
 Environment=OLLAMA_HOST=127.0.0.1:11434 ; ExecStart=OLLAMA_BIN serve

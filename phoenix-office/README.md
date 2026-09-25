@@ -21,8 +21,9 @@ identity/storage model than a source-code file, and an external product
 can't ship with Phoenix's own internal credentials baked in).
 
 The document engine itself — `lib/document.js`, `lib/file-format.js`,
-`lib/notify.js`, `lib/identity.js`, `lib/tamper-guard.js` — is a
-byte-identical copy. Those libraries never had any Phoenix-pipeline coupling
+`lib/notify.js`, `lib/identity.js`, `lib/tamper-guard.js` — started as a
+byte-identical copy (`lib/fingerprint.js` has since diverged: memoized, and a
+longer per-signal timeout so a slow PowerShell call can't change the author id). Those libraries never had any Phoenix-pipeline coupling
 in the first place (a document's identity is its own content hash, not a
 filename), so nothing needed to change to make them portable. The 53-test
 suite that already existed for them passes here unmodified.
@@ -32,8 +33,21 @@ suite that already existed for them passes here unmodified.
 ```
 npm install       # postinstall runs scripts/fix-electron.js automatically
 npm start         # launches the Electron app (electron .)
-npm test          # 83 tests: 53 engine (test/test.js) + 30 Secretariat-agent (test/test-agent.js)
+npm test          # 92 tests: 53 engine (test/test.js) + 39 Secretariat-agent/Project Assist (test/test-agent.js)
 ```
+
+Configuration (environment variables, read at launch — there is no in-app
+settings screen for these yet):
+
+- `PHOENIX_OFFICE_AUTH` — bearer for this product's worker. **Without it:**
+  documents still work locally, but sealing, browse/pull, version history,
+  legal hold, saved jobs and ALL of Project Assist are unavailable, and the
+  portable-LibreOffice download can't run.
+- `PHOENIX_OFFICE_GOOGLE_CLIENT_ID` / `_SECRET` — required for **Sign** and
+  **Legal hold** (enforced in the main process, not just the UI).
+- LibreOffice: install it from libreoffice.org for PDF export/convert. The
+  auto-download of a portable copy stays disabled until its SHA-256 is pinned
+  in `lib/libreoffice.js` (`RUNTIME_ASSET_SHA256`).
 
 To build a real installer/portable exe (electron-builder, configured 2026-09-23):
 
@@ -182,7 +196,7 @@ test/test.js         the 53-test engine suite (unchanged from Office)
 
 ## Status
 
-Code-complete, 83 tests passing (53 engine + 30 Secretariat-agent). Deployed
+Code-complete, 92 tests passing as of 2026-09-25 (53 engine + 39 Secretariat-agent/Project Assist). Deployed
 and live-verified end to end: real sign→seal→fetch round-trip, a real
 2-link change-order history chain, browse+pull, a real AI-composed field
 value, and a real LibreOffice-converted PDF (57KB, valid PDF 1.7).

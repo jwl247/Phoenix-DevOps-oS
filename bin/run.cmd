@@ -43,8 +43,10 @@ if not defined PHOENIX_ROOT (
 )
 
 REM Execute run command via usys
-"%PWSH_EXE%" -NoProfile -ExecutionPolicy Bypass -Command ^
-    ". '%PHOENIX_ROOT%\scripts\usys.ps1'; usys run %*"
+REM -File (not -Command): arguments reach usys.ps1's shim verbatim.
+REM Interpolating %* into a -Command string let a filename such as
+REM "a$(calc).lol" execute as PowerShell code.
+"%PWSH_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%PHOENIX_ROOT%\scripts\usys.ps1" run %*
 
 exit /b !errorlevel!
 

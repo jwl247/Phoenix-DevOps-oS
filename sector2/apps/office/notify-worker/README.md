@@ -18,7 +18,8 @@ box. It does not touch `packages-worker` or `phoenix-clonepool-r2`.
 | GET  | `/health` | none | worker + binding + active-transport status |
 | GET  | `/whoami` | `Bearer PHOENIX_AUTH` | auth round-trip, no side effects (drift check) |
 | POST | `/notify` | `Bearer PHOENIX_AUTH` | create + send a notification, start the escalation clock |
-| GET  | `/ack/:token` | the token itself | counterparty acknowledges → escalation stops |
+| GET  | `/ack/:token` | the token itself | confirm page only — a bare GET never acknowledges (link-preview bots/mail scanners fetch every URL) |
+| POST | `/ack/:token` | the token itself | counterparty taps "I have seen it" → escalation stops |
 
 `POST /notify` body:
 
@@ -38,10 +39,12 @@ the normal caller — it computes `doc_hex`, builds the notice, and POSTs here.
 
 `scheduled()` runs on `* * * * *` (Cloudflare cron minimum is 1 minute —
 DESIGN.md / Life First Module 6 specify 30s; **this is the one deviation**,
-noted on purpose). Each run re-sends every unacknowledged notification whose
-last send is >45s old, escalating the subject line (`REMINDER:` →
+noted on purpose). Each run re-sends an unacknowledged notification once its
+last send is older than a per-level gap (45s, ~4m, ~19m, ~1.6h, ~7.8h —
+`resendGapMs()`), escalating the subject line (`REMINDER:` →
 `SECOND REMINDER:` → `URGENT:` → `URGENT — PLEASE RESPOND:`), level capped at
-5, then it keeps re-sending at level 5 until the ack link is hit.
+5, and stops for good after `MAX_SENDS` (12) total sends. (Before 2026-09-25 it
+re-sent every minute forever — the 2026-09-23 test notice went out ~50 times.)
 
 Every send (initial and escalation) is one append-only row update in
 `office_notifications` (`sector2/apps/office/schema.sql`) — the audit trail
@@ -128,6 +131,7 @@ setting this up fresh on a new account/domain.
    });
    ```
 3. Confirm: the email/SMS arrives; `wrangler tail` shows the cron re-sending
-   ~1/min with escalating subjects; hitting the ack link stops it and
+   with escalating subjects and a growing gap; tapping "I have seen it" on the
+   ack link's page stops it and
    stamps `acknowledged_at` (`wrangler d1 execute phoenix_dev_db --remote
    --command "SELECT * FROM office_notifications ORDER BY id DESC LIMIT 3"`).

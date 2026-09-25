@@ -4,8 +4,8 @@
 #
 # Usage:
 #   .\push-dashboard.ps1                              # prompts for host/user
-#   .\push-dashboard.ps1 -Host 192.168.1.133 -User jerry
-#   .\push-dashboard.ps1 -Host 10.0.0.1 -User jerry  # WireGuard IP
+#   .\push-dashboard.ps1 -UbuntuHost 192.168.1.133 -UbuntuUser jerry
+#   .\push-dashboard.ps1 -UbuntuHost 10.0.0.1 -UbuntuUser jerry  # WireGuard IP
 
 param(
     [string]$UbuntuHost = "",

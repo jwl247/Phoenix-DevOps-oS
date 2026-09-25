@@ -107,11 +107,18 @@ function tryClaudeCli({ system, messages }) {
         const last = messages[messages.length - 1];
         const transcript = messages.slice(0, -1).map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
         const prompt = `${system}\n\n${transcript ? transcript + '\n\n' : ''}${last ? last.content : ''}`;
-        const p = spawn(bin, ['--print', prompt], { timeout: 30000, windowsHide: true });
+        // Actually restricted: --tools "" disables every built-in tool (plain
+        // --print still allows Read/Glob/Grep with no prompt, so a document
+        // could have steered it into reading local files), --strict-mcp-config
+        // drops the user's MCP servers. Prompt goes over stdin, not argv — no
+        // Windows command-line length cap on a long agent transcript.
+        const p = spawn(bin, ['--tools', '', '--strict-mcp-config', '--print'], { timeout: 30000, windowsHide: true });
         let out = '', errOut = '';
         p.stdout.on('data', d => { out += d; });
         p.stderr.on('data', d => { errOut += d; });
         p.on('error', reject);
+        p.stdin.on('error', () => {});
+        p.stdin.end(prompt);
         p.on('close', code => {
             if (code === 0 && out.trim()) resolve({ text: out.trim(), via: 'cli:restricted' });
             else reject(new Error(errOut.trim() || `claude exited ${code}`));

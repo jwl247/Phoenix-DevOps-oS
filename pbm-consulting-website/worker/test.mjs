@@ -92,6 +92,25 @@ test('POST /lead rejects a missing business_name', async () => {
     assert.strictEqual(res.status, 400);
 });
 
+test('POST /lead HTML-escapes the visitor name in the verification email (audit 2026-09-25)', async () => {
+    const env = { DB: makeFakeDB(), RESEND_API_KEY: 'test-key' };
+    const realFetch = globalThis.fetch;
+    let html = null;
+    globalThis.fetch = async (url, opts) => { html = JSON.parse(opts.body).html; return new Response('{}', { status: 200 }); };
+    try {
+        const res = await app.fetch(req('lead', 'POST', { name: '<a href="https://evil.example">Click</a>', business_name: 'Acme', email: 'x@example.com' }), env);
+        assert.strictEqual(res.status, 200);
+    } finally { globalThis.fetch = realFetch; }
+    assert.ok(html && !html.includes('<a href="https://evil.example">'), 'raw markup must not reach the email');
+    assert.ok(html.includes('&lt;a href=&quot;https://evil.example&quot;&gt;'));
+});
+
+test('POST /lead rejects oversized fields', async () => {
+    const env = { DB: makeFakeDB() };
+    const res = await app.fetch(req('lead', 'POST', { business_name: 'A'.repeat(5000), email: 'a@b.com' }), env);
+    assert.strictEqual(res.status, 400);
+});
+
 test('POST /lead rejects an invalid email', async () => {
     const env = { DB: makeFakeDB() };
     const res = await app.fetch(req('lead', 'POST', { business_name: 'Acme', email: 'nope' }), env);

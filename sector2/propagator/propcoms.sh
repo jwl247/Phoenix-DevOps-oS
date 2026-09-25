@@ -22,6 +22,10 @@ mkdir -p "$(dirname "${LOG_FILE}")"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG_FILE}"; }
 
+# Double single quotes so the relay payload stays a SQL string literal —
+# a payload like  x');DROP TABLE propcoms_log;--  must be data, not SQL.
+sql_q() { local s="${1//\'/\'\'}"; printf '%s' "${s}"; }
+
 catalog_log() {
     local com="$1" msg="$2" status="${3:-OK}"
     sqlite3 "${CATALOG_DB}" 2>/dev/null <<SQL || true
@@ -33,7 +37,7 @@ CREATE TABLE IF NOT EXISTS propcoms_log (
     status    TEXT
 );
 INSERT INTO propcoms_log (timestamp, com, message, status)
-VALUES ('$(date -u +"%Y-%m-%dT%H:%M:%SZ")', '${com}', '${msg}', '${status}');
+VALUES ('$(date -u +"%Y-%m-%dT%H:%M:%SZ")', '$(sql_q "${com}")', '$(sql_q "${msg}")', '$(sql_q "${status}")');
 SQL
 }
 

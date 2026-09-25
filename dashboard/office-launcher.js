@@ -31,6 +31,14 @@ let phoenixRootRef = null;
 const WORKDIR = path.join(os.homedir(), 'PhoenixOffice');
 const REFDIR = path.join(WORKDIR, '.references');
 
+// True only for a path strictly inside the Office workdir. path.relative
+// rather than startsWith — startsWith("...\PhoenixOffice") also matches a
+// sibling like "...\PhoenixOffice2\x".
+function insideWorkdir(p) {
+    const rel = path.relative(path.resolve(WORKDIR), path.resolve(String(p || '')));
+    return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
 function bashExe() {
     const candidates = [
         'bash',
@@ -141,6 +149,10 @@ function register({ ipcMain, BrowserWindow, dialog, phoenixRoot, askAI }) {
                 nodeIntegration: false,
             },
         });
+        // Same lock as the main window: this window's preload exposes
+        // privileged IPC, so it must never navigate to or open other content.
+        officeWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+        officeWindow.webContents.on('will-navigate', (event) => event.preventDefault());
         officeWindow.loadFile(indexPath);
         officeWindow.on('closed', () => { officeWindow = null; });
         return { success: true, refocused: false };
@@ -183,6 +195,9 @@ function register({ ipcMain, BrowserWindow, dialog, phoenixRoot, askAI }) {
     ipcMain.handle('office:autosave', (_e, { document, path: p } = {}) => {
         try {
             L();
+            // A renderer-supplied path is only honored inside the workdir —
+            // otherwise this is an arbitrary-file-write primitive.
+            if (p && !insideWorkdir(p)) return { ok: false, error: 'outside the Office workdir' };
             const target = p || docPath(document);
             libs.fileFormat.saveOfficeFile(target, document);
             return { ok: true, path: target };
@@ -276,7 +291,7 @@ function register({ ipcMain, BrowserWindow, dialog, phoenixRoot, askAI }) {
         try {
             L();
             const resolved = path.resolve(p || '');
-            if (!resolved.startsWith(path.resolve(WORKDIR))) return { ok: false, error: 'outside the Office workdir' };
+            if (!insideWorkdir(resolved)) return { ok: false, error: 'outside the Office workdir' };
             const loaded = libs.fileFormat.loadOfficeFile(resolved);
             return { ok: true, filePath: resolved, ...loaded };
         } catch (e) { return { ok: false, error: e.message }; }
@@ -318,6 +333,12 @@ function register({ ipcMain, BrowserWindow, dialog, phoenixRoot, askAI }) {
         for (const raw of names) {
             const name = String(raw).trim();
             if (!name) continue;
+            // A document name, never a path — keeps the clone (and the
+            // existence check below) inside REFDIR.
+            if (name === '.' || name === '..' || /[\\/:]/.test(name)) {
+                pulled.push({ name, error: 'names only — no paths' });
+                continue;
+            }
             const got = await new Promise((resolve) => {
                 const p = spawn(bashExe(), [script, 'clone', name], { cwd: REFDIR, env: intakeEnv(), timeout: 30000 });
                 let out = '';

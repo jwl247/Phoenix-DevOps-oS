@@ -1,14 +1,14 @@
 #Requires -Version 5.1
 # ============================================================
-# install.ps1 — Phoenix DevOps OS Windows Installer (unified)
-# USys — United Systems | jwl247 | GPL-3.0
+# install.ps1 -- Phoenix DevOps OS Windows Installer (unified)
+# USys -- United Systems | jwl247 | GPL-3.0
 #
 # One script: bare Windows box -> working Phoenix.
 #   - PS7 + Git (installed if missing)
-#   - repo in the RIGHT place (param / auto-detect / D: default — no
+#   - repo in the RIGHT place (param / auto-detect / D: default -- no
 #     more hardcoded C:\Users\<you>\Phoenix)
 #   - secrets pulled from the vault (F:\Phoenix\Vault\secrets\phoenix-secrets.env)
-#     instead of prompting — falls back to prompt only if the vault is gone
+#     instead of prompting -- falls back to prompt only if the vault is gone
 #   - env vars (PHOENIX_ROOT / PHOENIX_AUTH / CLONEPOOL_DIR / OLLAMA_MODELS)
 #   - ~/.phoenix/phoenix.env + ~/.phoenix_env.ps1/.sh
 #   - PS7 profile hook (usys / clone / .lol / .phx in every terminal)
@@ -20,7 +20,7 @@
 # ONE-LINER (fresh box, no repo yet):
 #   powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/main/install.ps1 | iex"
 #
-# LOCAL (repo already cloned — the normal case on a dev box):
+# LOCAL (repo already cloned -- the normal case on a dev box):
 #   pwsh -ExecutionPolicy Bypass -File .\install.ps1
 #   pwsh -ExecutionPolicy Bypass -File .\install.ps1 -TargetPath 'D:\Users\jwlef\Phoenix\Phoenix-DevOps-oS' -RestoreClaudeMemory
 # ============================================================
@@ -30,7 +30,7 @@ param(
     # (1) the repo this script is running from, (2) an existing D:\...\Phoenix-DevOps-oS,
     # (3) D:\Users\<user>\Phoenix\Phoenix-DevOps-oS if D: exists, (4) $HOME\Phoenix\...
     [string]$TargetPath = '',
-    # Vault secrets file — parsed for PHOENIX_AUTH / CLONEPOOL_DIR / OLLAMA_MODELS.
+    # Vault secrets file -- parsed for PHOENIX_AUTH / CLONEPOOL_DIR / OLLAMA_MODELS.
     [string]$SecretsFile = 'F:\Phoenix\Vault\secrets\phoenix-secrets.env',
     # Local clonepool cache. Empty = from vault, else E:\ if present, else <root>\clonepool.
     [string]$ClonepoolDir = '',
@@ -47,7 +47,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# ── Config ────────────────────────────────────────────────────
+# -- Config ----------------------------------------------------
 $WORKER_URL       = 'https://packages-worker.phoenix-jwl.workers.dev'
 $OS_REPO_URL      = 'https://github.com/jwl247/Phoenix-DevOps-oS.git'
 $PKG_REPO_URL     = 'https://github.com/jwl247/Phoenix-Package_handler.git'
@@ -64,11 +64,13 @@ $GIT_URL  = 'https://github.com/git-for-windows/git/releases/download/v2.47.1.wi
 $PS7_PATH = if (Test-Path "$env:ProgramFiles\PowerShell\7\pwsh.exe") {
     "$env:ProgramFiles\PowerShell\7\pwsh.exe"
 } else {
-    (Get-Command pwsh -ErrorAction SilentlyContinue)?.Source
+    # no ?. here -- this block must parse under Windows PowerShell 5.1
+    $c = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($c) { $c.Source } else { $null }
 }
 $GIT_PATH = "$env:ProgramFiles\Git\cmd\git.exe"
 
-# ── Helpers ─────────────────────────────────────────────────
+# -- Helpers -------------------------------------------------
 function PHX-Banner {
     Write-Host ''
     Write-Host '  ======================================' -ForegroundColor Cyan
@@ -83,11 +85,22 @@ function PHX-Warn  { param($m) Write-Host "[WARN] $m" -ForegroundColor Yellow }
 function PHX-Error { param($m) Write-Host "[ERR] $m"  -ForegroundColor Red; exit 1 }
 
 function Download-File {
-    param([string]$Url, [string]$Dest)
+    param([string]$Url, [string]$Dest, [string]$SignerLike = '')
     PHX-Info "Downloading $(Split-Path $Dest -Leaf)..."
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     Invoke-WebRequest -Uri $Url -OutFile $Dest -UseBasicParsing
     if (-not (Test-Path $Dest)) { PHX-Error "Download failed: $Url" }
+    # Installers we are about to execute must carry a valid Authenticode
+    # signature from the expected publisher -- never run an unsigned or
+    # re-signed binary pulled over the network.
+    if ($SignerLike) {
+        $sig = Get-AuthenticodeSignature -FilePath $Dest
+        if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notlike "*$SignerLike*") {
+            Remove-Item $Dest -Force -ErrorAction SilentlyContinue
+            PHX-Error "Signature check failed for $(Split-Path $Dest -Leaf) (status: $($sig.Status)) -- refusing to run it."
+        }
+        PHX-OK "Signature valid ($SignerLike)."
+    }
     PHX-OK 'Downloaded.'
 }
 
@@ -129,12 +142,12 @@ function Find-RepoRoot([string]$dir) {
 New-Item -ItemType Directory -Force -Path $TEMP_DIR | Out-Null
 PHX-Banner
 
-# ── STAGE 1: Bootstrap PS7 from PS 5.1 ──────────────────────
+# -- STAGE 1: Bootstrap PS7 from PS 5.1 ----------------------
 if ($PSVersionTable.PSVersion.Major -lt 7) {
-    PHX-Info "Running in PS $($PSVersionTable.PSVersion) — upgrading to PS7..."
+    PHX-Info "Running in PS $($PSVersionTable.PSVersion) -- upgrading to PS7..."
     if (-not $PS7_PATH -or -not (Test-Path $PS7_PATH)) {
         $msi = Join-Path $TEMP_DIR 'ps7.msi'
-        Download-File $PS7_URL $msi
+        Download-File $PS7_URL $msi 'Microsoft Corporation'
         Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /quiet /norestart ADD_EXPLORER_CONTEXT_MENU_OPENPOWERSHELL=1 ENABLE_PSREMOTING=0 REGISTER_MANIFEST=1" -Wait
         $PS7_PATH = "$env:ProgramFiles\PowerShell\7\pwsh.exe"
         if (-not (Test-Path $PS7_PATH)) { PHX-Error 'PS7 install failed.' }
@@ -161,17 +174,17 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
     exit $LASTEXITCODE
 }
 
-PHX-Info "Running in PS $($PSVersionTable.PSVersion) — good."
+PHX-Info "Running in PS $($PSVersionTable.PSVersion) -- good."
 
-# ── Git (needed before we can clone) ────────────────────────
+# -- Git (needed before we can clone) ------------------------
 if (-not (Test-Path $GIT_PATH)) {
     if (Get-Command git -ErrorAction SilentlyContinue) {
         $GIT_PATH = (Get-Command git).Source
         PHX-OK "Git found on PATH: $GIT_PATH"
     } else {
-        PHX-Info 'Git not found — installing...'
+        PHX-Info 'Git not found -- installing...'
         $gitExe = Join-Path $TEMP_DIR 'git-installer.exe'
-        Download-File $GIT_URL $gitExe
+        Download-File $GIT_URL $gitExe 'Johannes Schindelin'
         Start-Process $gitExe -ArgumentList '/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"' -Wait
         if (-not (Test-Path $GIT_PATH)) { PHX-Error 'Git install failed.' }
         PHX-OK 'Git installed.'
@@ -181,7 +194,7 @@ if (-not (Test-Path $GIT_PATH)) {
 }
 $env:PATH = "$env:ProgramFiles\Git\cmd;$env:ProgramFiles\PowerShell\7;$env:PATH"
 
-# ── Resolve where the repo lives ────────────────────────────
+# -- Resolve where the repo lives ----------------------------
 if ($LocalRepo -and -not $TargetPath) {
     # legacy: -LocalRepo pointed at a repo to copy from; treat its own path as the target
     $TargetPath = $LocalRepo
@@ -207,14 +220,14 @@ $INSTALL_ROOT = Split-Path $OS_DIR -Parent
 $PKG_DIR      = Join-Path $INSTALL_ROOT 'package-handler'
 PHX-Info "Repo target: $OS_DIR"
 
-# ── Clone / update the OS repo ──────────────────────────────
+# -- Clone / update the OS repo ------------------------------
 New-Item -ItemType Directory -Force -Path $INSTALL_ROOT | Out-Null
 if (Test-Path (Join-Path $OS_DIR '.git')) {
-    PHX-Info 'OS repo exists — pulling latest (ff-only)...'
+    PHX-Info 'OS repo exists -- pulling latest (ff-only)...'
     & $GIT_PATH -C $OS_DIR pull --ff-only 2>$null
     PHX-OK "OS repo at $OS_DIR"
 } elseif (Test-Path (Join-Path $OS_DIR 'CLAUDE.md')) {
-    PHX-Warn "Non-git repo already at $OS_DIR — leaving it as-is."
+    PHX-Warn "Non-git repo already at $OS_DIR -- leaving it as-is."
 } else {
     PHX-Info "Cloning Phoenix-DevOps-oS to $OS_DIR ..."
     & $GIT_PATH clone $OS_REPO_URL $OS_DIR
@@ -222,7 +235,7 @@ if (Test-Path (Join-Path $OS_DIR '.git')) {
     PHX-OK 'OS repo cloned.'
 }
 
-# ── package-handler (Sector 2 intake) ──────────────────────
+# -- package-handler (Sector 2 intake) ----------------------
 if (Test-Path (Join-Path $PKG_DIR '.git')) {
     & $GIT_PATH -C $PKG_DIR pull --ff-only 2>$null
     PHX-OK 'package-handler updated.'
@@ -230,14 +243,14 @@ if (Test-Path (Join-Path $PKG_DIR '.git')) {
     PHX-Info "Cloning package-handler to $PKG_DIR ..."
     & $GIT_PATH clone $PKG_REPO_URL $PKG_DIR 2>$null
     if (Test-Path (Join-Path $PKG_DIR '.git')) { PHX-OK 'package-handler cloned.' }
-    else { PHX-Warn 'package-handler clone failed — sector2/package-handler in the OS repo still works.' }
+    else { PHX-Warn 'package-handler clone failed -- sector2/package-handler in the OS repo still works.' }
 }
 
-# ── Secrets: read the vault, don't prompt if we don't have to ─
+# -- Secrets: read the vault, don't prompt if we don't have to -
 PHX-Info "Reading secrets from $SecretsFile ..."
 $vault = Read-EnvFile $SecretsFile
 if ($vault.Count) { PHX-OK "Vault loaded ($($vault.Count) keys)." }
-else { PHX-Warn "Vault not found at $SecretsFile — will prompt / use existing env." }
+else { PHX-Warn "Vault not found at $SecretsFile -- will prompt / use existing env." }
 
 if (Test-Path $ENV_PS1) { . $ENV_PS1; PHX-Info "Loaded $ENV_PS1" }
 
@@ -247,11 +260,21 @@ if (-not $env:PHOENIX_AUTH -and $vault['PHOENIX_AUTH']) {
 }
 if (-not $env:PHOENIX_AUTH -and [Environment]::UserInteractive) {
     Write-Host ''
-    Write-Host '  PHOENIX_AUTH not in vault or env. Paste it (Enter to skip — D1/R2 sync off):' -ForegroundColor Yellow
+    Write-Host '  PHOENIX_AUTH not in vault or env. Paste it (Enter to skip -- D1/R2 sync off):' -ForegroundColor Yellow
     $t = Read-Host '  PHOENIX_AUTH'
     if ($t) { $env:PHOENIX_AUTH = $t }
 }
-if (-not $env:PHOENIX_AUTH) { PHX-Warn 'PHOENIX_AUTH unset — D1/R2 sync disabled.' }
+if (-not $env:PHOENIX_AUTH) { PHX-Warn 'PHOENIX_AUTH unset -- D1/R2 sync disabled.' }
+
+# Cloudflare Access service token (usys-cli). packages-worker sits behind Access
+# since 2026-09-21 -- without these every worker call lands on the Access login
+# page instead of JSON. Vault only; never prompted (Laurie's box won't have them).
+foreach ($k in 'CF_ACCESS_CLIENT_ID', 'CF_ACCESS_CLIENT_SECRET') {
+    if (-not [Environment]::GetEnvironmentVariable($k) -and $vault[$k]) {
+        [Environment]::SetEnvironmentVariable($k, $vault[$k])
+    }
+}
+if (-not $env:CF_ACCESS_CLIENT_ID) { PHX-Warn 'CF_ACCESS_CLIENT_ID unset -- worker calls will hit the Access login page.' }
 
 # clonepool + ollama: param > vault > E: > fallback
 if (-not $ClonepoolDir) {
@@ -267,7 +290,7 @@ if (-not $OllamaModels) {
 PHX-Info "Clonepool: $ClonepoolDir"
 PHX-Info "Ollama models: $OllamaModels"
 
-# ── Directory structure ────────────────────────────────────
+# -- Directory structure ------------------------------------
 @($INSTALL_ROOT,
   ($ClonepoolDir -replace '/', '\'),
   $OllamaModels,
@@ -278,7 +301,7 @@ PHX-Info "Ollama models: $OllamaModels"
     try { New-Item -ItemType Directory -Force -Path $dir | Out-Null } catch { PHX-Warn "mkdir $dir failed: $($_.Exception.Message)" }
 }
 
-# clonepool junction at the repo root (gitignored) — matches dev-box convention
+# clonepool junction at the repo root (gitignored) -- matches dev-box convention
 $poolJunction = Join-Path $OS_DIR 'clonepool'
 $poolTarget   = $ClonepoolDir -replace '/', '\'
 if (-not (Test-Path $poolJunction) -and (Test-Path $poolTarget)) {
@@ -286,19 +309,23 @@ if (-not (Test-Path $poolJunction) -and (Test-Path $poolTarget)) {
     catch { PHX-Warn "Could not create clonepool junction: $_" }
 }
 
-# ── Env files ──────────────────────────────────────────────
+# -- Env files ----------------------------------------------
 $timestamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 $bashPool  = ConvertTo-GitBashPath ($ClonepoolDir -replace '/', '\')
-$bashPkg   = ConvertTo-GitBashPath (Join-Path $PKG_DIR 'intake\intake.sh')
+# Canonical intake is the in-repo sector2 pipeline (R2 + integrity + CF-Access
+# headers). The standalone package-handler clone has intake.sh at its root, not
+# intake\intake.sh, and lacks the 2026-09-21 Access fix -- never point at it.
+$INTAKE_SH = Join-Path $OS_DIR 'sector2\package-handler\intake.sh'
+$bashPkg   = ConvertTo-GitBashPath $INTAKE_SH
 
 @"
-# Phoenix DevOps OS environment — generated $timestamp
+# Phoenix DevOps OS environment -- generated $timestamp
 `$env:PHOENIX_ROOT       = "$OS_DIR"
 `$env:PHOENIX_AUTH       = "$($env:PHOENIX_AUTH)"
 `$env:PHOENIX_WORKER_URL = "$WORKER_URL"
 `$env:CLONEPOOL_DIR      = "$ClonepoolDir"
 `$env:OLLAMA_MODELS      = "$OllamaModels"
-`$env:PHOENIX_INTAKE     = "$(Join-Path $PKG_DIR 'intake\intake.sh')"
+`$env:PHOENIX_INTAKE     = "$INTAKE_SH"
 "@ | Set-Content -Path $ENV_PS1 -Encoding UTF8
 try { icacls $ENV_PS1 /inheritance:r /grant:r "$($env:USERNAME):(R,W)" | Out-Null } catch {}
 
@@ -310,9 +337,9 @@ export PHOENIX_INTAKE="$bashPkg"
 "@ | Set-Content -Path $ENV_SH -Encoding UTF8
 try { icacls $ENV_SH /inheritance:r /grant:r "$($env:USERNAME):(R,W)" | Out-Null } catch {}
 
-# ~/.phoenix/phoenix.env — the file the DASHBOARD reads (main.js loadPhoenixEnv)
+# ~/.phoenix/phoenix.env -- the file the DASHBOARD reads (main.js loadPhoenixEnv)
 @"
-# Phoenix Dashboard boot config — generated $timestamp by install.ps1
+# Phoenix Dashboard boot config -- generated $timestamp by install.ps1
 PHOENIX_ROOT=$OS_DIR
 CLONEPOOL_DIR=$ClonepoolDir
 PHOENIX_WORKER_URL=$WORKER_URL
@@ -324,16 +351,18 @@ PHOENIX_SKIP_AUTH_MODAL=1
 "@ | Set-Content -Path $PHX_ENV_FILE -Encoding UTF8
 PHX-OK "Wrote $PHX_ENV_FILE"
 
-# ── User env vars ──────────────────────────────────────────
+# -- User env vars ------------------------------------------
 [Environment]::SetEnvironmentVariable('PHOENIX_ROOT', $OS_DIR, 'User')
 [Environment]::SetEnvironmentVariable('PHOENIX_WORKER_URL', $WORKER_URL, 'User')
 [Environment]::SetEnvironmentVariable('CLONEPOOL_DIR', $ClonepoolDir, 'User')
 [Environment]::SetEnvironmentVariable('OLLAMA_MODELS', $OllamaModels, 'User')
-[Environment]::SetEnvironmentVariable('PHOENIX_INTAKE', (Join-Path $PKG_DIR 'intake\intake.sh'), 'User')
+[Environment]::SetEnvironmentVariable('PHOENIX_INTAKE', $INTAKE_SH, 'User')
 if ($env:PHOENIX_AUTH) { [Environment]::SetEnvironmentVariable('PHOENIX_AUTH', $env:PHOENIX_AUTH, 'User') }
+if ($env:CF_ACCESS_CLIENT_ID)     { [Environment]::SetEnvironmentVariable('CF_ACCESS_CLIENT_ID', $env:CF_ACCESS_CLIENT_ID, 'User') }
+if ($env:CF_ACCESS_CLIENT_SECRET) { [Environment]::SetEnvironmentVariable('CF_ACCESS_CLIENT_SECRET', $env:CF_ACCESS_CLIENT_SECRET, 'User') }
 PHX-OK 'User env vars set.'
 
-# ── User PATH ──────────────────────────────────────────────
+# -- User PATH ----------------------------------------------
 $pathsToAdd = @(
     "$env:ProgramFiles\PowerShell\7",
     "$env:ProgramFiles\Git\cmd",
@@ -348,7 +377,7 @@ foreach ($p in $pathsToAdd) {
 $env:PATH = "$($pathsToAdd -join ';');$env:PATH"
 PHX-OK 'User PATH updated.'
 
-# ── PS7 profile — usys + phoenix env in every terminal ─────
+# -- PS7 profile -- usys + phoenix env in every terminal -----
 $ps7Profile = Join-Path $HOME 'Documents\PowerShell\Microsoft.PowerShell_profile.ps1'
 New-Item -ItemType Directory -Force -Path (Split-Path $ps7Profile) | Out-Null
 if (-not (Test-Path $ps7Profile)) { New-Item -ItemType File -Force -Path $ps7Profile | Out-Null }
@@ -356,16 +385,16 @@ $existing = Get-Content $ps7Profile -Raw -ErrorAction SilentlyContinue
 if ($existing -notmatch 'Phoenix DevOps OS') {
     Add-Content -Path $ps7Profile -Value @"
 
-# Phoenix DevOps OS — installed $timestamp
+# Phoenix DevOps OS -- installed $timestamp
 if (Test-Path "$ENV_PS1") { . "$ENV_PS1" }
 if (Test-Path "$(Join-Path $OS_DIR 'scripts\usys.ps1')") { . "$(Join-Path $OS_DIR 'scripts\usys.ps1')" }
 "@
     PHX-OK 'USys sourced into PS7 profile.'
 } else {
-    PHX-Warn 'PS7 profile already has a Phoenix block — left it.'
+    PHX-Warn 'PS7 profile already has a Phoenix block -- left it.'
 }
 
-# ── Global command wrappers ───────────────────────────────
+# -- Global command wrappers -------------------------------
 $usysPs1 = Join-Path $OS_DIR 'scripts\usys.ps1'
 if (Test-Path $usysPs1) {
     try { & pwsh -NoProfile -ExecutionPolicy Bypass -File $usysPs1 init; PHX-OK 'usys init done.' }
@@ -382,7 +411,7 @@ if (Test-Path $binSource) {
     PHX-Warn "bin/ not found at $binSource"
 }
 
-# ── File associations: .lol / .phx ────────────────────────
+# -- File associations: .lol / .phx ------------------------
 function Register-PhoenixFileAssociation {
     param([string]$Extension, [string]$Description, [string]$HandlerCmd)
     $extKey  = "HKCU:\Software\Classes\$Extension"
@@ -405,7 +434,7 @@ if (-not $SkipAssociations -and (Test-Path $usysPs1)) {
     PHX-OK 'File associations (.lol, .phx) registered.'
 }
 
-# ── Autostart: Helix + Dashboard ──────────────────────────
+# -- Autostart: Helix + Dashboard --------------------------
 if (-not $SkipAutostart) {
     $helixInstaller = Join-Path $OS_DIR 'tools\poc\install-helix-autostart.ps1'
     $dashInstaller  = Join-Path $OS_DIR 'sector3\services\install-dashboard-windows.ps1'
@@ -425,7 +454,7 @@ if (-not $SkipAutostart) {
     PHX-Warn 'Autostart registration skipped (-SkipAutostart).'
 }
 
-# ── Restore Claude's memory from the vault ─────────────────
+# -- Restore Claude's memory from the vault -----------------
 if ($RestoreClaudeMemory) {
     if (Test-Path $CLAUDE_STATE_SRC) {
         $claudeProjects = Join-Path $HOME '.claude\projects'
@@ -434,11 +463,11 @@ if ($RestoreClaudeMemory) {
         cmd /c "robocopy `"$CLAUDE_STATE_SRC`" `"$claudeProjects`" /E /NJH /NJS >nul 2>&1 & exit /b 0"
         PHX-OK 'Claude memory restored (~/.claude/projects).'
     } else {
-        PHX-Warn "Claude state not found at $CLAUDE_STATE_SRC — skipped."
+        PHX-Warn "Claude state not found at $CLAUDE_STATE_SRC -- skipped."
     }
 }
 
-# ── Register machine with D1 (non-fatal) ──────────────────
+# -- Register machine with D1 (non-fatal) ------------------
 if ($env:PHOENIX_AUTH) {
     $regBody = @{
         package_name = 'phoenix-devops-os'
@@ -448,15 +477,21 @@ if ($env:PHOENIX_AUTH) {
         installed_by = 'install.ps1'
         install_dir  = $OS_DIR
     } | ConvertTo-Json
+    $regHeaders = @{ 'Authorization' = "Bearer $($env:PHOENIX_AUTH)"; 'Content-Type' = 'application/json' }
+    if ($env:CF_ACCESS_CLIENT_ID)     { $regHeaders['CF-Access-Client-Id']     = $env:CF_ACCESS_CLIENT_ID }
+    if ($env:CF_ACCESS_CLIENT_SECRET) { $regHeaders['CF-Access-Client-Secret'] = $env:CF_ACCESS_CLIENT_SECRET }
     try {
+        # -MaximumRedirection 0: a real worker response never redirects; a
+        # redirect means Cloudflare Access bounced us to its login page, which
+        # would otherwise be followed to a 200 and reported as success.
         $reg = Invoke-WebRequest -Uri "$WORKER_URL/installed/register" -Method POST `
-            -Headers @{ 'Authorization' = "Bearer $($env:PHOENIX_AUTH)"; 'Content-Type' = 'application/json' } `
-            -Body $regBody -UseBasicParsing -TimeoutSec 15
-        if ($reg.StatusCode -in 200, 201) { PHX-OK 'Machine registered with D1.' }
+            -Headers $regHeaders -Body $regBody -UseBasicParsing -TimeoutSec 15 -MaximumRedirection 0
+        if (($reg.StatusCode -in 200, 201) -and ("$($reg.Headers['Content-Type'])" -like '*json*')) { PHX-OK 'Machine registered with D1.' }
+        else { PHX-Warn "D1 registration: unexpected response ($($reg.StatusCode)) -- not registered." }
     } catch { PHX-Warn "D1 registration failed (non-fatal): $_" }
 }
 
-# ── Desktop launcher shortcut ─────────────────────────────
+# -- Desktop launcher shortcut -----------------------------
 $dashStart = Join-Path $OS_DIR 'dashboard\start.ps1'
 if (Test-Path $dashStart) {
     try {
@@ -477,7 +512,7 @@ if (Test-Path $dashStart) {
 
 Remove-Item -Recurse -Force $TEMP_DIR -ErrorAction SilentlyContinue
 
-# ── Done ──────────────────────────────────────────────────
+# -- Done --------------------------------------------------
 Write-Host ''
 Write-Host '  ======================================' -ForegroundColor Green
 Write-Host '   Phoenix DevOps OS installed.         ' -ForegroundColor Green
@@ -493,6 +528,6 @@ Write-Host '    usys clone <file>    <- clonepool intake'          -ForegroundCo
 Write-Host '  Dashboard: double-click the desktop shortcut, or run dashboard\start.ps1' -ForegroundColor Cyan
 Write-Host ''
 if (-not $env:PHOENIX_AUTH) {
-    Write-Host '  [!] PHOENIX_AUTH was not set — put it in the vault or env and re-run.' -ForegroundColor Yellow
+    Write-Host '  [!] PHOENIX_AUTH was not set -- put it in the vault or env and re-run.' -ForegroundColor Yellow
     Write-Host ''
 }

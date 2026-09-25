@@ -68,11 +68,22 @@ What it actually does (read directly from the script, not assumed):
 4. Deploys all 7 modules + `api.php` + `secure_settings.php` to
    `/var/www/html/lifefirst/`
 5. Writes `/etc/lifefirst/lifefirst.env` (mode 600, root-only) + an Apache vhost
+   (also mode 600 — it carries the secrets via `SetEnv`) that denies direct URL
+   access to `config.php` / `module_*.php` / `secure_settings.php` /
+   `budget_keeper.php` — only `api.php` and `laurie/` are reachable
 6. Installs `lifefirst-escalator.service` (systemd) — a 30-second loop that
    actually calls module 6's `escalate` action (this infrastructure didn't
    exist before `install.sh` — module 6 had the escalation logic but nothing
    was ever calling it on a timer)
-7. Prints the local/network test URLs and the next step (Cloudflare Tunnel)
+7. Prints the local/network test URLs, **Laurie's private link** (first run
+   only — `/laurie/#k=<LF_LAURIE_KEY>`), and the next step (Cloudflare Tunnel)
+
+**Laurie's link:** `laurie/proxy.php` refuses any request without her key
+(her page is on the public internet via the tunnel — without it, anyone could
+read her calendar and dismiss her notifications). The key rides in the link's
+`#fragment` (never sent to the server or logged), her browser remembers it
+after the first open, and it's `LF_LAURIE_KEY` in `/etc/lifefirst/lifefirst.env`
+if she ever needs the link again.
 
 **Safe to re-run** — `git pull && sudo bash install.sh` is the documented way
 to update. It never touches an existing secret and never re-runs the seed-user
@@ -99,8 +110,9 @@ curl http://localhost/api.php?action=health
 # or, once tunneled:
 curl https://lifefirst.authenticcoder.com/api.php?action=health
 
-# Laurie's front door
-curl http://localhost/laurie/          # or the public URL
+# Laurie's front door (open her private link in a browser; the key is in the #fragment)
+#   https://<your-hostname>/laurie/#k=$LF_LAURIE_KEY
+curl -H "X-LF-Key: $LF_LAURIE_KEY" 'http://localhost/laurie/proxy.php?op=check_notifications'
 
 # A real authenticated request — LF_API_SECRET is in /etc/lifefirst/lifefirst.env
 curl -X POST http://localhost/api.php \

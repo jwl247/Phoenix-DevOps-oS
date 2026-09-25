@@ -6,6 +6,13 @@
 const isElectron = typeof window !== 'undefined' && !!window.phoenix;
 let ipcRenderer = null;
 
+// File/folder names from list-directory go into innerHTML below — escape
+// them so a crafted name (e.g. on a Linux/SMB share) can't inject markup
+// into a renderer that can reach the SHELL PTY.
+function escName(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 if (isElectron) {
     ipcRenderer = window.phoenix;
     console.log('Running in Electron - Real Phoenix integration enabled');
@@ -876,7 +883,7 @@ class PhoenixDashboard {
                         preloadedItems.forEach(item => {
                             const el = document.createElement('div');
                             el.className = 'place-item place-file';
-                            el.innerHTML = `<span class="item-icon">·</span><span class="place-file-name">${item.name}</span>`;
+                            el.innerHTML = `<span class="item-icon">·</span><span class="place-file-name">${escName(item.name)}</span>`;
                             this._bindFileItem(el, item);
                             dropdown.appendChild(el);
                         });
@@ -939,7 +946,7 @@ class PhoenixDashboard {
                     const subdrop = document.createElement('div');
                     subdrop.className = 'place-subdropdown';
                     subdrop.style.display = 'none';
-                    el.innerHTML = `<span class="item-arrow">▶</span><span>${item.name}/</span>`;
+                    el.innerHTML = `<span class="item-arrow">▶</span><span>${escName(item.name)}/</span>`;
                     el.appendChild(subdrop);
                     el.addEventListener('click', async (e) => {
                         e.stopPropagation();
@@ -960,7 +967,7 @@ class PhoenixDashboard {
                     });
                 } else {
                     el.className = 'place-item place-file';
-                    el.innerHTML = `<span class="item-icon">·</span><span class="place-file-name">${item.name}</span>`;
+                    el.innerHTML = `<span class="item-icon">·</span><span class="place-file-name">${escName(item.name)}</span>`;
                     this._bindFileItem(el, item);
                 }
                 container.appendChild(el);

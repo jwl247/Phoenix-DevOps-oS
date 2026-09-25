@@ -38,6 +38,10 @@ from the real live worker — it is NOT the one actually deployed.
   `sector2/package-handler/worker/index.js`. A docs file
   (`docs/PHOENIX_SYSTEM_SUMMARY_STATUS_CONNECTIONS.md`) still points at this dead path —
   known-stale, don't trust that doc, trust this file and its sibling in `sector2/`.
+  It shares the live worker's `"name": "packages-worker"` and has NO auth on its
+  `/custody`, `/clonepool`, `/packages` GETs (pre-Gap-1), so a `wrangler deploy` from it
+  would overwrite production. Its `wrangler.jsonc` `main` now points at a nonexistent
+  file so a deploy fails loudly (2026-09-25 audit). Retire the folder when convenient.
 - **`dashboard/main.js` (~line 374) references `'SECTOR4'` uppercase**, but the real
   directory on disk is lowercase `sector4/`. Works today because Windows NTFS is
   case-insensitive by default — would break on a case-sensitive filesystem (the target

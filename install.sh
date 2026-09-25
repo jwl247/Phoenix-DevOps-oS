@@ -73,10 +73,14 @@ else
     git clone "$PKG_REPO_URL" "$PKG_DIR"
 fi
 
-if [[ -f "$PKG_DIR/intake/intake.sh" ]]; then
+# Canonical Sector 2 intake is the in-repo pipeline (R2 + integrity +
+# Cloudflare Access headers). The standalone package-handler clone keeps
+# intake.sh at its root (no intake/ subdir) and lacks the Access fix.
+INTAKE_SH="$OS_DIR/sector2/package-handler/intake.sh"
+if [[ -f "$INTAKE_SH" ]]; then
     phx_ok "Sector 2 intake.sh ready."
 else
-    phx_warn "package-handler intake.sh not found — clone/intake will fail until fixed."
+    phx_warn "sector2/package-handler/intake.sh not found — clone/intake will fail until fixed."
 fi
 
 # PHOENIX_AUTH prompt
@@ -100,8 +104,8 @@ export PHOENIX_ROOT="$OS_DIR"
 export PHOENIX_AUTH="${PHOENIX_AUTH:-}"
 export PHOENIX_WORKER_URL="$WORKER_URL"
 export CLONEPOOL_DIR="$CLONEPOOL_DIR"
-export PHOENIX_INTAKE="$PKG_DIR/intake/intake.sh"
-export PHOENIX_INTAKE_SECTOR4="$OS_DIR/SECTOR4/intake/intake.sh"
+export PHOENIX_INTAKE="$INTAKE_SH"
+export PHOENIX_INTAKE_SECTOR4="$OS_DIR/sector4/intake/intake.sh"
 EOF
 chmod 600 "$ENV_SH"
 phx_ok "Environment file written: $ENV_SH"
@@ -129,7 +133,7 @@ install_cmd() {
 install_cmd "clone"      "$OS_DIR/tools/clone.sh"
 install_cmd "align_dirs" "$OS_DIR/tools/align_dirs.sh"
 install_cmd "get_distros" "$OS_DIR/tools/get_distros.sh"
-install_cmd "intake"     "$OS_DIR/SECTOR4/intake/intake.sh"
+install_cmd "intake"     "$OS_DIR/sector4/intake/intake.sh"
 
 # Generate usys command
 cat > "$USYS_BIN/usys" << 'USYS'
@@ -145,7 +149,7 @@ case "${1:-help}" in
         echo "  Phoenix DevOps OS — System Status"
         echo "  $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
         echo ""
-        for s in sector1 sector2 sector3 SECTOR4; do
+        for s in sector1 sector2 sector3 sector4; do
             count=$(find "$PHX_ROOT/$s" -type f 2>/dev/null | wc -l)
             echo "  $s: $count files"
         done

@@ -26,7 +26,8 @@
 //   GET  /whoami                       auth round-trip (Bearer OFFICE_AUTH)
 //   POST /notify                       create + send a notification (Bearer)
 //                                      body: { doc_hex, notice }
-//   GET  /ack/:token                   counterparty acknowledges (token IS the auth)
+//   GET  /ack/:token                   confirm page (a GET alone never acknowledges)
+//   POST /ack/:token                   counterparty acknowledges (token IS the auth)
 //   GET  /author/:type/:value          canonical author_id for a credential (Bearer)
 //   POST /author/link                  link a credential to an author_id (Bearer)
 //                                      body: { author_id, credential_type, credential_value }
@@ -60,6 +61,18 @@ const CORS = {
 
 const RESEND_STALE_MS = 45 * 1000; // re-send once a send is older than this (cron fires every 60s)
 const MAX_LEVEL = 5;
+// Hard stop on total sends per notification. Without it the cron re-sent
+// every unacknowledged notice every minute FOREVER (the level caps at 5, the
+// sends didn't) — the 2026-09-23 "sent 50 times in an hour" incident; a
+// wrong or hostile address would be mailed indefinitely and burn the Resend
+// quota. Past this many sends the row stays recorded (audit), just quiet.
+const MAX_SENDS = 12;
+// Back off per level too (same schedule as office-notify-worker's fix):
+// gap before the next send by current level = 45s, ~4m, ~19m, ~1.6h, ~7.8h.
+const RESEND_BACKOFF = 5;
+function resendGapMs(level) {
+  return RESEND_STALE_MS * Math.pow(RESEND_BACKOFF, Math.max(0, (level || 1) - 1));
+}
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -71,9 +84,40 @@ function err(message, status = 400) {
   return json({ status: 'error', message }, status);
 }
 
+// Constant-time compare — a plain === leaks how many leading characters
+// matched through response timing.
+function timingSafeEqualStr(a, b) {
+  const x = new TextEncoder().encode(String(a));
+  const y = new TextEncoder().encode(String(b));
+  let diff = x.length ^ y.length;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] || 0) ^ (y[i] || 0);
+  return diff === 0;
+}
+
 function isAuthorized(req, env) {
   const token = req.headers.get('Authorization')?.replace('Bearer ', '').trim();
-  return token && token === (env.OFFICE_AUTH || '').trim();
+  const expected = (env.OFFICE_AUTH || '').trim();
+  return !!token && !!expected && timingSafeEqualStr(token, expected);
+}
+
+// Raw bytes of an R2 get() result (real R2ObjectBody or the test mock).
+async function objectBytes(obj) {
+  if (obj && typeof obj.arrayBuffer === 'function') return new Uint8Array(await obj.arrayBuffer());
+  const b = obj && obj.body;
+  if (b instanceof ArrayBuffer) return new Uint8Array(b);
+  if (ArrayBuffer.isView(b)) return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+  if (typeof b === 'string') return new TextEncoder().encode(b);
+  return new Uint8Array(await new Response(b).arrayBuffer());
+}
+function sameBytes(a, b) {
+  if (a.byteLength !== b.byteLength) return false;
+  for (let i = 0; i < a.byteLength; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+// Strip CR/LF so a caller-supplied value can never inject extra MIME headers.
+function headerSafe(v) {
+  return String(v == null ? '' : v).replace(/[\r\n]+/g, ' ');
 }
 
 // URL-safe, single-use. 32 bytes of randomness -> 43-char base64url.
@@ -121,13 +165,13 @@ async function sendNotice(env, { to, subject, body }) {
     const { EmailMessage } = await import('cloudflare:email');
     const fromAddr = from.match(/<([^>]+)>/)?.[1] || from;
     const mime =
-      `From: ${from}\r\n` +
-      `To: ${to}\r\n` +
-      `Subject: ${subject}\r\n` +
+      `From: ${headerSafe(from)}\r\n` +
+      `To: ${headerSafe(to)}\r\n` +
+      `Subject: ${headerSafe(subject)}\r\n` +
       `MIME-Version: 1.0\r\n` +
       `Content-Type: text/plain; charset=utf-8\r\n\r\n` +
       `${body}\r\n`;
-    await env.ISSUER_COPY.send(new EmailMessage(fromAddr, to, mime));
+    await env.ISSUER_COPY.send(new EmailMessage(headerSafe(fromAddr), headerSafe(to), mime));
     return { transport: 'cloudflare-email-routing' };
   }
 
@@ -218,7 +262,19 @@ async function handleNotify(req, env) {
   }, 200);
 }
 
-async function handleAck(token, env) {
+// GET only shows a confirm button; the POST acknowledges. SMS/iMessage link
+// previews and mail scanners GET every URL in a message — if GET acknowledged,
+// a preview bot would silently stop the customer's notices.
+function ackConfirmPage() {
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phoenix Office</title>
+<div style="font:16px/1.5 system-ui,sans-serif;max-width:34rem;margin:18vh auto;padding:0 1.25rem;color:#1a1a1a">
+  <p style="margin:0 0 1.25rem">Confirm you have seen the notice about your signed document. This stops the reminders.</p>
+  <form method="POST"><button type="submit" style="font:inherit;padding:.7rem 1.6rem;border:0;border-radius:.5rem;background:#1a1a1a;color:#fff">I have seen it</button></form>
+</div>`;
+}
+
+async function handleAck(token, env, method = 'GET') {
   if (!token) return err('token required', 400);
   const row = await env.OFFICE_DB.prepare(
     'SELECT id, acknowledged_at FROM office_notifications WHERE ack_token = ?'
@@ -227,6 +283,11 @@ async function handleAck(token, env) {
   if (!row) {
     return new Response(ackPage('This link is not valid.', false), {
       status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS },
+    });
+  }
+  if (method !== 'POST' && !row.acknowledged_at) {
+    return new Response(ackConfirmPage(), {
+      status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', ...CORS },
     });
   }
   if (!row.acknowledged_at) {
@@ -356,7 +417,8 @@ async function handleGetRuntime(name, req, env) {
   });
 }
 
-async function handleHeadRuntime(name, env) {
+async function handleHeadRuntime(name, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
   if (!RUNTIME_NAME_RE.test(name)) return err('invalid runtime asset name', 400);
   const obj = await env.OFFICE_RUNTIME.head(name);
   if (!obj) return err('not found', 404);
@@ -428,6 +490,17 @@ async function handlePutDocument(hex, req, env) {
     const record = JSON.parse(new TextDecoder().decode(bytes));
     doc = record.body || null;
   } catch (_) { /* stored as opaque bytes either way */ }
+
+  // Sealed records are write-once. Re-sealing the identical bytes is an
+  // idempotent no-op (a retried upload); anything else under an existing
+  // hex is refused — before this, any bearer holder could silently replace
+  // a signed document, including one under legal hold.
+  const prev = await env.OFFICE_DOCS.get(hex);
+  if (prev) {
+    const prevBytes = await objectBytes(prev);
+    if (sameBytes(prevBytes, new Uint8Array(bytes))) return json({ ok: true, hex, bytes: bytes.byteLength, already: true });
+    return err('a different document is already sealed under this hex — sealed documents are immutable', 409);
+  }
 
   await env.OFFICE_DOCS.put(hex, bytes);
   if (doc) {
@@ -835,6 +908,7 @@ async function handleChecklistDecision(itemId, req, env) {
   if (!['satisfied', 'not_applicable', 'open'].includes(disposition)) return err('disposition must be satisfied, not_applicable, or open', 400);
   if (!by) return err('by (author_id) required', 400);
   if (!rationale || !String(rationale).trim()) return err('rationale required — a determination must be documented', 400);
+  const rationaleText = String(rationale).trim();
 
   const item = await env.OFFICE_DB.prepare('SELECT item_id FROM office_phase_checklist_items WHERE item_id = ?').bind(itemId).first();
   if (!item) return err('checklist item not found', 404);
@@ -842,10 +916,10 @@ async function handleChecklistDecision(itemId, req, env) {
   const now = new Date().toISOString();
   await env.OFFICE_DB.prepare(
     `UPDATE office_phase_checklist_items SET disposition = ?, decided_by = ?, decided_at = ?, rationale = ?, linked_doc_hex = ? WHERE item_id = ?`
-  ).bind(disposition, by, now, rationale.trim(), linked_doc_hex || null, itemId).run();
+  ).bind(disposition, by, now, rationaleText, linked_doc_hex || null, itemId).run();
   await env.OFFICE_DB.prepare(
     `INSERT INTO office_checklist_decisions (item_id, disposition, by, rationale, linked_doc_hex, at) VALUES (?, ?, ?, ?, ?, ?)`
-  ).bind(itemId, disposition, by, rationale.trim(), linked_doc_hex || null, now).run();
+  ).bind(itemId, disposition, by, rationaleText, linked_doc_hex || null, now).run();
 
   return json({ ok: true, item_id: itemId, disposition });
 }
@@ -934,16 +1008,18 @@ function ackPage(message, ok) {
 async function runEscalation(env) {
   const cutoff = new Date(Date.now() - RESEND_STALE_MS).toISOString();
   const open = await env.OFFICE_DB.prepare(
-    `SELECT id, ack_token, escalation_level, to_address, doc_hash, attempt_field, attempt_at
+    `SELECT id, ack_token, escalation_level, send_count, to_address, doc_hash, attempt_field, attempt_at, last_sent_at
        FROM office_notifications
       WHERE acknowledged_at IS NULL
+        AND send_count < ?
         AND (last_sent_at IS NULL OR last_sent_at < ?)
       ORDER BY last_sent_at ASC NULLS FIRST
       LIMIT 50`
-  ).bind(cutoff).all();
+  ).bind(MAX_SENDS, cutoff).all();
 
   let resent = 0;
   for (const r of open.results || []) {
+    if (r.last_sent_at && Date.now() - new Date(r.last_sent_at).getTime() < resendGapMs(r.escalation_level)) continue;
     const nextLevel = Math.min(r.escalation_level + 1, MAX_LEVEL);
     if (nextLevel !== r.escalation_level) {
       await env.OFFICE_DB.prepare(
@@ -995,7 +1071,9 @@ export default {
     if (path === '/notify' && req.method === 'POST') return handleNotify(req, env);
 
     if (path.startsWith('/ack/')) {
-      return handleAck(decodeURIComponent(path.slice('/ack/'.length)), env);
+      let token;
+      try { token = decodeURIComponent(path.slice('/ack/'.length)); } catch { token = ''; }
+      return handleAck(token, env, req.method);
     }
 
     if (path === '/author/link' && req.method === 'POST') {
@@ -1021,7 +1099,7 @@ export default {
     if (path.startsWith('/runtime/')) {
       const name = decodeURIComponent(path.slice('/runtime/'.length));
       if (req.method === 'GET') return handleGetRuntime(name, req, env);
-      if (req.method === 'HEAD') return handleHeadRuntime(name, env);
+      if (req.method === 'HEAD') return handleHeadRuntime(name, req, env);
     }
 
     if (path === '/documents' && req.method === 'GET') return handleListDocuments(req, env);

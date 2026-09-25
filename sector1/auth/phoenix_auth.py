@@ -11,6 +11,7 @@
 # ============================================================
 
 import os
+import platform
 import sys
 import hashlib
 import json
@@ -57,24 +58,48 @@ def get_hw_signals():
         except Exception:
             return "unavailable"
 
-    # 1. CPU info
-    signals.append(safe_read(["cat", "/proc/cpuinfo"]))
+    def only_lines(text, prefixes):
+        # Keep only stable fields. Raw /proc/cpuinfo ("cpu MHz"), /proc/meminfo
+        # (MemFree...), full lsblk (USB sticks) and `uname -r` (kernel updates)
+        # change run to run, which made every call a "new machine".
+        keep = sorted({l.strip() for l in text.splitlines()
+                       if l.split(":", 1)[0].strip() in prefixes})
+        return "\n".join(keep) or "unavailable"
+
+    cpuinfo = safe_read(["cat", "/proc/cpuinfo"])
+
+    # 1. CPU identity (model, not live clock speed)
+    signals.append(only_lines(cpuinfo, {"vendor_id", "cpu family", "model",
+                                        "model name", "stepping"}))
     # 2. Machine ID
     signals.append(safe_read(["cat", "/etc/machine-id"]))
     # 3. DMI board serial
     signals.append(safe_read(["cat", "/sys/class/dmi/id/board_serial"]))
     # 4. DMI product UUID
     signals.append(safe_read(["cat", "/sys/class/dmi/id/product_uuid"]))
-    # 5. Block device list
-    signals.append(safe_read(["lsblk", "-o", "NAME,SERIAL,SIZE"]))
-    # 6. Network interface MACs
-    signals.append(safe_read(["cat", "/sys/class/net/eth0/address"]))
-    # 7. Memory info
-    signals.append(safe_read(["cat", "/proc/meminfo"]))
+    # 5. Fixed (non-removable) disk serials — removable media excluded
+    disks = safe_read(["lsblk", "-dn", "-o", "SERIAL,RM"])
+    signals.append("\n".join(sorted(
+        l.rsplit(None, 1)[0] for l in disks.splitlines()
+        if l.strip() and l.split()[-1] == "0" and len(l.split()) > 1
+    )) or "unavailable")
+    # 6. Network MACs of physical interfaces (eth0 rarely exists on modern
+    #    Debian — predictable names like enp3s0)
+    macs = []
+    try:
+        for dev in sorted(os.listdir("/sys/class/net")):
+            if os.path.exists(f"/sys/class/net/{dev}/device"):
+                with open(f"/sys/class/net/{dev}/address") as fh:
+                    macs.append(fh.read().strip())
+    except Exception:
+        pass
+    signals.append("\n".join(macs) or "unavailable")
+    # 7. Total memory (not free/cached counters)
+    signals.append(only_lines(safe_read(["cat", "/proc/meminfo"]), {"MemTotal"}))
     # 8. CPU serial (ARM/embedded)
-    signals.append(safe_read(["cat", "/proc/cpuinfo"]))
-    # 9. Kernel version
-    signals.append(safe_read(["uname", "-r"]))
+    signals.append(only_lines(cpuinfo, {"Serial", "Hardware"}))
+    # 9. DMI system vendor (was `uname -r` — changed on every kernel update)
+    signals.append(safe_read(["cat", "/sys/class/dmi/id/sys_vendor"]))
     # 10. BIOS version
     signals.append(safe_read(["cat", "/sys/class/dmi/id/bios_version"]))
 
@@ -135,7 +160,7 @@ def authorize_machine(fp):
             INSERT INTO authorized_machines
                 (fingerprint, hostname, authorized_at, last_seen)
             VALUES (?, ?, ?, ?)
-        """, (fp, os.uname().nodename, now, now))
+        """, (fp, platform.node(), now, now))
         conn.commit()
         print(f"[PHOENIX_AUTH] Machine authorized: {fp[:16]}...")
     except sqlite3.IntegrityError:

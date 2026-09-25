@@ -37,6 +37,10 @@ function exec(s, b) {
     if (r) { r.send_count++; r.last_sent_at = b[0]; r.last_error = b[1]; }
     return { rows: [] };
   }
+  if (s.startsWith('SELECT id, ack_token, escalation_level, send_count'))
+    return { rows: db.office_notifications.filter(r => !r.acknowledged_at && r.send_count < b[0] && (!r.last_sent_at || r.last_sent_at < b[1])) };
+  if (s.startsWith('UPDATE office_notifications SET escalation_level'))
+    { const r = db.office_notifications.find(x => x.id === b[1]); if (r) r.escalation_level = b[0]; return { rows: [] }; }
   if (s.startsWith('SELECT id, acknowledged_at FROM office_notifications WHERE ack_token'))
     return { rows: db.office_notifications.filter(r => r.ack_token === b[0]).map(r => ({ id: r.id, acknowledged_at: r.acknowledged_at })) };
   if (s.startsWith('UPDATE office_notifications SET acknowledged_at'))
@@ -230,6 +234,14 @@ const envelope2 = JSON.stringify({ header: 'x', footer: 'y', body: { state: 'SIG
   }), env);
   const j = await r.json();
   ok(r.status === 200 && j.recorded === true, 'POST /notify still records a notification row under the renamed OFFICE_DB binding');
+
+  // Audit 2026-09-25: a link-preview bot's GET must not acknowledge.
+  const row = db.office_notifications.find(x => x.ack_token === j.ack_token);
+  const g = await worker.fetch(new Request(B + '/ack/' + j.ack_token), env);
+  const gHtml = await g.text();
+  ok(g.status === 200 && /method="POST"/.test(gHtml) && !row.acknowledged_at, 'GET /ack/:token only shows a confirm page — it does NOT acknowledge');
+  const pr = await worker.fetch(new Request(B + '/ack/' + j.ack_token, { method: 'POST' }), env);
+  ok(pr.status === 200 && !!row.acknowledged_at, 'POST /ack/:token (the confirm button) acknowledges');
 }
 
 // 10. browse: lists both sealed documents, newest first
@@ -392,6 +404,40 @@ const envelope3 = JSON.stringify({ header: 'x', footer: 'y', body: {
   ok(r.status === 200, 'DELETE /jobs/:job_id removes it');
   const list = await (await worker.fetch(new Request(B + '/jobs?author_id=a_x', { headers: H }), env)).json();
   ok(list.items.length === 0, 'the deleted job no longer appears in the list');
+}
+
+// Audit 2026-09-25: sealed documents are write-once.
+{
+  const same = await worker.fetch(new Request(B + '/documents/' + hex, { method: 'PUT', headers: H, body: envelope }), env);
+  const sj = await same.json();
+  ok(same.status === 200 && sj.already === true, 're-PUT of the identical sealed bytes is an idempotent no-op');
+  const tampered = envelope.replace('Jane Doe', 'Someone Else');
+  const diff = await worker.fetch(new Request(B + '/documents/' + hex, { method: 'PUT', headers: H, body: tampered }), env);
+  ok(diff.status === 409, 'PUT of DIFFERENT bytes over an existing sealed hex is refused (409)');
+  const back = await (await worker.fetch(new Request(B + '/documents/' + hex, { headers: H }), env)).text();
+  ok(back === envelope, 'the original sealed bytes are still what GET returns');
+}
+
+// Audit 2026-09-25: escalation is capped and backs off (was: every minute, forever).
+{
+  const mk = (over) => { const r = { id: ++db._notifId, ack_token: 't' + db._notifId, escalation_level: 1, send_count: 1, to_address: 'x@example.com', last_sent_at: null, last_error: null, acknowledged_at: null, attempt_at: null, ...over }; db.office_notifications.push(r); return r; };
+  const ago = (ms) => new Date(Date.now() - ms).toISOString();
+  const capped = mk({ send_count: 12, escalation_level: 5, last_sent_at: ago(24 * 3600e3) });
+  const tooSoon = mk({ send_count: 2, escalation_level: 2, last_sent_at: ago(120e3) });   // level-2 gap is ~225s
+  const due = mk({ send_count: 2, escalation_level: 2, last_sent_at: ago(600e3) });
+  let waited = null;
+  await worker.scheduled({}, env, { waitUntil: (p) => { waited = p; } });
+  await waited;
+  ok(capped.send_count === 12, 'a notification that already hit MAX_SENDS is not re-sent');
+  ok(tooSoon.send_count === 2, 'a level-2 notification is not re-sent before its back-off gap');
+  ok(due.send_count === 3 && due.escalation_level === 3, 'a notification past its back-off gap is re-sent and escalated');
+  db.office_notifications.forEach(r => { r.acknowledged_at = r.acknowledged_at || 'test-cleanup'; });
+}
+
+// Audit 2026-09-25: HEAD /runtime is no longer an unauthenticated oracle.
+{
+  const r = await worker.fetch(new Request(B + '/runtime/libreoffice-portable-win64.zip', { method: 'HEAD' }), env);
+  ok(r.status === 401, 'HEAD /runtime/:name without a bearer is rejected');
 }
 
 console.log(`\n${pass} passing, ${fail} failing`);

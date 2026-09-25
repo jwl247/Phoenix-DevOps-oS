@@ -16,12 +16,14 @@ LOG_FILE="${LOG_DIR}/intake.log"
 VERSION="0.2.0"
 
 # Resolve intake.py from PHOENIX_ROOT (preferred) or fallback locations
+# (repo-relative fallback: <repo>/sector4/intake/intake.sh -> dirname x2 = <repo>/sector4,
+#  so the repo root is one level up, not two)
 if [[ -n "${PHOENIX_ROOT:-}" && -f "${PHOENIX_ROOT}/phoenix-core/tools/intake.py" ]]; then
     INTAKE_PY="${PHOENIX_ROOT}/phoenix-core/tools/intake.py"
 elif [[ -f "${HOME}/Phoenix/Phoenix-DevOps-oS/phoenix-core/tools/intake.py" ]]; then
     INTAKE_PY="${HOME}/Phoenix/Phoenix-DevOps-oS/phoenix-core/tools/intake.py"
-elif [[ -f "$(dirname "$(dirname "$(realpath "$0")")")/../../phoenix-core/tools/intake.py" ]]; then
-    INTAKE_PY="$(dirname "$(dirname "$(realpath "$0")")")/../../phoenix-core/tools/intake.py"
+elif [[ -f "$(dirname "$(dirname "$(realpath "$0")")")/../phoenix-core/tools/intake.py" ]]; then
+    INTAKE_PY="$(dirname "$(dirname "$(realpath "$0")")")/../phoenix-core/tools/intake.py"
 else
     INTAKE_PY="${HOME}/projects/unitedsys/core/intake.py"   # legacy fallback
 fi

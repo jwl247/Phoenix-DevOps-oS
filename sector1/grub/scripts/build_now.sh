@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-# Non-interactive Phoenix USB builder — target hardcoded to /dev/sdg
+# Phoenix USB builder (quick path) — ERASES the target device.
+# Usage: sudo bash build_now.sh /dev/sdX
+# (Was hardcoded to /dev/sdg with no prompt — device letters shift between
+#  boots, and a breach_coms drive landing on sdg would have been wiped.)
 set -euo pipefail
 
-TARGET="/dev/sdg"
+TARGET="${1:-}"
+[[ -n "$TARGET" ]] || { echo "Usage: sudo bash $0 /dev/sdX" >&2; exit 1; }
 PART="${TARGET}1"
 MNT="/tmp/phoenix_usb"
-GRUB_CFG="/home/jwl247/phoenix/grub/grub.cfg"
+GRUB_CFG="$(cd "$(dirname "$0")/../grub" && pwd)/grub.cfg"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; RESET='\033[0m'
 info() { echo -e "${CYAN}[*]${RESET} $*"; }
@@ -14,6 +18,12 @@ die()  { echo -e "${RED}[!]${RESET} $*"; exit 1; }
 
 [[ $EUID -ne 0 ]] && die "Run as root: sudo bash build_now.sh"
 [[ -b "$TARGET" ]] || die "Device $TARGET not found"
+if lsblk -no LABEL "$TARGET" 2>/dev/null | grep -qi 'breach_coms'; then
+    die "$TARGET carries a breach_coms label — refusing to erase a vault drive"
+fi
+lsblk -o NAME,SIZE,LABEL,MODEL "$TARGET" 2>/dev/null || true
+read -rp "ERASE $TARGET and build the Phoenix USB? Type YES to continue: " confirm
+[[ "$confirm" == "YES" ]] || die "Aborted"
 
 info "Partitioning $TARGET ..."
 parted -s "$TARGET" mklabel gpt

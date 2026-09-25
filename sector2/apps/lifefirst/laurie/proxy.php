@@ -8,12 +8,28 @@
  */
 
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: same-origin');
+header('Cache-Control: no-store');
+// No Access-Control-Allow-Origin header: her page is same-origin, so no other
+// site's JavaScript may read these responses. ("same-origin" is not a valid
+// ACAO value — it was a no-op.)
 
 $secret = getenv('LF_API_SECRET') ?: '';
-if (!$secret) {
-    http_response_code(500);
+$laurieKey = getenv('LF_LAURIE_KEY') ?: '';
+if (!$secret || !$laurieKey) {
+    http_response_code(503);
     echo json_encode(['status' => 'error', 'message' => 'Life First is not configured yet — tell Jerry.']);
+    exit;
+}
+
+// Her page is on the public internet (Cloudflare Tunnel). Without this gate,
+// anyone who found /laurie/proxy.php could read her calendar + notifications
+// and silently dismiss them. The key rides in her private link's #fragment
+// (never sent to the server/logs), is kept in her browser, and is sent here
+// as a header. install.sh generates it and prints her link once.
+$given = $_SERVER['HTTP_X_LF_KEY'] ?? '';
+if ($given === '' || !hash_equals($laurieKey, $given)) {
+    http_response_code(401);
+    echo json_encode(['status' => 'error', 'code' => 'need_link', 'message' => 'Please open Life First from the link Jerry gave you.']);
     exit;
 }
 
@@ -40,8 +56,8 @@ switch ($op) {
         break;
     case 'acknowledge':
         $input = json_decode(file_get_contents('php://input'), true) ?: [];
-        $notificationId = $input['notification_id'] ?? null;
-        if (!$notificationId) {
+        $notificationId = filter_var($input['notification_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !$notificationId) {
             http_response_code(400);
             echo json_encode(['status' => 'error', 'message' => 'Missing notification_id.']);
             exit;

@@ -67,7 +67,7 @@ Persistent adversarial threat model. GPU drivers blacklisted. SurfShark VPN, clo
 
 ## License
 
-See `license`. Life First — `sector2/lifefirst/docs/`. REALsure — Polyform Noncommercial 1.0.0.
+See `license`. Life First — `sector2/apps/lifefirst/README.md` (the old `sector2/lifefirst/docs/` path no longer exists). REALsure — Polyform Noncommercial 1.0.0.
 
 ## Acknowledgment
 

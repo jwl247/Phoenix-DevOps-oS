@@ -40,7 +40,10 @@ class ClonepoolBackend(BackendBase):
             return self.result(False, package, "install",
                                error=f"Not found in clonepool: {package}")
         print(f"  [clonepool] found: {deb.name}")
-        print(f"  [clonepool] verifying hashes...")
+        # NOTE: these hashes are only computed and printed — they are NOT
+        # compared against any stored baseline (sidecar/D1) before the
+        # sudo dpkg -i below. Don't label it verification until it is.
+        print(f"  [clonepool] hashing (NOT verified against a baseline)...")
         h1 = sha3_512(str(deb))
         h2 = blake2b(str(deb))
         print(f"  SHA3-512 : {h1[:32]}...")

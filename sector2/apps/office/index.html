@@ -213,7 +213,7 @@ async function loadRecent(){
   const sel = $('#recent');
   sel.innerHTML = '<option value="">Recent…</option>' +
     ((r.ok && r.items) || []).slice(0,12).map(i =>
-      `<option value="${esc(i.path)}">${esc(String(i.title).slice(0,40))} · ${i.state}</option>`).join('');
+      `<option value="${esc(i.path)}">${esc(String(i.title).slice(0,40))} · ${esc(i.state)}</option>`).join('');
 }
 
 // ── new-document modal ──────────────────────────────────────────────────────

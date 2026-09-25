@@ -474,6 +474,47 @@ function flashSaved(){ const s=$('#saved'); s.classList.add('show'); clearTimeou
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function banner(kind,html){ bannerHtml=`<div class="banner ${kind}">${html}</div>`; render(); }
 
+// In-page replacement for window.prompt(). Electron does not implement
+// prompt() at all — it throws "prompt() is and will not be supported"
+// (confirmed 2026-09-25 against this app's own Electron 28 build), which
+// silently broke every button that used it: New project, Save as job,
+// Send back, and Legal hold place/release. Resolves the typed string, or
+// null on Cancel/Escape — same contract as prompt().
+function askText(message, initial){
+  return new Promise(resolve => {
+    const scrim = document.createElement('div');
+    scrim.className = 'scrim show';
+    scrim.style.zIndex = '10000';
+    const box = document.createElement('div');
+    box.className = 'modal';
+    const h = document.createElement('h3');
+    h.textContent = message;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = initial || '';
+    input.style.width = '100%';
+    const actions = document.createElement('div');
+    actions.className = 'modal-actions';
+    const cancel = document.createElement('button');
+    cancel.textContent = 'Cancel';
+    const ok = document.createElement('button');
+    ok.className = 'primary';
+    ok.textContent = 'OK';
+    actions.append(cancel, ok);
+    box.append(h, input, actions);
+    scrim.append(box);
+    document.body.append(scrim);
+    const done = v => { scrim.remove(); resolve(v); };
+    ok.addEventListener('click', () => done(input.value));
+    cancel.addEventListener('click', () => done(null));
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); done(input.value); }
+      else if (e.key === 'Escape') { e.preventDefault(); done(null); }
+    });
+    input.focus();
+  });
+}
+
 // ── date fields ──────────────────────────────────────────────────────────
 // Any field named/ending in "date" (date, inspection_date, due_date, …)
 // gets a real calendar picker; the value stored on the document is always
@@ -601,7 +642,7 @@ async function boot(){
   const w = await api.invoke('office:whoami', {});
   me = w.ok ? w : null;
   $('#who').innerHTML = me
-    ? `signed in as <b>${me.author_id.slice(0,12)}…</b> <span>via ${esc(me.via)}</span>`
+    ? `signed in as <b>${esc(me.author_id.slice(0,12))}…</b> <span>via ${esc(me.via)}</span>`
     : 'identity unavailable';
   const t = await api.invoke('office:templates', {});
   templates = (t.ok && t.templates) || [];
@@ -638,7 +679,7 @@ async function loadRecent(){
   const sel = $('#recent');
   sel.innerHTML = '<option value="">Recent…</option>' +
     ((r.ok && r.items) || []).slice(0,12).map(i =>
-      `<option value="${esc(i.path)}">${esc(String(i.title).slice(0,40))} · ${i.state}</option>`).join('');
+      `<option value="${esc(i.path)}">${esc(String(i.title).slice(0,40))} · ${esc(i.state)}</option>`).join('');
 }
 
 // ── entry modal — process first, document second ────────────────────────────
@@ -765,7 +806,7 @@ async function saveAsJob(){
   if (!doc) return;
   const filledCount = Object.values(doc.fields).filter(v => v !== null).length;
   if (!filledCount) return toast('fill in at least one field first');
-  const label = prompt('Save this as a job profile — name it (e.g. "Dave — 123 Main St reroof"):');
+  const label = await askText('Save this as a job profile — name it (e.g. "Dave — 123 Main St reroof"):');
   if (!label || !label.trim()) return;
   const fields = {};
   Object.entries(doc.fields).forEach(([k, v]) => { if (v !== null && !isDateField(k)) fields[k] = v; });
@@ -832,7 +873,7 @@ async function sign(){
   refreshCopilot(true); loadRecent();
 }
 async function reject(){
-  const reason = prompt('Send back for changes. Reason (optional):') || '';
+  const reason = await askText('Send back for changes. Reason (optional):') || '';
   const r = await api.invoke('office:reject', { document: doc, by: me && me.author_id, reason });
   if (!r.ok) return toast(r.error);
   doc = r.document; render(); flashSaved(); toast('Sent back to draft');
@@ -868,12 +909,12 @@ async function toggleLegalHold(){
   if (!identity.ok) { if (identity.error !== 'cancelled') toast(identity.error); return; }
   if (status.held) {
     if (!confirm('Release the legal hold on this document?')) return;
-    const reason = prompt('Reason for release (optional):') || '';
+    const reason = await askText('Reason for release (optional):') || '';
     const r = await api.invoke('office:legal-hold-release', { document: doc, by: identity.author_id, reason });
     if (!r.ok) return toast(r.error);
     toast('Legal hold released');
   } else {
-    const reason = prompt('Legal matter / case reference (e.g. "Smith v. Jones") — required:');
+    const reason = await askText('Legal matter / case reference (e.g. "Smith v. Jones") — required:');
     if (!reason || !reason.trim()) return toast('a reason is required to place a legal hold');
     const r = await api.invoke('office:legal-hold', { document: doc, by: identity.author_id, reason: reason.trim() });
     if (!r.ok) return toast(r.error);
@@ -1003,7 +1044,7 @@ async function loadProjectList(){
 }
 
 $('#proj-new-btn').addEventListener('click', async () => {
-  const name = prompt('Project name (e.g. "Smith Warehouse — Guthrie, OK"):');
+  const name = await askText('Project name (e.g. "Smith Warehouse — Guthrie, OK"):');
   if (!name || !name.trim()) return;
   const r = await api.invoke('office:project-new', { name: name.trim() });
   if (!r.ok) return toast(r.error || 'could not create project');

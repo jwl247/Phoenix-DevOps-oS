@@ -431,6 +431,12 @@ PYEOF
 }
 
 # ── Local custody log ─────────────────────────────────────────
+# SQL string-literal escaping for the local catalog insert below: double any
+# single quote. Filenames are attacker-influenced (Downloads auto-intake), so
+# a name like  x');DROP TABLE custody;--  must stay data, never SQL. Before
+# this, any filename containing ' also silently broke the insert (2>/dev/null).
+sql_q() { local s="${1//\'/\'\'}"; printf '%s' "${s}"; }
+
 custody_log_local() {
   local hex="$1" name="$2" action="$3" version="$4" \
         src="$5" dst="$6" state="$7" actor="$8"
@@ -445,7 +451,7 @@ CREATE TABLE IF NOT EXISTS custody (
   intaked_at TEXT DEFAULT (datetime('now'))
 );
 INSERT INTO custody (hex_id, name, action, version, source, destination, state, actor)
-VALUES ('${hex}','${name}','${action}','${version}','${src}','${dst}','${state}','${actor}');
+VALUES ('$(sql_q "${hex}")','$(sql_q "${name}")','$(sql_q "${action}")','$(sql_q "${version}")','$(sql_q "${src}")','$(sql_q "${dst}")','$(sql_q "${state}")','$(sql_q "${actor}")');
 SQL
 }
 
@@ -649,8 +655,13 @@ verify_clonepool_copy() {
   local actual_sha3
   actual_sha3=$(openssl dgst -sha3-512 -r "${filepath}" 2>/dev/null | awk '{print $1}')
   if [[ -n "${actual_sha3}" && "${actual_sha3}" == "${baseline_sha3}" ]]; then
+    # Send BOTH hashes: the worker's /validate treats a missing hash_blake2
+    # as a mismatch whenever the D1 row has a blake2 baseline, so sending
+    # sha3 alone flipped qr_valid to 0 on every successful verification.
+    local actual_blake2
+    actual_blake2=$(openssl dgst -blake2b512 -r "${filepath}" 2>/dev/null | awk '{print $1}')
     curl -s -o /dev/null -X POST -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" -H "Content-Type: application/json" \
-      -d "{\"hash_sha3\":\"${actual_sha3}\"}" "${WORKER_URL}/clonepool/${hex}/validate" 2>/dev/null
+      -d "{\"hash_sha3\":\"${actual_sha3}\",\"hash_blake2\":\"${actual_blake2}\"}" "${WORKER_URL}/clonepool/${hex}/validate" 2>/dev/null
     echo "valid"
   else
     echo "CORRUPT"

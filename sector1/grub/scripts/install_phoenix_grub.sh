@@ -16,8 +16,11 @@
 
 set -euo pipefail
 
-GRUB_DEVICE="${1:-/dev/sde}"
-GRUB_CFG_SRC="$(dirname "$0")/grub.cfg"
+# No default device: a guessed /dev/sde could be a breach_coms vault drive.
+GRUB_DEVICE="${1:-}"
+[[ -n "$GRUB_DEVICE" ]] || { echo "Usage: sudo $0 /dev/sdX" >&2; exit 1; }
+# grub.cfg lives in ../grub/ relative to this scripts/ dir
+GRUB_CFG_SRC="$(dirname "$0")/../grub/grub.cfg"
 GRUB_MOUNT="/tmp/phoenix_grub_mount"
 GRUB_DIR="$GRUB_MOUNT/boot/grub"
 

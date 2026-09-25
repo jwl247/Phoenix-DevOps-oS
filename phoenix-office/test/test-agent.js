@@ -176,6 +176,29 @@ test('sign_document tier is deviation and calls ctx.sealDocument', async () => {
     assert.strictEqual(sealed, true);
 });
 
+test('sign_document ignores the model-supplied `by` when a signer resolver is wired (audit 2026-09-25)', async () => {
+    const tools = makeTools();
+    let doc = documentLib.createDocument({ fieldNames: ['customer'], authorFingerprint: 'FP' });
+    doc = documentLib.fillField(doc, 'customer', 'Dave', 'FP').document;
+    doc = documentLib.handToClient(doc);
+    const ctx = { sealDocument: async () => ({ ok: true }), resolveSigner: async () => ({ author_id: 'a_gVERIFIED', email: 'v@example.com' }) };
+    const r = await tools.get('sign_document').execute({ by: 'Dave the client' }, { document: doc }, ctx);
+    assert.strictEqual(r.ok, true);
+    const last = r.document.history[r.document.history.length - 1];
+    assert.strictEqual(last.by, 'a_gVERIFIED');
+});
+
+test('sign_document refuses (never signs) when the signer resolver rejects — no Google sign-in', async () => {
+    const tools = makeTools();
+    let doc = documentLib.createDocument({ fieldNames: ['customer'], authorFingerprint: 'FP' });
+    doc = documentLib.fillField(doc, 'customer', 'Dave', 'FP').document;
+    doc = documentLib.handToClient(doc);
+    let sealed = false;
+    const ctx = { sealDocument: async () => { sealed = true; return { ok: true }; }, resolveSigner: async () => { throw new Error('Google sign-in required'); } };
+    await assert.rejects(() => tools.get('sign_document').execute({ by: 'FP' }, { document: doc }, ctx), /Google sign-in required/);
+    assert.strictEqual(sealed, false);
+});
+
 // ── Project Assist tools ─────────────────────────────────────────────────────
 function makeMockProjectStore() {
     const projects = new Map();

@@ -45,6 +45,10 @@ resolve_user_env() {
 
 export PHOENIX_AUTH="$(resolve_user_env PHOENIX_AUTH)"
 export PHOENIX_WORKER_URL="$(resolve_user_env PHOENIX_WORKER_URL)"
+# Cloudflare Access service token -- packages-worker is behind Access since
+# 2026-09-21; without these intake.sh's D1/R2 calls land on the login page.
+export CF_ACCESS_CLIENT_ID="$(resolve_user_env CF_ACCESS_CLIENT_ID)"
+export CF_ACCESS_CLIENT_SECRET="$(resolve_user_env CF_ACCESS_CLIENT_SECRET)"
 
 raw_pool_dir="$(resolve_user_env CLONEPOOL_DIR)"
 # Forward slashes only — a literal Windows backslash path embedded raw

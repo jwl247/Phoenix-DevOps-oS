@@ -31,9 +31,14 @@ function isAuthorized(req, env) {
 async function resolveConnection(db, id) {
   const exact = await db.prepare('SELECT * FROM connections WHERE hex = ? OR name = ? OR path = ?').bind(id, id, id).first();
   if (exact) return exact;
+  // Escape LIKE wildcards so a lookup for "frank_save" or "100%" matches
+  // literally instead of "_"/"%" acting as wildcards (and "%" alone
+  // matching an arbitrary row). Values are bound, so this is about correct
+  // matching, not SQL injection.
+  const pat = `%${String(id).replace(/[\\%_]/g, (c) => '\\' + c)}%`;
   const like = await db.prepare(
-    `SELECT * FROM connections WHERE name LIKE ? OR path LIKE ? ORDER BY LENGTH(path) ASC LIMIT 1`
-  ).bind(`%${id}%`, `%${id}%`).first();
+    `SELECT * FROM connections WHERE name LIKE ? ESCAPE '\\' OR path LIKE ? ESCAPE '\\' ORDER BY LENGTH(path) ASC LIMIT 1`
+  ).bind(pat, pat).first();
   return like || null;
 }
 
@@ -302,21 +307,21 @@ async function loadGlossary() {
   const cats = [...new Set(items.map(g => g.category).filter(Boolean))];
   const catSel = document.getElementById('g-cat');
   const curVal = catSel.value;
-  catSel.innerHTML = '<option value="">All Categories</option>' + cats.map(c => '<option value="' + c + '">' + c + '</option>').join('');
+  catSel.innerHTML = '<option value="">All Categories</option>' + cats.map(c => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join('');
   catSel.value = curVal;
 }
 
 function renderGlossaryEntry(g) {
-  return '<div class="card" id="gentry-' + g.hex + '">' +
+  return '<div class="card" id="gentry-' + esc(g.hex) + '">' +
     '<div class="row sb">' +
       '<div class="row" style="gap:8px"><b>' + esc(g.name) + '</b>' +
-      (g.state ? '<span class="badge ' + g.state + '">' + g.state + '</span>' : '') +
+      (g.state ? '<span class="badge ' + esc(g.state) + '">' + esc(g.state) + '</span>' : '') +
       (g.category ? '<span class="badge grey">' + esc(g.category) + '</span>' : '') +
       (g.platform ? '<span class="meta">' + esc(g.platform) + '</span>' : '') +
       '</div>' +
       '<div class="row" style="gap:6px">' +
-        '<button class="btn ghost" style="padding:4px 10px;font-size:.78rem" onclick="editGlossaryEntry(' + JSON.stringify(g).replace(/"/g, '&quot;') + ')">Edit</button>' +
-        '<button class="btn danger" style="padding:4px 10px;font-size:.78rem" onclick="deleteGlossaryEntry('' + esc(g.hex || g.name) + '')">Delete</button>' +
+        '<button class="btn ghost" style="padding:4px 10px;font-size:.78rem" onclick="editGlossaryEntry(' + esc(JSON.stringify(g)) + ')">Edit</button>' +
+        '<button class="btn danger" style="padding:4px 10px;font-size:.78rem" onclick="deleteGlossaryEntry(' + esc(JSON.stringify(g.hex || g.name)) + ')">Delete</button>' +
       '</div>' +
     '</div>' +
     (g.description ? '<p style="margin-top:6px;font-size:.85rem;color:var(--muted)">' + esc(g.description) + '</p>' : '') +
@@ -402,10 +407,10 @@ async function loadReviews() {
 }
 
 function renderSubmission(s) {
-  return '<div class="card" id="sub-' + s.hex + '">' +
+  return '<div class="card" id="sub-' + esc(s.hex) + '">' +
     '<div class="row sb">' +
-      '<div><b>' + esc(s.name) + '</b> <span class="badge ' + s.status + '">' + s.status + '</span></div>' +
-      '<span class="meta">' + (s.submitted_at||'').substring(0,10) + '</span>' +
+      '<div><b>' + esc(s.name) + '</b> <span class="badge ' + esc(s.status) + '">' + esc(s.status) + '</span></div>' +
+      '<span class="meta">' + esc((s.submitted_at||'').substring(0,10)) + '</span>' +
     '</div>' +
     (s.description ? '<p class="meta" style="margin-top:4px">' + esc(s.description) + '</p>' : '') +
     '<div class="row" style="margin-top:6px;gap:10px">' +
@@ -414,13 +419,13 @@ function renderSubmission(s) {
       '<span class="hex">' + esc((s.hex||'').substring(0,20)) + '...</span>' +
     '</div>' +
     '<div class="vote-row">' +
-      '<button class="btn success" style="padding:5px 12px;font-size:.8rem" onclick="castVote('' + esc(s.hex) + '','approve')">&#10003; Approve</button>' +
-      '<button class="btn danger" style="padding:5px 12px;font-size:.8rem" onclick="castVote('' + esc(s.hex) + '','reject')">&#10007; Reject</button>' +
-      '<button class="btn ghost" style="padding:5px 12px;font-size:.8rem" onclick="castVote('' + esc(s.hex) + '','abstain')">&#x25CB; Abstain</button>' +
-      '<button class="btn ghost" style="padding:5px 12px;font-size:.8rem" onclick="loadVotes('' + esc(s.hex) + '')">View Votes</button>' +
-      (s.status === 'approved' ? '<button class="btn warn" style="padding:5px 12px;font-size:.8rem" onclick="revokeArtifact('' + esc(s.hex) + '')">Revoke</button>' : '') +
+      '<button class="btn success" style="padding:5px 12px;font-size:.8rem" onclick="castVote(' + esc(JSON.stringify(s.hex)) + ',&quot;approve&quot;)">&#10003; Approve</button>' +
+      '<button class="btn danger" style="padding:5px 12px;font-size:.8rem" onclick="castVote(' + esc(JSON.stringify(s.hex)) + ',&quot;reject&quot;)">&#10007; Reject</button>' +
+      '<button class="btn ghost" style="padding:5px 12px;font-size:.8rem" onclick="castVote(' + esc(JSON.stringify(s.hex)) + ',&quot;abstain&quot;)">&#x25CB; Abstain</button>' +
+      '<button class="btn ghost" style="padding:5px 12px;font-size:.8rem" onclick="loadVotes(' + esc(JSON.stringify(s.hex)) + ')">View Votes</button>' +
+      (s.status === 'approved' ? '<button class="btn warn" style="padding:5px 12px;font-size:.8rem" onclick="revokeArtifact(' + esc(JSON.stringify(s.hex)) + ')">Revoke</button>' : '') +
     '</div>' +
-    '<div id="votes-' + s.hex + '" style="margin-top:8px"></div>' +
+    '<div id="votes-' + esc(s.hex) + '" style="margin-top:8px"></div>' +
   '</div>';
 }
 
@@ -499,7 +504,7 @@ async function loadFeed() {
       (f.revoked ? '<span class="badge black" style="margin-left:6px">revoked</span>' : '<span class="badge white" style="margin-left:6px">available</span>') +
       (f.category ? '<span class="badge grey" style="margin-left:6px">' + esc(f.category) + '</span>' : '') +
       '</div>' +
-      '<span class="meta">' + (f.advertised_at||'').substring(0,10) + '</span>' +
+      '<span class="meta">' + esc((f.advertised_at||'').substring(0,10)) + '</span>' +
     '</div>' +
     (f.description ? '<p class="meta" style="margin-top:4px">' + esc(f.description) + '</p>' : '') +
     '<div class="row" style="margin-top:6px;gap:10px">' +
@@ -527,7 +532,7 @@ async function verifyArtifact() {
   const statusColor = d.verified ? 'approved' : (d.status === 'revoked' ? 'black' : d.status === 'pending' ? 'pending' : 'rejected');
   el.innerHTML = '<div class="card">' +
     '<div class="row" style="gap:10px;margin-bottom:8px">' +
-      '<span class="badge ' + statusColor + '" style="font-size:.9rem;padding:4px 12px">' + (d.status||'unknown') + '</span>' +
+      '<span class="badge ' + statusColor + '" style="font-size:.9rem;padding:4px 12px">' + esc(d.status||'unknown') + '</span>' +
       (d.verified ? '<span style="color:var(--green)">&#10003; Verified</span>' : '<span style="color:var(--red)">&#10007; Not Verified</span>') +
     '</div>' +
     (d.name ? '<div><b>' + esc(d.name) + '</b></div>' : '') +

@@ -24,6 +24,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const https = require('https');
+const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
 const ELECTRON_DIR = path.join(__dirname, '..', 'node_modules', 'electron');
@@ -131,6 +132,23 @@ function download(url, destPath, redirects = 0) {
     });
 }
 
+// electron's own npm package ships checksums.json (SHA-256 of every release
+// zip) — and that file is itself covered by package-lock.json's integrity
+// hash. Verifying against it is what electron's normal installer
+// (@electron/get) does; this fallback skipped it, so a tampered cached zip
+// or a swapped download would have been extracted and later executed.
+function verifyElectronZip(zipPath, zipName) {
+    let checksums;
+    try { checksums = require(path.join(ELECTRON_DIR, 'checksums.json')); }
+    catch (_) { throw new Error('electron/checksums.json missing — refusing to install an unverified electron binary'); }
+    const expected = checksums[zipName];
+    if (!expected) throw new Error(`no published checksum for ${zipName} — refusing to install it unverified`);
+    const actual = crypto.createHash('sha256').update(fs.readFileSync(zipPath)).digest('hex');
+    if (actual !== expected) {
+        throw new Error(`checksum mismatch for ${zipName} (got ${actual.slice(0, 16)}…, expected ${expected.slice(0, 16)}…)`);
+    }
+}
+
 async function main() {
     const version = require(path.join(ELECTRON_DIR, 'package.json')).version;
     if (alreadyInstalled(version)) {
@@ -147,6 +165,9 @@ async function main() {
         zipPath = path.join(os.tmpdir(), zipName);
         await download(`https://github.com/electron/electron/releases/download/v${version}/${zipName}`, zipPath);
     }
+
+    verifyElectronZip(zipPath, zipName);
+    console.log('[fix-electron] checksum verified against electron/checksums.json');
 
     const distDir = path.join(ELECTRON_DIR, 'dist');
     fs.rmSync(distDir, { recursive: true, force: true });

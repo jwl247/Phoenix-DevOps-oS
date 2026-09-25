@@ -18,7 +18,8 @@
 //   GET  /whoami                       auth round-trip (Bearer PHOENIX_AUTH)
 //   POST /notify                       create + send a notification (Bearer)
 //                                      body: { doc_hex, notice }
-//   GET  /ack/:token                   counterparty acknowledges (token IS the auth)
+//   GET  /ack/:token                   confirm page (a GET alone never acknowledges)
+//   POST /ack/:token                   counterparty acknowledges (token IS the auth)
 //   GET  /author/:type/:value          canonical author_id for a credential (Bearer)
 //   POST /author/link                  link a credential to an author_id (Bearer)
 //                                      body: { author_id, credential_type, credential_value }
@@ -32,8 +33,18 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Authorization, Content-Type',
 };
 
-const RESEND_STALE_MS = 45 * 1000; // re-send once a send is older than this (cron fires every 60s)
+const RESEND_STALE_MS = 45 * 1000; // base re-send gap (cron fires every 60s)
 const MAX_LEVEL = 5;
+// Back off per level and stop after a fixed number of sends. Without this an
+// unacknowledged notice re-sent every minute forever (the 2026-09-23 test
+// notice went out ~50 times in an hour) — spam to a customer's phone and a
+// risk to the sending domain's reputation.
+// Gap before the next send, by current level: 45s, ~4m, ~19m, ~1.6h, ~7.8h.
+const RESEND_BACKOFF = 5;
+const MAX_SENDS = 12;
+function resendGapMs(level) {
+  return RESEND_STALE_MS * Math.pow(RESEND_BACKOFF, Math.max(0, (level || 1) - 1));
+}
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -197,7 +208,19 @@ async function handleNotify(req, env) {
   }, 200);
 }
 
-async function handleAck(token, env) {
+// GET only shows a confirm button; the POST acknowledges. SMS/iMessage link
+// previews and mail scanners GET every URL in a message — if GET acknowledged,
+// a preview bot would silently stop the customer's notices.
+function ackConfirmPage() {
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phoenix Office</title>
+<div style="font:16px/1.5 system-ui,sans-serif;max-width:34rem;margin:18vh auto;padding:0 1.25rem;color:#1a1a1a">
+  <p style="margin:0 0 1.25rem">Confirm you have seen the notice about your signed document. This stops the reminders.</p>
+  <form method="POST"><button type="submit" style="font:inherit;padding:.7rem 1.6rem;border:0;border-radius:.5rem;background:#1a1a1a;color:#fff">I have seen it</button></form>
+</div>`;
+}
+
+async function handleAck(token, env, method = 'GET') {
   if (!token) return err('token required', 400);
   const row = await env.PHOENIX_DB.prepare(
     'SELECT id, acknowledged_at FROM office_notifications WHERE ack_token = ?'
@@ -206,6 +229,11 @@ async function handleAck(token, env) {
   if (!row) {
     return new Response(ackPage('This link is not valid.', false), {
       status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS },
+    });
+  }
+  if (method !== 'POST' && !row.acknowledged_at) {
+    return new Response(ackConfirmPage(), {
+      status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', ...CORS },
     });
   }
   if (!row.acknowledged_at) {
@@ -276,16 +304,18 @@ function ackPage(message, ok) {
 async function runEscalation(env) {
   const cutoff = new Date(Date.now() - RESEND_STALE_MS).toISOString();
   const open = await env.PHOENIX_DB.prepare(
-    `SELECT id, ack_token, escalation_level, to_address, doc_hash, attempt_field, attempt_at
+    `SELECT id, ack_token, escalation_level, send_count, to_address, doc_hash, attempt_field, attempt_at, last_sent_at
        FROM office_notifications
       WHERE acknowledged_at IS NULL
+        AND send_count < ?
         AND (last_sent_at IS NULL OR last_sent_at < ?)
       ORDER BY last_sent_at ASC NULLS FIRST
       LIMIT 50`
-  ).bind(cutoff).all();
+  ).bind(MAX_SENDS, cutoff).all();
 
   let resent = 0;
   for (const r of open.results || []) {
+    if (r.last_sent_at && Date.now() - new Date(r.last_sent_at).getTime() < resendGapMs(r.escalation_level)) continue;
     const nextLevel = Math.min(r.escalation_level + 1, MAX_LEVEL);
     if (nextLevel !== r.escalation_level) {
       await env.PHOENIX_DB.prepare(
@@ -335,7 +365,9 @@ export default {
     if (path === '/notify' && req.method === 'POST') return handleNotify(req, env);
 
     if (path.startsWith('/ack/')) {
-      return handleAck(decodeURIComponent(path.slice('/ack/'.length)), env);
+      let token;
+      try { token = decodeURIComponent(path.slice('/ack/'.length)); } catch { token = ''; }
+      return handleAck(token, env, req.method);
     }
 
     if (path === '/author/link' && req.method === 'POST') {
