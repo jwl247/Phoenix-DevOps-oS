@@ -1,0 +1,24 @@
+{
+  "template": "proposal",
+  "label": "Proposal / bid",
+  "fields": [
+    "client_name",
+    "project_name",
+    "project_address",
+    "scope_of_work",
+    "project_type",
+    "structure_type",
+    "square_footage",
+    "steel_tonnage_estimate",
+    "erection_duration_estimate",
+    "crew_size_estimate",
+    "labor_classification",
+    "material_spec",
+    "exclusions",
+    "total_bid_amount",
+    "payment_terms",
+    "bid_valid_until",
+    "prepared_by",
+    "date"
+  ]
+}

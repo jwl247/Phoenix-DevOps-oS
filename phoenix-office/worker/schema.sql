@@ -183,3 +183,151 @@ CREATE INDEX IF NOT EXISTS idx_jobs_author ON office_jobs(author_id);
 --   wrangler d1 execute phoenix_office_db --file=schema.sql --remote
 -- (CREATE TABLE/INDEX IF NOT EXISTS — safe to re-run against a DB that
 -- already has the other tables above.)
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- PROJECT ASSIST TABLES   (2026-09-25)
+-- A construction-PM module on top of the same document engine: a project
+-- groups multiple documents (proposal, schedule, safety plan, work orders)
+-- across phases, with a guided-choice checklist engine and an append-only
+-- decision audit trail. office_jobs above is untouched — it stays the
+-- lightweight saved-autofill-profile mechanism for one-off documents;
+-- office_projects.job_id is an optional one-way seed link at creation only,
+-- not a replacement for it.
+-- ══════════════════════════════════════════════════════════════════════════════
+
+-- TABLE: office_projects
+-- The project entity. bid_factors is a JSON blob (lib/bid-factors.js is the
+-- single source of truth for what keys it holds) rather than a normalized
+-- table on purpose — the bid-influencing factor list is known to keep
+-- growing (labor-needs sub-factors especially), and a blob absorbs new
+-- factors with zero migration. Same author_id scoping as office_documents/
+-- office_jobs — no tenant_id yet, but nothing here forecloses adding one.
+CREATE TABLE IF NOT EXISTS office_projects (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id    TEXT    NOT NULL UNIQUE,        -- client-generated uuid, same idiom as office_jobs.job_id
+  author_id     TEXT    NOT NULL,
+  job_id        TEXT    DEFAULT NULL,           -- optional seed link -> office_jobs.job_id, one-way only
+  name          TEXT    NOT NULL,
+  status        TEXT    NOT NULL DEFAULT 'BID'
+                  CHECK(status IN ('BID','AWARDED','ACTIVE','COMPLETE','CANCELLED')),
+  bid_factors   TEXT    NOT NULL DEFAULT '{}',
+  counterparty  TEXT    DEFAULT NULL,           -- JSON: { phone, carrier, email }
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT    DEFAULT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_author ON office_projects(author_id);
+CREATE INDEX IF NOT EXISTS idx_projects_status ON office_projects(status);
+
+-- TABLE: office_project_phases
+-- phase_type is deliberately free text (no CHECK) so the taxonomy stays
+-- extensible without a migration per new phase name. lifecycle_stage groups
+-- phases against real PM doctrine (PMI/PMBOK process groups) — see
+-- lib/project.js's STANDARD_PHASE_TEMPLATE. Note there is no
+-- 'MONITORING_CONTROLLING' stage: PMBOK defines M&C as concurrent with
+-- Execution, not a sequential step after it, so it's represented by the
+-- checklist/decision tables below running continuously alongside every
+-- Execution-stage phase, not as its own phase row.
+CREATE TABLE IF NOT EXISTS office_project_phases (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  phase_id         TEXT    NOT NULL UNIQUE,
+  project_id       TEXT    NOT NULL,               -- FK -> office_projects.project_id
+  phase_type       TEXT    NOT NULL,
+  lifecycle_stage  TEXT    NOT NULL,               -- INITIATION | PLANNING | EXECUTION | CLOSING
+  label            TEXT    NOT NULL,
+  sequence         INTEGER NOT NULL,
+  state            TEXT    NOT NULL DEFAULT 'NOT_STARTED'
+                     CHECK(state IN ('NOT_STARTED','IN_PROGRESS','COMPLETE')),
+  estimated_cost   REAL    DEFAULT NULL,
+  actual_cost      REAL    DEFAULT NULL,
+  risk_level       TEXT    DEFAULT NULL,           -- low | medium | high — documented in code, not DB-enforced (same posture as phase_type)
+  risk_notes       TEXT    DEFAULT NULL,
+  started_at       TEXT    DEFAULT NULL,
+  completed_at     TEXT    DEFAULT NULL,
+  created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at       TEXT    DEFAULT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_phases_project ON office_project_phases(project_id);
+
+-- TABLE: office_checklist_catalog
+-- Seeded, hand-curated reference data — the "menu" a phase's checklist gets
+-- instantiated from (see worker/seed-checklist-catalog.sql). phase_type
+-- 'general' applies to any phase. source_type is the guided-choice engine's
+-- multi-source validation: OSHA/federal, Oklahoma state code, the client's
+-- own spec/contract, and general PM best practice — the app never infers
+-- compliance itself, it only surfaces which source a given item comes from.
+CREATE TABLE IF NOT EXISTS office_checklist_catalog (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  catalog_id  TEXT    NOT NULL UNIQUE,             -- stable key, e.g. 'osha-1926-501-fall-protection'
+  phase_type  TEXT    NOT NULL,
+  source_type TEXT    NOT NULL CHECK(source_type IN ('OSHA','OK_STATE','CLIENT_SPEC','PM_BEST_PRACTICE')),
+  source_ref  TEXT    DEFAULT NULL,                -- citation, e.g. '29 CFR 1926.501(b)(1)'
+  label       TEXT    NOT NULL,
+  guidance    TEXT    DEFAULT NULL,                -- what "satisfied" looks like
+  active      INTEGER NOT NULL DEFAULT 1,
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_checklist_catalog_phase_type ON office_checklist_catalog(phase_type);
+
+-- TABLE: office_phase_checklist_items
+-- One row per item instantiated onto a real phase (copied from the catalog
+-- at phase-creation time, or added ad-hoc with catalog_id NULL) — editing
+-- the catalog later never silently changes an already-in-progress project's
+-- checklist. disposition/decided_by/rationale here are the denormalized
+-- CURRENT status (fast render); office_checklist_decisions below is the
+-- real append-only history, same relationship office_documents.legal_hold
+-- has to office_legal_holds.
+CREATE TABLE IF NOT EXISTS office_phase_checklist_items (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id        TEXT    NOT NULL UNIQUE,
+  phase_id       TEXT    NOT NULL,                 -- FK -> office_project_phases.phase_id
+  catalog_id     TEXT    DEFAULT NULL,              -- FK -> office_checklist_catalog.catalog_id, NULL if ad-hoc
+  source_type    TEXT    NOT NULL CHECK(source_type IN ('OSHA','OK_STATE','CLIENT_SPEC','PM_BEST_PRACTICE')),
+  source_ref     TEXT    DEFAULT NULL,
+  label          TEXT    NOT NULL,
+  sequence       INTEGER NOT NULL DEFAULT 0,
+  disposition    TEXT    NOT NULL DEFAULT 'open' CHECK(disposition IN ('open','satisfied','not_applicable')),
+  decided_by     TEXT    DEFAULT NULL,             -- author_id
+  decided_at     TEXT    DEFAULT NULL,
+  rationale      TEXT    DEFAULT NULL,
+  linked_doc_hex TEXT    DEFAULT NULL,             -- optional pointer to office_documents.hex evidencing satisfaction
+  created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_checklist_items_phase ON office_phase_checklist_items(phase_id);
+
+-- TABLE: office_checklist_decisions
+-- APPEND-ONLY. This IS the SBA/HUBZone self-performance evidence record —
+-- who decided what, when, against which source, and why — never
+-- overwritten, same append-only posture as office_legal_holds. Every write
+-- to office_phase_checklist_items.disposition above must have a matching
+-- row here; the app enforces this as a two-write per decision, it is not
+-- DB-enforced (D1/SQLite triggers add complexity this scale doesn't need).
+CREATE TABLE IF NOT EXISTS office_checklist_decisions (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id        TEXT    NOT NULL,
+  disposition    TEXT    NOT NULL CHECK(disposition IN ('open','satisfied','not_applicable')),
+  by             TEXT    NOT NULL,                 -- author_id
+  rationale      TEXT    DEFAULT NULL,
+  linked_doc_hex TEXT    DEFAULT NULL,
+  at             TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_checklist_decisions_item ON office_checklist_decisions(item_id);
+
+-- office_documents gains three nullable columns so a document can (optionally)
+-- belong to a project/phase. Nullable FK columns, not a join table: a
+-- document belongs to at most one project at a time (a proposal is written
+-- for one project; a correction is already handled by supersedes_hex) —
+-- same idiom as the existing supersedes_hex soft-FK, not a new relationship
+-- shape. Purely additive; does not touch hex/hash_sha3/hash_blake2 or any
+-- existing tamper-evidence guarantee.
+--   wrangler d1 execute phoenix_office_db --command="ALTER TABLE office_documents ADD COLUMN project_id TEXT DEFAULT NULL" --remote
+--   wrangler d1 execute phoenix_office_db --command="ALTER TABLE office_documents ADD COLUMN phase_id TEXT DEFAULT NULL" --remote
+--   wrangler d1 execute phoenix_office_db --command="ALTER TABLE office_documents ADD COLUMN doc_role TEXT DEFAULT NULL" --remote
+--   wrangler d1 execute phoenix_office_db --file=schema.sql --remote   (picks up the 5 new tables above, all CREATE IF NOT EXISTS)
+--   wrangler d1 execute phoenix_office_db --file=worker/seed-checklist-catalog.sql --remote   (INSERT OR IGNORE, safe to re-run)
+CREATE INDEX IF NOT EXISTS idx_documents_project ON office_documents(project_id);
+CREATE INDEX IF NOT EXISTS idx_documents_phase   ON office_documents(phase_id);

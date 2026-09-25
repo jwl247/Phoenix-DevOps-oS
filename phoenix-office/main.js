@@ -34,6 +34,9 @@ const lib = {
     notify: require('./lib/notify'),
     libreoffice: require('./lib/libreoffice'),
     documentHtml: require('./lib/document-html'),
+    project: require('./lib/project'),
+    phaseHtml: require('./lib/phase-html'),
+    bidFactors: require('./lib/bid-factors'),
 };
 
 const aiProvider = require('./lib/ai-provider');
@@ -193,6 +196,82 @@ async function signAndSeal(signedDocument) {
     return sealToWorker(hex, bytes);
 }
 
+// ── Project Assist — worker client ──────────────────────────────────────────
+// One thin fetch wrapper, one place the /projects/* API shape is known —
+// both the office:project-* IPC handlers (plain UI) AND the Secretariat
+// agent tools (agent-tools.js) call through THIS SAME object, so typing
+// into the agent chat and clicking through the UI never diverge (same
+// principle as bid-factors.js being the one source of truth for the
+// question catalog itself).
+async function officeWorkerFetch(pathAndQuery, opts = {}) {
+    if (!WORKER_AUTH) return { ok: false, error: 'no worker configured (PHOENIX_OFFICE_AUTH not set)' };
+    try {
+        const res = await fetch(`${WORKER_URL.replace(/\/+$/, '')}${pathAndQuery}`, {
+            method: opts.method || 'GET',
+            headers: { Authorization: `Bearer ${WORKER_AUTH}`, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
+            body: opts.body ? JSON.stringify(opts.body) : undefined,
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) return { ok: false, error: body.message || `worker ${res.status}` };
+        return { ok: true, ...body };
+    } catch (e) { return { ok: false, error: e.message }; }
+}
+
+const projectStore = {
+    createProject: ({ name, authorId, jobId, bidFactors, counterparty }) =>
+        officeWorkerFetch('/projects', { method: 'POST', body: { name, author_id: authorId, job_id: jobId || null, bid_factors: bidFactors || {}, counterparty: counterparty || null } }),
+    listProjects: (authorId) => officeWorkerFetch(`/projects?author_id=${encodeURIComponent(authorId)}`),
+    getProject: (projectId) => officeWorkerFetch(`/projects/${encodeURIComponent(projectId)}`),
+    patchProject: (projectId, patch) => officeWorkerFetch(`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: patch }),
+    createPhases: (projectId, phases) => officeWorkerFetch(`/projects/${encodeURIComponent(projectId)}/phases`, { method: 'POST', body: { phases } }),
+    listPhases: (projectId) => officeWorkerFetch(`/projects/${encodeURIComponent(projectId)}/phases`),
+    patchPhase: (projectId, phaseId, patch) => officeWorkerFetch(`/projects/${encodeURIComponent(projectId)}/phases/${encodeURIComponent(phaseId)}`, { method: 'PATCH', body: patch }),
+    seedChecklist: (projectId, phaseId) => officeWorkerFetch(`/projects/${encodeURIComponent(projectId)}/phases/${encodeURIComponent(phaseId)}/checklist`, { method: 'POST', body: { from_catalog: true } }),
+    addChecklistItem: (projectId, phaseId, item) => officeWorkerFetch(`/projects/${encodeURIComponent(projectId)}/phases/${encodeURIComponent(phaseId)}/checklist`, { method: 'POST', body: { item } }),
+    listChecklist: (projectId, phaseId) => officeWorkerFetch(`/projects/${encodeURIComponent(projectId)}/phases/${encodeURIComponent(phaseId)}/checklist`),
+    // item_id is globally unique (worker/schema.sql) and the worker's decision/
+    // history handlers key purely off it, ignoring the project/phase segments
+    // in the URL — the '_' placeholders keep the route's REST shape consistent
+    // with the rest of this tree without needing callers to look up ids they
+    // don't otherwise need for this call.
+    decideChecklistItem: (itemId, decision) => officeWorkerFetch(`/projects/_/phases/_/checklist/${encodeURIComponent(itemId)}/decision`, { method: 'POST', body: decision }),
+    checklistItemHistory: (itemId) => officeWorkerFetch(`/projects/_/phases/_/checklist/${encodeURIComponent(itemId)}/history`),
+    searchChecklistCatalog: ({ phase_type } = {}) => officeWorkerFetch(`/checklist-catalog${phase_type ? `?phase_type=${encodeURIComponent(phase_type)}` : ''}`),
+    listProjectDocuments: (projectId, phaseId) => officeWorkerFetch(`/projects/${encodeURIComponent(projectId)}/documents${phaseId ? `?phase_id=${encodeURIComponent(phaseId)}` : ''}`),
+};
+
+// Print a completed phase — reuses the exact same ensureSoffice/convertFile
+// path exportDocumentPdf already uses above, per the plan's "zero new
+// export code" requirement. The letterhead/report HTML is the only new
+// piece (lib/phase-html.js).
+async function exportPhasePdf(projectId, phaseId) {
+    try {
+        const [project, checklist, docs] = await Promise.all([
+            projectStore.getProject(projectId),
+            projectStore.listChecklist(projectId, phaseId),
+            projectStore.listProjectDocuments(projectId, phaseId),
+        ]);
+        if (!project.ok) return { ok: false, error: `project lookup failed: ${project.error}` };
+        const phases = await projectStore.listPhases(projectId);
+        const phase = (phases.items || []).find(p => p.phase_id === phaseId);
+        if (!phase) return { ok: false, error: 'phase not found' };
+
+        const { path: sofficePath } = await lib.libreoffice.ensureSoffice({
+            workerUrl: WORKER_URL, auth: WORKER_AUTH, appDataDir: app.getPath('userData'),
+            onProgress: (received, total) => { if (mainWindow) mainWindow.webContents.send('office:export-progress', { received, total }); },
+        });
+        const html = lib.phaseHtml.renderPhaseHtml({ project, phase, checklistItems: checklist.items || [], linkedDocs: docs.items || [] });
+        const outDir = workdir();
+        const htmlPath = path.join(require('os').tmpdir(), `phoenix-office-phase-${phaseId}.html`);
+        fs.writeFileSync(htmlPath, html, 'utf8');
+        const pdfPath = await lib.libreoffice.convertFile({ sofficePath, inputPath: htmlPath, outputDir: outDir, targetFormat: 'pdf' });
+        try { fs.unlinkSync(htmlPath); } catch (_) {}
+        return { ok: true, path: pdfPath };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+}
+
 // Restricted, read-only copilot — this product runs on other people's
 // machines, so it never gets --dangerously-skip-permissions or tool access,
 // unlike the dashboard's internal "subscription" chain. Just a text answer.
@@ -272,6 +351,22 @@ app.whenReady().then(() => {
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+
+// Resolved once at startup, in the background — never blocks IPC
+// registration (identity resolution is normally fast/local, but a Google-
+// backed identity or an unreachable D1 lookup shouldn't be able to delay
+// every other handler in this app from registering). Project Assist tools
+// that need attribution (set_checklist_item, create_project, award_project)
+// read this via the () => resolvedAuthorId getter passed into
+// createAgentLoop below; it degrades to 'a_unknown' rather than throwing if
+// resolution is still pending or fails.
+let resolvedAuthorId = 'a_unknown';
+(async () => {
+    try {
+        const me = await lib.identity.resolveAuthor({ prefer: 'fingerprint', fallback: true, store: authStore() });
+        resolvedAuthorId = me.author_id;
+    } catch (_) { /* stays 'a_unknown' — agent tools still work, just without real attribution until this resolves */ }
+})();
 
 // ── IPC ──────────────────────────────────────────────────────────────────────
 function registerIpc() {
@@ -710,6 +805,92 @@ function registerIpc() {
         } catch (e) { return { ok: false, error: e.message }; }
     });
 
+    // ── Project Assist — plain-UI IPC (same projectStore the agent tools
+    // use above, so the form and the agent chat can never diverge) ─────────
+    ipcMain.handle('office:project-new', (_e, { name, bidFactors, counterparty, jobId } = {}) =>
+        projectStore.createProject({ name, authorId: resolvedAuthorId, bidFactors, counterparty, jobId }));
+    ipcMain.handle('office:project-list', () => projectStore.listProjects(resolvedAuthorId));
+    ipcMain.handle('office:project-get', (_e, { projectId } = {}) => projectStore.getProject(projectId));
+    ipcMain.handle('office:project-update', (_e, { projectId, patch } = {}) => projectStore.patchProject(projectId, patch || {}));
+
+    ipcMain.handle('office:project-set-bid-factor', async (_e, { projectId, key, value } = {}) => {
+        if (!projectId || !key) return { ok: false, error: 'projectId and key required' };
+        const current = await projectStore.getProject(projectId);
+        if (!current.ok) return current;
+        const updated = lib.bidFactors.setFactor(current.bid_factors, key, value);
+        const patched = await projectStore.patchProject(projectId, { bid_factors: updated });
+        if (!patched.ok) return patched;
+        return { ok: true, bid_factors: updated, next: lib.bidFactors.nextQuestion(updated) };
+    });
+    ipcMain.handle('office:project-next-bid-question', async (_e, { projectId } = {}) => {
+        const current = await projectStore.getProject(projectId);
+        if (!current.ok) return current;
+        return { ok: true, next: lib.bidFactors.nextQuestion(current.bid_factors) };
+    });
+
+    ipcMain.handle('office:project-phases-list', (_e, { projectId } = {}) => projectStore.listPhases(projectId));
+    ipcMain.handle('office:project-phase-create', (_e, { projectId, phases } = {}) => projectStore.createPhases(projectId, phases));
+    ipcMain.handle('office:project-phase-advance', (_e, { projectId, phaseId, state } = {}) =>
+        projectStore.patchPhase(projectId, phaseId, { state }));
+
+    // The "award" milestone in the plain UI (not routed through the agent) —
+    // same deterministic derivation the agent's award_project tool uses,
+    // via lib.project directly, so both paths produce the identical phase
+    // set for the same bid_factors.
+    ipcMain.handle('office:project-award', async (_e, { projectId } = {}) => {
+        const current = await projectStore.getProject(projectId);
+        if (!current.ok) return current;
+        if (current.status !== 'BID') return { ok: false, error: `project is ${current.status}, not BID` };
+        const phases = lib.project.deriveScheduleFromBidFactors(current.bid_factors);
+        const created = await projectStore.createPhases(projectId, phases);
+        if (!created.ok) return created;
+        for (const p of phases) await projectStore.seedChecklist(projectId, p.phase_id);
+        const patched = await projectStore.patchProject(projectId, { status: 'AWARDED' });
+        if (!patched.ok) return patched;
+        return { ok: true, phases };
+    });
+
+    ipcMain.handle('office:project-checklist-list', (_e, { projectId, phaseId } = {}) => projectStore.listChecklist(projectId, phaseId));
+    ipcMain.handle('office:project-checklist-seed', (_e, { projectId, phaseId } = {}) => projectStore.seedChecklist(projectId, phaseId));
+    ipcMain.handle('office:project-checklist-decide', (_e, { itemId, disposition, rationale, linkedDocHex } = {}) =>
+        projectStore.decideChecklistItem(itemId, { disposition, by: resolvedAuthorId, rationale, linked_doc_hex: linkedDocHex || null }));
+    ipcMain.handle('office:project-checklist-history', (_e, { itemId } = {}) => projectStore.checklistItemHistory(itemId));
+    ipcMain.handle('office:checklist-catalog', (_e, { phaseType } = {}) => projectStore.searchChecklistCatalog({ phase_type: phaseType }));
+
+    ipcMain.handle('office:project-documents-list', (_e, { projectId, phaseId } = {}) => projectStore.listProjectDocuments(projectId, phaseId));
+
+    ipcMain.handle('office:project-print-phase', async (_e, { projectId, phaseId } = {}) => {
+        const r = await exportPhasePdf(projectId, phaseId);
+        return r;
+    });
+
+    // Plain-UI path to create a project-tied document (the "Documents" tab's
+    // own "new" button, as opposed to asking Secretariat for one) — same
+    // auto-fill logic as the agent's create_project_document tool, kept as
+    // its own small function here since agent-tools.js can't reach into
+    // main.js's project (the current project object) directly.
+    ipcMain.handle('office:project-document-new', async (_e, { project, template, phaseId } = {}) => {
+        const t = listTemplates().find(x => x.template === template);
+        if (!t) return { ok: false, error: `unknown template: ${template}` };
+        let doc = lib.document.createDocument({ fieldNames: t.fields.slice(), counterparty: project?.counterparty || null });
+        doc.project_id = project?.project_id || null;
+        doc.phase_id = phaseId || null;
+        doc.doc_role = template;
+        if ('project_name' in doc.fields && project?.name) {
+            const r = lib.document.fillField(doc, 'project_name', project.name, doc.author_fingerprint);
+            if (r.allowed) doc = r.document;
+        }
+        if (phaseId && 'phase_breakdown' in doc.fields) {
+            const phasesRes = await projectStore.listPhases(project.project_id);
+            if (phasesRes.ok) {
+                const breakdown = (phasesRes.items || []).map(p => `${p.label} (${p.lifecycle_stage}) — est. ${p.estimated_duration_weeks || '?'} wk`).join('\n');
+                const r = lib.document.fillField(doc, 'phase_breakdown', breakdown, doc.author_fingerprint);
+                if (r.allowed) doc = r.document;
+            }
+        }
+        return { ok: true, document: doc };
+    });
+
     ipcMain.handle('office:copilot', async (_e, { document } = {}) => {
         const fieldLines = Object.entries(document.fields || {})
             .map(([k, v]) => `  ${k}: ${v === null ? '(empty)' : JSON.stringify(v)}`).join('\n');
@@ -753,12 +934,18 @@ function registerIpc() {
         aiComplete: aiProvider.complete,
         sealDocument: signAndSeal,
         exportPdf: exportDocumentPdf,
+        projectStore,
+        printPhase: exportPhasePdf,
+        authorId: () => resolvedAuthorId,
     });
 
-    ipcMain.handle('office:agent-message', async (_e, { document, message } = {}) => {
+    ipcMain.handle('office:agent-message', async (_e, { document, project, message } = {}) => {
         if (!message) return { ok: false, error: 'message required' };
-        if (!agentSession) agentSession = agentLoop.newSession(document || null);
-        else if (document) agentSession.document = document;
+        if (!agentSession) agentSession = agentLoop.newSession(document || null, project || null);
+        else {
+            if (document) agentSession.document = document;
+            if (project) agentSession.project = project;
+        }
         try { return { ok: true, ...(await agentLoop.runTurn(agentSession, message)) }; }
         catch (e) { return { ok: false, error: e.message }; }
     });

@@ -1,0 +1,19 @@
+{
+  "template": "safety-plan",
+  "label": "Site safety plan",
+  "fields": [
+    "project_name",
+    "project_address",
+    "competent_person",
+    "fall_protection_method",
+    "ppe_requirements",
+    "crane_lift_plan_ref",
+    "site_hazards",
+    "osha_1926_subpart_references",
+    "emergency_contact",
+    "emergency_procedures",
+    "training_required",
+    "prepared_by",
+    "date"
+  ]
+}

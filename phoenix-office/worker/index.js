@@ -54,7 +54,7 @@
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
   'Access-Control-Allow-Headers': 'Authorization, Content-Type',
 };
 
@@ -288,6 +288,7 @@ function genJobId() {
   crypto.getRandomValues(b);
   return Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
 }
+const genId = genJobId; // same shape, generic name for project/phase/checklist-item ids
 
 async function handleListJobs(req, env) {
   if (!isAuthorized(req, env)) return err('unauthorized', 401);
@@ -384,14 +385,22 @@ function upsertDocumentRecord(env, hex, doc) {
   const cp = doc.counterparty || {};
   const hash = doc.hash || {};
   const title = deriveTitle(fields);
+  // project_id/phase_id/doc_role: optional, present only when the document
+  // was created via create_project_document (Project Assist) — additive,
+  // same soft-tagging idiom as supersedes_hex. A plain standalone document
+  // (work order, invoice, etc. made outside a project) leaves these NULL.
   return env.OFFICE_DB.prepare(
     `INSERT INTO office_documents
        (hex, b58, state, author_id, counterparty_phone, counterparty_carrier, counterparty_email,
-        hash_sha3, hash_blake2, supersedes_hex, title, signed_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        hash_sha3, hash_blake2, supersedes_hex, title, signed_at, created_at, updated_at,
+        project_id, phase_id, doc_role)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(hex) DO UPDATE SET
        state = excluded.state, hash_sha3 = excluded.hash_sha3, hash_blake2 = excluded.hash_blake2,
-       title = excluded.title, signed_at = excluded.signed_at, updated_at = excluded.updated_at`
+       title = excluded.title, signed_at = excluded.signed_at, updated_at = excluded.updated_at,
+       project_id = COALESCE(excluded.project_id, office_documents.project_id),
+       phase_id = COALESCE(excluded.phase_id, office_documents.phase_id),
+       doc_role = COALESCE(excluded.doc_role, office_documents.doc_role)`
   ).bind(
     hex, null, doc.state || 'DRAFT',
     (doc.history && doc.history[0] && doc.history[0].by) || 'unknown',
@@ -399,7 +408,8 @@ function upsertDocumentRecord(env, hex, doc) {
     hash.sha3 || null, hash.blake2 || null,
     doc.supersedes_hex || null, title,
     doc.signed_at || null,
-    now, now
+    now, now,
+    doc.project_id || null, doc.phase_id || null, doc.doc_role || null
   ).run();
 }
 
@@ -583,6 +593,331 @@ async function handleLegalHoldHistory(hex, req, env) {
   return json({ ok: true, events: rows.results || [] });
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// PROJECT ASSIST — projects, phases, guided-choice checklist engine.
+// See phoenix-office/worker/schema.sql for table shapes and the design
+// rationale (bid_factors as JSON, phase_type left open, the append-only
+// office_checklist_decisions audit trail). Segment-based dispatch
+// (routeProjects below) rather than the startsWith/endsWith chains used
+// elsewhere in this file — the nesting here (project -> phase -> checklist
+// item -> decision) gets unreadable that way past 2 levels.
+// ══════════════════════════════════════════════════════════════════════════
+
+async function handleCreateProject(req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  let body;
+  try { body = await req.json(); } catch { return err('body must be JSON', 400); }
+  const { author_id, name, bid_factors, counterparty, job_id } = body || {};
+  if (!author_id) return err('author_id required', 400);
+  if (!name || !String(name).trim()) return err('name required', 400);
+  const projectId = (body.project_id && String(body.project_id)) || genId();
+  const now = new Date().toISOString();
+  await env.OFFICE_DB.prepare(
+    `INSERT INTO office_projects (project_id, author_id, job_id, name, status, bid_factors, counterparty, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'BID', ?, ?, ?, ?)
+     ON CONFLICT(project_id) DO UPDATE SET
+       name = excluded.name, bid_factors = excluded.bid_factors, counterparty = excluded.counterparty, updated_at = excluded.updated_at`
+  ).bind(
+    projectId, author_id, job_id || null, String(name).trim(),
+    JSON.stringify(bid_factors || {}), counterparty ? JSON.stringify(counterparty) : null,
+    now, now
+  ).run();
+  return json({ ok: true, project_id: projectId, name: String(name).trim() });
+}
+
+async function handleListProjects(req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  const url = new URL(req.url);
+  const authorId = url.searchParams.get('author_id');
+  if (!authorId) return err('author_id required', 400);
+  const rows = await env.OFFICE_DB.prepare(
+    'SELECT project_id, job_id, name, status, bid_factors, counterparty, created_at, updated_at FROM office_projects WHERE author_id = ? ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 200'
+  ).bind(authorId).all();
+  const items = (rows.results || []).map(r => ({
+    ...r, bid_factors: JSON.parse(r.bid_factors || '{}'),
+    counterparty: r.counterparty ? JSON.parse(r.counterparty) : null,
+  }));
+  return json({ ok: true, items });
+}
+
+// Aggregate compliance/safety/cost/risk into one consultation_summary block,
+// computed fresh on every fetch (small dataset per project — no caching
+// needed). This is the "justify our role" surface: not a separate report,
+// riding along on the normal project-fetch call.
+async function computeConsultationSummary(projectId, env) {
+  const bySource = await env.OFFICE_DB.prepare(
+    `SELECT ci.source_type,
+            SUM(CASE WHEN ci.disposition = 'satisfied' THEN 1 ELSE 0 END) AS satisfied,
+            COUNT(*) AS total
+       FROM office_phase_checklist_items ci
+       JOIN office_project_phases p ON p.phase_id = ci.phase_id
+      WHERE p.project_id = ?
+      GROUP BY ci.source_type`
+  ).bind(projectId).all();
+
+  const compliance = {};
+  for (const row of bySource.results || []) {
+    compliance[row.source_type] = { satisfied: row.satisfied, total: row.total };
+  }
+  const oshaOpen = await env.OFFICE_DB.prepare(
+    `SELECT COUNT(*) AS n FROM office_phase_checklist_items ci
+       JOIN office_project_phases p ON p.phase_id = ci.phase_id
+      WHERE p.project_id = ? AND ci.source_type = 'OSHA' AND ci.disposition = 'open'`
+  ).bind(projectId).first();
+
+  const costs = await env.OFFICE_DB.prepare(
+    `SELECT COALESCE(SUM(estimated_cost),0) AS est, COALESCE(SUM(actual_cost),0) AS act,
+            SUM(CASE WHEN actual_cost IS NOT NULL AND estimated_cost IS NOT NULL AND actual_cost > estimated_cost THEN 1 ELSE 0 END) AS over_budget
+       FROM office_project_phases WHERE project_id = ?`
+  ).bind(projectId).first();
+
+  const risk = await env.OFFICE_DB.prepare(
+    `SELECT phase_type, label, risk_level FROM office_project_phases
+      WHERE project_id = ? AND risk_level IS NOT NULL
+      ORDER BY CASE risk_level WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END DESC`
+  ).bind(projectId).all();
+  const riskRows = risk.results || [];
+
+  return {
+    compliance,
+    safety: { open_osha_items: (oshaOpen && oshaOpen.n) || 0, status: (oshaOpen && oshaOpen.n) > 0 ? 'attention_needed' : 'clear' },
+    cost: { estimated_total: costs?.est ?? 0, actual_total: costs?.act ?? 0, phases_over_budget: costs?.over_budget ?? 0 },
+    risk: { highest_phase_risk: riskRows[0]?.risk_level || null, flagged_phases: riskRows.filter(r => r.risk_level !== 'low').map(r => r.label) },
+  };
+}
+
+async function handleGetProject(projectId, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  const row = await env.OFFICE_DB.prepare('SELECT * FROM office_projects WHERE project_id = ?').bind(projectId).first();
+  if (!row) return err('not found', 404);
+  const consultation_summary = await computeConsultationSummary(projectId, env);
+  return json({
+    ok: true,
+    ...row,
+    bid_factors: JSON.parse(row.bid_factors || '{}'),
+    counterparty: row.counterparty ? JSON.parse(row.counterparty) : null,
+    consultation_summary,
+  });
+}
+
+async function handlePatchProject(projectId, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  let body;
+  try { body = await req.json(); } catch { return err('body must be JSON', 400); }
+  const existing = await env.OFFICE_DB.prepare('SELECT project_id FROM office_projects WHERE project_id = ?').bind(projectId).first();
+  if (!existing) return err('not found', 404);
+  const now = new Date().toISOString();
+  await env.OFFICE_DB.prepare(
+    `UPDATE office_projects SET
+       name = COALESCE(?, name),
+       status = COALESCE(?, status),
+       bid_factors = COALESCE(?, bid_factors),
+       updated_at = ?
+     WHERE project_id = ?`
+  ).bind(
+    body.name ? String(body.name).trim() : null,
+    body.status || null,
+    body.bid_factors ? JSON.stringify(body.bid_factors) : null,
+    now, projectId
+  ).run();
+  return json({ ok: true, project_id: projectId });
+}
+
+async function handleCreatePhases(projectId, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  let body;
+  try { body = await req.json(); } catch { return err('body must be JSON', 400); }
+  const phases = Array.isArray(body?.phases) ? body.phases : (body?.phase_type ? [body] : null);
+  if (!phases || !phases.length) return err('phases (array) or a single phase object required', 400);
+  const now = new Date().toISOString();
+  // Sequential awaits, not .batch() — keeps this exercisable against the
+  // test suite's plain mock D1 (no batch() there), and phase counts per
+  // project are small (8-ish) so there's no real performance reason to
+  // prefer batching here.
+  for (const p of phases) {
+    await env.OFFICE_DB.prepare(
+      `INSERT INTO office_project_phases
+         (phase_id, project_id, phase_type, lifecycle_stage, label, sequence, state, estimated_cost, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'NOT_STARTED', ?, ?, ?)`
+    ).bind(
+      p.phase_id || genId(), projectId, p.phase_type, p.lifecycle_stage || 'EXECUTION',
+      p.label || p.phase_type, p.sequence || 0, p.estimated_cost ?? null, now, now
+    ).run();
+  }
+  return json({ ok: true, project_id: projectId, created: phases.length });
+}
+
+async function handleListPhases(projectId, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  const rows = await env.OFFICE_DB.prepare(
+    'SELECT * FROM office_project_phases WHERE project_id = ? ORDER BY sequence ASC'
+  ).bind(projectId).all();
+  return json({ ok: true, items: rows.results || [] });
+}
+
+async function handlePatchPhase(projectId, phaseId, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  let body;
+  try { body = await req.json(); } catch { return err('body must be JSON', 400); }
+  const existing = await env.OFFICE_DB.prepare('SELECT * FROM office_project_phases WHERE phase_id = ? AND project_id = ?').bind(phaseId, projectId).first();
+  if (!existing) return err('not found', 404);
+  const now = new Date().toISOString();
+  const startedAt = (body.state === 'IN_PROGRESS' && !existing.started_at) ? now : existing.started_at;
+  const completedAt = body.state === 'COMPLETE' ? now : existing.completed_at;
+  await env.OFFICE_DB.prepare(
+    `UPDATE office_project_phases SET
+       state = COALESCE(?, state), estimated_cost = COALESCE(?, estimated_cost), actual_cost = COALESCE(?, actual_cost),
+       risk_level = COALESCE(?, risk_level), risk_notes = COALESCE(?, risk_notes),
+       started_at = ?, completed_at = ?, updated_at = ?
+     WHERE phase_id = ?`
+  ).bind(
+    body.state || null, body.estimated_cost ?? null, body.actual_cost ?? null,
+    body.risk_level || null, body.risk_notes || null,
+    startedAt, completedAt, now, phaseId
+  ).run();
+  return json({ ok: true, phase_id: phaseId });
+}
+
+// Instantiate checklist items onto a real phase — either the full matching
+// catalog (from_catalog:true, the normal path when a phase is created) or
+// one ad-hoc item. Copies catalog rows rather than referencing them live,
+// so a later catalog edit never silently changes an in-progress checklist.
+async function handleSeedOrAddChecklistItem(projectId, phaseId, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  let body;
+  try { body = await req.json(); } catch { return err('body must be JSON', 400); }
+  const phase = await env.OFFICE_DB.prepare('SELECT phase_type FROM office_project_phases WHERE phase_id = ? AND project_id = ?').bind(phaseId, projectId).first();
+  if (!phase) return err('phase not found', 404);
+  const now = new Date().toISOString();
+
+  if (body.from_catalog) {
+    const catalog = await env.OFFICE_DB.prepare(
+      'SELECT * FROM office_checklist_catalog WHERE (phase_type = ? OR phase_type = ?) AND active = 1'
+    ).bind(phase.phase_type, 'general').all();
+    const rows = catalog.results || [];
+    if (!rows.length) return json({ ok: true, created: 0 });
+    for (let i = 0; i < rows.length; i++) {
+      const c = rows[i];
+      await env.OFFICE_DB.prepare(
+        `INSERT INTO office_phase_checklist_items (item_id, phase_id, catalog_id, source_type, source_ref, label, sequence, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(genId(), phaseId, c.catalog_id, c.source_type, c.source_ref, c.label, i, now).run();
+    }
+    return json({ ok: true, created: rows.length });
+  }
+
+  const item = body.item;
+  if (!item || !item.label || !item.source_type) return err('item (with label, source_type) required when not seeding from_catalog', 400);
+  const itemId = genId();
+  await env.OFFICE_DB.prepare(
+    `INSERT INTO office_phase_checklist_items (item_id, phase_id, catalog_id, source_type, source_ref, label, sequence, created_at)
+     VALUES (?, ?, NULL, ?, ?, ?, ?, ?)`
+  ).bind(itemId, phaseId, item.source_type, item.source_ref || null, item.label, item.sequence || 0, now).run();
+  return json({ ok: true, item_id: itemId, created: 1 });
+}
+
+async function handleListChecklist(projectId, phaseId, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  const rows = await env.OFFICE_DB.prepare(
+    'SELECT * FROM office_phase_checklist_items WHERE phase_id = ? ORDER BY sequence ASC'
+  ).bind(phaseId).all();
+  return json({ ok: true, items: rows.results || [] });
+}
+
+// The guided-choice determination itself — a two-write, same pattern as
+// legal-hold place/release: update the fast-render current-status row AND
+// append to the immutable audit trail. This IS the SBA/HUBZone evidence.
+async function handleChecklistDecision(itemId, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  let body;
+  try { body = await req.json(); } catch { return err('body must be JSON', 400); }
+  const { disposition, by, rationale, linked_doc_hex } = body || {};
+  if (!['satisfied', 'not_applicable', 'open'].includes(disposition)) return err('disposition must be satisfied, not_applicable, or open', 400);
+  if (!by) return err('by (author_id) required', 400);
+  if (!rationale || !String(rationale).trim()) return err('rationale required — a determination must be documented', 400);
+
+  const item = await env.OFFICE_DB.prepare('SELECT item_id FROM office_phase_checklist_items WHERE item_id = ?').bind(itemId).first();
+  if (!item) return err('checklist item not found', 404);
+
+  const now = new Date().toISOString();
+  await env.OFFICE_DB.prepare(
+    `UPDATE office_phase_checklist_items SET disposition = ?, decided_by = ?, decided_at = ?, rationale = ?, linked_doc_hex = ? WHERE item_id = ?`
+  ).bind(disposition, by, now, rationale.trim(), linked_doc_hex || null, itemId).run();
+  await env.OFFICE_DB.prepare(
+    `INSERT INTO office_checklist_decisions (item_id, disposition, by, rationale, linked_doc_hex, at) VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(itemId, disposition, by, rationale.trim(), linked_doc_hex || null, now).run();
+
+  return json({ ok: true, item_id: itemId, disposition });
+}
+
+async function handleChecklistItemHistory(itemId, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  const rows = await env.OFFICE_DB.prepare(
+    'SELECT disposition, by, rationale, linked_doc_hex, at FROM office_checklist_decisions WHERE item_id = ? ORDER BY at ASC'
+  ).bind(itemId).all();
+  return json({ ok: true, events: rows.results || [] });
+}
+
+async function handleChecklistCatalog(req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  const url = new URL(req.url);
+  const phaseType = url.searchParams.get('phase_type');
+  const q = phaseType
+    ? env.OFFICE_DB.prepare('SELECT * FROM office_checklist_catalog WHERE active = 1 AND (phase_type = ? OR phase_type = ?) ORDER BY phase_type').bind(phaseType, 'general')
+    : env.OFFICE_DB.prepare('SELECT * FROM office_checklist_catalog WHERE active = 1 ORDER BY phase_type');
+  const rows = await q.all();
+  return json({ ok: true, items: rows.results || [] });
+}
+
+async function handleProjectDocuments(projectId, req, env) {
+  if (!isAuthorized(req, env)) return err('unauthorized', 401);
+  const url = new URL(req.url);
+  const phaseId = url.searchParams.get('phase_id');
+  const q = phaseId
+    ? env.OFFICE_DB.prepare('SELECT hex, b58, state, title, doc_role, phase_id, signed_at, created_at FROM office_documents WHERE project_id = ? AND phase_id = ? ORDER BY created_at DESC').bind(projectId, phaseId)
+    : env.OFFICE_DB.prepare('SELECT hex, b58, state, title, doc_role, phase_id, signed_at, created_at FROM office_documents WHERE project_id = ? ORDER BY created_at DESC').bind(projectId);
+  const rows = await q.all();
+  return json({ ok: true, items: rows.results || [] });
+}
+
+// Segment-based dispatch for the whole /projects/... tree — see the section
+// comment above for why (the nesting is 5-7 segments deep in places).
+async function routeProjects(path, req, env) {
+  const seg = path.split('/').filter(Boolean); // 'projects', ':id', 'phases', ...
+
+  if (seg.length === 1) {
+    if (req.method === 'GET') return handleListProjects(req, env);
+    if (req.method === 'POST') return handleCreateProject(req, env);
+  }
+  if (seg.length === 2) {
+    if (req.method === 'GET') return handleGetProject(decodeURIComponent(seg[1]), req, env);
+    if (req.method === 'PATCH') return handlePatchProject(decodeURIComponent(seg[1]), req, env);
+  }
+  if (seg.length === 3 && seg[2] === 'phases') {
+    if (req.method === 'GET') return handleListPhases(decodeURIComponent(seg[1]), req, env);
+    if (req.method === 'POST') return handleCreatePhases(decodeURIComponent(seg[1]), req, env);
+  }
+  if (seg.length === 3 && seg[2] === 'documents' && req.method === 'GET') {
+    return handleProjectDocuments(decodeURIComponent(seg[1]), req, env);
+  }
+  if (seg.length === 4 && seg[2] === 'phases' && req.method === 'PATCH') {
+    return handlePatchPhase(decodeURIComponent(seg[1]), decodeURIComponent(seg[3]), req, env);
+  }
+  if (seg.length === 5 && seg[2] === 'phases' && seg[4] === 'checklist') {
+    const [, projectId, , phaseId] = seg;
+    if (req.method === 'GET') return handleListChecklist(decodeURIComponent(projectId), decodeURIComponent(phaseId), req, env);
+    if (req.method === 'POST') return handleSeedOrAddChecklistItem(decodeURIComponent(projectId), decodeURIComponent(phaseId), req, env);
+  }
+  if (seg.length === 7 && seg[2] === 'phases' && seg[4] === 'checklist' && seg[6] === 'decision' && req.method === 'POST') {
+    return handleChecklistDecision(decodeURIComponent(seg[5]), req, env);
+  }
+  if (seg.length === 7 && seg[2] === 'phases' && seg[4] === 'checklist' && seg[6] === 'history' && req.method === 'GET') {
+    return handleChecklistItemHistory(decodeURIComponent(seg[5]), req, env);
+  }
+
+  return err('not found', 404);
+}
+
 function ackPage(message, ok) {
   return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Phoenix Office</title>
@@ -691,6 +1026,9 @@ export default {
 
     if (path === '/documents' && req.method === 'GET') return handleListDocuments(req, env);
     if (path === '/legal-holds' && req.method === 'GET') return handleLegalHoldsReport(req, env);
+
+    if (path === '/checklist-catalog' && req.method === 'GET') return handleChecklistCatalog(req, env);
+    if (path === '/projects' || path.startsWith('/projects/')) return routeProjects(path, req, env);
 
     if (path.startsWith('/documents/') && path.endsWith('/history')) {
       const hex = decodeURIComponent(path.slice('/documents/'.length, -'/history'.length));

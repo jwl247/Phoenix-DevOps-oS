@@ -19,6 +19,12 @@ const CHANNELS = new Set([
   'office:convert', 'office:convert-formats',
   'office:apps', 'office:launch-app',
   'office:agent-message', 'office:agent-confirm', 'office:agent-reset',
+  'office:project-new', 'office:project-list', 'office:project-get', 'office:project-update',
+  'office:project-set-bid-factor', 'office:project-next-bid-question',
+  'office:project-phases-list', 'office:project-phase-create', 'office:project-phase-advance', 'office:project-award',
+  'office:project-checklist-list', 'office:project-checklist-seed', 'office:project-checklist-decide', 'office:project-checklist-history',
+  'office:checklist-catalog',
+  'office:project-documents-list', 'office:project-document-new', 'office:project-print-phase',
 ]);
 
 const EVENTS = new Set(['office:export-progress']);

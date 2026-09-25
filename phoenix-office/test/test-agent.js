@@ -12,6 +12,7 @@ const { createAgentTools } = require('../lib/agent-tools');
 const { createAgentLoop, parseModelReply } = require('../lib/agent-loop');
 const { renderDocumentHtml } = require('../lib/document-html');
 const documentLib = require('../lib/document');
+const projectLib = require('../lib/project');
 const fileFormat = require('../lib/file-format');
 
 const tests = [];
@@ -60,7 +61,7 @@ test('tryAnthropic resolves with text + via when a key is set and the call succe
 // ── agent-tools.js ─────────────────────────────────────────────────────────
 function makeTools(overrides = {}) {
     return createAgentTools({
-        lib: { document: documentLib },
+        lib: { document: documentLib, project: projectLib },
         listTemplates: overrides.listTemplates || (() => [
             { template: 'work-order', label: 'Work Order', fields: ['customer', 'description', 'total'] },
         ]),
@@ -73,18 +74,25 @@ test('agent tool catalog only exposes the intended tools, correctly tiered', () 
     const tools = makeTools();
     const names = tools.list.map(t => t.name).sort();
     assert.deepStrictEqual(names, [
-        'draft_field', 'export_pdf', 'fill_field', 'hand_to_client',
-        'new_document', 'search_templates', 'search_workspace', 'sign_document',
+        'advance_phase', 'award_project', 'check_phase_checklist', 'create_project',
+        'create_project_document', 'draft_checklist_rationale', 'draft_field', 'export_pdf',
+        'fill_field', 'hand_to_client', 'new_document', 'open_project', 'print_phase',
+        'search_checklist_catalog', 'search_templates', 'search_workspace', 'set_bid_factor',
+        'set_checklist_item', 'sign_document',
     ]);
     const tierOf = n => tools.get(n).tier;
-    ['search_workspace', 'search_templates', 'new_document', 'draft_field', 'fill_field', 'export_pdf']
+    ['search_workspace', 'search_templates', 'new_document', 'draft_field', 'fill_field', 'export_pdf',
+        'create_project', 'open_project', 'set_bid_factor', 'create_project_document',
+        'check_phase_checklist', 'search_checklist_catalog', 'draft_checklist_rationale', 'print_phase']
         .forEach(n => assert.strictEqual(tierOf(n), 'base', `${n} should be base tier`));
-    ['hand_to_client', 'sign_document'].forEach(n => assert.strictEqual(tierOf(n), 'deviation', `${n} should be deviation tier`));
+    ['hand_to_client', 'sign_document', 'advance_phase', 'set_checklist_item', 'award_project']
+        .forEach(n => assert.strictEqual(tierOf(n), 'deviation', `${n} should be deviation tier`));
 });
 
 test('never-exposed actions are simply absent from the catalog', () => {
     const tools = makeTools();
-    ['delete_document', 'edit_signed_document', 'run_shell', 'send_notification', 'bypass_fill_once']
+    ['delete_document', 'edit_signed_document', 'run_shell', 'send_notification', 'bypass_fill_once',
+        'delete_project', 'ai_decides_compliance', 'bypass_checklist']
         .forEach(n => assert.strictEqual(tools.get(n), undefined, `${n} must not exist as a tool`));
 });
 
@@ -166,6 +174,136 @@ test('sign_document tier is deviation and calls ctx.sealDocument', async () => {
     assert.strictEqual(r.ok, true);
     assert.strictEqual(r.document.state, 'SIGNED');
     assert.strictEqual(sealed, true);
+});
+
+// ── Project Assist tools ─────────────────────────────────────────────────────
+function makeMockProjectStore() {
+    const projects = new Map();
+    const checklists = new Map(); // phase_id -> items[]
+    const decisions = [];
+    return {
+        calls: { createPhases: [], seedChecklist: [] },
+        store: { projects, checklists, decisions },
+        async createProject({ name, authorId, jobId }) {
+            const project_id = `proj_${projects.size + 1}`;
+            projects.set(project_id, { project_id, author_id: authorId, job_id: jobId, name, status: 'BID', bid_factors: {}, counterparty: null });
+            return { ok: true, project_id };
+        },
+        async getProject(id) {
+            const p = projects.get(id);
+            if (!p) return { ok: false, error: 'not found' };
+            return { ok: true, ...p };
+        },
+        async patchProject(id, patch) {
+            const p = projects.get(id);
+            if (!p) return { ok: false, error: 'not found' };
+            Object.assign(p, patch);
+            return { ok: true };
+        },
+        async createPhases(id, phases) {
+            this.calls.createPhases.push({ id, phases });
+            for (const p of phases) checklists.set(p.phase_id, []);
+            return { ok: true, created: phases.length };
+        },
+        async seedChecklist(id, phaseId) {
+            this.calls.seedChecklist.push({ id, phaseId });
+            checklists.set(phaseId, [{ item_id: `item_${phaseId}_1`, label: 'PPE on site', source_type: 'OSHA', disposition: 'open' }]);
+            return { ok: true, created: 1 };
+        },
+        async listChecklist(_id, phaseId) {
+            return { ok: true, items: checklists.get(phaseId) || [] };
+        },
+        async searchChecklistCatalog() {
+            return { ok: true, items: [{ catalog_id: 'x', phase_type: 'erection', source_type: 'OSHA', label: 'Fall protection plan' }] };
+        },
+        async decideChecklistItem(itemId, decision) {
+            decisions.push({ itemId, ...decision });
+            return { ok: true };
+        },
+        async patchPhase() { return { ok: true }; },
+    };
+}
+
+test('create_project starts a new project and open_project loads it back', async () => {
+    const tools = makeTools();
+    const projectStore = makeMockProjectStore();
+    const ctx = { projectStore, authorId: 'a_test' };
+    const r1 = await tools.get('create_project').execute({ name: 'Smith Warehouse' }, {}, ctx);
+    assert.strictEqual(r1.ok, true);
+    assert.strictEqual(r1.project.name, 'Smith Warehouse');
+    assert.strictEqual(r1.project.status, 'BID');
+
+    const r2 = await tools.get('open_project').execute({ project_id: r1.project.project_id }, {}, ctx);
+    assert.strictEqual(r2.ok, true);
+    assert.strictEqual(r2.project.project_id, r1.project.project_id);
+});
+
+test('set_bid_factor merges the answer and returns the next unanswered question', async () => {
+    const tools = makeTools();
+    const projectStore = makeMockProjectStore();
+    const ctx = { projectStore, authorId: 'a_test' };
+    const created = await tools.get('create_project').execute({ name: 'Test Job' }, {}, ctx);
+    const state = { project: created.project };
+
+    const r = await tools.get('set_bid_factor').execute({ key: 'project_type', value: 'commercial' }, state, ctx);
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.project.bid_factors.project_type, 'commercial');
+    assert.ok(r.data.next && r.data.next.key !== 'project_type', 'should advance past the just-answered question');
+});
+
+test('create_project_document auto-fills project_name and tags project/phase ids, never invents other fields', async () => {
+    const tools = makeTools({
+        listTemplates: () => [{ template: 'proposal', label: 'Proposal', fields: ['project_name', 'scope_of_work'] }],
+    });
+    const state = { project: { project_id: 'proj_1', name: 'Smith Warehouse', counterparty: null, phases: [] } };
+    const r = await tools.get('create_project_document').execute({ template: 'proposal', phase_id: 'phase_1' }, state, {});
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.document.fields.project_name, 'Smith Warehouse');
+    assert.strictEqual(r.document.fields.scope_of_work, null, 'unfillable field must stay null, never guessed');
+    assert.strictEqual(r.document.project_id, 'proj_1');
+    assert.strictEqual(r.document.phase_id, 'phase_1');
+    assert.strictEqual(r.document.doc_role, 'proposal');
+});
+
+test('award_project derives phases from PM-doctrine template, seeds each checklist, and flips status to AWARDED', async () => {
+    const tools = makeTools();
+    const projectStore = makeMockProjectStore();
+    const ctx = { projectStore, authorId: 'a_test' };
+    const created = await tools.get('create_project').execute({ name: 'Test Job' }, {}, ctx);
+    const state = { project: created.project };
+
+    const r = await tools.get('award_project').execute({}, state, ctx);
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.project.status, 'AWARDED');
+    assert.strictEqual(r.data.phases.length, projectLib.STANDARD_PHASE_TEMPLATE.length);
+    assert.strictEqual(projectStore.calls.seedChecklist.length, projectLib.STANDARD_PHASE_TEMPLATE.length, 'every phase should get its checklist seeded');
+    // No 'MONITORING_CONTROLLING' lifecycle stage — deliberate PMBOK-doctrine call (concurrent with Execution, not a phase of its own)
+    assert.ok(!r.data.phases.some(p => p.lifecycle_stage === 'MONITORING_CONTROLLING'));
+});
+
+test('award_project refuses to re-award an already-awarded project', async () => {
+    const tools = makeTools();
+    const state = { project: { project_id: 'proj_1', status: 'AWARDED', bid_factors: {} } };
+    const r = await tools.get('award_project').execute({}, state, { projectStore: makeMockProjectStore(), authorId: 'a_test' });
+    assert.strictEqual(r.ok, false);
+});
+
+test('set_checklist_item requires a rationale — no silent/blank determinations', async () => {
+    const tools = makeTools();
+    const r = await tools.get('set_checklist_item').execute({ item_id: 'item_1', disposition: 'satisfied' }, {}, { projectStore: makeMockProjectStore(), authorId: 'a_test' });
+    assert.strictEqual(r.ok, false);
+});
+
+test('set_checklist_item records a real determination with attribution', async () => {
+    const tools = makeTools();
+    const projectStore = makeMockProjectStore();
+    const r = await tools.get('set_checklist_item').execute(
+        { item_id: 'item_1', disposition: 'satisfied', rationale: 'Verified PPE on site by site walk 9/25.' },
+        {}, { projectStore, authorId: 'a_field_super' }
+    );
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(projectStore.store.decisions.length, 1);
+    assert.strictEqual(projectStore.store.decisions[0].by, 'a_field_super');
 });
 
 // ── agent-loop.js ──────────────────────────────────────────────────────────

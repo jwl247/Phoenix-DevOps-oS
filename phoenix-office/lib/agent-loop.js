@@ -35,6 +35,19 @@ function docSummary(doc) {
     return `state=${doc.state}, fields ${filled}/${entries.length} filled, counterparty=${doc.counterparty ? 'set' : 'none'}`;
 }
 
+// Project Assist: a project is optional context alongside a document, not a
+// replacement for it — one conversation should move fluidly between
+// project-level actions (bid factors, phases, checklist) and document-level
+// ones (fill, sign) without losing either.
+function projectSummary(project) {
+    if (!project) return 'none — no project open yet';
+    const bf = project.bid_factors || {};
+    const flatten = (o, prefix = '') => Object.entries(o || {}).flatMap(([k, v]) =>
+        (v && typeof v === 'object' && !Array.isArray(v)) ? flatten(v, `${prefix}${k}.`) : [[`${prefix}${k}`, v]]);
+    const answered = flatten(bf).filter(([, v]) => v !== null && v !== undefined && v !== '').length;
+    return `"${project.name}" [${project.status}] — ${answered} bid factor(s) answered, ${project.phases ? project.phases.length + ' phase(s)' : 'no phases yet'}`;
+}
+
 function trimForModel(data) {
     if (Array.isArray(data) && data.length > 10) return { truncated: true, count: data.length, sample: data.slice(0, 10) };
     return data;
@@ -60,14 +73,14 @@ function parseModelReply(text) {
     return { malformed: true, raw: cleaned };
 }
 
-function createAgentLoop({ tools, aiComplete, persona, sealDocument, exportPdf }) {
+function createAgentLoop({ tools, aiComplete, persona, sealDocument, exportPdf, projectStore, printPhase, authorId }) {
     const SYSTEM_PERSONA = persona || DEFAULT_PERSONA;
 
-    function newSession(document) {
-        return { modelMessages: [], transcript: [], document: document || null, pending: null, lastToolData: null };
+    function newSession(document, project) {
+        return { modelMessages: [], transcript: [], document: document || null, project: project || null, pending: null, lastToolData: null };
     }
 
-    function systemPrompt(doc) {
+    function systemPrompt(doc, project) {
         return [
             SYSTEM_PERSONA,
             '',
@@ -79,6 +92,7 @@ function createAgentLoop({ tools, aiComplete, persona, sealDocument, exportPdf }
             tools.catalogForPrompt(),
             '',
             `Current document: ${docSummary(doc)}`,
+            `Current project: ${projectSummary(project)}`,
         ].join('\n');
     }
 
@@ -87,11 +101,16 @@ function createAgentLoop({ tools, aiComplete, persona, sealDocument, exportPdf }
         if (!tool) return { ok: false, message: `unknown tool: ${name}` };
         let result;
         try {
-            result = await tool.execute(args || {}, session, { sealDocument, exportPdf });
+            // authorId may be a plain string or a () => string getter — a
+            // getter lets the caller resolve identity asynchronously at app
+            // startup without blocking IPC registration on it (see main.js).
+            const resolvedAuthorId = typeof authorId === 'function' ? authorId() : authorId;
+            result = await tool.execute(args || {}, session, { sealDocument, exportPdf, projectStore, printPhase, authorId: resolvedAuthorId });
         } catch (e) {
             result = { ok: false, message: e.message };
         }
         if (result && result.document) session.document = result.document;
+        if (result && result.project) session.project = result.project;
         session.transcript.push({ role: 'tool', tool: name, args, result: { ok: result.ok, message: result.message } });
         session.modelMessages.push({
             role: 'user',
@@ -108,7 +127,7 @@ function createAgentLoop({ tools, aiComplete, persona, sealDocument, exportPdf }
 
     async function drive(session) {
         for (let i = 0; i < MAX_STEPS; i++) {
-            const sys = systemPrompt(session.document);
+            const sys = systemPrompt(session.document, session.project);
             const messages = session.modelMessages.slice(-MAX_HISTORY);
             let replyText, via;
             try {
@@ -116,14 +135,14 @@ function createAgentLoop({ tools, aiComplete, persona, sealDocument, exportPdf }
                 replyText = r.text; via = r.via;
             } catch (e) {
                 session.transcript.push({ role: 'assistant', content: `offline — ${e.message}` });
-                return { state: 'error', message: e.message, document: session.document, transcript: session.transcript, lastToolData: session.lastToolData };
+                return { state: 'error', message: e.message, document: session.document, project: session.project, transcript: session.transcript, lastToolData: session.lastToolData };
             }
             session.modelMessages.push({ role: 'assistant', content: replyText });
             const parsed = parseModelReply(replyText);
 
             if (parsed.final) {
                 session.transcript.push({ role: 'assistant', content: parsed.final, via });
-                return { state: 'done', message: parsed.final, document: session.document, transcript: session.transcript, via, lastToolData: session.lastToolData };
+                return { state: 'done', message: parsed.final, document: session.document, project: session.project, transcript: session.transcript, via, lastToolData: session.lastToolData };
             }
 
             const tool = tools.get(parsed.tool);
@@ -134,12 +153,12 @@ function createAgentLoop({ tools, aiComplete, persona, sealDocument, exportPdf }
             if (tool.tier === 'deviation') {
                 session.pending = { toolName: parsed.tool, args: parsed.args || {} };
                 session.transcript.push({ role: 'confirm', tool: parsed.tool, args: parsed.args || {} });
-                return { state: 'confirm', pending: session.pending, document: session.document, transcript: session.transcript, via, lastToolData: session.lastToolData };
+                return { state: 'confirm', pending: session.pending, document: session.document, project: session.project, transcript: session.transcript, via, lastToolData: session.lastToolData };
             }
             await runTool(session, parsed.tool, parsed.args || {});
             // loop continues — the tool result is now in modelMessages for the next completion
         }
-        return { state: 'error', message: `stalled after ${MAX_STEPS} steps without a final answer`, document: session.document, transcript: session.transcript, lastToolData: session.lastToolData };
+        return { state: 'error', message: `stalled after ${MAX_STEPS} steps without a final answer`, document: session.document, project: session.project, transcript: session.transcript, lastToolData: session.lastToolData };
     }
 
     async function runTurn(session, userMessage) {
@@ -165,4 +184,4 @@ function createAgentLoop({ tools, aiComplete, persona, sealDocument, exportPdf }
     return { newSession, runTurn, resolveConfirm, DEFAULT_PERSONA: SYSTEM_PERSONA };
 }
 
-module.exports = { createAgentLoop, DEFAULT_PERSONA, docSummary, parseModelReply };
+module.exports = { createAgentLoop, DEFAULT_PERSONA, docSummary, projectSummary, parseModelReply };

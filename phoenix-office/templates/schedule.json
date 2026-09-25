@@ -1,0 +1,15 @@
+{
+  "template": "schedule",
+  "label": "Master schedule",
+  "fields": [
+    "project_name",
+    "overall_start_date",
+    "overall_target_completion",
+    "phase_breakdown",
+    "weather_contingency_days",
+    "key_milestones",
+    "long_lead_materials",
+    "prepared_by",
+    "date"
+  ]
+}

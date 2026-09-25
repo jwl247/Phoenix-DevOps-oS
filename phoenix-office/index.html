@@ -178,6 +178,54 @@
     background:var(--accent-soft); border-bottom:1px solid #a9c7de; color:#1d4566; font-size:12px; }
   .lo-banner.show { display:flex; }
   .lo-banner button { margin-left:auto; }
+
+  /* ── Project Assist ─────────────────────────────────────────────────────── */
+  #project-view { flex:1; display:grid; grid-template-columns:220px 1.35fr 1fr; grid-template-rows:1fr auto;
+    overflow:hidden; background:var(--canvas); }
+  #project-view.hidden-view { display:none; }
+  main.hidden-view { display:none; }
+  .proj-rail { grid-row:1; background:var(--surface); border-right:1px solid var(--line); overflow-y:auto; padding:10px; }
+  .proj-rail h4 { margin:4px 6px 8px; font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-dim); }
+  .proj-rail button.proj-item { display:block; width:100%; text-align:left; margin-bottom:6px; padding:8px 10px; font-weight:500; }
+  .proj-rail button.proj-item.sel { border-color:var(--accent); background:var(--accent-soft); }
+  .proj-main { grid-row:1; background:var(--paper); border-right:1px solid var(--line); overflow-y:auto; padding:16px; }
+  .proj-side { grid-row:1; background:var(--surface); overflow-y:auto; padding:16px; }
+  .proj-header { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .proj-header h2 { margin:0; font-size:18px; }
+  .badge.BID { color:var(--draft); border-color:var(--draft); }
+  .badge.AWARDED, .badge.ACTIVE { color:var(--accent); border-color:var(--accent); }
+  .badge.COMPLETE { color:var(--signed); border-color:var(--signed); }
+  .badge.CANCELLED { color:var(--bad); border-color:var(--bad); }
+  .proj-tabs { display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid var(--line); }
+  .proj-tabs button { border:none; border-bottom:2px solid transparent; border-radius:0; background:none;
+    padding:8px 4px; margin-right:16px; color:var(--ink-dim); }
+  .proj-tabs button.sel { color:var(--ink); border-bottom-color:var(--accent); font-weight:700; }
+  .proj-tabs button:hover:not(:disabled) { background:none; color:var(--ink); }
+  .bidq { max-width:420px; }
+  .bidq .qlabel { font-weight:600; margin-bottom:8px; }
+  .phase-card { background:var(--paper); border:1px solid var(--line); border-radius:4px; padding:12px 14px; margin-bottom:10px; }
+  .phase-card .ph-top { display:flex; align-items:center; gap:10px; }
+  .phase-card .ph-name { font-weight:700; flex:1; }
+  .phase-card .ph-meta { font-size:11px; color:var(--ink-dim); margin-top:2px; }
+  .phase-state { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.4px;
+    padding:2px 8px; border-radius:3px; border:1px solid; }
+  .phase-state.NOT_STARTED { color:var(--draft); border-color:var(--draft); }
+  .phase-state.IN_PROGRESS { color:var(--warn); border-color:var(--warn); }
+  .phase-state.COMPLETE { color:var(--signed); border-color:var(--signed); }
+  .checklist-item { border-top:1px solid var(--line); padding:8px 0; font-size:12px; }
+  .cl-source { font-size:9px; font-weight:700; text-transform:uppercase; padding:1px 6px; border-radius:3px;
+    background:var(--accent-soft); color:var(--accent); margin-right:6px; }
+  .cl-disp { font-weight:700; }
+  .cl-disp.satisfied { color:var(--ok); } .cl-disp.open { color:var(--bad); } .cl-disp.not_applicable { color:var(--ink-dim); }
+  .cl-decide { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
+  .cl-decide select, .cl-decide input { font:inherit; font-size:12px; }
+  .cl-decide input { flex:1; min-width:160px; }
+  .consultation-panel { grid-column:1 / -1; grid-row:2; background:var(--ink); color:#eee;
+    padding:12px 20px; display:flex; gap:28px; align-items:flex-start; font-size:12px; flex-wrap:wrap; }
+  .consultation-panel .cp-block b { display:block; font-size:10px; text-transform:uppercase; letter-spacing:.5px;
+    color:#9aa; margin-bottom:4px; }
+  .consultation-panel .cp-title { font-weight:700; font-size:13px; color:#fff; margin-right:10px; align-self:center; }
+  .cp-warn { color:var(--warn); font-weight:700; } .cp-ok { color:#7fd6a0; font-weight:700; }
 </style>
 </head>
 <body>
@@ -186,6 +234,7 @@
   <span class="brand">Phoenix Office<small id="doc-title"></small></span>
   <span id="badge" class="badge DRAFT" hidden>DRAFT</span>
   <span class="saved" id="saved">autosaved</span>
+  <button id="btn-back-office" hidden>&larr; Office</button>
   <span class="spacer"></span>
   <span class="who" id="who">…</span>
   <select id="recent" title="Recent documents"><option value="">Recent…</option></select>
@@ -252,6 +301,38 @@
     </div>
   </section>
 </main>
+
+<!-- Project Assist — its own screen, not squeezed into the single-document
+     two-pane view above (that view's model is tightly document-centric —
+     fields/state/counterparty/signature — a project spans many documents
+     across phases, so it gets a real parallel surface, entered from its own
+     "What are you opening?" card, same seam Phoenix's own template flow
+     already uses). -->
+<section id="project-view" class="hidden-view">
+  <div class="proj-rail">
+    <h4>Projects</h4>
+    <button class="primary" id="proj-new-btn" style="width:100%;margin-bottom:10px">+ New project</button>
+    <div id="proj-list"></div>
+  </div>
+  <div class="proj-main" id="proj-main">
+    <p class="muted">Pick a project on the left, or start a new one.</p>
+  </div>
+  <div class="proj-side pane right" style="margin:0">
+    <h2 style="margin:0">Ask Secretariat</h2>
+    <div class="kitt-bar" id="pj-kitt-bar"><div class="beam"></div></div>
+    <div class="agent-status" id="pj-agent-status">idle</div>
+    <div class="agent-log" id="pj-agent-log"><span class="muted">"start a project for the Smith warehouse", "what's the foundation checklist", "draft a proposal"…</span></div>
+    <div id="pj-agent-confirm-box"></div>
+    <div class="agent-input-row">
+      <input id="pj-agent-input" placeholder="Talk to Secretariat…" autocomplete="off">
+      <button class="primary" id="pj-agent-send">Send</button>
+    </div>
+  </div>
+  <div class="consultation-panel" id="consultation-panel">
+    <span class="cp-title">Project Oversight Record</span>
+    <span class="muted">Open a project to see its compliance, safety, cost, and risk standing.</span>
+  </div>
+</section>
 
 <!-- Entry modal — process first, document second -->
 <div class="scrim" id="scrim">
@@ -577,7 +658,10 @@ function openModal(){
   const phoenixCard =
     `<button class="tpl" data-app="phoenix"><div class="n">Phoenix</div>
      <div class="f">tamper-evident work orders, invoices, records</div></button>`;
-  $('#app-grid').innerHTML = appCards + phoenixCard;
+  const projectAssistCard =
+    `<button class="tpl" data-app="project-assist"><div class="n">Project Assist</div>
+     <div class="f">bid, schedule, and track a real construction project</div></button>`;
+  $('#app-grid').innerHTML = appCards + phoenixCard + projectAssistCard;
 
   $('#app-grid').querySelectorAll('button[data-app]').forEach(b => b.addEventListener('click', async () => {
     const which = b.dataset.app;
@@ -587,6 +671,11 @@ function openModal(){
       $('#phoenix-steps').hidden = false;
       $('#m-create').hidden = false;
       openPhoenixTemplates();
+      return;
+    }
+    if (which === 'project-assist') {
+      closeModal();
+      openProjectView();
       return;
     }
     closeModal();
@@ -878,6 +967,335 @@ async function runCopilot(){
   const r = await api.invoke('office:copilot', { document: doc });
   out.textContent = r.ok ? (r.suggestions || 'No suggestions right now.') : ('· ' + r.error);
 }
+
+// ── Project Assist ───────────────────────────────────────────────────────────
+let currentProject = null, projList = [], activeProjTab = 'bid', expandedPhase = null, checklistCache = {};
+
+function openProjectView(){
+  $('main').classList.add('hidden-view');
+  $('#project-view').classList.remove('hidden-view');
+  $('#btn-back-office').hidden = false;
+  // Both chat panes share ONE agent session/transcript (main.js) — that's
+  // deliberate (one conversation moves fluidly between document- and
+  // project-level actions), but each pane only renders transcript entries
+  // from the point it was opened, so switching views doesn't dump the
+  // other pane's whole history into this one.
+  pjAgentTranscriptLen = agentTranscriptLen;
+  loadProjectList();
+}
+function closeProjectView(){
+  $('#project-view').classList.add('hidden-view');
+  $('main').classList.remove('hidden-view');
+  $('#btn-back-office').hidden = true;
+  agentTranscriptLen = pjAgentTranscriptLen;
+}
+$('#btn-back-office').addEventListener('click', closeProjectView);
+
+async function loadProjectList(){
+  const r = await api.invoke('office:project-list', {});
+  projList = (r.ok && r.items) || [];
+  $('#proj-list').innerHTML = projList.map(p =>
+    `<button class="proj-item${currentProject && currentProject.project_id === p.project_id ? ' sel' : ''}" data-pid="${esc(p.project_id)}">
+       <div>${esc(p.name)}</div><div class="ph-meta">${esc(p.status)}</div></button>`).join('')
+    || '<p class="muted" style="font-size:12px">No projects yet.</p>';
+  $('#proj-list').querySelectorAll('button[data-pid]').forEach(b =>
+    b.addEventListener('click', () => selectProject(b.dataset.pid)));
+}
+
+$('#proj-new-btn').addEventListener('click', async () => {
+  const name = prompt('Project name (e.g. "Smith Warehouse — Guthrie, OK"):');
+  if (!name || !name.trim()) return;
+  const r = await api.invoke('office:project-new', { name: name.trim() });
+  if (!r.ok) return toast(r.error || 'could not create project');
+  await loadProjectList();
+  selectProject(r.project_id);
+});
+
+async function selectProject(projectId){
+  const r = await api.invoke('office:project-get', { projectId });
+  if (!r.ok) return toast(r.error || 'project not found');
+  currentProject = r;
+  activeProjTab = 'bid';
+  expandedPhase = null;
+  checklistCache = {};
+  $('#proj-list').querySelectorAll('button[data-pid]').forEach(b => b.classList.toggle('sel', b.dataset.pid === projectId));
+  renderProjectMain();
+  renderConsultationPanel();
+}
+
+function projTabBtn(id, label){
+  return `<button class="${activeProjTab === id ? 'sel' : ''}" data-tab="${id}">${esc(label)}</button>`;
+}
+
+function renderProjectMain(){
+  const p = currentProject;
+  if (!p) { $('#proj-main').innerHTML = '<p class="muted">Pick a project on the left, or start a new one.</p>'; return; }
+  $('#proj-main').innerHTML = `
+    <div class="proj-header">
+      <h2>${esc(p.name)}</h2>
+      <span class="badge ${esc(p.status)}">${esc(p.status)}</span>
+    </div>
+    <div class="proj-tabs">
+      ${projTabBtn('bid', 'Bid Factors')}
+      ${projTabBtn('phases', 'Phases')}
+      ${projTabBtn('documents', 'Documents')}
+    </div>
+    <div id="proj-tab-body"></div>
+  `;
+  $('#proj-main').querySelectorAll('.proj-tabs button').forEach(b =>
+    b.addEventListener('click', () => { activeProjTab = b.dataset.tab; renderProjectMain(); }));
+  if (activeProjTab === 'bid') renderBidFactorsTab();
+  else if (activeProjTab === 'phases') renderPhasesTab();
+  else renderDocumentsTab();
+}
+
+// ── Bid Factors tab — the anticipatory Q&A: one question at a time, exactly
+// what bid-factors.js's nextQuestion() returns, never a static form. ──────────
+async function renderBidFactorsTab(){
+  const p = currentProject;
+  const body = $('#proj-tab-body');
+  const r = await api.invoke('office:project-next-bid-question', { projectId: p.project_id });
+  const next = r.ok ? r.next : null;
+
+  if (!next) {
+    body.innerHTML = `<div class="bidq">
+      <p class="muted">All bid factors answered.</p>
+      ${p.status === 'BID' ? '<button class="primary" id="btn-award">Award project &amp; generate schedule</button>' : `<p class="muted">Project is ${esc(p.status)}.</p>`}
+    </div>`;
+    if (p.status === 'BID') $('#btn-award').addEventListener('click', async () => {
+      const ar = await api.invoke('office:project-award', { projectId: p.project_id });
+      if (!ar.ok) return toast(ar.error || 'award failed');
+      toast(`Awarded — ${ar.phases.length} phases scheduled`);
+      await selectProject(p.project_id);
+      activeProjTab = 'phases';
+      renderProjectMain();
+    });
+    return;
+  }
+
+  let inputHtml;
+  if (next.type === 'select') inputHtml = `<select id="bidq-input">${next.options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}</select>`;
+  else if (next.type === 'boolean') inputHtml = `<select id="bidq-input"><option value="true">Yes</option><option value="false">No</option></select>`;
+  else inputHtml = `<input id="bidq-input" type="${next.type === 'number' ? 'number' : 'text'}" autofocus>`;
+
+  body.innerHTML = `<div class="bidq">
+    <div class="qlabel">${esc(next.label)}</div>
+    <div class="row">${inputHtml}<button class="primary" id="bidq-submit">Next</button></div>
+  </div>`;
+  $('#bidq-submit').addEventListener('click', async () => {
+    const el = $('#bidq-input');
+    let value = el.value;
+    if (next.type === 'number') value = Number(value);
+    if (next.type === 'boolean') value = value === 'true';
+    if (value === '' || value == null) return toast('enter a value first');
+    const sr = await api.invoke('office:project-set-bid-factor', { projectId: p.project_id, key: next.key, value });
+    if (!sr.ok) return toast(sr.error || 'save failed');
+    currentProject.bid_factors = sr.bid_factors;
+    renderBidFactorsTab();
+  });
+}
+
+// ── Phases tab ───────────────────────────────────────────────────────────────
+async function renderPhasesTab(){
+  const p = currentProject;
+  const body = $('#proj-tab-body');
+  const r = await api.invoke('office:project-phases-list', { projectId: p.project_id });
+  const phases = (r.ok && r.items) || [];
+  if (!phases.length) { body.innerHTML = '<p class="muted">No phases yet — answer all bid factors, then award the project.</p>'; return; }
+
+  body.innerHTML = phases.map(ph => `
+    <div class="phase-card">
+      <div class="ph-top">
+        <span class="ph-name">${esc(ph.label)}</span>
+        <span class="phase-state ${esc(ph.state)}">${esc(ph.state.replace('_',' '))}</span>
+      </div>
+      <div class="ph-meta">${esc(ph.lifecycle_stage)}${ph.estimated_duration_weeks ? ` — est. ${esc(ph.estimated_duration_weeks)} wk` : ''}</div>
+      <div class="row" style="margin-top:8px">
+        <button data-expand="${esc(ph.phase_id)}">${expandedPhase === ph.phase_id ? 'Hide checklist' : 'Checklist'}</button>
+        ${ph.state !== 'IN_PROGRESS' && ph.state !== 'COMPLETE' ? `<button data-advance="${esc(ph.phase_id)}" data-to="IN_PROGRESS">Start</button>` : ''}
+        ${ph.state === 'IN_PROGRESS' ? `<button data-advance="${esc(ph.phase_id)}" data-to="COMPLETE">Mark complete</button>` : ''}
+        ${ph.state === 'COMPLETE' ? `<button data-print="${esc(ph.phase_id)}">Print completed phase</button>` : ''}
+      </div>
+      <div id="checklist-${esc(ph.phase_id)}"></div>
+    </div>
+  `).join('');
+
+  body.querySelectorAll('button[data-expand]').forEach(b => b.addEventListener('click', async () => {
+    const pid = b.dataset.expand;
+    expandedPhase = expandedPhase === pid ? null : pid;
+    renderPhasesTab();
+    if (expandedPhase) renderChecklist(pid);
+  }));
+  body.querySelectorAll('button[data-advance]').forEach(b => b.addEventListener('click', async () => {
+    const r = await api.invoke('office:project-phase-advance', { projectId: p.project_id, phaseId: b.dataset.advance, state: b.dataset.to });
+    if (!r.ok) return toast(r.error || 'update failed');
+    renderPhasesTab();
+  }));
+  body.querySelectorAll('button[data-print]').forEach(b => b.addEventListener('click', async () => {
+    toast('printing…');
+    const r = await api.invoke('office:project-print-phase', { projectId: p.project_id, phaseId: b.dataset.print });
+    toast(r.ok ? `exported to ${r.path}` : (r.error || 'print failed'));
+  }));
+
+  if (expandedPhase) renderChecklist(expandedPhase);
+}
+
+const SOURCE_LABELS = { OSHA: 'OSHA/Federal', OK_STATE: 'Oklahoma State', CLIENT_SPEC: 'Client Spec', PM_BEST_PRACTICE: 'PM Best Practice' };
+
+async function renderChecklist(phaseId){
+  const el = $('#checklist-' + phaseId);
+  if (!el) return;
+  const p = currentProject;
+  let items = checklistCache[phaseId];
+  if (!items) {
+    const r = await api.invoke('office:project-checklist-list', { projectId: p.project_id, phaseId });
+    items = (r.ok && r.items) || [];
+    checklistCache[phaseId] = items;
+  }
+  if (!items.length) {
+    el.innerHTML = `<p class="muted" style="margin-top:8px">No checklist yet. <button data-seed="${esc(phaseId)}">Seed from catalog</button></p>`;
+    const seedBtn = el.querySelector('button[data-seed]');
+    if (seedBtn) seedBtn.addEventListener('click', async () => {
+      await api.invoke('office:project-checklist-seed', { projectId: p.project_id, phaseId });
+      delete checklistCache[phaseId];
+      renderChecklist(phaseId);
+    });
+    return;
+  }
+  el.innerHTML = items.map(it => `
+    <div class="checklist-item">
+      <span class="cl-source">${esc(SOURCE_LABELS[it.source_type] || it.source_type)}</span>
+      ${esc(it.label)} — <span class="cl-disp ${esc(it.disposition)}">${esc(it.disposition)}</span>
+      ${it.rationale ? `<div class="muted" style="margin-top:2px">${esc(it.rationale)} — ${esc(it.decided_by || '')}</div>` : ''}
+      <div class="cl-decide">
+        <select data-disp="${esc(it.item_id)}">
+          <option value="satisfied"${it.disposition === 'satisfied' ? ' selected' : ''}>Satisfied</option>
+          <option value="not_applicable"${it.disposition === 'not_applicable' ? ' selected' : ''}>Not applicable</option>
+          <option value="open"${it.disposition === 'open' ? ' selected' : ''}>Open</option>
+        </select>
+        <input data-rationale="${esc(it.item_id)}" placeholder="Rationale (required)" value="${esc(it.rationale || '')}">
+        <button data-decide="${esc(it.item_id)}">Save</button>
+      </div>
+    </div>
+  `).join('');
+  el.querySelectorAll('button[data-decide]').forEach(b => b.addEventListener('click', async () => {
+    const itemId = b.dataset.decide;
+    const disposition = el.querySelector(`select[data-disp="${itemId}"]`).value;
+    const rationale = el.querySelector(`input[data-rationale="${itemId}"]`).value.trim();
+    if (!rationale) return toast('rationale required — a determination must be documented');
+    const r = await api.invoke('office:project-checklist-decide', { itemId, disposition, rationale });
+    if (!r.ok) return toast(r.error || 'save failed');
+    delete checklistCache[phaseId];
+    renderChecklist(phaseId);
+    renderConsultationPanel();
+  }));
+}
+
+// ── Documents tab ────────────────────────────────────────────────────────────
+async function renderDocumentsTab(){
+  const p = currentProject;
+  const body = $('#proj-tab-body');
+  const r = await api.invoke('office:project-documents-list', { projectId: p.project_id });
+  const docs = (r.ok && r.items) || [];
+  const tplOptions = templates.map(t => `<option value="${esc(t.template)}">${esc(t.label)}</option>`).join('');
+  body.innerHTML = `
+    <div class="row" style="margin-bottom:12px">
+      <select id="pd-template">${tplOptions}</select>
+      <button class="primary" id="pd-new">+ New document for this project</button>
+    </div>
+    ${docs.length ? docs.map(d => `<div class="ref-item"><div class="name">${esc(d.title || d.hex)} — ${esc(d.state)}</div></div>`).join('')
+      : '<p class="muted">No documents yet.</p>'}
+  `;
+  $('#pd-new').addEventListener('click', async () => {
+    const template = $('#pd-template').value;
+    const r = await api.invoke('office:project-document-new', { project: currentProject, template });
+    if (!r.ok) return toast(r.error || 'could not create document');
+    doc = r.document;
+    closeProjectView();
+    render();
+  });
+}
+
+// ── Consultation panel — the "justify our role" surface, always visible ─────
+function renderConsultationPanel(){
+  const el = $('#consultation-panel');
+  const s = currentProject && currentProject.consultation_summary;
+  if (!s) { el.innerHTML = '<span class="cp-title">Project Oversight Record</span><span class="muted">Open a project to see its compliance, safety, cost, and risk standing.</span>'; return; }
+  const compliance = Object.entries(s.compliance || {}).map(([k, v]) =>
+    `${esc(SOURCE_LABELS[k] || k)}: ${v.satisfied}/${v.total}`).join(' · ') || 'none yet';
+  el.innerHTML = `
+    <span class="cp-title">Project Oversight Record</span>
+    <div class="cp-block"><b>Compliance</b>${esc(compliance)}</div>
+    <div class="cp-block"><b>Safety</b><span class="${s.safety.status === 'attention_needed' ? 'cp-warn' : 'cp-ok'}">${s.safety.status === 'attention_needed' ? `${s.safety.open_osha_items} OSHA item(s) open` : 'clear'}</span></div>
+    <div class="cp-block"><b>Cost</b>est. $${esc(s.cost.estimated_total)} / actual $${esc(s.cost.actual_total)}${s.cost.phases_over_budget ? ` — <span class="cp-warn">${s.cost.phases_over_budget} phase(s) over budget</span>` : ''}</div>
+    <div class="cp-block"><b>Risk</b>${s.risk.highest_phase_risk ? `<span class="cp-warn">${esc(s.risk.highest_phase_risk)}</span> — ${esc((s.risk.flagged_phases || []).join(', ') || 'none flagged')}` : 'none flagged'}</div>
+  `;
+}
+
+// ── Project-side Secretariat chat — same agent, same tool catalog, just
+// carrying `project` instead of/alongside `document` (agent-loop.js). ───────
+let pjAgentTranscriptLen = 0, pjAgentBusy = false;
+function pjSetKitt(state, statusText){
+  $('#pj-kitt-bar').className = 'kitt-bar' + (state ? ' ' + state : '');
+  if (statusText) $('#pj-agent-status').innerHTML = statusText;
+}
+function pjAgentLine(role, text){
+  const log = $('#pj-agent-log');
+  if (log.querySelector('.muted') && !log.querySelector('.agent-line')) log.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'agent-line ' + role;
+  div.innerHTML = `<div class="who">${esc(role)}</div><div class="bubble">${esc(text)}</div>`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+function pjRenderTranscript(transcript){
+  if (!transcript) return;
+  for (; pjAgentTranscriptLen < transcript.length; pjAgentTranscriptLen++) {
+    const t = transcript[pjAgentTranscriptLen];
+    if (t.role === 'user') pjAgentLine('user', t.content);
+    else if (t.role === 'assistant') pjAgentLine('assistant', t.content + (t.via ? `  [${t.via}]` : ''));
+    else if (t.role === 'tool') pjAgentLine('tool', `${t.tool} → ${t.result.ok ? 'ok' : 'failed'}: ${t.result.message}`);
+    else if (t.role === 'system') pjAgentLine('tool', t.content);
+  }
+}
+function pjRenderConfirm(pending){
+  const box = $('#pj-agent-confirm-box');
+  if (!pending) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="agent-confirm">
+    <div>Secretariat wants to run <b>${esc(pending.toolName)}</b> — a real operational change.</div>
+    <div class="what">${esc(JSON.stringify(pending.args || {}))}</div>
+    <div class="row"><button class="primary" id="pj-agent-approve">Approve</button><button id="pj-agent-deny">Deny</button></div>
+  </div>`;
+  $('#pj-agent-approve').addEventListener('click', () => pjAgentConfirm(true));
+  $('#pj-agent-deny').addEventListener('click', () => pjAgentConfirm(false));
+}
+function pjHandleAgentResult(r){
+  pjAgentBusy = false;
+  if (!r.ok) { pjSetKitt('', 'error'); pjAgentLine('error', r.error || 'unknown error'); return; }
+  if (r.project) { currentProject = r.project; renderProjectMain(); renderConsultationPanel(); loadProjectList(); }
+  pjRenderTranscript(r.transcript);
+  if (r.state === 'confirm') { pjSetKitt('confirm', 'waiting on you — see below'); pjRenderConfirm(r.pending); }
+  else { pjRenderConfirm(null); pjSetKitt('', r.via ? `online — ${esc(r.via)}` : (r.state === 'error' ? 'offline' : 'idle')); }
+}
+async function pjSendAgentMessage(){
+  const input = $('#pj-agent-input');
+  const message = input.value.trim();
+  if (!message || pjAgentBusy) return;
+  input.value = '';
+  pjAgentBusy = true;
+  pjSetKitt('thinking', 'thinking…');
+  const r = await api.invoke('office:agent-message', { project: currentProject, message });
+  pjHandleAgentResult(r);
+}
+async function pjAgentConfirm(approve){
+  pjAgentBusy = true;
+  pjSetKitt('acting', approve ? 'acting…' : 'thinking…');
+  pjRenderConfirm(null);
+  const r = await api.invoke('office:agent-confirm', { approve });
+  pjHandleAgentResult(r);
+}
+$('#pj-agent-send').addEventListener('click', pjSendAgentMessage);
+$('#pj-agent-input').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); pjSendAgentMessage(); }});
 
 // ── Secretariat agent (tool-using) ─────────────────────────────────────────────
 // Additive to the Suggestions box above — that path is untouched. This one
