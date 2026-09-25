@@ -527,8 +527,9 @@ function Invoke-UsysDoctor {
     Write-Host '  -- Deployed worker health --' -ForegroundColor Yellow
     foreach ($w in @(
         @{ Name = 'packages-worker';      Url = 'https://packages-worker.phoenix-jwl.workers.dev/health'; Authed = $false }
-        @{ Name = 'phoenix-clonepool-r2'; Url = 'https://phoenix-clonepool-r2.phoenix-jwl.workers.dev/whoami'; Authed = $true }
         @{ Name = 'office-notify-worker'; Url = 'https://office-notify-worker.phoenix-jwl.workers.dev/health'; Authed = $false }
+        @{ Name = 'phoenix-office-worker'; Url = 'https://phoenix-office-worker.phoenix-jwl.workers.dev/health'; Authed = $false }
+        @{ Name = 'pbm-leads-worker';     Url = 'https://pbm-leads-worker.phoenix-jwl.workers.dev/health'; Authed = $false }
     )) {
         $result = Test-UsysWorkerHealth -Name $w.Name -Url $w.Url -Authed:$w.Authed
         if ($result.Ok) {
