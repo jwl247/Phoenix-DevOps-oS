@@ -1,3 +1,12 @@
+> **This is a stale duplicate.** The corrected, up-to-date version of this
+> file lives at `sector2/apps/lifefirst/README_BUDGET_KEEPER.md` (fixed
+> 2026-09-24 — wrong DB name, wrong port, and missing "not wired into
+> install.sh" caveat). This `security/` directory looks like an older
+> archival snapshot of the whole lifefirst bundle (own copy of
+> `lifefirst_setup.sh`, `module_2_api_router.php`, etc.) — verify whether
+> it's still meant to be a live target before trusting anything install-wise
+> in this specific copy.
+
 # BUDGET KEEPER AI (MODULE 8) - DEPLOYMENT SUMMARY
 
 ## 📦 WHAT YOU GOT

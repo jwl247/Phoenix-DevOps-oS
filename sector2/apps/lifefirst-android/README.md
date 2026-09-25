@@ -1,5 +1,19 @@
 # Life First App 💙
 
+> **Status (per `HIBERNATION_STATUS.md`, marked 2026-08-19): intentionally
+> dormant, NOT fossil/abandoned.** This is the original Phoenix/LifeFirst
+> architecture; the Electron dashboard + PHP hotline track
+> (`sector2/apps/lifefirst/`, live at `lifefirst.authenticcoder.com`) is the
+> current active development focus instead. Do not archive/delete this
+> directory without JW's explicit say-so.
+>
+> **Install section below was corrected 2026-09-24** — it previously
+> described cloning a separate `LifeFirstApp.git` repo and running
+> `java -jar LifeFirstApp.jar`, which doesn't match what's actually in this
+> directory: a real Kotlin/Gradle Android app (`app/build.gradle.kts`,
+> `AndroidManifest.xml`) plus a Python Firebase Cloud Function
+> (`functions/main.py`), not a standalone Java JAR.
+
 [![Sponsor jwl247](https://img.shields.io/badge/Sponsor%20jwl247-%E2%9D%A4-red?logo=github&style=for-the-badge)](https://github.com/sponsors/jwl247)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0)
 [![Language: Java](https://img.shields.io/badge/Java-11+-orange?style=for-the-badge&logo=java)](https://java.com)
@@ -56,26 +70,29 @@ depend on a vendor again.
 ## Getting Started
 
 ### Requirements
-- Java 11 or higher
-- [Phoenix DevOps OS](https://github.com/jwl247/Phoenix-DevOps-oS) (recommended for self-hosting)
-- 2GB RAM minimum
+- Android Studio (or `gradlew` + an Android SDK on PATH)
+- JDK 11+ (for Gradle itself)
+- Firebase CLI, if you also want to run/deploy `functions/` (Python)
 
-### Installation
+### Building the app (this directory, real project layout)
 
 ```bash
-# Clone the repository
-git clone https://github.com/jwl247/LifeFirstApp.git
+cd sector2/apps/lifefirst-android
 
-# Navigate into the directory
-cd LifeFirstApp
+# Build a debug APK
+./gradlew assembleDebug        # gradlew.bat on Windows
 
-# Run the app
-java -jar LifeFirstApp.jar
+# Or just open this folder directly in Android Studio and run from there
 ```
 
-> Full self-hosting guide coming soon.
-> For now, clone the repo and open an issue if you need help getting started —
-> no question is too basic.
+The Firebase Cloud Function (`functions/main.py`) is a separate deploy target —
+see `.firebaserc` for the configured project, and use the standard
+`firebase deploy --only functions` flow if/when this component is reactivated.
+
+> This project is dormant (see status note above) — there is no current
+> self-hosting guide because it isn't the active LifeFirst deployment target.
+> If you're trying to actually run Laurie's Life First system today, see
+> `sector2/apps/lifefirst/README.md` instead (PHP + Apache, live and deployed).
 
 ---
 

@@ -38,7 +38,9 @@ Sector 4 — Helix engine, Frank orchestrator, master vault
 
 ## What is proven working — as of 2026-08-23
 
-These are not aspirational. These are tested, committed, and pushed.
+These are not aspirational. These are tested, committed, and pushed. This list is a snapshot,
+not maintained day-to-day — for what's actually built and current, see root `CLAUDE.md` §
+BUILD STATUS (updated every session) rather than assuming this section stayed in sync.
 
 - **Full intake pipeline end-to-end** — file → hex → QR → sidecar → D1 custody → R2 upload, live on Cloudflare Worker
 - **Content-hash integrity** — SHA3-512 + BLAKE2b baseline, checked at `intake clone`, gates restore on mismatch
@@ -71,8 +73,30 @@ After install:
 ```powershell
 usys init          # first-time setup — dirs, auth, profile
 usys status        # verify everything is wired
+usys clone <file>  # the intake pipeline — hex ID, QR, D1 custody, R2 upload
 usys run debian    # boot Debian from the clonepool
 ```
+
+---
+
+## Start the Dashboard (already installed? start here)
+
+Phoenix's day-to-day control surface is the Electron dashboard — a live PS7 terminal, a
+Claude Code hotline, the clonepool/Glossary browser, Office, ScriptForge, and more.
+**Already have Phoenix set up and just want to launch it?**
+
+```powershell
+pwsh -ExecutionPolicy Bypass -File dashboard\start.ps1
+```
+
+That's the whole command — no separate install step if you've run it before. Details,
+the manual `npm start` path, and first-time setup: [`dashboard/README.md`](./dashboard/README.md#starting-the-dashboard).
+If the installer set up autostart, it may already be running at logon.
+
+There's also a separate **HUD** (`hud/`, a WPF/.NET 9 app — voice, a transparent live-desktop
+overlay, and its own Claude Code CLI pane): build/run it via `dotnet run` from `hud/`, or the
+published exe once built (`dotnet build` in `hud/`). It's a different thing from the dashboard
+above, not a replacement for it.
 
 Full reference: [`dashboard/manual/PHOENIX_MANUAL.md`](./dashboard/manual/PHOENIX_MANUAL.md)
 Plain-English guide for Laurie: [`dashboard/manual/LAURIE_GUIDE.md`](./dashboard/manual/LAURIE_GUIDE.md)

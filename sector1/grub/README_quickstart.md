@@ -15,6 +15,26 @@ USB key in → you're in. USB key out → wall. No exceptions.
 
 ---
 
+## Setup — load the daily commands
+
+None of the commands below exist in a shell until `phoenix_aliases.sh` (in
+this same directory) is sourced:
+
+```bash
+source phoenix_aliases.sh     # this session only
+echo 'source /path/to/sector1/grub/phoenix_aliases.sh' >> ~/.bashrc   # every session
+```
+
+These aliases assume the deployed Phoenix USB-key target layout — `~/phoenix`
+as the checkout root, `~/phoenix/SECTOR4` (legacy uppercase naming, predates
+this repo's current lowercase `sector1-4/` convention), `/mnt/clonepool`
+mounted. This is a standalone system built on Linux for the boot-key
+deployment, not something to run from this Windows dev checkout — see
+`sector1/CONNECTIONS.md` for how this subtree relates (or doesn't yet,
+unconfirmed) to the rest of the repo.
+
+---
+
 ## Daily Commands
 
 ### Navigation

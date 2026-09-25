@@ -14,13 +14,14 @@ packages:
   - cifs-utils
 
 write_files:
-  - path: /etc/phoenix-cifs.creds
-    permissions: '0600'
-    owner: root:root
-    content: |
-      username=jwlef
-      password=***REMOVED-CREDENTIAL-ROTATED-2026-09-25***
-      domain=
+  # NOTE: this cloud-init seed can no longer bake in the real SMB password —
+  # a real Windows account password was hardcoded here in plaintext, pushed
+  # to the public GitHub repo from 2026-08-23 to 2026-09-25 (see CLAUDE.md
+  # session log), and must now be treated as permanently compromised. Set
+  # /etc/phoenix-cifs.creds via persist-smb-mount.sh instead (now requires
+  # SMB_PASS as a required env var, never hardcoded) after boot, or inject a
+  # real secret through cloud-init's own vendor-data/instance-data mechanism
+  # rather than committing it to this file.
 
   - path: /etc/systemd/system/phoenix-helix-kernel.service
     permissions: '0644'

@@ -13,9 +13,15 @@
 #   6. Prints current fstab state and mount status
 #
 # Usage (inside Debian as root or phoenix with sudo):
-#   bash /phoenix/helix-pages/persist-smb-mount.sh
+#   SMB_PASS='...' bash /phoenix/helix-pages/persist-smb-mount.sh
 #   -- OR (if repo is on share) --
-#   bash /phoenix/Phoenix-DevOps-oS/tools/poc/persist-smb-mount.sh
+#   SMB_PASS='...' bash /phoenix/Phoenix-DevOps-oS/tools/poc/persist-smb-mount.sh
+#
+# SMB_PASS is REQUIRED (no default) — never hardcode a real password in this
+# file again. A real Windows account password sat here in plaintext, pushed
+# to the public GitHub repo, from 2026-08-23 to 2026-09-25 (see CLAUDE.md
+# session log) — that password must be treated as permanently compromised
+# regardless of any git-history cleanup.
 #
 # After this script runs, /phoenix will mount automatically on every boot.
 # No manual mount needed. No password in /proc/mounts or ps output.
@@ -30,8 +36,8 @@ SHARE_HOST="10.0.2.2"
 SHARE_NAME="Phoenix"
 MOUNT_POINT="/phoenix"
 CREDS_FILE="/etc/phoenix-cifs.creds"
-SMB_USER="jwlef"
-SMB_PASS="***REMOVED-CREDENTIAL-ROTATED-2026-09-25***"
+SMB_USER="${SMB_USER:-jwlef}"
+SMB_PASS="${SMB_PASS:?SMB_PASS env var required — never hardcode this. Set it before running: SMB_PASS='...' bash persist-smb-mount.sh}"
 SMB_DOMAIN=""
 FSTAB_OPTS="credentials=${CREDS_FILE},uid=1000,gid=1000,iocharset=utf8,vers=3.0,nofail,_netdev"
 FSTAB_ENTRY="//${SHARE_HOST}/${SHARE_NAME}  ${MOUNT_POINT}  cifs  ${FSTAB_OPTS}  0  0"

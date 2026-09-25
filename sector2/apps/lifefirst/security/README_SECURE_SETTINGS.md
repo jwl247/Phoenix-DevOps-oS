@@ -1,3 +1,11 @@
+> **This is a stale duplicate.** The corrected, up-to-date version of this
+> file lives at `sector2/apps/lifefirst/README_SECURE_SETTINGS.md` (fixed
+> 2026-09-24 — wrong DB name/port, and clarified that `install.sh` already
+> deploys the schema+PHP file automatically, only the API-router wiring is
+> still manual). This `security/` directory looks like an older archival
+> snapshot of the whole lifefirst bundle — verify whether it's still meant to
+> be a live target before trusting anything install-wise in this specific copy.
+
 # 🔐 SECURE SETTINGS LOCK (MODULE 9)
 # "The Fort Knox of Budget Apps"
 

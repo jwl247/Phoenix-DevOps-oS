@@ -30,9 +30,23 @@ suite that already existed for them passes here unmodified.
 ## Run it
 
 ```
-npm install
-npm start
+npm install       # postinstall runs scripts/fix-electron.js automatically
+npm start         # launches the Electron app (electron .)
+npm test          # 83 tests: 53 engine (test/test.js) + 30 Secretariat-agent (test/test-agent.js)
 ```
+
+To build a real installer/portable exe (electron-builder, configured 2026-09-23):
+
+```
+npm run build-win     # -> dist/Phoenix Office Setup 1.0.0.exe (NSIS) + dist/Phoenix Office 1.0.0.exe (portable)
+npm run build-mac     # -> dist/*.dmg (configured, not yet exercised)
+npm run build-linux   # -> dist/*.AppImage (configured, not yet exercised)
+```
+
+Windows only for real PDF export / general file conversion right now
+(`lib/libreoffice.js` throws on other platforms until a mac/Linux runtime
+asset is uploaded) — everything else (documents, signing, Secretariat) is
+platform-independent.
 
 ## Structure
 

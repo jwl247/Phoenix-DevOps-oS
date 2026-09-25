@@ -1,3 +1,11 @@
+> **STALE — do not follow this file (flagged 2026-09-24 README audit).** This
+> is a pre-deployment planning doc: it claims Modules 5 and 7 "don't exist
+> yet" (they do, and are deployed), and points at `lifefirst_setup.sh` +
+> `deploy_modules.sh`, both since deprecated and replaced by
+> `sector2/apps/lifefirst/install.sh`. The real, current, live system is
+> documented at `sector2/apps/lifefirst/README.md`. Left in place below only
+> as historical record of the original plan — not instructions to follow.
+
 # 🤖 LIFE FIRST AI SYSTEM - DEPLOYMENT PACKAGE
 ## Complete Bond Setup for Ubuntu Server
 

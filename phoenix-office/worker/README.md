@@ -90,7 +90,7 @@ notifications just won't send.
 ## Live test
 
 ```
-curl https://phoenix-office-worker.<your-subdomain>.workers.dev/health
+curl https://phoenix-office-worker.phoenix-jwl.workers.dev/health
 # -> { "status": "ok", "worker": "phoenix-office-worker", "db_bound": true, "r2_bound": true, ... }
 ```
 

@@ -1,5 +1,11 @@
 # Config
 
+> **⚠️ Drifted from the real file — verified 2026-09-24.** The real, current
+> `sector2/propagator/dispatch.json` targets differ from the table below: `vault` points at
+> `/mnt/e/CLONEPOOL` (not `/media/jwl247/breach_coms4`), there's no `docworker` target, and it
+> includes a `com_chain`/`sector2_backup`/`sector3_primary` block not documented here at all.
+> Read `sector2/propagator/dispatch.json` directly rather than trusting this table.
+
 Routing rules and environment config for the Phoenix stack.
 
 ## Files

@@ -87,21 +87,26 @@ Hacker steals password → Tries to change settings →
 
 ## 🚀 INSTALLATION
 
-### Quick Install:
+> **Verified 2026-09-24 against `install.sh`:** steps 1 and 2 below already
+> happen automatically — `install.sh` loads `secure_settings_schema.sql` and
+> copies `secure_settings.php` into place on every run. **Step 3 does not** —
+> there is no `'secure_settings'` case in `module_2_api_router.php`'s switch
+> statement, so this feature is deployed but not actually reachable through
+> the API until that wiring is added by hand (and re-added after any router
+> change, since `install.sh` doesn't touch the router's switch statement).
+
+### Quick Install (manual step 3 only — 1 and 2 are automatic now):
 ```bash
-# 1. Import database
-mysql -u lifefirst_user -p lifefirst_db < secure_settings_schema.sql
+# 1. Database — already done by install.sh (loads this schema on every run)
+# 2. PHP file — already done by install.sh (copies this file on every run)
 
-# 2. Deploy PHP
-sudo cp secure_settings.php /var/www/html/lifefirst/
-
-# 3. Update API router
+# 3. Still manual: wire it into the API router
 sudo nano /var/www/html/lifefirst/api.php
 # Add: require_once __DIR__ . '/secure_settings.php';
 # Add case 'secure_settings' to switch
 
-# 4. Restart Apache
-sudo systemctl restart apache2
+# 4. Reload Apache
+sudo systemctl reload apache2
 ```
 
 ---
@@ -112,7 +117,7 @@ sudo systemctl restart apache2
 Both partners must be at home together!
 
 ```bash
-curl -X POST http://localhost:8888/lifefirst/api.php \
+curl -X POST http://localhost/api.php \
   -H "Content-Type: application/json" \
   -d '{
     "action": "secure_settings",
@@ -502,7 +507,7 @@ Both: ✅ Budget updated responsibly
 ### Security Dashboard:
 ```bash
 # Get security stats
-curl -X POST http://localhost:8888/lifefirst/api.php \
+curl -X POST http://localhost/api.php \
   -d '{"action":"secure_settings","subaction":"get_security_stats","user_id":1}'
 
 Response:
@@ -520,14 +525,14 @@ Response:
 ### Recent Attempts:
 ```bash
 # View unlock history
-curl -X POST http://localhost:8888/lifefirst/api.php \
+curl -X POST http://localhost/api.php \
   -d '{"action":"secure_settings","subaction":"get_unlock_attempts","user_id":1}'
 ```
 
 ### Violations:
 ```bash
 # Check violations
-curl -X POST http://localhost:8888/lifefirst/api.php \
+curl -X POST http://localhost/api.php \
   -d '{"action":"secure_settings","subaction":"get_violations","user_id":1}'
 ```
 

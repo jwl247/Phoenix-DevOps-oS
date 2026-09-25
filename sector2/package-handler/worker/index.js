@@ -22,6 +22,21 @@ function isAuthorized(req, env) {
   return !!match && match[1] === env.PHOENIX_AUTH;
 }
 
+// ── Connections lookup ───────────────────────────────────────────────────────
+// A human won't type a node's exact stored path/name (parsed from prose —
+// e.g. "package-handler/" vs the stored "sector2/package-handler"), so an
+// exact-match-only lookup is unusable in practice. Try exact match first,
+// then fall back to a LIKE scan, preferring the shortest matching path (the
+// most specific/direct hit rather than a long nested one).
+async function resolveConnection(db, id) {
+  const exact = await db.prepare('SELECT * FROM connections WHERE hex = ? OR name = ? OR path = ?').bind(id, id, id).first();
+  if (exact) return exact;
+  const like = await db.prepare(
+    `SELECT * FROM connections WHERE name LIKE ? OR path LIKE ? ORDER BY LENGTH(path) ASC LIMIT 1`
+  ).bind(`%${id}%`, `%${id}%`).first();
+  return like || null;
+}
+
 // ── Platform HTML ───────────────────────────────────────────────────────────
 const HTML_PLATFORM = `<!DOCTYPE html>
 <html lang="en">
@@ -995,6 +1010,132 @@ export default {
         const id = decodeURIComponent(path.slice(10));
         await db.prepare('DELETE FROM glossary WHERE hex = ? OR name = ?').bind(id, id).run();
         return ok({ ok: true, deleted: id });
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+      // CONNECTIONS — the Atlas: every component/feature documented in a
+      // CONNECTIONS.md, plus the real relationships between them (parsed from
+      // "Connects to / connected from" + shared area). One node per bullet/row
+      // in a CONNECTIONS.md; edges live in `links` (JSON array of hex ids).
+      // Where a node is also a real intaked file, LEFT JOIN glossary pulls in
+      // its live state — same pattern glossary already uses for clonepool.
+      // columns: hex, name, path, area, description, key_fact, source_file,
+      //          state, links, updated_at
+      // ══════════════════════════════════════════════════════════════════════
+
+      if (path === '/connections' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const search = url.searchParams.get('q');
+        const area = url.searchParams.get('area');
+        const params = [];
+        const conditions = [];
+        let query = `SELECT c.*, g.state AS file_state, g.pool_path AS file_pool_path
+                      FROM connections c
+                      LEFT JOIN glossary g ON g.hex = c.hex`;
+        if (search) { conditions.push('(c.name LIKE ? OR c.description LIKE ? OR c.path LIKE ?)'); params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+        if (area) { conditions.push('c.area = ?'); params.push(area); }
+        if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
+        query += ' ORDER BY c.name';
+
+        const result = await db.prepare(query).bind(...params).all();
+        return ok({ connections: result.results, count: result.results.length });
+      }
+
+      if (path === '/connections' && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const body = await req.json();
+        if (!body.hex || !body.name || !body.path) return err('hex, name, and path required');
+
+        await db.prepare(`
+          INSERT INTO connections (hex, name, path, area, description, key_fact, source_file, state, links)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(hex) DO UPDATE SET
+            name = excluded.name,
+            path = excluded.path,
+            area = excluded.area,
+            description = excluded.description,
+            key_fact = excluded.key_fact,
+            source_file = excluded.source_file,
+            state = excluded.state,
+            links = excluded.links,
+            updated_at = CURRENT_TIMESTAMP
+        `).bind(
+          body.hex,
+          body.name,
+          body.path,
+          body.area || null,
+          body.description || '',
+          body.key_fact || null,
+          body.source_file || null,
+          body.state || 'white',
+          body.links || '[]',
+        ).run();
+
+        return ok({ ok: true, hex: body.hex, name: body.name });
+      }
+
+      // GET /connections/:id/related — the "snow globe": exactly 8 neighbors,
+      // closest first. 1) explicit edges from `links` (both directions),
+      // 2) same-area entries not already picked, 3) backfill from anywhere if
+      // the graph around this node is still short. Must be checked before the
+      // generic /connections/:id GET below (path.startsWith would shadow it).
+      if (path.startsWith('/connections/') && path.endsWith('/related') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const id = decodeURIComponent(path.slice('/connections/'.length, -'/related'.length));
+        const center = await resolveConnection(db, id);
+        if (!center) return err('not found', 404);
+
+        const linked = JSON.parse(center.links || '[]');
+        const reverseLinked = await db.prepare(
+          `SELECT hex FROM connections WHERE hex != ? AND links LIKE ?`
+        ).bind(center.hex, `%${center.hex}%`).all();
+        const candidateHexes = [...new Set([...linked, ...reverseLinked.results.map(r => r.hex)])]
+          .filter(h => h !== center.hex);
+
+        const picked = [];
+        const pickedHexes = new Set();
+
+        if (candidateHexes.length) {
+          const placeholders = candidateHexes.map(() => '?').join(',');
+          const rows = await db.prepare(`SELECT * FROM connections WHERE hex IN (${placeholders})`).bind(...candidateHexes).all();
+          for (const row of rows.results) {
+            if (picked.length >= 8) break;
+            picked.push(row);
+            pickedHexes.add(row.hex);
+          }
+        }
+
+        if (picked.length < 8 && center.area) {
+          const need = 8 - picked.length;
+          const excludeHexes = [...pickedHexes, center.hex];
+          const placeholders = excludeHexes.map(() => '?').join(',');
+          const rows = await db.prepare(
+            `SELECT * FROM connections WHERE area = ? AND hex NOT IN (${placeholders}) ORDER BY name LIMIT ?`
+          ).bind(center.area, ...excludeHexes, need).all();
+          for (const row of rows.results) {
+            picked.push(row);
+            pickedHexes.add(row.hex);
+          }
+        }
+
+        if (picked.length < 8) {
+          const need = 8 - picked.length;
+          const excludeHexes = [...pickedHexes, center.hex];
+          const placeholders = excludeHexes.map(() => '?').join(',');
+          const rows = await db.prepare(
+            `SELECT * FROM connections WHERE hex NOT IN (${placeholders}) ORDER BY RANDOM() LIMIT ?`
+          ).bind(...excludeHexes, need).all();
+          for (const row of rows.results) picked.push(row);
+        }
+
+        return ok({ center, related: picked.slice(0, 8), count: picked.slice(0, 8).length });
+      }
+
+      if (path.startsWith('/connections/') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const id = decodeURIComponent(path.slice('/connections/'.length));
+        const row = await resolveConnection(db, id);
+        return row ? ok(row) : err('not found', 404);
       }
 
       // ══════════════════════════════════════════════════════════════════════

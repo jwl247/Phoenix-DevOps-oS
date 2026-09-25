@@ -105,10 +105,19 @@ I just built **Budget Keeper AI** - the most sophisticated module yet! Here's wh
 
 ## 🚀 INSTALLATION (Quick Version)
 
-### On Your Server:
+> **Verified 2026-09-24: this is NOT wired into `install.sh`.** Life First's
+> main installer deploys modules 1-7 + `secure_settings.php` automatically —
+> `budget_keeper.php` is not among them, and `module_2_api_router.php` has no
+> `'budget'` case in its switch statement. This manual add-on below is the
+> actual (only) way to enable it, and needs to be redone after any fresh
+> `install.sh` run (it doesn't survive a re-install). If you want it permanent,
+> fold these steps into `install.sh` itself rather than repeating them by hand.
+
+### On Your Server (Debian/Ubuntu, matches `install.sh`'s deployment target):
 ```bash
-# 1. Import database
-mysql -u lifefirst_user -p lifefirst_db < budget_keeper_schema.sql
+# 1. Import database — DB name is "lifefirst" (not "lifefirst_db"), see
+#    /etc/lifefirst/lifefirst.env for the real credentials install.sh generated
+mysql -u root -p lifefirst < budget_keeper_schema.sql
 
 # 2. Deploy PHP
 sudo cp budget_keeper.php /var/www/html/lifefirst/
@@ -118,13 +127,16 @@ sudo nano /var/www/html/lifefirst/api.php
 # Add: require_once __DIR__ . '/budget_keeper.php';
 # Add case: 'budget' to switch statement
 
-# 4. Test
-curl -X POST http://localhost:8888/lifefirst/api.php \
+# 4. Test — port 80 (install.sh's Apache vhost), not 8888
+curl -X POST http://localhost/api.php \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $LF_API_SECRET" \
   -d '{"action":"budget","subaction":"get_settings","user_id":1}'
 ```
 
-**Full instructions in BUDGET_KEEPER_INSTALL.md**
+**Full instructions in BUDGET_KEEPER_INSTALL.md** — that file wasn't re-verified
+in this pass; check it against the same "not wired into install.sh" caveat
+above before trusting its own install steps.
 
 ---
 

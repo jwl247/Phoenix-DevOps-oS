@@ -16,15 +16,27 @@ drops in the real binary/image, and after that `usys run <name>` just works.
 
 | File | Type | What it does |
 |---|---|---|
-| `run-debian.ps1` | launcher | Demo 1 — boots Debian 12 via `usys run debian` |
-| `run-ubuntu.ps1` | launcher | Demo 2 (pro) — boots Ubuntu 24.04 via `usys run ubuntu`, `-Hyperv` for Act 2 |
+| `run-debian.ps1` | launcher | Demo 1 — boots Debian 12 via `usys run debian` (ephemeral/snapshot mode, no persistence) |
+| `start-debian-persist.ps1` | launcher | **Recommended for real use** — always boots Debian with `-Persist --share` so changes and `/phoenix` survive reboots. Equivalent to `usys run debian -Persist --share` but you don't have to remember the flags |
+| `run-ubuntu.ps1` | launcher | Demo 2 (pro) — boots Ubuntu 24.04 via `usys run ubuntu`, pass `2` as the launcher's own arg for Act 2 (`--accel hyperv`) |
 | `demo-collab.sh` | demo (Debian side) | Collaboration demo — writes + runs a Python script to the shared FS |
 | `demo-collab.ps1` | demo (Windows side) | Collaboration demo — intakes Debian's output, promotes it, runs it on Windows |
+| `install-helix-autostart.ps1` | setup | Registers the Windows-side Helix engine as an autostart task |
+| `watch-downloads.ps1` | background job | Watches a folder and auto-intakes new files as they land — see `usys watch` |
+| `persist-smb-mount.sh` | Debian-side fix | Makes the `/phoenix` share survive reboots via CIFS/SMB — see "Known issue: `--share` / virtfs" below |
+| `debian-seed/`, `ubuntu-seed/` | cloud-init | `meta-data` + `user-data` baked into each distro's first boot — passwords, fstab, swap, service-enable |
 | `debian.suite.json` | suite manifest | Debian 12 (Bookworm) cloud image, QEMU runtime |
 | `ubuntu.suite.json` | suite manifest | Ubuntu 24.04.2 LTS (Noble) cloud image, QEMU runtime |
 | `qemu-system.suite.json` | suite manifest | QEMU binary itself — the VM engine both distros run on |
 | `hello-phoenix.suite.json` | suite manifest | Python script demo — same hex ID on every OS |
 | `yt-dlp.suite.json` | suite manifest | yt-dlp binary — single-file, no-install download tool |
+| `google.suite.json`, `steam.suite.json` | suite manifest | Google/Chrome and Steam launcher suites — not documented further here, same `usys clone`/`usys run` pattern as the others |
+
+> Not covered below (out of scope for this how-to, not because they don't
+> exist): `helix-poc.suite.json`, `run-helix-poc.ps1`/`.sh`,
+> `test-double-helix.*`, `true_double_helix.py`, `DOUBLE-HELIX-PLAN.md`,
+> `HELIX-LIGHTNING-GUIDE.md`, `SHARED-FS-PLAN.md` — Helix-engine POC work,
+> see those files directly.
 
 > The launcher scripts assume they live two directories under the repo root
 > (`tools/poc/run-debian.ps1`), because they walk up two `Split-Path -Parent`
@@ -138,7 +150,13 @@ Accelerator values: `auto` (default, Phoenix picks), `tcg` (software, universal)
 fastest on Windows), `kvm` (Linux/WSL).
 
 Pass `-Persist` to write VM changes back to the image instead of discarding them
-on exit (default is snapshot/ephemeral).
+on exit (default is snapshot/ephemeral). For "just always persist, and give me
+the shared FS too" — the common real-use case — run `start-debian-persist.ps1`
+instead of remembering the flag combo:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools\poc\start-debian-persist.ps1
+```
 
 Check what's actually staged at any time:
 
@@ -235,6 +253,20 @@ usys run debian --accel hyperv --share        # Act 2 (near-native) + shared FS
 ```
 
 Without `--share`: standard boot, unchanged. The shared directories are opt-in.
+
+> **Known issue — `--share` / virtio-9p (`-virtfs`) can fail on some QEMU
+> builds.** `--share` makes `usys run` build QEMU `-virtfs` args (the code path
+> above); this has been confirmed broken on at least one QEMU 11.1.0 build here
+> ("no option group 'virtfs'"). If you hit that error, virtio-9p isn't usable
+> on your QEMU build — don't keep retrying `--share`. The actual working
+> fallback already baked into `debian-seed/user-data`'s cloud-init is a
+> **CIFS/SMB mount** instead (`//10.0.2.2/Phoenix` → `/phoenix`, Debian's QEMU
+> usermode-network gateway address, from a Windows-side SMB share of
+> `F:\Phoenix\`) — `persist-smb-mount.sh` (re-)applies that mount idempotently
+> from inside Debian if it's ever missing after boot. This means the mount tag
+> reference and PS7-wrapper sections below describe the virtio-9p design
+> intent; on a machine where virtfs doesn't work, the directories still show
+> up at the same `/phoenix/...` paths, just via CIFS underneath.
 
 ### Debian side (first boot with updated cloud-init seed)
 

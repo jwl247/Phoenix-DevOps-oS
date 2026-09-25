@@ -1,5 +1,11 @@
 # Sector 2 — Services / Buffer / Backup
 
+> **⚠️ Design-intent doc, not verified current — see `docs/README.md`'s status banner.** The
+> Life First suite described below (`lifefirst/ai/*.php` on MySQL) is the retired PHP tree —
+> per root `CLAUDE.md`, confirmed a fossil 2026-08-19, superseded by `sector2/apps/lifefirst/`
+> (real, deployed at lifefirst.authenticcoder.com) and the `lifefirst-mcp` Cloudflare Worker.
+> For what's actually live in Sector 2 today, use `sector2/CONNECTIONS.md`.
+
 Path: `/etc/systemd/`
 
 Main service layer. `intent_parser.py` sits at the top — nothing reaches the OS without going through it first.

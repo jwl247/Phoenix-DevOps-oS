@@ -72,7 +72,13 @@ rolled MIME, zero extra deps) for the verified-recipient / issuer-copy case.
 
 ---
 
-## Deploy (needs Jerry's Cloudflare auth)
+## Deploy — already live (verified 2026-09-24)
+
+**This worker is deployed and fully live** — schema applied, `PHOENIX_AUTH`
+set and in sync with the rest of the fleet, and (as of 2026-09-23) a real
+`RESEND_API_KEY` is configured so sends actually go out, not just log to D1.
+The steps below are for a fresh redeploy or a new machine, not a first-time
+setup — if you're just checking status, skip to step 4 (verify).
 
 ```bash
 cd sector2/apps/office
@@ -99,7 +105,10 @@ curl -s -H "Authorization: Bearer $PHOENIX_AUTH" https://office-notify-worker.ph
 `wrangler deploy --dry-run --outdir=/tmp/x` validates config + bundle
 without deploying (already passing as of 2026-09-07).
 
-## Live end-to-end test (Jerry)
+## Live end-to-end test
+
+Resend is already configured (see above) — steps 1 below is only relevant if
+setting this up fresh on a new account/domain.
 
 1. Verify a sending domain in Resend (or use their `onboarding@resend.dev`
    sandbox to your own address).

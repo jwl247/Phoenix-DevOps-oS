@@ -1,5 +1,19 @@
 # Phoenix-DevOps-oS
 
+> **⚠️ Status, verified 2026-09-24:** the systemd "corridor" install described below (this file,
+> `docs/sector1..4/README.md`, `docs/systemd/README.md`, `docs/config/README.md`) was never
+> fully completed or deployed — root `CLAUDE.md` § BUILD STATUS Phase 5 still shows
+> `install-units.sh` as un-run. Confirmed live: `phoenix-sector1.target`/`phoenix-sector2.target`
+> exist in `sector3/services/`, but `phoenix-sector3.target`/`phoenix-sector4.target` (which the
+> "Quick Start" below tells you to start) **do not exist**, and `intent_parser.py` /
+> `mega_system_manager.py` don't exist anywhere outside `archive/`. Some pieces described here
+> did land, just under different paths than shown (e.g. `frankenhelix.py` → `sector2/ring0/`,
+> `romeo.py`/`juliet.py` → `sector3/romeo_juliet/`). **For what's actually live and how to
+> actually start Phoenix today, use root `CLAUDE.md` (canonical, updated every session) and the
+> per-sector `CONNECTIONS.md` files (`sector1/CONNECTIONS.md` etc., verified against real code)
+> instead of this doc set.** Left in place as historical/aspirational design intent, not a
+> working install guide.
+
 Multi-OS quad-native infrastructure framework. Distro-agnostic operation across Linux and Windows. Built by Jerry Leftwich (jwl247) — Phoenix DevOps LLC.
 
 ## Architecture

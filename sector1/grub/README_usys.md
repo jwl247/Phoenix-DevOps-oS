@@ -36,14 +36,23 @@ sudo dnf install sqlite
 
 ## Install
 
+This `usys.sh` already lives in the repo at `sector1/grub/usys.sh` — there is
+no separate `unitedsys` repo to clone (an earlier version of this doc pointed
+at `github.com/jwl247/unitedsys`, which doesn't exist; see the repo table in
+root `CLAUDE.md` for the actual repos). Run it from here:
+
 ```bash
-git clone https://github.com/jwl247/unitedsys
-cd unitedsys
+cd sector1/grub
 bash usys.sh init
 source ~/.bashrc   # or open a new terminal
 ```
 
 `init` sets up `~/.usys/`, initializes the database, and adds `~/.usys/bin` to your PATH.
+
+Note: this is a separate, standalone implementation from `sector2/unitedsys/`
+and from the project's main CLI, `scripts/usys.ps1` — same "usys" name, three
+different codebases. Their relationship is unconfirmed (see
+`sector1/CONNECTIONS.md`); don't assume commands from one apply to another.
 
 ---
 

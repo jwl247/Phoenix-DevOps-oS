@@ -1,5 +1,9 @@
 # Sector 1 — Kernels / Hardware / Boot Layer
 
+> **⚠️ Design-intent doc, not verified current — see `docs/README.md`'s status banner.** For
+> what's actually live in Sector 1 today, use `sector1/CONNECTIONS.md` (dated, verified against
+> real code) and root `CLAUDE.md`.
+
 Path: `/etc/`
 
 First sector in the corridor. `auto_config_installer.py` fires on first boot, profiles hardware, generates configs for all downstream services.
