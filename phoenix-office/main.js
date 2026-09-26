@@ -338,6 +338,7 @@ function createWindow(splashStartedAt) {
     mainWindow = new BrowserWindow({
         width: 1400, height: 900, minWidth: 1000, minHeight: 640,
         title: 'Phoenix Office',
+        icon: path.join(__dirname, 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
         backgroundColor: '#0a0c10',
         autoHideMenuBar: true,
         show: !splashStartedAt, // if there's no splash to hand off from, just show immediately
