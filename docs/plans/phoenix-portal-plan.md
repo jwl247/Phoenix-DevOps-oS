@@ -58,7 +58,10 @@ noted for a future bridge, not needed for Phase 0.
 **Jerry's rules for the tunnels (2026-09-26):** connections run **ingress and
 egress by the tunnels** (sector 3's Romeo in / Juliet out), each measured, so
 we can judge how fragile each link is. WireGuard clashes with the VPN already in
-use: the later WireGuard phase has to be built around that. WARP is also a
+use (**Surfshark**; not yet installed on the new PC, and the old tunnels are
+down for the same reason: the PC migration). The later WireGuard phase has to
+be built around that. **Android runs one VPN app at a time**: on the phone,
+WARP and Surfshark take turns, not run together. WARP is also a
 VPN-style client, so each device's WARP is tested against that VPN before
 anything depends on it.
 Home: `sector3/phoenix-net/` (sector 3 = comms/networking).
@@ -86,11 +89,57 @@ relay server.
 - **0e** Phoenix services (portal, Office, HUD bridges, Frank) use Phoenix
   names. The portal shows who's online.
 
-### Later phase — Phoenix Net goes self-owned (WireGuard)
-Same Phoenix names, same `phoenix-net` tool interface; the Pavilion becomes a
-WireGuard hub (`10.47.0.0/24`), devices swap WARP for the WireGuard client
-(open source). Remote reach through CGNAT: IPv6 test first, small replaceable
-relay if needed. Cloudflare stays only as a public front door if still wanted.
+### Phase 0.5 — Phoenix Mesh: our own ZeroTier-style network, WITH Cloudflare (build it all)
+Jerry, 2026-09-26: "lets build our own zero tier service for our selves then
+you can operate in all the phoenix family" · "both would be a great option and
+feature to have" · "if we gonna build some of it now might as well finish the
+job". Order: the Phase 0 phone test closes first, then Phoenix Mesh is built
+end to end.
+
+**Shape: direct when it can be, Cloudflare when it has to be.**
+- **Data = our road:** WireGuard links **directly** between Phoenix machines
+  (peer to peer), mesh addresses `10.47.0.0/24`.
+- **Switchboard = Cloudflare, code we own:** `phoenix-mesh-worker` (Cloudflare
+  Worker + its own D1 `phoenix_mesh`) keeps the family registry: device name,
+  owner email, WireGuard **public** key, mesh IP, current endpoints, last seen,
+  revoked. Routes: register · peers · heartbeat · revoke. Auth: per-device
+  token issued at enrollment, enrollment gated by Cloudflare Access (both of
+  Jerry's emails already allowed).
+- **Finding each other through Starlink:** each device learns its own public
+  address via **Cloudflare's STUN service** (`stun.cloudflare.com:3478`),
+  publishes it through the worker, and both sides send at once (hole punching),
+  over **IPv6 first** (the boxes have public IPv6), IPv4 second.
+- **Fallback = the Phase 0 tunnel:** if two devices can't handshake directly,
+  traffic goes through the `phoenix-net` Cloudflare tunnel instead. Never dead.
+- **Phoenix names** (`compaq.phx`, `pbm3.phx`, `precision.phx`, `phone.phx`)
+  resolve to the mesh address when the direct link is up, the tunnel path when
+  it isn't. Apps only ever use the names.
+- **`phoenix-meshd` agent** on each computer: makes the device's keypair
+  locally (the **private key never leaves the device**), registers, pulls
+  peers, writes the WireGuard config, heartbeats ~30 s, reports link health.
+- **Every link measured, ingress and egress** (Jerry's rule): handshake age,
+  latency, bytes in/out, direct-vs-fallback, drops, logged per link so we can
+  judge how fragile each one is. Shown later in the portal.
+- **Revoke = instant:** mark a device revoked in the worker; every agent drops
+  it within one heartbeat.
+
+**Devices:** this PC (Windows agent + official WireGuard for Windows), the
+Compaq and pbm3 (Linux agent + wireguard-tools; firewall opens the WireGuard
+port on the mesh only), **the phone** (official WireGuard app with a generated
+config/QR; phones can't run the agent, so the phone links to this PC with
+keepalive).
+
+**Known limits, stated up front:** WireGuard clashes with Surfshark on the same
+device (phone: one VPN app at a time, so the phone picks mesh, Cloudflare One
+or Surfshark); Workers can't carry UDP, so the worker only coordinates, never
+relays; if both ends are behind strict NAT with no IPv6, that pair uses the
+Cloudflare fallback.
+
+**Build order:** worker + D1 → Linux agent (Compaq, pbm3) → direct link
+Compaq↔pbm3 → Windows agent (this PC) → this PC↔Compaq over IPv6 → fallback
+test (block direct, confirm tunnel carries it) → phone config/QR → revoke test
+→ health log. Home: `sector3/phoenix-net/` (worker in
+`sector3/phoenix-net/mesh-worker/`, agent in `sector3/phoenix-net/meshd/`).
 
 ### Phase 1 — One shared brain: `shared/Phoenix.Shared` (net9.0-windows class library)
 Move, don't rewrite, from `hud/`:
@@ -168,14 +217,19 @@ Move, don't rewrite, from `hud/`:
   pointed at the portal. The Electron dashboard is kept, not deleted.
 
 ### Later (named, not built now)
-Laurie's profile (she designs it) · Forum · Phoenix Net → self-owned WireGuard
-· Desktop shade UI / drawer filesystem.
+Laurie's profile (she designs it) · Forum · Desktop shade UI / drawer
+filesystem · a second tunnel copy (backup hub) on the Compaq.
 
 ## Verification
 - Phase 0: every enrolled machine reaches every other by its Phoenix name;
   SSH to the Compaq over Phoenix Net; a removed device loses access at once;
   from outside the house (phone off Wi-Fi) the phone reaches the Pavilion;
   a device that isn't enrolled can't reach anything.
+- Phase 0.5: Compaq↔pbm3 and this PC↔Compaq handshake **directly** (logged as
+  direct); with the direct path blocked, the same names still work via the
+  tunnel (logged as fallback); the phone reaches `precision.phx` on cellular;
+  a revoked device is dropped by every peer within one heartbeat; private keys
+  exist only on their own device.
 - Phase 1: `dotnet build hud` clean; launch the HUD: chat reply, voice
   round-trip, Live Monitor frame, CLI pane — same as before.
 - Phase 2+: `dotnet build portal` clean; launch **not elevated** (`whoami
