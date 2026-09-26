@@ -47,7 +47,20 @@ intake file · `.lol_direxample.lol` intake directory.
 Jerry, 2026-09-26: "add the virtual network now because that makes tying it all
 together easier ... its going to all live there." Decisions (2026-09-26):
 **Cloudflare now, self-owned WireGuard later** (Jerry: "if half the work is done
-for cloudflare we can migrate to self hosted later") · **hub = the Pavilion**.
+for cloudflare we can migrate to self hosted later") · **hub = this PC (the
+Precision)**: the Pavilion is inoperable (Jerry, 2026-09-26). The hub runs only
+the `cloudflared` connector (outbound service, not a VPN), next to the existing
+`Phoenix_win8_26` tunnel, untouched. Backup copy of the tunnel on a second
+machine (the Compaq suggested: tiny, outbound-only) is a later add.
+**Devices that must reach Phoenix Net:** this PC, the Compaq, pbm3, and
+**Jerry's phone (Galaxy S23 FE, WARP app)**. The phone already runs Helix:
+noted for a future bridge, not needed for Phase 0.
+**Jerry's rules for the tunnels (2026-09-26):** connections run **ingress and
+egress by the tunnels** (sector 3's Romeo in / Juliet out), each measured, so
+we can judge how fragile each link is. WireGuard clashes with the VPN already in
+use: the later WireGuard phase has to be built around that. WARP is also a
+VPN-style client, so each device's WARP is tested against that VPN before
+anything depends on it.
 Home: `sector3/phoenix-net/` (sector 3 = comms/networking).
 Why Cloudflare first: Access (email identity + service tokens) and tunnels
 already exist, and a tunnel **dials out**, so it beats Starlink's CGNAT with no
@@ -56,14 +69,15 @@ relay server.
   each other by **Phoenix names** (`pavilion.phx`, `compaq.phx`, `portal.phx`…),
   never by Cloudflare-specific features or raw addresses. The names live in one
   file `phoenix-net` owns. Swapping to WireGuard later changes pipes, not apps.
-- **0a Pavilion bring-up:** SSH key (same bootstrap as the Compaq), then
-  `sector1/security/harden_debian_box.sh` (key-only SSH, nftables default-drop).
-- **0b The hub:** a dedicated `cloudflared` tunnel on the Pavilion that routes
-  Phoenix's private network (the machines' LAN/private addresses) to enrolled
-  devices. Separate from the existing Life First and `Phoenix_win8_26` tunnels
-  (not touched).
-- **0c Join devices ("your key"):** Cloudflare WARP client on this PC, the
-  Compaq, pbm3, and later Laurie's machine and phones. Enrollment through
+- **0a Hub bring-up (this PC):** a dedicated `phoenix-net` tunnel, run by the
+  `cloudflared` connector as its own Windows service. Separate from the existing
+  Life First and `Phoenix_win8_26` tunnels (not touched).
+- **0b The route:** the tunnel routes Phoenix's private network (the LAN
+  192.168.1.0/24 and this PC's direct-cable 192.168.137.0/24, where pbm3 lives)
+  to enrolled devices only. Each link's ingress/egress health is logged.
+- **0c Join devices ("your key"):** Cloudflare WARP client on the Compaq, pbm3,
+  **Jerry's phone**, and later Laurie's machine. Each tested against the VPN
+  already in use first. Enrollment through
   Cloudflare Access with your email identity; only enrolled devices reach
   Phoenix Net. `phoenix-net` tool = one script that enrolls/lists/removes a
   device and keeps the Phoenix names file.
