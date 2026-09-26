@@ -448,7 +448,8 @@ test('renderDocumentHtml includes the letterhead when brand.json is present', ()
     const html = renderDocumentHtml({ state: 'DRAFT', fields: { customer: 'Dave' }, counterparty: {} });
     assert.ok(html.includes('PBM Consulting Service'));
     assert.ok(html.includes('Chris Madsen'));
-    assert.ok(html.includes('<svg'));
+    // logo as an image LibreOffice renders (inline <svg> printed as text in a real PDF export)
+    assert.match(html, /<img src="data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+" width="\d+" height="\d+" alt="PBM/);
 });
 
 // ── parseModelReply — small-model failure modes found live 2026-09-22 ─────
@@ -477,6 +478,89 @@ test('the loop repairs a malformed reply by re-prompting instead of surfacing br
     const r = await loop.runTurn(session, 'what templates do you have?');
     assert.strictEqual(r.state, 'done');
     assert.strictEqual(r.message, 'found your templates');
+});
+
+// ── schedule timeline + chart (2026-09-26) ───────────────────────────────
+const gantt = require('../lib/schedule-gantt');
+const TL_PHASES = [
+    { phase_id: 'a', label: 'Foundation', phase_type: 'foundation', sequence: 1, state: 'COMPLETE',
+      estimated_duration_weeks: 2, started_at: '2026-10-01T08:00:00Z', completed_at: '2026-10-14T16:00:00Z' },
+    { phase_id: 'b', label: 'Steel Erection', phase_type: 'erection', sequence: 2, state: 'IN_PROGRESS',
+      estimated_duration_weeks: 2, started_at: '2026-10-15T08:00:00Z', schedule_notes: 'columns then beams' },
+    { phase_id: 'c', label: 'Decking', phase_type: 'decking', sequence: 3, state: 'NOT_STARTED', estimated_duration_weeks: 1 },
+];
+const TL_OPTS = { bidFactors: { time_of_year: { start_month: '2026-10' } } };
+
+test('timeline: baseline runs phases back to back from the bid start month', () => {
+    const tl = projectLib.scheduleTimeline(TL_PHASES, { ...TL_OPTS, today: '2026-10-05' });
+    assert.strictEqual(tl.start, '2026-10-01');
+    assert.deepStrictEqual(tl.rows.map(r => [r.planned_start, r.planned_end]),
+        [['2026-10-01', '2026-10-15'], ['2026-10-15', '2026-10-29'], ['2026-10-29', '2026-11-05']]);
+    assert.strictEqual(tl.rows[1].notes, 'columns then beams');
+});
+
+test('timeline: green when done on time and running within plan', () => {
+    const tl = projectLib.scheduleTimeline(TL_PHASES, { ...TL_OPTS, today: '2026-10-20' });
+    assert.deepStrictEqual(tl.rows.map(r => r.status), ['green', 'green', 'green']);
+});
+
+test('timeline: yellow when a running phase is past its planned end by up to 25%', () => {
+    const tl = projectLib.scheduleTimeline(TL_PHASES, { ...TL_OPTS, today: '2026-11-01' });   // erection planned end 10-29, 3 days over of 14
+    assert.strictEqual(tl.rows[1].status, 'yellow');
+    assert.strictEqual(tl.rows[1].days_over, 3);
+});
+
+test('timeline: red when more than 25% over', () => {
+    const tl = projectLib.scheduleTimeline(TL_PHASES, { ...TL_OPTS, today: '2026-11-06' });   // 8 days over of 14
+    assert.strictEqual(tl.rows[1].status, 'red');
+});
+
+test('timeline: red when it pushes past the target finish, even if barely late', () => {
+    const tl = projectLib.scheduleTimeline(TL_PHASES, {
+        bidFactors: { time_of_year: { start_month: '2026-10' }, schedule: { target_duration_weeks: 4 } }, today: '2026-10-30' });
+    assert.strictEqual(tl.rows[1].status, 'red');                // target end 10-29, projected 10-30
+});
+
+test('timeline: a phase that should have started and has not turns yellow', () => {
+    const tl = projectLib.scheduleTimeline([TL_PHASES[2]], { ...TL_OPTS, today: '2026-10-02' });
+    assert.strictEqual(tl.rows[0].status, 'yellow');
+});
+
+test('timeline: phases saved without a duration fall back to the template weeks', () => {
+    const tl = projectLib.scheduleTimeline([{ ...TL_PHASES[1], estimated_duration_weeks: null, state: 'NOT_STARTED', started_at: null }],
+        { ...TL_OPTS, today: '2026-09-01' });
+    assert.strictEqual(tl.rows[0].planned_weeks, 3);             // erection base_weeks
+});
+
+test('schedule chart: parses one line per trade and reports bad lines, never guesses', () => {
+    const r = gantt.parseBreakdown('Steel | 2026-10-05 | 2026-10-23 | critical | bolt-up\nDeck | 10/26/2026 | 10/30/2026\nbroken line\nX | 2026-10-10 | 2026-10-01 | on');
+    assert.strictEqual(r.rows.length, 2);
+    assert.deepStrictEqual(r.rows.map(x => x.status), ['red', 'green']);
+    assert.strictEqual(r.problems.length, 2);
+});
+
+test('schedule chart: export draws it for a Master schedule, as an image LibreOffice renders', () => {
+    const html = renderDocumentHtml({ state: 'DRAFT', fields: {
+        project_name: 'Test', phase_breakdown: 'Steel | 2026-10-05 | 2026-10-23 | over | bolt-up', date: '2026-10-20' } });
+    assert.match(html, /<img src="data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+" width="\d+" height="\d+"/);
+    assert.doesNotMatch(html, /display:\s*flex/, 'LibreOffice ignores flexbox');
+    const svg = gantt.scheduleSvg({ phase_breakdown: 'Steel | 2026-10-05 | 2026-10-23 | over | bolt-up' });
+    assert.match(svg, new RegExp(gantt.COLORS.yellow));
+    assert.match(svg, /bolt-up/);
+});
+
+test('schedule chart: other documents get no chart', () => {
+    const html = renderDocumentHtml({ state: 'DRAFT', fields: { customer: 'Dave', total: '100' } });
+    assert.doesNotMatch(html, /alt="Schedule by trade"/);
+});
+
+test('schedule chart: Project Assist timeline converts to the chart line format', () => {
+    const tl = projectLib.scheduleTimeline(TL_PHASES, { ...TL_OPTS, today: '2026-11-01' });
+    const text = gantt.breakdownFromTimeline(tl);
+    const parsed = gantt.parseBreakdown(text);
+    assert.strictEqual(parsed.problems.length, 0);
+    assert.strictEqual(parsed.rows.length, 3);
+    assert.strictEqual(parsed.rows[1].status, 'yellow');
 });
 
 // ── run ──────────────────────────────────────────────────────────────────

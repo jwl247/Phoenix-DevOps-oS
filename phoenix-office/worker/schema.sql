@@ -240,6 +240,8 @@ CREATE TABLE IF NOT EXISTS office_project_phases (
                      CHECK(state IN ('NOT_STARTED','IN_PROGRESS','COMPLETE')),
   estimated_cost   REAL    DEFAULT NULL,
   actual_cost      REAL    DEFAULT NULL,
+  estimated_duration_weeks REAL DEFAULT NULL,      -- planned length; the schedule timeline's baseline (added 2026-09-26; live DB got it via ALTER TABLE)
+  schedule_notes   TEXT    DEFAULT NULL,           -- "what's scheduled" in this stretch, printed under the trade's line on the timeline (added 2026-09-26)
   risk_level       TEXT    DEFAULT NULL,           -- low | medium | high — documented in code, not DB-enforced (same posture as phase_type)
   risk_notes       TEXT    DEFAULT NULL,
   started_at       TEXT    DEFAULT NULL,

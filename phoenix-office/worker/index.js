@@ -810,11 +810,13 @@ async function handleCreatePhases(projectId, req, env) {
   for (const p of phases) {
     await env.OFFICE_DB.prepare(
       `INSERT INTO office_project_phases
-         (phase_id, project_id, phase_type, lifecycle_stage, label, sequence, state, estimated_cost, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'NOT_STARTED', ?, ?, ?)`
+         (phase_id, project_id, phase_type, lifecycle_stage, label, sequence, state, estimated_cost, estimated_duration_weeks, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'NOT_STARTED', ?, ?, ?, ?)`
     ).bind(
       p.phase_id || genId(), projectId, p.phase_type, p.lifecycle_stage || 'EXECUTION',
-      p.label || p.phase_type, p.sequence || 0, p.estimated_cost ?? null, now, now
+      p.label || p.phase_type, p.sequence || 0, p.estimated_cost ?? null,
+      Number.isFinite(Number(p.estimated_duration_weeks)) && p.estimated_duration_weeks !== null ? Number(p.estimated_duration_weeks) : null,
+      now, now
     ).run();
   }
   return json({ ok: true, project_id: projectId, created: phases.length });
@@ -840,11 +842,17 @@ async function handlePatchPhase(projectId, phaseId, req, env) {
   await env.OFFICE_DB.prepare(
     `UPDATE office_project_phases SET
        state = COALESCE(?, state), estimated_cost = COALESCE(?, estimated_cost), actual_cost = COALESCE(?, actual_cost),
+       estimated_duration_weeks = COALESCE(?, estimated_duration_weeks),
+       schedule_notes = CASE WHEN ? THEN ? ELSE schedule_notes END,
        risk_level = COALESCE(?, risk_level), risk_notes = COALESCE(?, risk_notes),
        started_at = ?, completed_at = ?, updated_at = ?
      WHERE phase_id = ?`
   ).bind(
     body.state || null, body.estimated_cost ?? null, body.actual_cost ?? null,
+    Number.isFinite(Number(body.estimated_duration_weeks)) && body.estimated_duration_weeks != null ? Number(body.estimated_duration_weeks) : null,
+    // schedule_notes can be cleared (""), so presence decides, not COALESCE
+    Object.prototype.hasOwnProperty.call(body, 'schedule_notes') ? 1 : 0,
+    typeof body.schedule_notes === 'string' ? body.schedule_notes.slice(0, 500) : null,
     body.risk_level || null, body.risk_notes || null,
     startedAt, completedAt, now, phaseId
   ).run();

@@ -94,6 +94,83 @@ function deriveScheduleFromBidFactors(bidFactors) {
   });
 }
 
+// ── Schedule timeline (the Gantt view) ─────────────────────────────────────
+// Planned baseline: the bid's start month (time_of_year.start_month, YYYY-MM)
+// or, failing that, the project's creation date; phases run back to back in
+// sequence for their estimated_duration_weeks. The baseline never moves.
+// Actual: started_at .. completed_at, or .. today while running.
+//
+// Status (Jerry, 2026-09-26: green scheduled / yellow over / red critical):
+//   green  on schedule: done by its planned end, or not past it yet
+//   yellow over schedule: past its planned end (or late to start) by up to
+//          CRITICAL_OVERRUN of its planned length
+//   red    critical: more than CRITICAL_OVERRUN over, or late enough to push
+//          the job past schedule.target_duration_weeks
+const DAY_MS = 86400000;
+const CRITICAL_OVERRUN = 0.25;
+
+function _day(d) { const t = new Date(d); return Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()); }
+
+function planStart(bidFactors, createdAt) {
+  const m = /^(\d{4})-(\d{2})/.exec(bidFactors?.time_of_year?.start_month || '');
+  if (m) return Date.UTC(Number(m[1]), Number(m[2]) - 1, 1);
+  return _day(createdAt || Date.now());
+}
+
+function scheduleTimeline(phases, { bidFactors, createdAt, today } = {}) {
+  const now = _day(today || Date.now());
+  const start = planStart(bidFactors, createdAt);
+  const targetWeeks = Number(bidFactors?.schedule?.target_duration_weeks) || null;
+  const targetEnd = targetWeeks ? start + Math.round(targetWeeks * 7) * DAY_MS : null;
+  const ordered = [...(phases || [])].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+
+  let cursor = start;
+  const rows = ordered.map(ph => {
+    // Projects saved before 2026-09-26 lost their durations (no DB column):
+    // fall back to the standard template's weeks for that phase type.
+    const weeks = Number(ph.estimated_duration_weeks)
+      || STANDARD_PHASE_TEMPLATE.find(t => t.phase_type === ph.phase_type)?.base_weeks || 1;
+    const planLen = Math.max(1, Math.round(weeks * 7)) * DAY_MS;
+    const plannedStart = cursor, plannedEnd = cursor + planLen;
+    cursor = plannedEnd;
+
+    const actualStart = ph.started_at ? _day(ph.started_at) : null;
+    const actualEnd = ph.completed_at ? _day(ph.completed_at) : null;
+    // When will this phase really finish? done = its finish; running = at the
+    // earliest its planned length from its real start, and never before today.
+    let projectedEnd;
+    if (ph.state === 'COMPLETE' && actualEnd != null) projectedEnd = actualEnd;
+    else if (ph.state === 'IN_PROGRESS' && actualStart != null) projectedEnd = Math.max(now, actualStart + planLen);
+    else projectedEnd = Math.max(plannedEnd, now + planLen);   // not started: it can't finish sooner than now + its length
+
+    const overMs = Math.max(0, projectedEnd - plannedEnd);
+    const lateToStart = ph.state === 'NOT_STARTED' && now > plannedStart;
+    let status = 'green';
+    if (overMs > planLen * CRITICAL_OVERRUN || (targetEnd != null && projectedEnd > targetEnd)) status = 'red';
+    else if (overMs > 0 || lateToStart) status = 'yellow';
+
+    return {
+      phase_id: ph.phase_id, label: ph.label, state: ph.state, sequence: ph.sequence,
+      notes: ph.schedule_notes || '',
+      planned_weeks: weeks,
+      planned_start: new Date(plannedStart).toISOString().slice(0, 10),
+      planned_end: new Date(plannedEnd).toISOString().slice(0, 10),
+      actual_start: actualStart != null ? new Date(actualStart).toISOString().slice(0, 10) : null,
+      actual_end: actualEnd != null ? new Date(actualEnd).toISOString().slice(0, 10) : null,
+      projected_end: new Date(projectedEnd).toISOString().slice(0, 10),
+      days_over: Math.round(overMs / DAY_MS),
+      status,
+    };
+  });
+  return {
+    start: new Date(start).toISOString().slice(0, 10),
+    planned_end: new Date(cursor).toISOString().slice(0, 10),
+    target_end: targetEnd != null ? new Date(targetEnd).toISOString().slice(0, 10) : null,
+    today: new Date(now).toISOString().slice(0, 10),
+    rows,
+  };
+}
+
 function advancePhase(phase, toState) {
   const validStates = ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETE'];
   if (!validStates.includes(toState)) {
@@ -110,5 +187,7 @@ module.exports = {
   STANDARD_PHASE_TEMPLATE,
   createProject,
   deriveScheduleFromBidFactors,
+  scheduleTimeline,
+  CRITICAL_OVERRUN,
   advancePhase,
 };

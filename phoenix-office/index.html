@@ -208,6 +208,21 @@
   .proj-tabs button:hover:not(:disabled) { background:none; color:var(--ink); }
   .bidq { max-width:420px; }
   .bidq .qlabel { font-weight:600; margin-bottom:8px; }
+  .sched-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .sched-table th { text-align:left; font-weight:600; color:var(--ink-dim); padding:4px 4px; font-size:11px; }
+  .sched-table td { padding:2px 4px; }
+  .sched-table input, .sched-table select { width:100%; box-sizing:border-box; font-size:12px; padding:4px 6px; }
+  .sched-table td:nth-child(2), .sched-table td:nth-child(3) { width:132px; }
+  .sched-table td:nth-child(4) { width:120px; }
+  .sched-table td:last-child { width:34px; }
+  .sched-chart { margin-top:10px; border:1px solid var(--line); border-radius:4px; background:#fff; padding:6px; overflow-x:auto; }
+  .sched-chart svg { min-width:720px; display:block; }
+  .sched-pre { white-space:pre-wrap; font-size:11px; background:var(--surface); padding:8px; border-radius:4px; }
+  .gantt { background:var(--paper); border:1px solid var(--line); border-radius:4px; padding:12px 14px; margin-bottom:14px; overflow-x:auto; }
+  .gantt svg { min-width:760px; display:block; }
+  .gantt-head { display:flex; gap:12px; align-items:baseline; margin-bottom:6px; }
+  .gantt-legend { display:flex; flex-wrap:wrap; gap:16px; font-size:11px; color:var(--ink-dim); margin-top:6px; }
+  .gantt-legend i { display:inline-block; width:18px; height:10px; border-radius:2px; margin-right:6px; vertical-align:middle; }
   .phase-card { background:var(--paper); border:1px solid var(--line); border-radius:4px; padding:12px 14px; margin-bottom:10px; }
   .phase-card .ph-top { display:flex; align-items:center; gap:10px; }
   .phase-card .ph-name { font-weight:700; flex:1; }
@@ -1141,21 +1156,94 @@ async function renderBidFactorsTab(){
   });
 }
 
+// ── Schedule timeline (Gantt) ───────────────────────────────────────────────
+// Dates across the top, one trade/phase per row down the left. Thin grey line =
+// the planned baseline (never moves); the thick line = that trade's real
+// schedule, coloured by lib/project.js scheduleTimeline(): green on schedule,
+// yellow over, red critical. The row's "what's scheduled" note sits under it.
+const GANTT_COLORS = { green: '#2e7d32', yellow: '#e0a800', red: '#c62828' };
+const GANTT_WORDS = { green: 'on schedule', yellow: 'over schedule', red: 'critical' };
+function renderGantt(tl){
+  const DAY = 86400000, d = s => Date.parse(s + 'T00:00:00Z');
+  const rows = tl.rows || [];
+  if (!rows.length) return '';
+  const ends = rows.flatMap(r => [d(r.planned_end), d(r.projected_end)]);
+  const starts = rows.flatMap(r => [d(r.planned_start), r.actual_start ? d(r.actual_start) : Infinity]);
+  const lo = Math.min(d(tl.start), ...starts) - DAY;
+  const hi = Math.max(d(tl.planned_end), d(tl.today), tl.target_end ? d(tl.target_end) : 0, ...ends) + 3 * DAY;
+  const W = 1000, X0 = 214, X1 = 984, TOP = 40, ROW = 50;
+  const x = t => X0 + (t - lo) / (hi - lo) * (X1 - X0);
+  const H = TOP + rows.length * ROW + 10;
+  const fmt = t => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const weeks = Math.ceil((hi - lo) / (7 * DAY));
+  const step = weeks > 16 ? 14 : 7;
+  let ticks = '';
+  for (let t = d(tl.start); t <= hi; t += step * DAY) {
+    if (t < lo) continue;
+    ticks += `<line x1="${x(t)}" x2="${x(t)}" y1="${TOP - 8}" y2="${H - 10}" stroke="#e3e6ea"/>
+      <text x="${x(t) + 3}" y="${TOP - 14}" font-size="11" fill="#5b6470">${esc(fmt(t))}</text>`;
+  }
+  const vline = (t, label, color, dash) => t >= lo && t <= hi ? `
+    <line x1="${x(t)}" x2="${x(t)}" y1="${TOP - 26}" y2="${H - 10}" stroke="${color}" stroke-width="1.5" ${dash ? 'stroke-dasharray="5 4"' : ''}/>
+    <text x="${x(t) + 4}" y="${TOP - 28}" font-size="11" font-weight="700" fill="${color}">${label}</text>` : '';
+  const bars = rows.map((r, i) => {
+    const y0 = TOP + i * ROW, c = GANTT_COLORS[r.status] || GANTT_COLORS.green;
+    const ps = d(r.planned_start), pe = d(r.planned_end);
+    const as = r.actual_start ? d(r.actual_start) : ps;
+    const ae = r.actual_end ? d(r.actual_end) : d(r.projected_end);
+    const bw = Math.max(4, x(ae) - x(as));
+    const tip = `${r.label}: planned ${r.planned_start} to ${r.planned_end}`
+      + (r.actual_start ? `, started ${r.actual_start}` : ', not started')
+      + (r.actual_end ? `, finished ${r.actual_end}` : `, projected ${r.projected_end}`)
+      + (r.days_over ? `, ${r.days_over} days over` : '') + ` (${GANTT_WORDS[r.status]})`;
+    const noteX = Math.min(x(as), X1 - 380);
+    return `<g>
+      <rect x="0" y="${y0}" width="${W}" height="${ROW}" fill="${i % 2 ? '#f7f8fa' : 'transparent'}"/>
+      <text x="12" y="${y0 + 21}" font-size="13" font-weight="700" fill="#1d232b">${esc(r.label)}</text>
+      <text x="12" y="${y0 + 37}" font-size="11" fill="${c}" font-weight="700">${esc(GANTT_WORDS[r.status])}${r.days_over ? ` · ${r.days_over} d over` : ''}</text>
+      <rect x="${x(ps)}" y="${y0 + 6}" width="${Math.max(3, x(pe) - x(ps))}" height="5" rx="2" fill="#c9ced6"><title>${esc('Planned: ' + r.planned_start + ' to ' + r.planned_end)}</title></rect>
+      <rect x="${x(as)}" y="${y0 + 14}" width="${bw}" height="16" rx="3" fill="${c}"><title>${esc(tip)}</title></rect>
+      ${r.notes ? `<text x="${noteX}" y="${y0 + 44}" font-size="11" fill="#39414b">${esc(r.notes)}</text>` : ''}
+    </g>`;
+  }).join('');
+  return `
+    <div class="gantt">
+      <div class="gantt-head"><b>Schedule</b>
+        <span class="muted">planned ${esc(tl.start)} to ${esc(tl.planned_end)}${tl.target_end ? ` · target finish ${esc(tl.target_end)}` : ''}</span></div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Project schedule by trade">
+        ${ticks}${bars}
+        ${tl.target_end ? vline(d(tl.target_end), 'Target finish', '#6b3fa0', true) : ''}
+        ${vline(d(tl.today), 'Today', '#1d232b', false)}
+      </svg>
+      <div class="gantt-legend">
+        <span><i style="background:${GANTT_COLORS.green}"></i>On schedule</span>
+        <span><i style="background:${GANTT_COLORS.yellow}"></i>Over schedule</span>
+        <span><i style="background:${GANTT_COLORS.red}"></i>Critical: over 25% late, or past the target finish</span>
+        <span><i style="background:#c9ced6; height:5px"></i>Planned</span>
+      </div>
+    </div>`;
+}
+
 // ── Phases tab ───────────────────────────────────────────────────────────────
 async function renderPhasesTab(){
   const p = currentProject;
   const body = $('#proj-tab-body');
-  const r = await api.invoke('office:project-phases-list', { projectId: p.project_id });
+  const [r, tl] = await Promise.all([
+    api.invoke('office:project-phases-list', { projectId: p.project_id }),
+    api.invoke('office:project-timeline', { projectId: p.project_id }),
+  ]);
   const phases = (r.ok && r.items) || [];
   if (!phases.length) { body.innerHTML = '<p class="muted">No phases yet — answer all bid factors, then award the project.</p>'; return; }
 
-  body.innerHTML = phases.map(ph => `
+  body.innerHTML = (tl && tl.ok ? renderGantt(tl) : '') + phases.map(ph => `
     <div class="phase-card">
       <div class="ph-top">
         <span class="ph-name">${esc(ph.label)}</span>
         <span class="phase-state ${esc(ph.state)}">${esc(ph.state.replace('_',' '))}</span>
       </div>
       <div class="ph-meta">${esc(ph.lifecycle_stage)}${ph.estimated_duration_weeks ? ` — est. ${esc(ph.estimated_duration_weeks)} wk` : ''}</div>
+      <div class="field" style="margin-top:8px"><label>What's scheduled <span class="muted">— shows under this trade's line on the schedule</span></label>
+        <div class="row"><input data-notes="${esc(ph.phase_id)}" maxlength="500" value="${esc(ph.schedule_notes || '')}" placeholder="e.g. Wk 1 set columns grid A-D · Wk 2 beams + bolt-up · Wk 3 plumb and final torque"></div></div>
       <div class="row" style="margin-top:8px">
         <button data-expand="${esc(ph.phase_id)}">${expandedPhase === ph.phase_id ? 'Hide checklist' : 'Checklist'}</button>
         ${ph.state !== 'IN_PROGRESS' && ph.state !== 'COMPLETE' ? `<button data-advance="${esc(ph.phase_id)}" data-to="IN_PROGRESS">Start</button>` : ''}
@@ -1175,6 +1263,12 @@ async function renderPhasesTab(){
   body.querySelectorAll('button[data-advance]').forEach(b => b.addEventListener('click', async () => {
     const r = await api.invoke('office:project-phase-advance', { projectId: p.project_id, phaseId: b.dataset.advance, state: b.dataset.to });
     if (!r.ok) return toast(r.error || 'update failed');
+    renderPhasesTab();
+  }));
+  body.querySelectorAll('input[data-notes]').forEach(inp => inp.addEventListener('change', async () => {
+    const r = await api.invoke('office:project-phase-notes', { projectId: p.project_id, phaseId: inp.dataset.notes, notes: inp.value });
+    if (!r.ok) return toast(r.error || 'could not save');
+    toast('saved to the schedule');
     renderPhasesTab();
   }));
   body.querySelectorAll('button[data-print]').forEach(b => b.addEventListener('click', async () => {
@@ -1452,6 +1546,83 @@ function docTitle(d){
   return d.supersedes ? ` — ${base} · change order` : ` — ${base}`;
 }
 
+// ── Master schedule field: a trade-row editor + live chart ──────────────────
+// Every other field is a one-line box filled once; a schedule needs one line
+// per trade, so phase_breakdown gets rows (trade · start · finish · status ·
+// what's scheduled). "Lock schedule" fills the field once, in the
+// lib/schedule-gantt.js line format; after that it's locked like any field and
+// only the chart shows. The same SVG goes into the exported PDF.
+let schedDraft = null, schedDraftFor = null;
+const SCHED_STATUS = [['on', 'On schedule'], ['over', 'Over schedule'], ['critical', 'Critical']];
+function schedClean(s){ return String(s || '').replace(/\|/g, '/').replace(/\s+/g, ' ').trim(); }
+function schedText(rows){
+  return rows.filter(r => schedClean(r.trade) && r.start && r.end)
+    .map(r => [schedClean(r.trade), r.start, r.end, r.status || 'on', schedClean(r.notes)].join(' | ')).join('\n');
+}
+function scheduleFieldHtml(val, readOnly){
+  // per-document key: the FORGED entry's timestamp (documents carry no id or
+  // created_at field, and the fingerprint is the same for every doc on a machine)
+  const key = doc && ((doc.history && doc.history[0] && doc.history[0].at) || doc.hash || 'doc');
+  if (schedDraftFor !== key) { schedDraft = [{ trade: '', start: '', end: '', status: 'on', notes: '' }]; schedDraftFor = key; }
+  if (readOnly) {
+    return `<div class="field filled"><label>phase_breakdown <span class="lock">🔒 filled</span></label>
+      <div id="sched-chart" class="sched-chart"><span class="muted">drawing…</span></div>
+      <details style="margin-top:6px"><summary class="muted">show as text</summary><pre class="sched-pre">${esc(val || '')}</pre></details></div>`;
+  }
+  const rowsHtml = schedDraft.map((r, i) => `<tr>
+      <td><input data-srow="${i}" data-skey="trade" value="${esc(r.trade)}" placeholder="e.g. Steel erection"></td>
+      <td><input type="date" data-srow="${i}" data-skey="start" value="${esc(r.start)}"></td>
+      <td><input type="date" data-srow="${i}" data-skey="end" value="${esc(r.end)}"></td>
+      <td><select data-srow="${i}" data-skey="status">${SCHED_STATUS.map(([v, t]) => `<option value="${v}"${r.status === v ? ' selected' : ''}>${t}</option>`).join('')}</select></td>
+      <td><input data-srow="${i}" data-skey="notes" value="${esc(r.notes)}" placeholder="what's scheduled"></td>
+      <td><button data-sdel="${i}" title="remove this trade">✕</button></td></tr>`).join('');
+  return `<div class="field"><label>phase_breakdown <span class="muted">— one row per trade; the chart draws as you go</span></label>
+    <table class="sched-table"><thead><tr><th>Trade</th><th>Start</th><th>Finish</th><th>Status</th><th>What's scheduled</th><th></th></tr></thead>
+      <tbody>${rowsHtml}</tbody></table>
+    <div class="row" style="margin-top:6px"><button id="sched-add">+ Add trade</button>
+      <button class="primary" id="sched-lock">Lock schedule</button>
+      <span class="muted" id="sched-msg"></span></div>
+    <div id="sched-chart" class="sched-chart"></div></div>`;
+}
+async function drawSchedChart(text){
+  const el = $('#sched-chart'); if (!el) return;
+  if (!text) { el.innerHTML = '<span class="muted">Add a trade with a start and finish date to see the chart.</span>'; return; }
+  const r = await api.invoke('office:schedule-preview', { fields: { ...doc.fields, phase_breakdown: text } });
+  if (!r.ok) return;
+  el.innerHTML = r.svg || '<span class="muted">nothing to draw yet</span>';
+  const msg = $('#sched-msg');
+  if (msg) msg.textContent = r.problems && r.problems.length ? `row ${r.problems[0].line}: ${r.problems[0].why}` : '';
+}
+function wireScheduleField(){
+  if (!doc || !('phase_breakdown' in doc.fields)) return;
+  const filled = doc.fields.phase_breakdown !== null || doc.state === 'SIGNED';
+  if (filled) { drawSchedChart(doc.fields.phase_breakdown || ''); return; }
+  $('#doc-view').querySelectorAll('[data-srow]').forEach(inp => {
+    const upd = () => { schedDraft[Number(inp.dataset.srow)][inp.dataset.skey] = inp.value; drawSchedChart(schedText(schedDraft)); };
+    inp.addEventListener('input', upd); inp.addEventListener('change', upd);
+  });
+  $('#doc-view').querySelectorAll('[data-sdel]').forEach(b => b.addEventListener('click', () => {
+    schedDraft.splice(Number(b.dataset.sdel), 1);
+    if (!schedDraft.length) schedDraft.push({ trade: '', start: '', end: '', status: 'on', notes: '' });
+    render();
+  }));
+  const add = $('#sched-add');
+  if (add) add.addEventListener('click', () => {
+    const last = schedDraft[schedDraft.length - 1];
+    schedDraft.push({ trade: '', start: last && last.end ? last.end : '', end: '', status: 'on', notes: '' });
+    render();
+  });
+  const lock = $('#sched-lock');
+  if (lock) lock.addEventListener('click', () => {
+    const text = schedText(schedDraft);
+    if (!text) return toast('Add at least one trade with a start and finish date first');
+    const bad = schedDraft.find(r => r.start && r.end && r.end < r.start);
+    if (bad) return toast(`${bad.trade || 'A trade'} finishes before it starts`);
+    fill('phase_breakdown', text);
+  });
+  drawSchedChart(schedText(schedDraft));
+}
+
 function render(){
   if (!doc){ $('#empty').hidden = false; $('#doc-view').hidden = true; $('#badge').hidden = true; $('#doc-title').textContent=''; return; }
   $('#empty').hidden = true; $('#doc-view').hidden = false;
@@ -1462,6 +1633,7 @@ function render(){
   const locked = doc.state === 'SIGNED';
   const fieldsHtml = Object.entries(doc.fields).map(([name,val]) => {
     const filled = val !== null;
+    if (name === 'phase_breakdown') return scheduleFieldHtml(val, filled || locked);
     const dateField = isDateField(name);
     const inputHtml = (dateField && !filled && !locked)
       ? `<input type="date" data-field="${esc(name)}" data-kind="date">`
@@ -1535,6 +1707,8 @@ function render(){
       }
     });
   }
+
+  wireScheduleField();
 
   $('#doc-view').querySelectorAll('input[data-field]').forEach(inp => {
     const f = inp.dataset.field;

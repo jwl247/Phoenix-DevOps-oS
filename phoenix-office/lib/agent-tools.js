@@ -223,7 +223,12 @@ function createAgentTools({ lib, listTemplates, browseWorker, aiComplete }) {
                     if (r.allowed) doc = r.document;
                 }
                 if (args.phase_id && 'phase_breakdown' in doc.fields && Array.isArray(state.project.phases)) {
-                    const breakdown = state.project.phases.map(p => `${p.label} (${p.lifecycle_stage}) — est. ${p.estimated_duration_weeks || '?'} wk`).join('\n');
+                    // One line per trade in the Master schedule's chart format
+                    // (lib/schedule-gantt.js): trade | start | finish | status | notes,
+                    // with real dates and status from the project's timeline.
+                    const tl = lib.project.scheduleTimeline(state.project.phases, {
+                        bidFactors: state.project.bid_factors, createdAt: state.project.created_at });
+                    const breakdown = require('./schedule-gantt').breakdownFromTimeline(tl);
                     const r = lib.document.fillField(doc, 'phase_breakdown', breakdown, doc.author_fingerprint);
                     if (r.allowed) doc = r.document;
                 }

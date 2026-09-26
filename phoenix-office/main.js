@@ -886,9 +886,27 @@ function registerIpc() {
     });
 
     ipcMain.handle('office:project-phases-list', (_e, { projectId } = {}) => projectStore.listPhases(projectId));
+    // The Gantt view: planned baseline vs actual per trade/phase, coloured
+    // green/yellow/red by lib.project.scheduleTimeline (tested there).
+    ipcMain.handle('office:project-timeline', async (_e, { projectId } = {}) => {
+        const [project, phases] = await Promise.all([projectStore.getProject(projectId), projectStore.listPhases(projectId)]);
+        if (!project.ok) return project;
+        if (!phases.ok) return phases;
+        return { ok: true, ...lib.project.scheduleTimeline(phases.items || [], {
+            bidFactors: project.bid_factors, createdAt: project.created_at }) };
+    });
     ipcMain.handle('office:project-phase-create', (_e, { projectId, phases } = {}) => projectStore.createPhases(projectId, phases));
     ipcMain.handle('office:project-phase-advance', (_e, { projectId, phaseId, state } = {}) =>
         projectStore.patchPhase(projectId, phaseId, { state }));
+    // Master schedule chart for the document pane (same SVG the PDF export uses).
+    ipcMain.handle('office:schedule-preview', (_e, { fields } = {}) => {
+        const g = require('./lib/schedule-gantt');
+        const f = fields && typeof fields === 'object' ? fields : {};
+        return { ok: true, svg: g.scheduleSvg(f, { width: 1000 }), problems: g.parseBreakdown(f.phase_breakdown).problems };
+    });
+    // "What's scheduled" for a trade's stretch, printed under its timeline line.
+    ipcMain.handle('office:project-phase-notes', (_e, { projectId, phaseId, notes } = {}) =>
+        projectStore.patchPhase(projectId, phaseId, { schedule_notes: String(notes ?? '').slice(0, 500) }));
 
     // The "award" milestone in the plain UI (not routed through the agent) —
     // same deterministic derivation the agent's award_project tool uses,
