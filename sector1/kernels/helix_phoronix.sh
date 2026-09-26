@@ -33,7 +33,10 @@ TESTS=(pts/fio pts/fs-mark pts/dbench pts/postmark pts/sqlite-speedtest)
 phoronix-test-suite batch-install pts/fio pts/fs-mark pts/dbench pts/sqlite-speedtest 2>&1 | grep -v deprecated | tail -5
 # gnu89 for postmark ONLY: fio needs C99+ and fails under it.
 CFLAGS="-std=gnu89 -O2" phoronix-test-suite batch-install pts/postmark 2>&1 | grep -v deprecated | tail -3
-ONLY=${HELIX_PTS_ONLY:-all}   # all | nofio (resume a run whose fio tests already landed)
+# HELIX_PTS_SKIP="fio fsmark" resumes a run whose tests of those kinds already landed.
+SKIP=" ${HELIX_PTS_SKIP:-} "
+[ "${HELIX_PTS_ONLY:-}" = nofio ] && SKIP="$SKIP fio "
+skip() { case "$SKIP" in *" $1 "*) return 0;; *) return 1;; esac; }
 
 run() {   # $1 = test, $2 = PRESET_OPTIONS
   drop
@@ -45,15 +48,15 @@ run() {   # $1 = test, $2 = PRESET_OPTIONS
 }
 
 DT="fio.auto-disk-mount-points=Default Test Directory"
-if [ "$ONLY" != nofio ]; then
+if ! skip fio; then
   for T in "Random Read" "Random Write" "Sequential Read" "Sequential Write"; do
     BS=4KB; case "$T" in Seq*) BS=1MB;; esac
     run pts/fio "fio.type=$T;fio.engine=IO_uring;fio.direct=Yes;fio.size=$BS;fio.cpu-threads=1;$DT"
   done
 fi
-for F in "1000 Files, 1MB Size" "5000 Files, 1MB Size, 4 Threads" "4000 Files, 32 Sub Dirs, 1MB Size"; do
-  run pts/fs-mark "fs-mark.test=$F"
-done
+# One fs-mark variant: the 5000- and 4000-file ones write 80-100 GB per pass,
+# hours each on a 5400 rpm origin. 1000 files x 1 MB, fsync'd, is the same test.
+skip fsmark || run pts/fs-mark "fs-mark.test=1000 Files, 1MB Size"
 for N in 1 12 48; do
   run pts/dbench "dbench.client-count=$N"
 done
