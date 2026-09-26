@@ -112,7 +112,9 @@ def local_addresses():
             ip = ipaddress.ip_address(a.split("%")[0])
         except ValueError:
             continue
-        if ip.version == 4 and ip.is_private and not str(ip).startswith("10.47.0."):
+        # link-local 169.254.x (Windows gives these to idle adapters) is not a
+        # real LAN address: found live 2026-09-26, it sent pbm3 to a dead hop.
+        if ip.version == 4 and ip.is_private and not ip.is_link_local and not str(ip).startswith("10.47.0."):
             v4.add(str(ip))
         elif ip.version == 6 and ip.is_global:
             v6.add(str(ip))
@@ -156,9 +158,21 @@ def api(dev, method, path, body=None):
 def write_configs(dev, self_view, peers, my_v4, have_v6):
     priv = open(KEY_FILE, encoding="utf-8").read().strip()
     iface = [f"PrivateKey = {priv}", f"ListenPort = {dev['port']}"]
+    # Static devices (phones) can't run the agent: they link only to the hub.
+    # Everyone else reaches them THROUGH the hub, so their addresses ride on
+    # the hub's AllowedIPs instead of a direct peer entry. The hub itself
+    # (and only the hub) holds them as direct peers.
+    i_am_hub = bool(self_view.get("hub"))
+    hub = next((p for p in peers if p.get("hub")), None)
+    statics = [p for p in peers if p.get("kind") == "static"]
     peer_blocks = []
     for p in peers:
-        lines = ["[Peer]", f"PublicKey = {p['pubkey']}", f"AllowedIPs = {p['mesh_ip']}/32"]
+        if p.get("kind") == "static" and not i_am_hub:
+            continue
+        allowed = [f"{p['mesh_ip']}/32"]
+        if hub is not None and p is hub and not i_am_hub:
+            allowed += [f"{s['mesh_ip']}/32" for s in statics]
+        lines = ["[Peer]", f"PublicKey = {p['pubkey']}", f"AllowedIPs = {', '.join(allowed)}"]
         ep = pick_endpoint(p, my_v4, have_v6)
         if ep:
             lines.append(f"Endpoint = {ep}")
@@ -200,7 +214,7 @@ def ping_ms(ip):
     return float(m.group(1)) if (r.returncode == 0 and m) else None
 
 
-def link_health(peers):
+def link_health(peers, my_v4=()):
     dump = subprocess.run([wg_bin(), "show", IFACE, "dump"], capture_output=True, text=True).stdout.splitlines()
     by_key = {}
     for line in dump[1:]:
@@ -218,7 +232,7 @@ def link_health(peers):
             path = "direct"
         else:
             # direct link down: can we still reach the peer's LAN address (via LAN or the Cloudflare tunnel)?
-            lan = next((e["addr"] for e in p.get("endpoints", []) if e.get("family") == 4), None)
+            lan = lan_fallback(p, my_v4)
             rtt = ping_ms(lan) if lan else None
             path = "fallback" if rtt is not None else "down"
         links.append({"to": p["name"], "path": path, "handshake_age": age, "rtt_ms": rtt,
@@ -227,10 +241,22 @@ def link_health(peers):
 
 
 # ── Phoenix names ──────────────────────────────────────────────────────────
-def write_hosts(names, peers, links):
+def lan_fallback(peer, my_v4):
+    """The peer's IPv4 LAN address for when the direct mesh link is down:
+    one on a network we share first (reachable straight over the LAN), else
+    any (reachable via the Cloudflare tunnel's private routes)."""
+    v4 = [e["addr"] for e in peer.get("endpoints", []) if e.get("family") == 4]
+    for a in v4:
+        net = ipaddress.ip_network(a + "/24", strict=False)
+        if any(ipaddress.ip_address(m) in net for m in my_v4):
+            return a
+    return v4[0] if v4 else None
+
+
+def write_hosts(names, peers, links, my_v4=()):
     """<name>.phx -> mesh IP while the direct link is up; the peer's LAN
     address when it isn't (that path works on the LAN and via the tunnel)."""
-    lan = {p["name"]: next((e["addr"] for e in p.get("endpoints", []) if e.get("family") == 4), None) for p in peers}
+    lan = {p["name"]: lan_fallback(p, my_v4) for p in peers}
     status = {l["to"]: l["path"] for l in links}
     lines = [HOSTS_BEGIN]
     for host, mesh_ip in sorted(names.items()):
@@ -268,6 +294,8 @@ def cmd_init(a):
 
 
 def cmd_token(a):
+    if a.token == "-":                      # from stdin: keeps the token out of the process list
+        a.token = sys.stdin.readline()
     if not re.fullmatch(r"[0-9a-f]{64}", a.token.strip()):
         sys.exit("token must be 64 hex characters")
     dev = load_device()
@@ -282,13 +310,13 @@ def cycle(dev):
     if iface_up():
         try:
             prev = api(dev, "GET", "/peers")
-            body["links"] = link_health(prev["peers"])
+            body["links"] = link_health(prev["peers"], my_v4)
         except Exception as e:                         # health is best-effort; the heartbeat must still go
             log(f"health: {e}")
     r = api(dev, "POST", "/heartbeat", body)
     write_configs(dev, r["self"], r["peers"], my_v4, bool(my_v6))
     apply_wireguard(r["self"])
-    write_hosts(r["names"], r["peers"], body.get("links", []))
+    write_hosts(r["names"], r["peers"], body.get("links", []), my_v4)
     summary = ", ".join(f"{l['to']}={l['path']}" for l in body.get("links", [])) or "first cycle"
     log(f"{dev['name']} {r['self']['mesh_ip']}: {len(r['peers'])} peers; {summary}")
 
@@ -314,7 +342,7 @@ def cmd_run(a):
 def cmd_status(a):
     dev = load_device()
     peers = api(dev, "GET", "/peers")["peers"]
-    for l in link_health(peers):
+    for l in link_health(peers, local_addresses()[0]):
         print(f"{l['to']:<12} {l['path']:<9} handshake={l['handshake_age']}s rtt={l['rtt_ms']}ms "
               f"rx={l['rx_bytes']} tx={l['tx_bytes']} via={l['endpoint']}")
 

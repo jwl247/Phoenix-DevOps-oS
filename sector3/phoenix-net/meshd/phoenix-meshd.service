@@ -1,0 +1,16 @@
+# phoenix-meshd.service — the Phoenix Mesh agent (sector3/phoenix-net/meshd)
+# Installed by sector3/phoenix-net/phoenix-net.py enroll. Keys + token live in
+# /etc/phoenix-mesh (root, 0600). Heartbeat every 30 s.
+[Unit]
+Description=Phoenix Mesh agent (WireGuard mesh, Cloudflare switchboard)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/phoenix-mesh/meshd.py run --every 30
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -8,10 +8,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import meshd  # noqa: E402
 
 fails = 0
+ran = 0
 
 
 def t(name, fn):
-    global fails
+    global fails, ran
+    ran += 1
     try:
         fn()
         print(f"  ok  {name}")
@@ -60,10 +62,31 @@ def hosts_uses_lan_address_when_direct_is_down():
         assert "192.168.1.141\tcompaq.phx" in open(meshd.HOSTS).read()
 
 
+def phones_ride_through_the_hub():
+    with tempfile.TemporaryDirectory() as d:
+        meshd.KEY_FILE = os.path.join(d, "private.key")
+        meshd.WG_SYNC_CONF = os.path.join(d, "s.conf")
+        meshd.WG_FULL_CONF = os.path.join(d, "f.conf")
+        open(meshd.KEY_FILE, "w").write("PRIVATEKEY\n")
+        hub = {"name": "precision", "pubkey": "HUB", "mesh_ip": "10.47.0.1", "hub": True, "kind": "agent", "endpoints": []}
+        phone = {"name": "phone", "pubkey": "PHONE", "mesh_ip": "10.47.0.4", "hub": False, "kind": "static", "endpoints": []}
+        # a normal agent: no direct phone entry; the phone's /32 rides on the hub
+        meshd.write_configs({"port": 51820}, {"mesh_ip": "10.47.0.2", "hub": False}, [hub, PEER | {"kind": "agent"}, phone], [], False)
+        s = open(meshd.WG_SYNC_CONF).read()
+        assert "PublicKey = PHONE" not in s, "phone listed directly on a non-hub"
+        assert "AllowedIPs = 10.47.0.1/32, 10.47.0.4/32" in s, s
+        assert "PRIVATEKEY" in s and "Address" not in s, "sync conf must not carry Address"
+        # the hub: phone is a direct peer
+        meshd.write_configs({"port": 51820}, {"mesh_ip": "10.47.0.1", "hub": True}, [PEER | {"kind": "agent"}, phone], [], False)
+        assert "PublicKey = PHONE" in open(meshd.WG_SYNC_CONF).read()
+        assert "Address = 10.47.0.1/24" in open(meshd.WG_FULL_CONF).read()
+
+
+t("phones ride through the hub", phones_ride_through_the_hub)
 t("same LAN is preferred", same_lan_first)
 t("public IPv6 when not on the same LAN", ipv6_when_not_same_lan)
 t("no direct path -> None (Cloudflare fallback)", none_means_fallback)
 t("hosts block: managed, idempotent, user lines kept", hosts_block_is_managed_and_idempotent)
 t("hosts: LAN address when the direct link is down", hosts_uses_lan_address_when_direct_is_down)
-print(f"\n{5 - fails} passing, {fails} failing")
+print(f"\n{ran - fails} passing, {fails} failing")
 sys.exit(1 if fails else 0)

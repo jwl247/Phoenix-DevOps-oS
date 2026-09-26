@@ -97,6 +97,11 @@ table inet phoenix {
     udp dport 68 accept                       # DHCPv4 client
     tcp dport 22 ip saddr @lan4 accept
     tcp dport 22 ip6 saddr @lan6 accept
+    # Phoenix Mesh (sector3/phoenix-net): WireGuard itself authenticates every
+    # packet (unknown keys are silently dropped), so its port may be open; and
+    # anything arriving over the mesh interface already came from a family device.
+    udp dport 51820 accept
+    iifname "wg-phx" accept
   }
   chain forward { type filter hook forward priority 0; policy drop; }
   chain output  { type filter hook output priority 0; policy accept; }
