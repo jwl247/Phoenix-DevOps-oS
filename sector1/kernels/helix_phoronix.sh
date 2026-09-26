@@ -24,8 +24,16 @@ mkdir -p /srv/bench/pts-env
 
 drop() { sync; sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'; }
 
-TESTS=(pts/fio pts/compilebench pts/dbench pts/postmark pts/sqlite-speedtest)
-phoronix-test-suite batch-install "${TESTS[@]}" 2>&1 | grep -v deprecated | tail -5
+# Debian 13 notes (found 2026-09-26): dbench needs libpopt-dev, sqlite-speedtest
+# needs tcl, postmark is 1990s C that GCC 14 rejects (built with -std=gnu89 via
+# CFLAGS, which its install.sh passes through). compilebench needs python2,
+# which Debian 13 no longer ships: fs-mark (small-file create/sync) replaces it.
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libpopt-dev tcl >/dev/null
+TESTS=(pts/fio pts/fs-mark pts/dbench pts/postmark pts/sqlite-speedtest)
+phoronix-test-suite batch-install pts/fio pts/fs-mark pts/dbench pts/sqlite-speedtest 2>&1 | grep -v deprecated | tail -5
+# gnu89 for postmark ONLY: fio needs C99+ and fails under it.
+CFLAGS="-std=gnu89 -O2" phoronix-test-suite batch-install pts/postmark 2>&1 | grep -v deprecated | tail -3
+ONLY=${HELIX_PTS_ONLY:-all}   # all | nofio (resume a run whose fio tests already landed)
 
 run() {   # $1 = test, $2 = PRESET_OPTIONS
   drop
@@ -37,12 +45,14 @@ run() {   # $1 = test, $2 = PRESET_OPTIONS
 }
 
 DT="fio.auto-disk-mount-points=Default Test Directory"
-for T in "Random Read" "Random Write" "Sequential Read" "Sequential Write"; do
-  BS=4KB; case "$T" in Seq*) BS=1MB;; esac
-  run pts/fio "fio.type=$T;fio.engine=IO_uring;fio.direct=Yes;fio.size=$BS;fio.cpu-threads=1;$DT"
-done
-for C in "Initial Create" "Compile" "Read Compiled Tree"; do
-  run pts/compilebench "compilebench.run-test=$C"
+if [ "$ONLY" != nofio ]; then
+  for T in "Random Read" "Random Write" "Sequential Read" "Sequential Write"; do
+    BS=4KB; case "$T" in Seq*) BS=1MB;; esac
+    run pts/fio "fio.type=$T;fio.engine=IO_uring;fio.direct=Yes;fio.size=$BS;fio.cpu-threads=1;$DT"
+  done
+fi
+for F in "1000 Files, 1MB Size" "5000 Files, 1MB Size, 4 Threads" "4000 Files, 32 Sub Dirs, 1MB Size"; do
+  run pts/fs-mark "fs-mark.test=$F"
 done
 for N in 1 12 48; do
   run pts/dbench "dbench.client-count=$N"
