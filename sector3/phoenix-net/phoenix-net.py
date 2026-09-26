@@ -106,8 +106,10 @@ def enroll_local(a):
 def enroll_phone(a):
     """A phone can't run the agent, so its keypair is made here and the
     config shown ONCE for the WireGuard app to scan. It links to the hub PC."""
-    priv = subprocess.run(["wg", "genkey"], capture_output=True, text=True).stdout.strip()
-    pub = subprocess.run(["wg", "pubkey"], input=priv, capture_output=True, text=True).stdout.strip()
+    wg = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "WireGuard", "wg.exe")
+    wg = wg if os.path.exists(wg) else "wg"
+    priv = subprocess.run([wg, "genkey"], capture_output=True, text=True).stdout.strip()
+    pub = subprocess.run([wg, "pubkey"], input=priv, capture_output=True, text=True).stdout.strip()
     if not priv or not pub:
         sys.exit("needs `wg` (WireGuard for Windows) on this PC")
     r = admin("POST", "/enroll", {"name": a.name, "pubkey": pub, "owner_email": OWNER, "kind": "static"})
@@ -119,10 +121,27 @@ def enroll_phone(a):
     conf = (f"[Interface]\nPrivateKey = {priv}\nAddress = {r['mesh_ip']}/32\n\n"
             f"[Peer]\nPublicKey = {hub['pubkey']}\nAllowedIPs = 10.47.0.0/24\n"
             + (f"Endpoint = {endpoint}\n" if endpoint else "") + "PersistentKeepalive = 25\n")
-    out = os.path.join(os.path.expanduser("~"), f"{a.name}-phoenix-mesh.conf")
-    with open(out, "w", encoding="utf-8") as f:
-        f.write(conf)
-    print(f"enrolled {a.name} = {r['mesh_ip']}. Config written to {out}: import it in the WireGuard app, then DELETE the file.")
+    out = os.path.join(os.path.expanduser("~"), f"{a.name}-phoenix-mesh.png")
+    try:
+        import qrcode
+        qrcode.make(conf).save(out)
+        os.startfile(out) if hasattr(os, "startfile") else None
+        print(f"enrolled {a.name} = {r['mesh_ip']}. QR opened on screen: scan it in the WireGuard app "
+              f"(+ -> Scan from QR code), then run: phoenix-net.py forget-qr {a.name}")
+    except ImportError:
+        out = out[:-4] + ".conf"
+        with open(out, "w", encoding="utf-8") as f:
+            f.write(conf)
+        print(f"enrolled {a.name} = {r['mesh_ip']}. Config at {out}: import in the WireGuard app, then DELETE it.")
+
+
+def forget_qr(a):
+    """The QR/config holds the phone's private key: delete it once scanned."""
+    for ext in (".png", ".conf"):
+        p = os.path.join(os.path.expanduser("~"), f"{a.name}-phoenix-mesh{ext}")
+        if os.path.exists(p):
+            os.remove(p)
+            print(f"deleted {p}")
 
 
 def cmd_list(a):
@@ -153,6 +172,7 @@ def main():
     p.add_argument("--hub", action="store_true"); p.set_defaults(fn=enroll_ssh)
     p = sp.add_parser("enroll-local"); p.add_argument("name"); p.add_argument("--hub", action="store_true"); p.set_defaults(fn=enroll_local)
     p = sp.add_parser("enroll-phone"); p.add_argument("name"); p.add_argument("--hub-name", required=True); p.set_defaults(fn=enroll_phone)
+    p = sp.add_parser("forget-qr"); p.add_argument("name"); p.set_defaults(fn=forget_qr)
     sp.add_parser("list").set_defaults(fn=cmd_list)
     p = sp.add_parser("links"); p.add_argument("--since", default="1970-01-01"); p.set_defaults(fn=cmd_links)
     p = sp.add_parser("revoke"); p.add_argument("name"); p.set_defaults(fn=cmd_revoke)
