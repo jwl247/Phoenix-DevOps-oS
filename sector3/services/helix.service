@@ -1,0 +1,21 @@
+# helix.service — kernel Helix at boot: helix.ko + Frank3 slots + dm-helix
+# double strand over her origin disk, mounted. Settings: /etc/default/helix.
+# Install: sector1/kernels/install_helix_boot.sh
+[Unit]
+Description=Helix kernel (dm-helix double strand, Dandelion) + Frank3 slots
+DefaultDependencies=no
+After=local-fs.target systemd-udev-settle.service
+Before=phoenix-paging.service
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/phoenix/sector1/kernels/helix_boot.sh start
+ExecStop=/opt/phoenix/sector1/kernels/helix_boot.sh stop
+TimeoutStartSec=900
+TimeoutStopSec=300
+
+[Install]
+WantedBy=multi-user.target

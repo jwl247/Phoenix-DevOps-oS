@@ -429,16 +429,20 @@ class LinuxSystemMonitor:
 
 class LinuxSwapManager:
     """
-    Creates and manages a swapfile on the dedicated NVMe.
-    Uses fallocate + mkswap + swapon/swapoff.
-    No restart required — changes are live immediately.
+    Additive swap: grows by ADDING swapfiles, shrinks only by removing a
+    Phoenix-made swapfile whose used pages fit back in RAM. Never swapoff's
+    what it didn't create (e.g. the installer's swap partition).
+
+    Rewritten 2026-09-26 (Compaq bring-up). The old resize() did
+    swapoff -> unlink -> recreate on its single swapfile: under memory
+    pressure (exactly when the circuit breaker calls resize) swapoff forces
+    every swapped page back into RAM, which can OOM the box it's protecting.
     """
 
     def __init__(self, config: SystemConfig):
-        self.config       = config
-        self.swapfile     = Path(config.swapfile_path)
-        self.lock         = threading.Lock()
-        self._current_gb  = 0.0
+        self.config   = config
+        self.swapfile = Path(config.swapfile_path)   # base name; files are <base>.<n>
+        self.lock     = threading.Lock()
 
     # Real bug, found live 2026-09-25: mkswap/swapon/swapoff live in
     # /usr/sbin (or /sbin on some distros), which is NOT on a normal
@@ -460,145 +464,153 @@ class LinuxSwapManager:
     def _run(self, cmd: List[str], check: bool = True) -> subprocess.CompletedProcess:
         resolved = [self._resolve_bin(cmd[0])] + cmd[1:]
         return subprocess.run(resolved, capture_output=True, text=True,
-                              timeout=120, check=check)
+                              timeout=600, check=check)
+
+    # -- what's active -------------------------------------------------
+    @staticmethod
+    def _proc_swaps() -> List[Dict]:
+        """Active swap areas from /proc/swaps (sizes in bytes)."""
+        out = []
+        try:
+            with open('/proc/swaps') as f:
+                next(f)
+                for line in f:
+                    p = line.split()
+                    if len(p) >= 4:
+                        out.append({'path': p[0].replace('\\040', ' '), 'type': p[1],
+                                    'size': int(p[2]) * 1024, 'used': int(p[3]) * 1024})
+        except (OSError, StopIteration, ValueError):
+            pass
+        return out
+
+    def _ours(self, path: str) -> bool:
+        base = str(self.swapfile)
+        return path == base or (path.startswith(base + '.') and path[len(base) + 1:].isdigit())
+
+    def managed(self) -> List[Dict]:
+        """Phoenix's own active swapfiles, oldest first."""
+        mine = [s for s in self._proc_swaps() if self._ours(s['path'])]
+
+        def order(s):
+            suffix = s['path'][len(str(self.swapfile)) + 1:]
+            return int(suffix) if suffix.isdigit() else -1   # legacy single file first
+        return sorted(mine, key=order)
 
     def get_current_swap_gb(self) -> float:
-        """Read active swap from /proc/meminfo."""
-        try:
-            with open('/proc/meminfo') as f:
-                for line in f:
-                    if line.startswith('SwapTotal:'):
-                        kb = int(line.split()[1])
-                        return kb / 1e6
-        except:
-            pass
-        return self._current_gb
+        """All active swap (ours + the system's), in GB."""
+        return sum(s['size'] for s in self._proc_swaps()) / 1e9
 
     def get_free_disk_gb(self) -> float:
         try:
-            mount = str(self.swapfile.parent)
-            st    = os.statvfs(mount)
+            st = os.statvfs(str(self.swapfile.parent))
             return (st.f_bavail * st.f_frsize) / 1e9
-        except:
+        except OSError:
             return 0.0
 
-    def _deactivate(self) -> bool:
-        if not self.swapfile.exists():
-            return True
+    @staticmethod
+    def _mem_available_bytes() -> int:
         try:
-            r = self._run(['swapoff', str(self.swapfile)], check=False)
-            if r.returncode not in (0, 1):
-                logging.warning(f"[SWAP] swapoff warning: {r.stderr.strip()}")
-            return True
-        except Exception as e:
-            logging.error(f"[SWAP] deactivate failed: {e}")
-            return False
+            with open('/proc/meminfo') as f:
+                for line in f:
+                    if line.startswith('MemAvailable:'):
+                        return int(line.split()[1]) * 1024
+        except (OSError, ValueError):
+            pass
+        return 0
 
-    def _create(self, size_gb: float) -> bool:
-        size_bytes = int(size_gb * 1024 * 1024 * 1024)
-        sf         = str(self.swapfile)
+    # -- add / remove one file -----------------------------------------
+    def _next_path(self) -> Path:
+        used = {s['path'] for s in self._proc_swaps()}
+        n = 0
+        while True:
+            p = Path(f"{self.swapfile}.{n}")
+            if str(p) not in used and not p.exists():
+                return p
+            n += 1
 
-        # Ensure mount point exists
-        self.swapfile.parent.mkdir(parents=True, exist_ok=True)
-
-        # Try fallocate first (instant on NVMe)
+    def _add(self, size_gb: float) -> bool:
+        path = self._next_path()
+        size_bytes = int(size_gb * 1024 ** 3)
+        path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            self._run(['fallocate', '-l', str(size_bytes), sf])
-            logging.info(f"[SWAP] fallocate {size_gb:.1f}GB OK")
-        except Exception:
-            # Fallback to dd
-            logging.warning("[SWAP] fallocate failed — using dd (slower)")
-            count = int(size_gb * 1024)
             try:
-                self._run(['dd', 'if=/dev/zero', f'of={sf}',
-                           'bs=1M', f'count={count}', 'status=none'])
-            except Exception as e:
-                logging.error(f"[SWAP] dd failed: {e}")
-                return False
-
-        # Permissions
-        os.chmod(sf, 0o600)
-
-        # Format
-        try:
-            self._run(['mkswap', sf])
-            logging.info("[SWAP] mkswap OK")
+                self._run(['fallocate', '-l', str(size_bytes), str(path)])
+            except Exception:
+                logging.warning("[SWAP] fallocate failed, using dd (slower)")
+                self._run(['dd', 'if=/dev/zero', f'of={path}', 'bs=1M',
+                           f'count={max(1, size_bytes // (1024 * 1024))}', 'status=none'])
+            os.chmod(path, 0o600)
+            self._run(['mkswap', str(path)])
+            self._run(['swapon', str(path)])
         except Exception as e:
-            logging.error(f"[SWAP] mkswap failed: {e}")
+            logging.error(f"[SWAP] add {path} failed: {e}")
+            try:
+                path.unlink()
+            except OSError:
+                pass
             return False
-
+        logging.info(f"[SWAP] + {path} ({size_gb:.1f}GB) on")
         return True
 
-    def _activate(self) -> bool:
-        try:
-            self._run(['swapon', str(self.swapfile)])
-            logging.info("[SWAP] swapon OK")
-            return True
-        except Exception as e:
-            logging.error(f"[SWAP] swapon failed: {e}")
+    def _remove(self, entry: Dict) -> bool:
+        """swapoff + delete one of OUR files, only if its used pages fit in RAM."""
+        if not self._ours(entry['path']):
             return False
+        if entry['used'] > self._mem_available_bytes() * 0.5:
+            logging.info(f"[SWAP] keep {entry['path']}: {entry['used'] / 1e9:.1f}GB in use "
+                         f"won't fit back in RAM safely")
+            return False
+        try:
+            self._run(['swapoff', entry['path']])
+            Path(entry['path']).unlink()
+        except Exception as e:
+            logging.error(f"[SWAP] remove {entry['path']} failed: {e}")
+            return False
+        logging.info(f"[SWAP] - {entry['path']} ({entry['size'] / 1e9:.1f}GB) off")
+        return True
 
+    # -- public ---------------------------------------------------------
     def initialize(self) -> bool:
-        """Create initial swapfile if not already active."""
+        """Keep whatever swap exists; create a first Phoenix file only if the
+        machine has no swap at all."""
         with self.lock:
             current = self.get_current_swap_gb()
             if current > 0:
-                logging.info(f"[SWAP] Existing swap: {current:.1f}GB — keeping")
-                self._current_gb = current
+                logging.info(f"[SWAP] Existing swap {current:.1f}GB "
+                             f"({len(self.managed())} Phoenix file(s)) - keeping")
                 return True
-
-            logging.info(f"[SWAP] Creating initial swapfile {self.config.initial_swap_gb}GB "
-                         f"on {self.config.nvme_mount}")
-            ok = self._create(self.config.initial_swap_gb) and self._activate()
-            if ok:
-                self._current_gb = self.config.initial_swap_gb
-            return ok
+            logging.info(f"[SWAP] No swap: creating {self.config.initial_swap_gb}GB "
+                         f"at {self.swapfile}.0")
+            return self._add(self.config.initial_swap_gb)
 
     def resize(self, target_gb: float) -> bool:
-        """
-        Resize swapfile to target_gb.
-        Live: deactivate → recreate → reactivate.
-        On NVMe fallocate is near-instant so downtime is minimal.
-        """
+        """Move total swap toward target_gb: add a file to grow, remove whole
+        Phoenix files (newest first) to shrink. Never swapoff under pressure."""
         with self.lock:
-            target_gb = round(max(self.config.min_swap_gb,
-                                  min(self.config.max_swap_gb, target_gb)), 1)
-            current   = self.get_current_swap_gb()
-
-            if abs(target_gb - current) < self.config.micro_adjust_min_gb:
-                return True  # Already close enough
-
-            direction = "→" if target_gb > current else "←"
-            logging.info(f"[SWAP] Resize {current:.1f}GB {direction} {target_gb:.1f}GB")
-
-            # Check disk space before expanding
-            if target_gb > current:
+            target_gb = max(self.config.min_swap_gb, min(self.config.max_swap_gb, target_gb))
+            current = self.get_current_swap_gb()
+            delta = target_gb - current
+            if abs(delta) < self.config.micro_adjust_min_gb:
+                return True
+            if delta > 0:
                 free = self.get_free_disk_gb()
-                needed = target_gb - current
-                if needed > free * 0.9:
-                    logging.warning(f"[SWAP] Not enough disk: need {needed:.1f}GB, "
-                                    f"have {free:.1f}GB free")
-                    return False
-
-            if not self._deactivate():
-                return False
-
-            if self.swapfile.exists():
-                try:
-                    self.swapfile.unlink()
-                except Exception as e:
-                    logging.error(f"[SWAP] unlink failed: {e}")
-                    return False
-
-            if not self._create(target_gb):
-                return False
-
-            if not self._activate():
-                return False
-
-            self._current_gb = target_gb
-            logging.info(f"[SWAP] ✓ Swap now at {target_gb:.1f}GB")
-            return True
+                if delta > free * 0.9:
+                    logging.warning(f"[SWAP] Not enough disk: need {delta:.1f}GB, have {free:.1f}GB")
+                    delta = free * 0.9
+                    if delta < self.config.micro_adjust_min_gb:
+                        return False
+                return self._add(delta)
+            shrink = -delta
+            removed_any = False
+            for entry in reversed(self.managed()):
+                if entry['size'] / 1e9 > shrink + self.config.micro_adjust_min_gb:
+                    continue          # removing it would overshoot the target
+                if self._remove(entry):
+                    removed_any = True
+                    shrink -= entry['size'] / 1e9
+                if shrink < self.config.micro_adjust_min_gb:
+                    break
+            return removed_any
 
     def expand(self, amount_gb: float) -> bool:
         return self.resize(self.get_current_swap_gb() + amount_gb)
@@ -607,9 +619,11 @@ class LinuxSwapManager:
         return self.resize(self.get_current_swap_gb() - amount_gb)
 
     def teardown(self):
-        """Cleanly deactivate on shutdown."""
-        logging.info("[SWAP] Teardown — deactivating swapfile")
-        self._deactivate()
+        """Remove Phoenix's swapfiles on shutdown (only those that fit back in RAM)."""
+        logging.info("[SWAP] Teardown - removing Phoenix swapfiles that fit back in RAM")
+        with self.lock:
+            for entry in reversed(self.managed()):
+                self._remove(entry)
 
 
 # ============================================================================
@@ -860,6 +874,7 @@ class AIPagingManager:
             config, self.monitor, self.swap_manager, self.control)
 
         self._helix         = None
+        self._last_helix    = {}
         self._snapshot_path = None
 
         self.running    = False
@@ -904,6 +919,32 @@ class AIPagingManager:
             except Exception as e:
                 logging.error(f"[DASH] {e}")
         threading.Thread(target=run, daemon=True).start()
+
+    def attach_kernel_helix(self) -> bool:
+        """Attach the kernel Helix (helix.ko) through libhelix: her real tier
+        numbers and the Dandelion's heat. PHOENIX_PAGING_HELIX=off disables;
+        =kernel requires it; default (auto) attaches when /dev/helix_intent is up."""
+        mode = os.environ.get('PHOENIX_PAGING_HELIX', 'auto').lower()
+        if mode == 'off' or (mode == 'auto' and not os.path.exists('/dev/helix_intent')):
+            return False
+        here = os.path.dirname(os.path.abspath(__file__))
+        libdir = os.environ.get('PHOENIX_LIBHELIX_DIR',
+                                os.path.join(here, '..', 'sector1', 'kernels', 'libhelix'))
+        if libdir not in sys.path:
+            sys.path.insert(0, libdir)
+        try:
+            from helix import KernelHelixFeed
+            feed = KernelHelixFeed(register_as='phoenix-paging')
+        except Exception as e:
+            (logging.error if mode == 'kernel' else logging.info)(
+                f"[PAGING] kernel Helix not attached: {e}")
+            return False
+        if not feed.dandelion():
+            logging.info("[PAGING] libhelix in virtual mode (helix.ko not loaded) - not attached")
+            feed.close()
+            return False
+        self.attach_helix(feed)
+        return True
 
     def attach_helix(self, helix) -> None:
         """Wire in a live HelixSystem for real tier data."""
@@ -955,6 +996,7 @@ class AIPagingManager:
         """
         if self._helix is not None:
             snap = self._helix.get_tier_snapshot()
+            self._last_helix = snap
             self.stats['helix_snapshots'] += 1
             return TierSnapshot(
                 timestamp  = snap['timestamp'],
@@ -1086,10 +1128,16 @@ class AIPagingManager:
                     time.sleep(self.config.monitoring_interval); continue
 
                 # Decision
+                dandelion = self._last_helix.get('dandelion_state') if self._helix else None
                 if helix_paging:
                     action = 'expand'
                     amount = 4.0
                     reason = 'helix_disk_pressure'
+                    self.stats['ai_decisions'] += 1
+                elif dandelion == 'surging' and mem['percent'] > 85:
+                    action = 'expand'
+                    amount = 4.0
+                    reason = f"dandelion_surging_heat_{self._last_helix.get('dandelion_heat', 0):.2f}"
                     self.stats['ai_decisions'] += 1
                 elif self.control.is_ai_mode():
                     action, amount, reason = self.engine.decide(
@@ -1138,6 +1186,8 @@ class AIPagingManager:
         snap_env = os.environ.get('PHOENIX_PAGING_SNAPSHOT_PATH')
         if snap_env and self._snapshot_path is None:
             self.attach_snapshot_path(snap_env)
+        if self._helix is None:
+            self.attach_kernel_helix()
 
         logging.info("[INIT] Initializing swapfile on NVMe...")
 
@@ -1180,7 +1230,7 @@ Commands:
   expand <gb>        Manually expand swap
   shrink <gb>        Manually shrink swap
   status             Show current status
-  teardown           Deactivate swapfile cleanly
+  teardown           Remove Phoenix swapfiles (only those that fit back in RAM)
 """
 
     if len(sys.argv) < 2:
@@ -1229,7 +1279,7 @@ Config:
     elif cmd == 'status':
         print(json.dumps(ctrl.get_state(), indent=2, default=str))
     elif cmd == 'teardown':
-        swap.teardown(); print("[OK] Swapfile deactivated")
+        swap.teardown(); print("[OK] Phoenix swapfiles removed")
     else:
         print(f"Unknown: {cmd}"); print(usage)
 

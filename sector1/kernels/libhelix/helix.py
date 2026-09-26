@@ -140,6 +140,121 @@ class HeIX:
         self.close()
 
 
+_BLOCK = 4096
+_STATE_NAMES = ("cold", "warm", "hot", "surging", "cooling")
+
+
+def _dm_helix_status():
+    """Sum `dmsetup status` over every dm-helix target (root). Returns a dict of
+    her counters, or {} when no helix target is up."""
+    import re
+    import shutil
+    import subprocess
+    dmsetup = shutil.which("dmsetup") or "/usr/sbin/dmsetup"
+    try:
+        out = subprocess.run([dmsetup, "status", "--target", "helix"],
+                             capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    total = {}
+    for line in out.splitlines():
+        # "<name>: <start> <len> helix double dandelion heat 0.412 state hot ..."
+        body = line.split(" helix ", 1)
+        if len(body) != 2:
+            continue
+        toks = body[1].split()
+        for key, val in re.findall(r"(\w+) (-?[0-9]+(?:\.[0-9]+)?)(?= |$)", " ".join(toks)):
+            num = float(val) if "." in val else int(val)
+            if key in ("heat", "compression"):
+                total[key] = max(total.get(key, 0), num)
+            else:
+                total[key] = total.get(key, 0) + num
+        if "state" in toks:
+            total["state"] = toks[toks.index("state") + 1]
+        total["targets"] = total.get("targets", 0) + 1
+    return total
+
+
+class KernelHelixFeed:
+    """The kernel Helix as a tier source for her companions (paging manager,
+    VRAM manager). One Helix underneath: tier sizes come from dm-helix's own
+    counters, the Dandelion's heat/state from GET_STATS through libhelix.
+
+    get_tier_snapshot() keys match sector4/paging.py's TierSnapshot:
+      hot_mb    = raw blocks held in Strand A (RAM)
+      warm_mb   = zlib-5 compressed bytes held in Strand A
+      cold_mb   = blocks held on Strand B (her relief strand)
+      frozen_mb = blocks Strand B had to evict since the last snapshot, i.e.
+                  she ran out of relief room. >0 is the paging manager's cue.
+    """
+
+    def __init__(self, register_as="phoenix-paging"):
+        self._helix = None
+        try:
+            self._helix = HeIX()
+            if not self._helix.virtual:
+                self._helix.register(register_as)
+        except OSError:
+            self._helix = None
+        self._last_b_evictions = None
+
+    def dandelion(self):
+        if self._helix is None:
+            return {}
+        try:
+            st = self._helix.stats()
+        except OSError:
+            return {}
+        state = st["dandelion_state"]
+        return {
+            "heat": st["dandelion_heat"] / 1000.0,
+            "state": _STATE_NAMES[state] if state < len(_STATE_NAMES) else str(state),
+            "compression": st["dandelion_compression"] / 1000.0,
+            "mem_pressure_pct": st["mem_pressure_pct"],
+        }
+
+    def get_tier_snapshot(self):
+        import time
+        s = _dm_helix_status()
+        mb = 1024 * 1024
+        b_ev = s.get("b_evictions", 0)
+        fresh = 0 if self._last_b_evictions is None else max(0, b_ev - self._last_b_evictions)
+        self._last_b_evictions = b_ev
+        served = s.get("hits", 0) + s.get("zhits", 0) + s.get("b_hits", 0)
+        asked = served + s.get("misses", 0)
+        snap = {
+            "timestamp": time.time(),
+            "hot_mb": s.get("raw", 0) * _BLOCK / mb,
+            "warm_mb": s.get("zbytes", 0) / mb,
+            "cold_mb": s.get("used", 0) * _BLOCK / mb,
+            "frozen_mb": fresh * _BLOCK / mb,
+            "hit_rate": (served / asked * 100.0) if asked else 0.0,
+            "promotions": s.get("inserts", 0),
+            "demotions": s.get("compressed", 0) + s.get("b_writes", 0),
+            "evictions": s.get("evictions", 0) + b_ev,
+            "targets": s.get("targets", 0),
+        }
+        snap.update({"dandelion_" + k: v for k, v in self.dandelion().items()})
+        if "heat" in s and "dandelion_heat" not in snap:
+            snap["dandelion_heat"] = s["heat"]
+            snap["dandelion_state"] = s.get("state")
+        return snap
+
+    def mem_sync(self, ptr, size, tier):
+        """Report a companion's placement to her ledger. Never raises."""
+        if self._helix is None:
+            return False
+        try:
+            return self._helix.mem_sync(ptr, size, tier)
+        except OSError:
+            return False
+
+    def close(self):
+        if self._helix is not None:
+            self._helix.close()
+            self._helix = None
+
+
 if __name__ == "__main__":
     with HeIX() as helix:
         helix.register("attack-analyzer")

@@ -1,0 +1,27 @@
+# phoenix-paging.service — the AI paging manager, fed by the kernel Helix
+# (libhelix bridge). Additive swapfiles on the SSD; never swapoff's swap it
+# didn't create. Dashboard stays on loopback (127.0.0.1:8888).
+# Install: sector1/kernels/install_helix_boot.sh
+[Unit]
+Description=Phoenix AI paging manager (Helix-fed)
+After=helix.service
+Wants=helix.service
+
+[Service]
+Type=simple
+Environment=PHOENIX_PAGING_HELIX=kernel
+Environment=PHOENIX_PAGING_NVME_MOUNT=/var/lib/phoenix-swap
+Environment=PHOENIX_PAGING_SWAPFILE_PATH=/var/lib/phoenix-swap/swapfile
+Environment=PHOENIX_PAGING_TOTAL_RAM_GB=15
+Environment=PHOENIX_PAGING_MAX_SWAP_GB=96
+Environment=PHOENIX_PAGING_MIN_SWAP_GB=4
+EnvironmentFile=-/etc/default/phoenix-paging
+ExecStart=/usr/bin/python3 /opt/phoenix/sector4/paging.py start
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
