@@ -36,6 +36,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 IFACE = "wg-phx"
@@ -51,6 +52,12 @@ HOSTS = (os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), r"System32\dr
 HOSTS_BEGIN, HOSTS_END = "# >>> phoenix-mesh (managed) >>>", "# <<< phoenix-mesh <<<"
 DIRECT_MAX_AGE = 180      # a handshake newer than this = the direct link is up
 KEEPALIVE = 25
+# Relay through the hub: when two satellites can't link directly (found live
+# 2026-09-26: the Compaq on the LAN and pbm3 behind the Precision's cable have
+# no working direct path), each side routes that peer via the hub instead.
+RELAY_FILE = os.path.join(CONF_DIR, "relay.json")
+RELAY_AFTER = 2           # consecutive failed checks before relaying
+RELAY_RETRY_S = 600       # then try direct again every 10 minutes
 
 
 def log(msg):
@@ -121,10 +128,44 @@ def local_addresses():
     return sorted(v4), sorted(v6)
 
 
-def my_endpoints(port):
+_V6_OK = None
+
+
+def v6_works(host, timeout=3):
+    """Does this machine's IPv6 actually reach the internet? Having a global
+    IPv6 address is not proof: pbm3 gets one through the Precision's
+    connection sharing, but IPv6 isn't routed (live 2026-09-26), so every
+    call stalled on IPv6 before falling back, and peers were handed a dead
+    address. Tested once per cycle against the switchboard itself."""
+    global _V6_OK
+    try:
+        infos = socket.getaddrinfo(host, 443, socket.AF_INET6, socket.SOCK_STREAM)
+        with socket.create_connection(infos[0][4][:2], timeout=timeout):
+            _V6_OK = True
+    except OSError:
+        _V6_OK = False
+    return _V6_OK
+
+
+_orig_getaddrinfo = socket.getaddrinfo
+
+
+def _ipv4_first_getaddrinfo(*args, **kwargs):
+    res = _orig_getaddrinfo(*args, **kwargs)
+    if _V6_OK is False:
+        v4 = [r for r in res if r[0] == socket.AF_INET]
+        return v4 or res
+    return res
+
+
+socket.getaddrinfo = _ipv4_first_getaddrinfo
+
+
+def my_endpoints(port, v6_ok=True):
     v4, v6 = local_addresses()
     eps = [{"addr": a, "port": port, "scope": "lan"} for a in v4]
-    eps += [{"addr": a, "port": port, "scope": "public"} for a in v6]
+    if v6_ok:
+        eps += [{"addr": a, "port": port, "scope": "public"} for a in v6]
     return eps
 
 
@@ -155,7 +196,7 @@ def api(dev, method, path, body=None):
 
 
 # ── WireGuard ───────────────────────────────────────────────────────────────
-def write_configs(dev, self_view, peers, my_v4, have_v6):
+def write_configs(dev, self_view, peers, my_v4, have_v6, relayed=frozenset()):
     priv = open(KEY_FILE, encoding="utf-8").read().strip()
     iface = [f"PrivateKey = {priv}", f"ListenPort = {dev['port']}"]
     # Static devices (phones) can't run the agent: they link only to the hub.
@@ -164,14 +205,15 @@ def write_configs(dev, self_view, peers, my_v4, have_v6):
     # (and only the hub) holds them as direct peers.
     i_am_hub = bool(self_view.get("hub"))
     hub = next((p for p in peers if p.get("hub")), None)
-    statics = [p for p in peers if p.get("kind") == "static"]
+    via_hub = [p for p in peers if not i_am_hub and hub is not None and p is not hub
+               and (p.get("kind") == "static" or p["name"] in relayed)]
     peer_blocks = []
     for p in peers:
-        if p.get("kind") == "static" and not i_am_hub:
+        if any(p is v for v in via_hub):
             continue
         allowed = [f"{p['mesh_ip']}/32"]
         if hub is not None and p is hub and not i_am_hub:
-            allowed += [f"{s['mesh_ip']}/32" for s in statics]
+            allowed += [f"{v['mesh_ip']}/32" for v in via_hub]
         lines = ["[Peer]", f"PublicKey = {p['pubkey']}", f"AllowedIPs = {', '.join(allowed)}"]
         ep = pick_endpoint(p, my_v4, have_v6)
         if ep:
@@ -207,14 +249,28 @@ def apply_wireguard(self_view):
 
 
 # ── health: every link, ingress and egress ─────────────────────────────────
-def ping_ms(ip):
+def ping_ms(ip, attempts=3):
+    """RTT of the first echo reply out of up to `attempts` single pings.
+    One lost packet is not a dead link (live 2026-09-26: the first packet of
+    a relayed link through the hub is sometimes dropped)."""
+    for _ in range(attempts):
+        rtt = _ping_once(ip)
+        if rtt is not None:
+            return rtt
+    return None
+
+
+def _ping_once(ip):
     args = (["ping", "-n", "1", "-w", "1500", ip] if IS_WIN else ["ping", "-c", "1", "-W", "2", ip])
     r = subprocess.run(args, capture_output=True, text=True)
+    # A reply is a reply: ping exits non-zero when an ICMP redirect also
+    # arrives (the hub relaying between satellites triggers those), even
+    # though the echo reply came back. Found live 2026-09-26.
     m = re.search(r"time[=<]\s*([\d.]+)\s*ms", r.stdout)
-    return float(m.group(1)) if (r.returncode == 0 and m) else None
+    return float(m.group(1)) if m else None
 
 
-def link_health(peers, my_v4=()):
+def link_health(peers, my_v4=(), relayed=frozenset()):
     dump = subprocess.run([wg_bin(), "show", IFACE, "dump"], capture_output=True, text=True).stdout.splitlines()
     by_key = {}
     for line in dump[1:]:
@@ -226,6 +282,12 @@ def link_health(peers, my_v4=()):
     links = []
     for p in peers:
         w = by_key.get(p["pubkey"], {})
+        if p["name"] in relayed:
+            rtt = ping_ms(p["mesh_ip"])          # goes via the hub
+            links.append({"to": p["name"], "path": "fallback" if rtt is not None else "down",
+                          "handshake_age": None, "rtt_ms": rtt, "rx_bytes": None, "tx_bytes": None,
+                          "endpoint": "relay:hub", "use_mesh": rtt is not None})
+            continue
         age = (now - w["handshake"]) if w.get("handshake") else None
         rtt = ping_ms(p["mesh_ip"]) if age is not None and age < DIRECT_MAX_AGE else None
         if age is not None and age < DIRECT_MAX_AGE and rtt is not None:
@@ -236,7 +298,8 @@ def link_health(peers, my_v4=()):
             rtt = ping_ms(lan) if lan else None
             path = "fallback" if rtt is not None else "down"
         links.append({"to": p["name"], "path": path, "handshake_age": age, "rtt_ms": rtt,
-                      "rx_bytes": w.get("rx"), "tx_bytes": w.get("tx"), "endpoint": w.get("endpoint")})
+                      "rx_bytes": w.get("rx"), "tx_bytes": w.get("tx"), "endpoint": w.get("endpoint"),
+                      "use_mesh": path == "direct"})
     return links
 
 
@@ -257,11 +320,11 @@ def write_hosts(names, peers, links, my_v4=()):
     """<name>.phx -> mesh IP while the direct link is up; the peer's LAN
     address when it isn't (that path works on the LAN and via the tunnel)."""
     lan = {p["name"]: lan_fallback(p, my_v4) for p in peers}
-    status = {l["to"]: l["path"] for l in links}
+    use_mesh = {l["to"]: l.get("use_mesh", l["path"] == "direct") for l in links}
     lines = [HOSTS_BEGIN]
     for host, mesh_ip in sorted(names.items()):
         n = host[:-4]
-        ip = mesh_ip if status.get(n, "direct") == "direct" or not lan.get(n) else lan[n]
+        ip = mesh_ip if use_mesh.get(n, True) or not lan.get(n) else lan[n]
         lines.append(f"{ip}\t{host}")
     lines.append(HOSTS_END)
     try:
@@ -304,20 +367,64 @@ def cmd_token(a):
     log("token stored")
 
 
+def load_relay():
+    try:
+        with open(RELAY_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def update_relay(state, links, peers, i_am_hub, now=None):
+    """Decide per peer: direct, or relayed via the hub. Pure (testable)."""
+    now = int(now if now is not None else time.time())
+    hub = next((p["name"] for p in peers if p.get("hub")), None)
+    for l in links:
+        n, st = l["to"], state.get(l["to"], {})
+        if i_am_hub or hub is None or n == hub:
+            state.pop(n, None)
+            continue
+        if st.get("relay_since"):
+            if now - st["relay_since"] >= RELAY_RETRY_S:
+                state[n] = {"down": 0, "retry": now}        # give direct another chance
+            continue
+        if l["path"] == "direct":
+            state.pop(n, None)
+        else:
+            st["down"] = st.get("down", 0) + 1
+            if st["down"] >= RELAY_AFTER:
+                st = {"relay_since": now}
+            state[n] = st
+    return state
+
+
 def cycle(dev):
     my_v4, my_v6 = local_addresses()
-    body = {"endpoints": my_endpoints(dev["port"])}
+    host = urllib.parse.urlparse(dev["worker"]).hostname
+    v6_ok = bool(my_v6) and v6_works(host)
+    if not my_v6:
+        global _V6_OK
+        _V6_OK = False
+    my_v6 = my_v6 if v6_ok else []
+    body = {"endpoints": my_endpoints(dev["port"], v6_ok)}
+    state = load_relay()
+    relayed = frozenset(n for n, st in state.items() if st.get("relay_since"))
     if iface_up():
         try:
             prev = api(dev, "GET", "/peers")
-            body["links"] = link_health(prev["peers"], my_v4)
+            body["links"] = link_health(prev["peers"], my_v4, relayed)
+            state = update_relay(state, body["links"], prev["peers"], bool(prev["self"].get("hub")))
+            with open(RELAY_FILE, "w", encoding="utf-8") as f:
+                json.dump(state, f)
+            relayed = frozenset(n for n, st in state.items() if st.get("relay_since"))
         except Exception as e:                         # health is best-effort; the heartbeat must still go
             log(f"health: {e}")
     r = api(dev, "POST", "/heartbeat", body)
-    write_configs(dev, r["self"], r["peers"], my_v4, bool(my_v6))
+    write_configs(dev, r["self"], r["peers"], my_v4, bool(my_v6), relayed)
     apply_wireguard(r["self"])
     write_hosts(r["names"], r["peers"], body.get("links", []), my_v4)
-    summary = ", ".join(f"{l['to']}={l['path']}" for l in body.get("links", [])) or "first cycle"
+    summary = ", ".join(f"{l['to']}={l['path']}{'(relay)' if l['to'] in relayed else ''}"
+                        for l in body.get("links", [])) or "first cycle"
     log(f"{dev['name']} {r['self']['mesh_ip']}: {len(r['peers'])} peers; {summary}")
 
 

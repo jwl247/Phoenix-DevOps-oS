@@ -108,6 +108,8 @@ await t('link health is recorded per link, ingress and egress', async () => {
   eq(r.body.links.length, 2, 'two rows');
   const c = r.body.links.find(l => l.to_device === 'compaq');
   eq([c.path, c.rx_bytes, c.tx_bytes], ['direct', 5000, 7000], 'direct row');
+  const f = r.body.links.find(l => l.to_device === 'pbm3');
+  eq([f.handshake_age, f.rx_bytes], [null, null], 'no handshake stays null, not 0');
 });
 
 await t('device token cannot use admin routes', async () => {

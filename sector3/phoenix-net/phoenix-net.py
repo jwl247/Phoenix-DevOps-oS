@@ -157,8 +157,9 @@ def cmd_links(a):
     for r in rows:                              # newest first: keep the latest per pair
         latest.setdefault((r["from_device"], r["to_device"]), r)
     for (f, t), r in sorted(latest.items()):
-        print(f"{f:>10} -> {t:<10} {r['path']:<9} handshake={r['handshake_age']}s rtt={r['rtt_ms']}ms "
-              f"in={r['rx_bytes']} out={r['tx_bytes']} via={r['endpoint']}  @{r['at']}")
+        v = lambda x, unit="": "-" if x is None else f"{x}{unit}"
+        print(f"{f:>10} -> {t:<10} {r['path']:<9} handshake={v(r['handshake_age'], 's')} rtt={v(r['rtt_ms'], 'ms')} "
+              f"in={v(r['rx_bytes'])} out={v(r['tx_bytes'])} via={r['endpoint']}  @{r['at']}")
 
 
 def cmd_revoke(a):

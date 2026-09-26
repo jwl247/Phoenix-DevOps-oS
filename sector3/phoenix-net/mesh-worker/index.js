@@ -164,7 +164,9 @@ async function handleHeartbeat(req, env) {
     for (const l of b.links.slice(0, MAX_LINKS)) {
       if (!l || !NAME_RE.test(String(l.to || ''))) continue;
       const path = ['direct', 'fallback', 'down'].includes(l.path) ? l.path : 'down';
-      const num = v => (Number.isFinite(Number(v)) ? Number(v) : null);
+      // null/undefined stay null: Number(null) is 0, and "no handshake" must
+      // not read as "handshake 0 seconds ago" (found live 2026-09-26)
+      const num = v => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
       await env.MESH_DB.prepare(
         `INSERT INTO mesh_link_health (from_device, to_device, path, handshake_age, rtt_ms, rx_bytes, tx_bytes, endpoint)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`

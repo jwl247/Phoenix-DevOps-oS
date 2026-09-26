@@ -82,6 +82,36 @@ def phones_ride_through_the_hub():
         assert "Address = 10.47.0.1/24" in open(meshd.WG_FULL_CONF).read()
 
 
+def relay_after_two_failures_then_retry():
+    peers = [{"name": "precision", "hub": True}, {"name": "pbm3", "hub": False}]
+    st = {}
+    st = meshd.update_relay(st, [{"to": "pbm3", "path": "down"}, {"to": "precision", "path": "direct"}], peers, False, now=1000)
+    assert "relay_since" not in st.get("pbm3", {}), "relayed after one failure"
+    st = meshd.update_relay(st, [{"to": "pbm3", "path": "down"}], peers, False, now=1030)
+    assert st["pbm3"]["relay_since"] == 1030, st
+    assert "precision" not in st, "the hub is never relayed"
+    st = meshd.update_relay(st, [{"to": "pbm3", "path": "fallback"}], peers, False, now=1300)
+    assert st["pbm3"].get("relay_since") == 1030, "stays relayed before the retry window"
+    st = meshd.update_relay(st, [{"to": "pbm3", "path": "fallback"}], peers, False, now=1030 + meshd.RELAY_RETRY_S)
+    assert "relay_since" not in st["pbm3"], "direct gets retried after 10 minutes"
+    assert meshd.update_relay({}, [{"to": "pbm3", "path": "down"}] * 3, peers, True, now=1) == {}, "the hub never relays"
+
+
+def relayed_peer_rides_the_hub_in_config():
+    with tempfile.TemporaryDirectory() as d:
+        meshd.KEY_FILE = os.path.join(d, "private.key")
+        meshd.WG_SYNC_CONF = os.path.join(d, "s.conf")
+        meshd.WG_FULL_CONF = os.path.join(d, "f.conf")
+        open(meshd.KEY_FILE, "w").write("PRIVATEKEY\n")
+        hub = {"name": "precision", "pubkey": "HUB", "mesh_ip": "10.47.0.2", "hub": True, "kind": "agent", "endpoints": []}
+        pbm3 = {"name": "pbm3", "pubkey": "PBM3", "mesh_ip": "10.47.0.1", "hub": False, "kind": "agent", "endpoints": []}
+        meshd.write_configs({"port": 51820}, {"mesh_ip": "10.47.0.3", "hub": False}, [hub, pbm3], [], False, frozenset({"pbm3"}))
+        s = open(meshd.WG_SYNC_CONF).read()
+        assert "PublicKey = PBM3" not in s and "AllowedIPs = 10.47.0.2/32, 10.47.0.1/32" in s, s
+
+
+t("relay after two failures, retry direct after 10 min", relay_after_two_failures_then_retry)
+t("a relayed peer rides the hub in the config", relayed_peer_rides_the_hub_in_config)
 t("phones ride through the hub", phones_ride_through_the_hub)
 t("same LAN is preferred", same_lan_first)
 t("public IPv6 when not on the same LAN", ipv6_when_not_same_lan)
