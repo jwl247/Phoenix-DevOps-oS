@@ -1,0 +1,27 @@
+{
+  // phoenix-mesh-worker — the Phoenix Mesh switchboard (sector3/phoenix-net).
+  // UnitedSys — United Systems | jwl247 | GPL-3.0
+  //
+  // Coordinates only (registry, endpoints, link health); WireGuard traffic
+  // never passes through here. Its OWN D1 and its OWN admin secret — nothing
+  // shared with packages-worker / phoenix-office-worker / PHOENIX_AUTH.
+  //
+  // Lives in Jerry's main Cloudflare account for now (2026-09-26); planned to
+  // move to its own account later — only this worker + its D1 move.
+  //
+  // Secret:  MESH_ADMIN  (64 hex; the value lives in the vault file
+  //          F:\Phoenix\Vault\secrets\phoenix-secrets.env, never in git)
+  // Schema:  schema.sql (applied to phoenix_mesh 2026-09-26)
+  // Tests:   node test.mjs   (real SQLite via node:sqlite)
+  "name": "phoenix-mesh-worker",
+  "main": "index.js",
+  "compatibility_date": "2025-01-01",
+  "d1_databases": [
+    {
+      "binding": "MESH_DB",
+      "database_name": "phoenix_mesh",
+      "database_id": "573fd4e4-7cae-44f7-aaca-ca396eefbc4d"
+    }
+  ],
+  "observability": { "enabled": true }
+}
