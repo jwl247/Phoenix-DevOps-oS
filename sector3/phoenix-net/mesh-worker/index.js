@@ -19,7 +19,7 @@
 //   POST /enroll    admin   {name, pubkey, owner_email, kind?, hub?, listen_port?} -> {device_id, mesh_ip, token}
 //   POST /revoke    admin   {name}
 //   GET  /devices   admin   all devices incl. revoked (no token hashes)
-//   GET  /links     admin   ?since=ISO  recent link health
+//   GET  /links     admin   ?since=ISO&limit=N (max 5000)  recent link health
 //   POST /heartbeat device  {endpoints?, links?} -> {self, peers, names}
 //   GET  /peers     device  -> {self, peers, names}
 
@@ -147,9 +147,14 @@ async function handleDevices(req, env) {
 
 async function handleLinks(req, env) {
   if (!isAdmin(req, env)) return err('unauthorized', 401);
-  const since = new URL(req.url).searchParams.get('since') || '1970-01-01';
+  const q = new URL(req.url).searchParams;
+  // `at` is stored as SQLite's "YYYY-MM-DD HH:MM:SS" (UTC). An ISO time
+  // ("…T…Z") compares wrong as a string ('T' > ' '), which silently hid every
+  // row of the day it named (found live 2026-09-26) — normalize it first.
+  const since = (q.get('since') || '1970-01-01').replace('T', ' ').replace(/(\.\d+)?Z$/, '');
+  const limit = Math.min(Math.max(parseInt(q.get('limit') || '1000', 10) || 1000, 1), 5000);
   const rows = (await env.MESH_DB.prepare(
-    'SELECT * FROM mesh_link_health WHERE at >= ? ORDER BY at DESC LIMIT 1000').bind(since).all()).results || [];
+    'SELECT * FROM mesh_link_health WHERE at >= ? ORDER BY at DESC LIMIT ?').bind(since, limit).all()).results || [];
   return json({ ok: true, links: rows });
 }
 

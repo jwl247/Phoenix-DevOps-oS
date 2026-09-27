@@ -7,7 +7,8 @@ UnitedSys — United Systems | jwl247 | GPL-3.0
   phoenix-net.py enroll-local NAME [--hub]         join THIS Windows PC (run as Administrator)
   phoenix-net.py enroll-phone NAME --hub-name H    make a WireGuard config for a phone (QR-ready)
   phoenix-net.py list                              everyone in the family
-  phoenix-net.py links [--since ISO]               link health (direct / fallback / down)
+  phoenix-net.py links [--since ISO]               latest state of every link
+  phoenix-net.py health [--hours 24]               how fragile each link is (uptime, flips, latency)
   phoenix-net.py revoke NAME                       drop a device from the family, now
 
 Reads MESH_ADMIN + MESH_WORKER_URL from the vault file
@@ -17,11 +18,13 @@ Private keys are made ON the device and never leave it (the phone is the one
 exception, see enroll-phone).
 """
 import argparse
+import datetime
 import json
 import os
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -152,7 +155,7 @@ def cmd_list(a):
 
 
 def cmd_links(a):
-    rows = admin("GET", f"/links?since={a.since}")["links"]
+    rows = admin("GET", f"/links?since={urllib.parse.quote(a.since)}")["links"]
     latest = {}
     for r in rows:                              # newest first: keep the latest per pair
         latest.setdefault((r["from_device"], r["to_device"]), r)
@@ -160,6 +163,29 @@ def cmd_links(a):
         v = lambda x, unit="": "-" if x is None else f"{x}{unit}"
         print(f"{f:>10} -> {t:<10} {r['path']:<9} handshake={v(r['handshake_age'], 's')} rtt={v(r['rtt_ms'], 'ms')} "
               f"in={v(r['rx_bytes'])} out={v(r['tx_bytes'])} via={r['endpoint']}  @{r['at']}")
+
+
+def cmd_health(a):
+    """How fragile is each link? Over the last N hours: share of reports that
+    were direct / fallback / down, latency, and how often it changed path."""
+    since = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=a.hours)).strftime("%Y-%m-%d %H:%M:%S")
+    rows = admin("GET", f"/links?since={urllib.parse.quote(since)}&limit=5000")["links"]
+    pairs = {}
+    for r in reversed(rows):                    # oldest first, so flips count in order
+        pairs.setdefault((r["from_device"], r["to_device"]), []).append(r)
+    if not pairs:
+        print(f"no link reports in the last {a.hours} h")
+        return
+    print(f"last {a.hours} h, {len(rows)} reports{' (capped at 5000: shorten --hours)' if len(rows) >= 5000 else ''}")
+    print(f"{'link':<22} {'reports':>7} {'direct':>7} {'fallbk':>7} {'down':>6} {'flips':>5} {'rtt avg':>8} {'rtt max':>8}  now")
+    for (f, t), rs in sorted(pairs.items()):
+        n = len(rs)
+        pct = lambda p: f"{100 * sum(r['path'] == p for r in rs) / n:.0f}%"
+        flips = sum(1 for x, y in zip(rs, rs[1:]) if x["path"] != y["path"])
+        rtts = [r["rtt_ms"] for r in rs if r["rtt_ms"] is not None]
+        avg = f"{sum(rtts) / len(rtts):.1f}ms" if rtts else "-"
+        mx = f"{max(rtts):.1f}ms" if rtts else "-"
+        print(f"{f + ' -> ' + t:<22} {n:>7} {pct('direct'):>7} {pct('fallback'):>7} {pct('down'):>6} {flips:>5} {avg:>8} {mx:>8}  {rs[-1]['path']}")
 
 
 def cmd_revoke(a):
@@ -176,6 +202,7 @@ def main():
     p = sp.add_parser("forget-qr"); p.add_argument("name"); p.set_defaults(fn=forget_qr)
     sp.add_parser("list").set_defaults(fn=cmd_list)
     p = sp.add_parser("links"); p.add_argument("--since", default="1970-01-01"); p.set_defaults(fn=cmd_links)
+    p = sp.add_parser("health"); p.add_argument("--hours", type=float, default=24); p.set_defaults(fn=cmd_health)
     p = sp.add_parser("revoke"); p.add_argument("name"); p.set_defaults(fn=cmd_revoke)
     a = ap.parse_args()
     a.fn(a)

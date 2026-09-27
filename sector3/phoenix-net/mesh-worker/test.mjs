@@ -112,6 +112,15 @@ await t('link health is recorded per link, ingress and egress', async () => {
   eq([f.handshake_age, f.rx_bytes], [null, null], 'no handshake stays null, not 0');
 });
 
+await t('links ?since takes ISO times (T/Z) and ?limit caps rows', async () => {
+  // an hour ago in ISO form: before the fix, 'T' > ' ' hid every row of today
+  const iso = new Date(Date.now() - 3600e3).toISOString();
+  eq((await call('GET', `/links?since=${encodeURIComponent(iso)}`, { token: ADMIN })).body.links.length, 2, 'ISO since sees today');
+  eq((await call('GET', `/links?since=${encodeURIComponent(iso.slice(0, 19).replace('T', ' '))}`, { token: ADMIN })).body.links.length, 2, 'space form');
+  eq((await call('GET', '/links?since=2999-01-01T00:00:00Z', { token: ADMIN })).body.links.length, 0, 'future since');
+  eq((await call('GET', '/links?limit=1', { token: ADMIN })).body.links.length, 1, 'limit');
+});
+
 await t('device token cannot use admin routes', async () => {
   eq((await call('GET', '/devices', { token: tokens.compaq })).status, 401, 'devices');
   eq((await call('POST', '/revoke', { token: tokens.compaq, body: { name: 'pbm3' } })).status, 401, 'revoke');

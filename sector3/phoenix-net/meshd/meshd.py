@@ -57,7 +57,8 @@ KEEPALIVE = 25
 # no working direct path), each side routes that peer via the hub instead.
 RELAY_FILE = os.path.join(CONF_DIR, "relay.json")
 RELAY_AFTER = 2           # consecutive failed checks before relaying
-RELAY_RETRY_S = 600       # then try direct again every 10 minutes
+RELAY_RETRY_S = 600       # then try direct again after 10 minutes, doubling each failed try
+RELAY_MAX_RETRY_S = 6 * 3600   # ... up to 6 hours (only while a direct candidate exists)
 
 
 def log(msg):
@@ -375,8 +376,15 @@ def load_relay():
         return {}
 
 
-def update_relay(state, links, peers, i_am_hub, now=None):
-    """Decide per peer: direct, or relayed via the hub. Pure (testable)."""
+def update_relay(state, links, peers, i_am_hub, now=None, candidates=None):
+    """Decide per peer: direct, or relayed via the hub. Pure (testable).
+
+    Retrying direct takes the relay route down for ~2 cycles, so it has to
+    earn it (live 2026-09-26: compaq<->pbm3, which share no network, were cut
+    ~1 minute in every 10 by a blind retry). `candidates` = {peer: the direct
+    endpoint we'd try, or None}. With it: no candidate -> never retry; a new
+    candidate -> retry now; same candidate -> back off 10 min, 20, 40 ... 6 h.
+    Without it (None) the plain 10-minute retry stays."""
     now = int(now if now is not None else time.time())
     hub = next((p["name"] for p in peers if p.get("hub")), None)
     for l in links:
@@ -385,15 +393,23 @@ def update_relay(state, links, peers, i_am_hub, now=None):
             state.pop(n, None)
             continue
         if st.get("relay_since"):
-            if now - st["relay_since"] >= RELAY_RETRY_S:
-                state[n] = {"down": 0, "retry": now}        # give direct another chance
+            if candidates is None:
+                due = now - st["relay_since"] >= RELAY_RETRY_S
+            else:
+                cand = candidates.get(n)
+                wait = min(RELAY_RETRY_S * 2 ** st.get("tries", 0), RELAY_MAX_RETRY_S)
+                due = cand is not None and (cand != st.get("cand") or now - st["relay_since"] >= wait)
+            if due:                                         # give direct another chance
+                state[n] = {"down": 0, "retry": now, "tries": st.get("tries", 0) + 1,
+                            "cand": (candidates or {}).get(n)}
             continue
         if l["path"] == "direct":
             state.pop(n, None)
         else:
             st["down"] = st.get("down", 0) + 1
             if st["down"] >= RELAY_AFTER:
-                st = {"relay_since": now}
+                st = {"relay_since": now, "tries": st.get("tries", 0),
+                      "cand": (candidates or {}).get(n)}
             state[n] = st
     return state
 
@@ -413,7 +429,9 @@ def cycle(dev):
         try:
             prev = api(dev, "GET", "/peers")
             body["links"] = link_health(prev["peers"], my_v4, relayed)
-            state = update_relay(state, body["links"], prev["peers"], bool(prev["self"].get("hub")))
+            cands = {p["name"]: pick_endpoint(p, my_v4, bool(my_v6)) for p in prev["peers"]}
+            state = update_relay(state, body["links"], prev["peers"], bool(prev["self"].get("hub")),
+                                 candidates=cands)
             with open(RELAY_FILE, "w", encoding="utf-8") as f:
                 json.dump(state, f)
             relayed = frozenset(n for n, st in state.items() if st.get("relay_since"))

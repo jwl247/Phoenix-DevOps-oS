@@ -97,6 +97,27 @@ def relay_after_two_failures_then_retry():
     assert meshd.update_relay({}, [{"to": "pbm3", "path": "down"}] * 3, peers, True, now=1) == {}, "the hub never relays"
 
 
+def relay_retries_only_when_direct_is_possible():
+    peers = [{"name": "precision", "hub": True}, {"name": "pbm3", "hub": False}]
+    down = [{"to": "pbm3", "path": "down"}]
+    none = {"pbm3": None}
+    st = meshd.update_relay({}, down, peers, False, now=0, candidates=none)
+    st = meshd.update_relay(st, down, peers, False, now=30, candidates=none)
+    assert st["pbm3"]["relay_since"] == 30
+    st = meshd.update_relay(st, down, peers, False, now=30 + 10 * meshd.RELAY_MAX_RETRY_S, candidates=none)
+    assert st["pbm3"].get("relay_since") == 30, "no direct candidate: the relay is never cut"
+    cand = {"pbm3": "192.168.1.5:51820"}
+    st = meshd.update_relay(st, down, peers, False, now=100, candidates=cand)
+    assert "relay_since" not in st["pbm3"] and st["pbm3"]["tries"] == 1, "a new candidate is tried at once"
+    st = meshd.update_relay(st, down, peers, False, now=130, candidates=cand)
+    st = meshd.update_relay(st, down, peers, False, now=160, candidates=cand)
+    assert st["pbm3"]["relay_since"] == 160
+    st = meshd.update_relay(st, down, peers, False, now=160 + meshd.RELAY_RETRY_S, candidates=cand)
+    assert st["pbm3"].get("relay_since") == 160, "same candidate failed once: waits 20 min, not 10"
+    st = meshd.update_relay(st, down, peers, False, now=160 + 2 * meshd.RELAY_RETRY_S, candidates=cand)
+    assert "relay_since" not in st["pbm3"] and st["pbm3"]["tries"] == 2, "retried after the doubled wait"
+
+
 def relayed_peer_rides_the_hub_in_config():
     with tempfile.TemporaryDirectory() as d:
         meshd.KEY_FILE = os.path.join(d, "private.key")
@@ -111,6 +132,7 @@ def relayed_peer_rides_the_hub_in_config():
 
 
 t("relay after two failures, retry direct after 10 min", relay_after_two_failures_then_retry)
+t("relay retries only when a direct path is possible, with backoff", relay_retries_only_when_direct_is_possible)
 t("a relayed peer rides the hub in the config", relayed_peer_rides_the_hub_in_config)
 t("phones ride through the hub", phones_ride_through_the_hub)
 t("same LAN is preferred", same_lan_first)
