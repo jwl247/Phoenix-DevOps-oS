@@ -82,6 +82,14 @@ public partial class MainWindow : Window
         // right on the one screen it was tuned against).
         ClaudeCodePane.Height = SystemParameters.PrimaryScreenHeight / 3;
 
+        // Fill the work area, not the whole screen — at full screen height the
+        // bottom-anchored H.L.K-10 panel's input row sat behind the taskbar.
+        var work = SystemParameters.WorkArea;
+        Left = work.Left;
+        Top = work.Top;
+        Width = work.Width;
+        Height = work.Height;
+
         // Same reason dashboard/terminal-pty.js's cleanEnv() strips these:
         // if Hud.exe itself ever gets launched from inside a running Claude
         // Code session (e.g. a dev testing it from a Claude Code terminal —
@@ -198,7 +206,7 @@ public partial class MainWindow : Window
         var text = string.Join("\n\n", _codeLines);
         ClaudeCodeLog.Text = text;
         ClaudeCodeLog.CaretIndex = text.Length;
-        ClaudeCodeLog.ScrollToEnd();
+        ScrollToEndAfterLayout(ClaudeCodeLog);
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(ClaudeCodeLogPath)!);
@@ -279,15 +287,23 @@ public partial class MainWindow : Window
             await _voice.SpeakReplyAsync(finalReply);
     }
 
-    // Renders _lines into the read-only TextBox and scrolls to the bottom —
-    // TextBox.ScrollToEnd() handles both text-length and caret-position
-    // scrolling in one call, no separate ScrollViewer needed.
+    // Scrolling right after setting Text scrolls to the OLD extent — the new
+    // wrapped lines aren't measured yet, so the last line or two of a long
+    // reply sat below the visible area (Jerry, 2026-09-27: "i cant see the
+    // bottom row of text"). Scroll again once layout has run.
+    private static void ScrollToEndAfterLayout(System.Windows.Controls.TextBox box)
+    {
+        box.ScrollToEnd();
+        box.Dispatcher.BeginInvoke(box.ScrollToEnd, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    // Renders _lines into the read-only TextBox and scrolls to the bottom.
     private void RefreshChatLog()
     {
         var text = string.Join("\n\n", _lines);
         ChatLog.Text = text;
         ChatLog.CaretIndex = text.Length;
-        ChatLog.ScrollToEnd();
+        ScrollToEndAfterLayout(ChatLog);
 
         try
         {
