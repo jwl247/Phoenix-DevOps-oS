@@ -35,7 +35,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-WEB = os.path.join(HERE, "web")
+WEB = os.environ.get("PHOENIX_CONSOLE_WEB") or os.path.join(HERE, "web")   # a test copy can serve web-next/
 VAULT = os.environ.get("PHOENIX_SECRETS", r"F:\Phoenix\Vault\secrets\phoenix-secrets.env")
 MESH_PREFIX = "10.47.0."
 ONLINE_S = 90            # a machine that checked in within 90 s is online (agents beat every 30 s)
@@ -202,6 +202,43 @@ def build_state():
         return state
 
 
+# ── H.L.K's hands (hands/hands.py) ─────────────────────────────────────────
+# v0: this PC's hands only, on 127.0.0.1. Remote machines' hands come on day 8.
+HANDS_URL = os.environ.get("PHOENIX_HANDS_URL", "http://127.0.0.1:8471")
+HANDS_TOKEN_FILE = os.path.join(os.path.expanduser("~"), ".phoenix", "hands.token")
+MACHINE_RE = __import__("re").compile(r"^[a-z][a-z0-9-]{1,30}$")
+
+
+def local_name():
+    """This machine's Phoenix name (from the mesh agent's device file)."""
+    conf = (os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "PhoenixMesh", "device.json")
+            if platform.system() == "Windows" else "/etc/phoenix-mesh/device.json")
+    try:
+        with open(conf, encoding="utf-8") as f:
+            return json.load(f).get("name")
+    except (OSError, ValueError):
+        return None
+
+
+def hands_call(method, path, body=None, caller=""):
+    """-> (status, bytes, content-type). Never raises."""
+    try:
+        tok = open(HANDS_TOKEN_FILE, encoding="utf-8").read().strip()
+    except OSError:
+        return 503, json.dumps({"ok": False, "error": "hands not running on this PC"}).encode(), "application/json"
+    req = urllib.request.Request(HANDS_URL + path, method=method,
+                                 data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json",
+                                          "X-Caller": caller[:80]})
+    try:
+        with urllib.request.urlopen(req, timeout=40) as r:
+            return r.status, r.read(), r.headers.get("Content-Type", "application/json")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read(), e.headers.get("Content-Type", "application/json")
+    except Exception as e:
+        return 503, json.dumps({"ok": False, "error": f"hands unreachable ({type(e).__name__})"}).encode(), "application/json"
+
+
 # ── HTTP ───────────────────────────────────────────────────────────────────
 ALLOWED_HOSTS = {"precision.phx", "portal.phx", "localhost", "127.0.0.1"}
 
@@ -234,6 +271,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         if path == "/api/state":
             return self._send(200, json.dumps(build_state()).encode(), "application/json")
+        if path == "/api/hands":
+            me = local_name()
+            st, body, _ = hands_call("GET", "/tools")
+            info = json.loads(body) if st == 200 else {"ok": False, "error": json.loads(body).get("error", "unavailable")}
+            return self._send(200, json.dumps({"machines": {me: info} if me else {}}).encode(), "application/json")
+        m = self._hands_path(path)
+        if m and m[1] in ("log", "shot"):
+            st, body, ctype = hands_call("GET", "/log" if m[1] == "log" else "/shot/latest")
+            return self._send(st, body, ctype if st == 200 else "application/json")
         files = {"/": ("index.html", "text/html; charset=utf-8"),
                  "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                  "/style.css": ("style.css", "text/css; charset=utf-8")}
@@ -242,6 +288,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with open(os.path.join(WEB, name), "rb") as f:
                 return self._send(200, f.read(), ctype)
         return self._send(404, b"not found", "text/plain")
+
+    def _hands_path(self, path):
+        """/api/hands/<machine>/<what> for THIS machine only -> (machine, what) or None."""
+        parts = path.strip("/").split("/")
+        if len(parts) == 4 and parts[:2] == ["api", "hands"] and MACHINE_RE.match(parts[2]) and parts[2] == local_name():
+            return parts[2], parts[3]
+        return None
+
+    def do_POST(self):
+        if not self._host_ok():
+            return self._send(421, b"wrong host", "text/plain")
+        # A plain form on another site can't set this header or send JSON
+        # without a CORS preflight we never answer: blocks cross-site clicks.
+        if self.headers.get("X-Phoenix-Console") != "1" or                 not (self.headers.get("Content-Type") or "").startswith("application/json"):
+            return self._send(403, b'{"ok":false,"error":"console requests only"}', "application/json")
+        m = self._hands_path(urllib.parse.urlparse(self.path).path)
+        if not m or m[1] != "run":
+            return self._send(404, b'{"ok":false,"error":"not found"}', "application/json")
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(min(n, 65536)) or b"{}")
+        except ValueError:
+            return self._send(400, b'{"ok":false,"error":"body must be JSON"}', "application/json")
+        fwd = {"tool": str(body.get("tool", "")), "args": body.get("args") or {}, "confirm": body.get("confirm") is True}
+        st, out, _ = hands_call("POST", "/run", fwd, caller=f"console from {self.client_address[0]}")
+        return self._send(st, out, "application/json")
 
 
 def mesh_address():
@@ -274,8 +346,12 @@ def serve(addr, port):
 def main():
     ap = argparse.ArgumentParser(prog="phoenix-portal")
     ap.add_argument("--port", type=int, default=8470)
+    ap.add_argument("--local-only", action="store_true", help="127.0.0.1 only (a test copy)")
     a = ap.parse_args()
     serve("127.0.0.1", a.port)
+    if a.local_only:
+        while True:
+            time.sleep(3600)
     bound = None
     while True:                                  # the mesh can come up after us (boot order)
         ip = mesh_address()
