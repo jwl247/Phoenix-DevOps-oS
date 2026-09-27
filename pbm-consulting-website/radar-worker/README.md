@@ -1,6 +1,6 @@
 # Set-Aside Radar — `pbm-radar-worker`
 
-Public page + application form: https://pbmconsultingservice.com/radar (`../radar.html`, `../radar.js`). Free beta; every application is reviewed by hand.
+Public page + application form: https://pbmconsultingservice.com/radar (`../radar.html`, `../radar.js`). $9.99/month (Jerry, 2026-09-27), free during the beta; nobody is charged without being asked first. Every application is reviewed by hand.
 
 Every morning (6 AM Central, cron `0 11 * * *`) Radar pulls the federal opportunities
 posted the previous day from the **SAM.gov Opportunities API v2**, keeps only the

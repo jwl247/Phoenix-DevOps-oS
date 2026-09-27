@@ -597,7 +597,8 @@ async function handleUnsub(req, env, token) {
 //   POST /apply/verify  code ok -> status 'review', Jerry/Laurie get a notice with a review link
 //   GET  /review/:token shows the application; POST approves or declines (a GET never acts)
 // Approval turns it into a subscriber and sends the applicant a welcome note.
-// Free beta: no payment anywhere in this path.
+// Price is $9.99/month, free during the beta. No payment anywhere in this path yet,
+// and nobody is charged without being asked first.
 
 const SITE_ORIGIN = 'https://pbmconsultingservice.com';
 const PUBLIC_CERTS = ['small', 'wosb', 'edwosb', 'hubzone', '8a', 'sdvosb', 'vosb'];
@@ -746,7 +747,7 @@ async function handleApplyVerify(req, env) {
   await sendEmail(env, {
     to: a.email,
     subject: 'We got your Set-Aside Radar application',
-    text: `Thanks${a.name ? ', ' + a.name : ''}. Your email is confirmed and your application for ${a.business_name} is in.\n\nWe review each one by hand. Once it is approved you will start getting matched federal set-aside bids by email each weekday morning. Radar is free during the beta.\n\nPBM Consulting Service · 6814 Chris Madsen Rd, Guthrie, OK 73044`,
+    text: `Thanks${a.name ? ', ' + a.name : ''}. Your email is confirmed and your application for ${a.business_name} is in.\n\nWe review each one by hand. Once it is approved you will start getting matched federal set-aside bids by email each weekday morning. Radar is $9.99 a month, free during the beta. No card needed now, and we will ask before we ever charge you.\n\nPBM Consulting Service · 6814 Chris Madsen Rd, Guthrie, OK 73044`,
   });
   return corsJson({ ok: true });
 }
@@ -769,7 +770,7 @@ async function approveApplication(env, a, overrides = {}) {
   await sendEmail(env, {
     to: a.email,
     subject: "You're in: Set-Aside Radar starts tomorrow",
-    text: `Good news${a.name ? ', ' + a.name : ''}: your Set-Aside Radar application for ${a.business_name} is approved.\n\nStarting tomorrow morning, whenever a new federal set-aside bid matches your NAICS codes, certifications and states, you will get one short email with the bid, the deadline and a link to it on SAM.gov. Quiet weeks get a short Monday check-in so you know it is still watching.\n\nWatching: NAICS ${sub.naics.join(', ')} · ${sub.states.length ? sub.states.join(', ') : 'anywhere in the U.S.'}\n\nFree during the beta. To stop at any time: ${unsubUrl}\n\nPBM Consulting Service · 6814 Chris Madsen Rd, Guthrie, OK 73044`,
+    text: `Good news${a.name ? ', ' + a.name : ''}: your Set-Aside Radar application for ${a.business_name} is approved.\n\nStarting tomorrow morning, whenever a new federal set-aside bid matches your NAICS codes, certifications and states, you will get one short email with the bid, the deadline and a link to it on SAM.gov. Quiet weeks get a short Monday check-in so you know it is still watching.\n\nWatching: NAICS ${sub.naics.join(', ')} · ${sub.states.length ? sub.states.join(', ') : 'anywhere in the U.S.'}\n\nRadar is $9.99 a month and free during the beta. We will ask before we ever charge you. To stop at any time: ${unsubUrl}\n\nPBM Consulting Service · 6814 Chris Madsen Rd, Guthrie, OK 73044`,
     unsubUrl,
   });
   return { ok: true, subscriber_id: r.id };
