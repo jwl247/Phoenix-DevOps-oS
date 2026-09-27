@@ -128,3 +128,35 @@ h2 { font-size: 1.25rem; font-weight: 600; margin: 0 0 6px; }
 .services li.is-down .svc-note { color: var(--primer); }
 
 .foot { margin-top: 32px; color: var(--ink-soft); font-size: 0.88rem; }
+
+/* actions (H.L.K's hands) */
+.hands { margin-top: 28px; border: 2px solid var(--ink); background: var(--sheet); padding: 14px 16px 12px; }
+.hands-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 860px) { .hands-body { grid-template-columns: minmax(0, 1fr); } }
+.group { margin: 0 0 12px; }
+.group h3 { font-size: 0.95rem; font-weight: 500; color: var(--ink-soft); margin: 0 0 6px; }
+.group .row { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn {
+  font: inherit; font-size: 0.95rem; color: var(--ink); background: var(--sheet);
+  border: 2px solid var(--ink); padding: 6px 12px; cursor: pointer; border-radius: 0;
+}
+.btn:hover { background: color-mix(in srgb, var(--ink) 8%, var(--sheet)); }
+.btn:focus-visible { outline: 3px solid var(--hivis); outline-offset: 2px; }
+.btn:disabled { opacity: 0.55; cursor: progress; }
+.btn.danger { border-color: var(--primer); color: var(--primer); }
+.btn.danger:hover { background: color-mix(in srgb, var(--primer) 10%, var(--sheet)); }
+.result { border-left: 4px solid var(--rule); padding: 2px 0 2px 14px; min-height: 90px; }
+.result.ok { border-left-color: var(--good); }
+.result.err { border-left-color: var(--primer); }
+.result p { margin: 0 0 6px; }
+.result img { display: block; max-width: 100%; border: 1px solid var(--ink); margin-top: 6px; }
+.result table { border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.result td { padding: 2px 14px 2px 0; }
+.recent { margin-top: 8px; font-size: 0.9rem; }
+.recent summary { cursor: pointer; color: var(--ink-soft); }
+.recent ol { margin: 8px 0 0; padding-left: 20px; }
+.recent li { margin: 2px 0; font-variant-numeric: tabular-nums; }
+.recent .failed { color: var(--primer); }
+dialog { border: 2px solid var(--ink); background: var(--sheet); color: var(--ink); padding: 18px 20px; max-width: 420px; }
+dialog::backdrop { background: rgb(0 0 0 / 0.45); }
+.confirm-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; }

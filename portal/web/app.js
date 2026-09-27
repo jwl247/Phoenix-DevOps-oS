@@ -188,10 +188,137 @@ async function load() {
     $('tb-drawn').textContent = new Date(state.generated_at).toLocaleString();
     tick();
   } catch (e) {
-    $('checked').textContent = `Can't reach the portal server (${e.message}). Trying again in 15 s.`;
+    $('checked').textContent = `Can't reach the Console (${e.message}). Trying again in 15 s.`;
   }
 }
 
 load();
 setInterval(load, REFRESH_MS);
 setInterval(tick, 1000);
+
+// ── Actions: H.L.K's hands on this machine ─────────────────────────────────
+// The Console never runs anything itself: it asks the hands on that PC, which
+// keep the fixed tool list, the permission tiers and the log.
+const GROUPS = [
+  { title: 'Open on its screen', buttons: [
+    { label: 'Office', tool: 'open_app', args: { app: 'office' } },
+    { label: 'The HUD', tool: 'open_app', args: { app: 'hud' } },
+    { label: 'PowerShell', tool: 'open_app', args: { app: 'powershell' } },
+    { label: 'File Explorer', tool: 'open_app', args: { app: 'explorer' } },
+  ] },
+  { title: 'Look', buttons: [
+    { label: 'Show status', tool: 'status' },
+    { label: 'Take a screenshot', tool: 'screenshot' },
+  ] },
+  { title: 'Power', buttons: [
+    { label: 'Restart in 60 s', tool: 'restart_pc', danger: true },
+    { label: 'Cancel restart', tool: 'cancel_restart' },
+  ] },
+];
+let handsMachine = null;
+
+function showResult(kind, nodes) {
+  const r = $('hand-result');
+  r.className = `result ${kind}`;
+  r.replaceChildren(...nodes);
+}
+
+function renderStatus(s) {
+  const t = el('table');
+  const row = (k, v) => { const tr = el('tr'); tr.append(el('td', {}, k), el('td', {}, v)); t.append(tr); };
+  row('Computer', s.host);
+  if (s.memory) row('Memory', `${s.memory.used_pct}% used, ${s.memory.free_gb} of ${s.memory.total_gb} GB free`);
+  if (s.uptime_h !== undefined) row('Up for', s.uptime_h < 48 ? `${s.uptime_h} hours` : `${Math.round(s.uptime_h / 24)} days`);
+  for (const d of s.drives || []) row(`${d.drive} ${d.label || ''}`.trim(), `${d.free_gb} of ${d.total_gb} GB free`);
+  return [el('p', {}, `Status of ${s.host}`), t];
+}
+
+async function runTool(btn, b, confirm = false) {
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/hands/${handsMachine}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Phoenix-Console': '1' },
+      body: JSON.stringify({ tool: b.tool, args: b.args || {}, confirm }),
+    });
+    const out = await r.json();
+    if (r.status === 409 && out.needs_confirm) {           // "ask" tier: the one real decision
+      $('confirm-q').textContent = out.question;
+      const d = $('confirm');
+      d.returnValue = '';
+      d.showModal();
+      d.addEventListener('close', () => {
+        if (d.returnValue === 'yes') runTool(btn, b, true);
+        else showResult('', [el('p', {}, 'Nothing was done.')]);
+      }, { once: true });
+      return;
+    }
+    if (!out.ok) { showResult('err', [el('p', {}, `${b.label} didn't work: ${out.error}`)]); return; }
+    const res = out.result;
+    if (b.tool === 'status') showResult('ok', renderStatus(res));
+    else if (b.tool === 'screenshot') {
+      const img = el('img', { src: `/api/hands/${handsMachine}/shot?t=${Date.now()}`, alt: `Screenshot of ${handsMachine}` });
+      showResult('ok', [el('p', {}, `Screenshot saved to ${res.saved}`), img]);
+    } else if (b.tool === 'open_app') showResult('ok', [el('p', {}, `Opened ${res.opened} on ${handsMachine}.`)]);
+    else if (b.tool === 'restart_pc') showResult('err', [el('p', {}, `${handsMachine} restarts in 60 seconds. Press Cancel restart to stop it.`)]);
+    else if (b.tool === 'cancel_restart') showResult('ok', [el('p', {}, res.cancelled ? 'Restart cancelled.' : 'No restart was counting down.')]);
+  } catch (e) {
+    showResult('err', [el('p', {}, `Couldn't reach the Console (${e.message}).`)]);
+  } finally {
+    btn.disabled = false;
+    loadHandLog();
+  }
+}
+
+async function loadHandLog() {
+  if (!handsMachine) return;
+  try {
+    const r = await fetch(`/api/hands/${handsMachine}/log`, { cache: 'no-store' });
+    const out = await r.json();
+    const ol = $('hand-log');
+    ol.replaceChildren();
+    for (const e of (out.entries || []).slice(0, 10)) {
+      const what = e.tool === 'open_app' && e.args ? `open ${e.args.app}` : e.tool;
+      const how = e.ok ? (e.confirmed ? 'done, you confirmed' : 'done') : `not done: ${e.error}`;
+      ol.append(el('li', { class: e.ok ? '' : 'failed' }, `${new Date(e.at).toLocaleTimeString()}  ${what}, ${how} (${e.caller || 'unknown'})`));
+    }
+    if (!ol.children.length) ol.append(el('li', {}, 'Nothing yet.'));
+  } catch { /* the log is a convenience; the actions still work */ }
+}
+
+async function loadHands() {
+  try {
+    const r = await fetch('/api/hands', { cache: 'no-store' });
+    if (!r.ok) return;                                     // an older Console: no actions section
+    const { machines } = await r.json();
+    const [name, info] = Object.entries(machines)[0] || [];
+    const sec = $('hands');
+    if (!name) return;
+    handsMachine = name;
+    sec.hidden = false;
+    $('hands-title').textContent = `Actions on ${name}.phx`;
+    const groups = $('hand-groups');
+    groups.replaceChildren();
+    if (!info.ok) {
+      $('hands-note').textContent = `The hands on ${name} aren't running (${info.error}). Start them with python hands/hands.py.`;
+      return;
+    }
+    $('hands-note').textContent = `These run on ${name} itself, whichever machine you're looking from. Anything with consequences asks first. The other machines get their hands next.`;
+    const have = new Set(info.tools.map(t => t.name));
+    for (const g of GROUPS) {
+      const box = el('div', { class: 'group' });
+      box.append(el('h3', {}, g.title));
+      const row = el('div', { class: 'row' });
+      for (const b of g.buttons) {
+        if (!have.has(b.tool)) continue;
+        const btn = el('button', { type: 'button', class: `btn${b.danger ? ' danger' : ''}` }, b.label);
+        btn.addEventListener('click', () => runTool(btn, b));
+        row.append(btn);
+      }
+      box.append(row);
+      groups.append(box);
+    }
+    loadHandLog();
+  } catch { /* no actions section; the rest of the page still works */ }
+}
+loadHands();

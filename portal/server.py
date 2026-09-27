@@ -209,6 +209,27 @@ HANDS_TOKEN_FILE = os.path.join(os.path.expanduser("~"), ".phoenix", "hands.toke
 MACHINE_RE = __import__("re").compile(r"^[a-z][a-z0-9-]{1,30}$")
 
 
+def _name_from_hosts():
+    """This PC's Phoenix name, readable without admin: the mesh agent writes
+    '10.47.0.x<TAB>name.phx' for every member into the hosts file (a public
+    file, no secrets), and this PC's own mesh address picks our line."""
+    try:
+        mine = {i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)}
+    except OSError:
+        return None
+    hosts = (os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "drivers", "etc", "hosts")
+             if platform.system() == "Windows" else "/etc/hosts")
+    try:
+        with open(hosts, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2 and parts[0] in mine and parts[0].startswith("10.47.0.") and parts[1].endswith(".phx"):
+                    return parts[1][:-4]
+    except OSError:
+        pass
+    return None
+
+
 def local_name():
     """This machine's Phoenix name (from the mesh agent's device file)."""
     conf = (os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "PhoenixMesh", "device.json")
@@ -216,8 +237,8 @@ def local_name():
     try:
         with open(conf, encoding="utf-8") as f:
             return json.load(f).get("name")
-    except (OSError, ValueError):
-        return None
+    except (OSError, ValueError):          # admin-only folder (it holds the mesh key): use the hosts file
+        return _name_from_hosts()
 
 
 def hands_call(method, path, body=None, caller=""):

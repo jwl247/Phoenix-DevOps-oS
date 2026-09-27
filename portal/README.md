@@ -1,4 +1,4 @@
-# Phoenix Portal
+# Phoenix Console
 
 The one dashboard, served on Phoenix Net. Nobody installs a dashboard on their
 own machine; every Phoenix machine opens this page (decision 2026-09-26, see
@@ -7,7 +7,7 @@ own machine; every Phoenix machine opens this page (decision 2026-09-26, see
 **Open it:** `http://precision.phx:8470` from any machine on Phoenix Mesh, or
 `http://127.0.0.1:8470` on the hub itself.
 
-## v0 (2026-09-26): read-only
+## v0 (2026-09-26)
 - **The plan view:** every machine as a plate, every link as a member. Solid =
   direct, dashed through the hub = relayed, red-oxide with a break = down.
   Each member carries its round-trip time like a dimension.
@@ -17,7 +17,7 @@ own machine; every Phoenix machine opens this page (decision 2026-09-26, see
   Cloudflare tunnel and mesh agent.
 - A banner names anything that's down, in plain words.
 
-Buttons come with H.L.K's hands (the helper on each PC).
+**Actions** (same night): buttons for this PC run through H.L.K's hands (`hands/hands.py`, task `PhoenixHands`): open Office / the HUD / PowerShell / Explorer, status, screenshot, restart (asks first). One page only: no test copies.
 
 ## How it runs
 - `server.py`: Python standard library only. Asks the switchboard

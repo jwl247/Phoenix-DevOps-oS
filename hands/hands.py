@@ -174,6 +174,27 @@ TOOLS = {
 }
 
 
+def _name_from_hosts():
+    """This PC's Phoenix name, readable without admin: the mesh agent writes
+    '10.47.0.x<TAB>name.phx' for every member into the hosts file (a public
+    file, no secrets), and this PC's own mesh address picks our line."""
+    try:
+        mine = {i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)}
+    except OSError:
+        return None
+    hosts = (os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "drivers", "etc", "hosts")
+             if platform.system() == "Windows" else "/etc/hosts")
+    try:
+        with open(hosts, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2 and parts[0] in mine and parts[0].startswith("10.47.0.") and parts[1].endswith(".phx"):
+                    return parts[1][:-4]
+    except OSError:
+        pass
+    return None
+
+
 def phoenix_name():
     """This PC's Phoenix name (precision, compaq...) from the mesh agent; else the OS name."""
     conf = (os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "PhoenixMesh", "device.json")
@@ -181,8 +202,8 @@ def phoenix_name():
     try:
         with open(conf, encoding="utf-8") as f:
             return json.load(f).get("name") or socket.gethostname()
-    except (OSError, ValueError):
-        return socket.gethostname()
+    except (OSError, ValueError):          # admin-only folder (it holds the mesh key): use the hosts file
+        return _name_from_hosts() or socket.gethostname()
 
 
 def public_tools():
