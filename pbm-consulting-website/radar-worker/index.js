@@ -148,6 +148,39 @@ function agencyOf(n) {
   return path.length === 1 ? path[0] : `${path[0]} — ${path[path.length - 1]}`;
 }
 
+const STATE_NAMES = {
+  alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA', colorado: 'CO', connecticut: 'CT',
+  delaware: 'DE', 'district of columbia': 'DC', florida: 'FL', georgia: 'GA', hawaii: 'HI', idaho: 'ID', illinois: 'IL',
+  indiana: 'IN', iowa: 'IA', kansas: 'KS', kentucky: 'KY', louisiana: 'LA', maine: 'ME', maryland: 'MD',
+  massachusetts: 'MA', michigan: 'MI', minnesota: 'MN', mississippi: 'MS', missouri: 'MO', montana: 'MT',
+  nebraska: 'NE', nevada: 'NV', 'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+  'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH', oklahoma: 'OK', oregon: 'OR', pennsylvania: 'PA',
+  'rhode island': 'RI', 'south carolina': 'SC', 'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT',
+  vermont: 'VT', virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI', wyoming: 'WY',
+  'puerto rico': 'PR', guam: 'GU',
+};
+const STATE_CODES = new Set(Object.values(STATE_NAMES));
+
+// SAM sometimes leaves placeOfPerformance.state empty and puts the place in
+// free text ("Yuma Proving Ground (YPG) in Yuma, Arizona"). Read the state out
+// of that text: full names first (longest first, so "West Virginia" beats
+// "Virginia"), then a ", XX" / "XX 12345" code.
+function stateFromText(text) {
+  const t = String(text || '');
+  if (!t) return null;
+  const lower = t.toLowerCase();
+  const names = Object.keys(STATE_NAMES).sort((a, b) => b.length - a.length);
+  for (const n of names) if (new RegExp(`\\b${n}\\b`).test(lower)) return STATE_NAMES[n];
+  const m = t.match(/(?:,\s*|\s)([A-Z]{2})(?:\s+\d{5}|\s*$|[\s,.)])/);
+  return m && STATE_CODES.has(m[1]) ? m[1] : null;
+}
+
+// SAM uses "0" as a placeholder city name.
+function realCity(name) {
+  const s = String(name || '').trim();
+  return s && !/^\d+$/.test(s) ? s : null;
+}
+
 // Raw SAM notice -> the row we keep. Returns null for anything that is not an
 // active set-aside (those are not what Radar is for).
 function normalize(n) {
@@ -166,8 +199,8 @@ function normalize(n) {
     set_aside: code,
     set_aside_desc: n.typeOfSetAsideDescription || code,
     ptype: ptypeOf(n.type || n.baseType),
-    pop_state: (pop.state && pop.state.code) ? String(pop.state.code).toUpperCase() : null,
-    pop_city: (pop.city && pop.city.name) ? String(pop.city.name) : null,
+    pop_state: (pop.state && pop.state.code) ? String(pop.state.code).toUpperCase() : stateFromText(pop.streetAddress),
+    pop_city: realCity(pop.city && pop.city.name),
     ui_link: n.uiLink || `https://sam.gov/opp/${n.noticeId}/view`,
   };
 }
@@ -257,6 +290,14 @@ function matches(sub, opp) {
   return true;
 }
 
+// A bid whose response deadline has already passed is no use to anyone.
+// No deadline listed = still shown (sources-sought notices often have none).
+function isOpen(o, now = new Date()) {
+  if (!o.response_deadline) return true;
+  const t = Date.parse(o.response_deadline);
+  return isNaN(t) || t >= now.getTime();
+}
+
 function byDeadline(a, b) {
   const x = a.response_deadline ? Date.parse(a.response_deadline) : Infinity;
   const y = b.response_deadline ? Date.parse(b.response_deadline) : Infinity;
@@ -284,7 +325,7 @@ function dueText(deadline, now) {
 
 function placeText(o) {
   if (o.pop_city && o.pop_state) return `${o.pop_city}, ${o.pop_state}`;
-  return o.pop_state || 'Place not listed';
+  return o.pop_state || 'Place not listed — check the bid';
 }
 
 function subjectFor(sub, count, runIso) {
@@ -293,6 +334,7 @@ function subjectFor(sub, count, runIso) {
 }
 
 function footerLine(stats) {
+  if (stats.reused) return `Re-checked ${stats.kept.toLocaleString('en-US')} stored set-asides posted ${prettyDate(stats.posted)} · ${stats.matched} matched you.`;
   return `Checked ${stats.seen.toLocaleString('en-US')} notices posted ${prettyDate(stats.posted)} · ${stats.kept.toLocaleString('en-US')} were set-asides · ${stats.matched} matched you.`;
 }
 
@@ -409,11 +451,11 @@ async function runRadar(env, opts = {}) {
   const monday = weekday(runIso) === 1;
 
   for (const sub of subs) {
-    const matched = opps.filter(o => matches(sub, o)).sort(byDeadline);
+    const matched = opps.filter(o => matches(sub, o) && isOpen(o, now)).sort(byDeadline);
     const already = new Set(((await env.DB.prepare('SELECT notice_id FROM sent_matches WHERE subscriber_id = ?').bind(sub.id).all()).results || []).map(r => r.notice_id));
     const fresh = matched.filter(o => !already.has(o.notice_id));
     const unsubUrl = `${baseUrl(env)}/unsub/${sub.unsub_token}`;
-    const stats = { seen: summary.seen, kept: summary.kept, matched: fresh.length, posted };
+    const stats = { seen: summary.seen, kept: summary.kept, matched: fresh.length, posted, reused: opts.fetch === false };
     const entry = { id: sub.id, email: sub.email, matched: fresh.length, sent: 'none' };
 
     if (fresh.length) {
@@ -513,7 +555,7 @@ async function preview(url, env) {
   if (!row) return json({ ok: false, error: 'no such subscriber' }, 404);
   const sub = normSub(row);
   const opps = (await env.DB.prepare('SELECT * FROM opportunities WHERE posted_date = ?').bind(date).all()).results || [];
-  const m = opps.filter(o => matches(sub, o)).sort(byDeadline);
+  const m = opps.filter(o => matches(sub, o) && isOpen(o)).sort(byDeadline);
   return json({ ok: true, date, set_asides_stored: opps.length, matched: m.length, matches: m });
 }
 
@@ -544,7 +586,7 @@ async function handleUnsub(req, env, token) {
 // ---------------------------------------------------------------- entry
 
 export {
-  CERT_SETASIDES, normalize, matches, normSub, eligibleSetAsides, ptypeOf, chicagoDate, addDays, toSamDate,
+  CERT_SETASIDES, normalize, matches, stateFromText, realCity, isOpen, normSub, eligibleSetAsides, ptypeOf, chicagoDate, addDays, toSamDate,
   redact, isAuthorized, fetchPosted, runRadar, subjectFor, footerLine, validateSubscriber, digestText,
 };
 

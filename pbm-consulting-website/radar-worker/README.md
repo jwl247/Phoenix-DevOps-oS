@@ -37,6 +37,7 @@ It's Laurie's product, and PBM is customer zero.
   check-in goes out instead, so silence never looks like breakage.
 - **Honest record.** Every run writes a `runs` row: requests used, notices seen,
   set-asides kept, matches per subscriber, and any error. The digest footer states the same numbers.
+- **Real SAM quirks handled (found live 2026-09-27):** bids already past their deadline are dropped; `"0"` city placeholders are ignored; when `placeOfPerformance.state` is empty the state is read from the street-address text ("…Yuma, Arizona" → AZ).
 - The SAM key is redacted out of every error, log and response (tested).
 
 ## Routes
@@ -53,14 +54,14 @@ It's Laurie's product, and PBM is customer zero.
 | `GET /runs` | Bearer | last 30 runs |
 
 ## Secrets
-- `SAM_API_KEY`: sam.gov → Account Details → request public API key.
+- `SAM_API_KEY`: sam.gov → Account Details → request public API key. **Expires every 90 days.**
 - `RESEND_API_KEY`
 - `RESEND_FROM`: `Set-Aside Radar <radar@pbmconsultingservice.com>`
 - `PHOENIX_AUTH`: a leg in `sector2/package-handler/rotate-phoenix-auth.sh`. Never hand-set it.
 
 ## Run / test / deploy
 ```bash
-npm test                                  # 24 tests, real SQLite via node:sqlite, SAM + Resend faked
+npm test                                  # 25 tests, real SQLite via node:sqlite, SAM + Resend faked
 npx wrangler deploy
 npx wrangler d1 execute pbm_radar_db --remote --file=schema.sql   # schema (idempotent)
 curl -X POST -H "Authorization: Bearer $PHOENIX_AUTH" "https://pbm-radar-worker.phoenix-jwl.workers.dev/run?dry=1"

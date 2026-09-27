@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import worker, {
-  normalize, matches, normSub, eligibleSetAsides, ptypeOf, toSamDate, redact,
+  normalize, matches, stateFromText, realCity, isOpen, normSub, eligibleSetAsides, ptypeOf, toSamDate, redact,
   fetchPosted, runRadar, validateSubscriber,
 } from './index.js';
 
@@ -37,7 +37,7 @@ function notice(o) {
     noticeId: o.id, title: o.title || `Bid ${o.id}`, solicitationNumber: `SOL-${o.id}`,
     fullParentPathName: o.agency || 'DEPT OF DEFENSE.DEPT OF THE ARMY.W076 ENDIST TULSA',
     postedDate: '2026-09-28', type: o.type || 'Solicitation',
-    responseDeadLine: o.deadline === undefined ? '2026-10-05T14:00:00-05:00' : o.deadline,
+    responseDeadLine: o.deadline === undefined ? '2099-10-05T14:00:00-05:00' : o.deadline,
     naicsCode: o.naics || '238120', typeOfSetAside: o.sa === undefined ? 'SBA' : o.sa,
     typeOfSetAsideDescription: o.sa || null, active: o.active || 'Yes',
     placeOfPerformance: o.state === null ? undefined : { city: { name: o.city || 'Tulsa' }, state: { code: o.state || 'OK' } },
@@ -69,7 +69,7 @@ function freshEnv(extra = {}) {
 const FILLER = Array.from({ length: 2500 }, (_, i) => notice({ id: `F${i}`, sa: '' }));
 const CASES = [
   notice({ id: 'A1', naics: '238120', sa: 'SBA', state: 'OK', title: 'Steel erection <script>x</script>' }),       // match (small)
-  notice({ id: 'A2', naics: '238190', sa: 'WOSB', state: 'TX', deadline: '2026-10-01T12:00:00-05:00' }),           // match via edwosb->WOSB, sooner deadline
+  notice({ id: 'A2', naics: '238190', sa: 'WOSB', state: 'TX', deadline: '2099-10-01T12:00:00-05:00' }),           // match via edwosb->WOSB, sooner deadline
   notice({ id: 'A3', naics: '238120', sa: 'HZC', state: null }),                                                   // match: no place -> allowed
   notice({ id: 'A4', naics: '238120', sa: 'SDVOSBC', state: 'OK' }),                                               // no: not eligible
   notice({ id: 'A5', naics: '541330', sa: 'SBA', state: 'OK' }),                                                   // no: NAICS
@@ -77,6 +77,7 @@ const CASES = [
   notice({ id: 'A7', naics: '238120', sa: 'SBA', state: 'OK', type: 'Award Notice' }),                             // no: ptype
   notice({ id: 'A8', naics: '238120', sa: 'SBA', state: 'OK', active: 'No' }),                                     // dropped: inactive
   notice({ id: 'A9', naics: '238120', sa: '8A', state: 'KS', type: 'Some New SAM Wording' }),                      // match: unknown type passes
+  notice({ id: 'B1', naics: '238120', sa: 'SBA', state: 'OK', deadline: '2026-09-20T12:00:00-05:00' }),            // no: closed before the run
 ];
 SAM_NOTICES = [...FILLER, ...CASES];
 
@@ -120,10 +121,24 @@ await t('cert mapping: edwosb also qualifies for WOSB; small -> SBA/SBP', () => 
 });
 await t('matching: NAICS prefix, state, nationwide, no place, ptype', () => {
   const sub = normSub({ ...PBM, naics: JSON.stringify(PBM.naics), certs: JSON.stringify(PBM.certs), states: JSON.stringify(PBM.states), ptypes: '[]' });
-  const got = CASES.map(normalize).filter(Boolean).filter(o => matches(sub, o)).map(o => o.notice_id).sort();
+  const got = CASES.map(normalize).filter(Boolean).filter(o => matches(sub, o) && isOpen(o, TUE)).map(o => o.notice_id).sort();
   eq(got, ['A1', 'A2', 'A3', 'A9']);
   const nationwide = { ...sub, states: [] };
   ok(matches(nationwide, normalize(CASES[5])), 'nationwide should take CA');
+});
+await t('real SAM quirks: state from address text, "0" city, closed bids (seen live 2026-09-27)', () => {
+  eq(stateFromText('Yuma Proving Ground (YPG) in Yuma, Arizona'), 'AZ');
+  eq(stateFromText('Fort Sill, OK 73503'), 'OK');
+  eq(stateFromText('Charleston, West Virginia'), 'WV');
+  eq(stateFromText('Building 12, Main Gate'), null);
+  eq(realCity('0'), null); eq(realCity('Tulsa'), 'Tulsa');
+  const raw = notice({ id: 'Y', state: null });
+  raw.placeOfPerformance = { streetAddress: 'Yuma Proving Ground (YPG) in Yuma, Arizona', zip: '' };
+  eq(normalize(raw).pop_state, 'AZ');
+  const now = new Date('2026-09-27T12:00:00Z');
+  eq(isOpen({ response_deadline: '2026-09-26T00:00:00-05:00' }, now), false);
+  eq(isOpen({ response_deadline: '2026-10-07T14:00:00-05:00' }, now), true);
+  eq(isOpen({ response_deadline: null }, now), true);
 });
 await t('SAM date format MM/dd/yyyy', () => eq(toSamDate('2026-09-28'), '09/28/2026'));
 await t('validateSubscriber rejects bad input', () => {
@@ -137,10 +152,10 @@ await t('redact strips the key everywhere', () => {
 });
 
 // ---------------------------------------------------------------- SAM fetch
-await t('fetchPosted pages to totalRecords (2,509 notices = 3 requests), keeps 8 set-asides', async () => {
+await t('fetchPosted pages to totalRecords (2,510 notices = 3 requests), keeps 9 set-asides', async () => {
   const env = freshEnv();
   const f = await fetchPosted(env, '2026-09-28', 8);
-  eq(f.requests, 3); eq(f.seen, 2509); eq(f.kept.length, 8); eq(f.capped, false);
+  eq(f.requests, 3); eq(f.seen, 2510); eq(f.kept.length, 9); eq(f.capped, false);
   eq(samCalls[0].searchParams.get('postedFrom'), '09/28/2026');
   eq(samCalls[2].searchParams.get('offset'), '2000');
 });
@@ -159,12 +174,12 @@ await t('run: fetch, store, match, one digest email with the right content', asy
   const env = freshEnv();
   const id = await addSub(env);
   const s = await runRadar(env, { now: TUE });
-  eq(s.posted, '2026-09-28'); eq(s.requests_used, 3); eq(s.kept, 8);
+  eq(s.posted, '2026-09-28'); eq(s.requests_used, 3); eq(s.kept, 9);
   eq(emails.length, 1);
   const m = emails[0].body;
   eq(m.to, ['pbm@example.com']);
   eq(m.subject, 'Radar · 4 set-aside bids for PBM · Tue Sep 29');
-  ok(m.text.includes('Checked 2,509 notices posted Mon Sep 28 · 8 were set-asides · 4 matched you.'), 'footer');
+  ok(m.text.includes('Checked 2,510 notices posted Mon Sep 28 · 9 were set-asides · 4 matched you.'), 'footer');
   ok(m.text.indexOf('A2') < m.text.indexOf('A1'), 'soonest deadline first');
   ok(m.text.includes('Planning mode'), 'planning banner');
   ok(m.html.includes('&lt;script&gt;') && !m.html.includes('<script>x'), 'SAM text escaped in HTML');
@@ -172,7 +187,7 @@ await t('run: fetch, store, match, one digest email with the right content', asy
   const sent = env.DB.raw.prepare('SELECT notice_id FROM sent_matches WHERE subscriber_id=? ORDER BY notice_id').all(id).map(r => r.notice_id);
   eq(sent, ['A1', 'A2', 'A3', 'A9']);
   const run = env.DB.raw.prepare('SELECT * FROM runs').get();
-  eq([run.requests_used, run.notices_seen, run.set_asides_kept, run.error], [3, 2509, 8, null]);
+  eq([run.requests_used, run.notices_seen, run.set_asides_kept, run.error], [3, 2510, 9, null]);
 });
 await t('same bid is never sent twice; budget counts across runs', async () => {
   const env = freshEnv();
@@ -205,6 +220,7 @@ await t('fetch=0 re-uses stored bids and costs no SAM request', async () => {
   samCalls = [];
   const s = await runRadar(env, { now: TUE, dry: true, fetch: false });
   eq(samCalls.length, 0); eq(s.subscribers[0].matched, 4);
+  ok(s.subscribers[0].preview.text.includes('Re-checked 9 stored set-asides'), 'reuse footer');
 });
 await t('zero matches on a weekday: no email', async () => {
   const env = freshEnv();

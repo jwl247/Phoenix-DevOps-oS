@@ -350,10 +350,10 @@ Append the session entry to **`docs/history/SESSION-LOG.md`** (NOT this file). U
 | Pre-slim CLAUDE.md snapshot | `D:\Phoenix\claude-archive\` (also git history) |
 
 ## LAST SESSION (2026-09-27)
-CLAUDE.md slimmed (history → `docs/history/`). Polsia cut; **Set-Aside Radar built in-house and live** (`pbm-consulting-website/radar-worker/`, `pbm-radar-worker`, D1 `pbm_radar_db`, 24/24 tests). Resend key set on radar + leads workers, test send OK. Full entry in `docs/history/SESSION-LOG.md`.
+CLAUDE.md slimmed (history → `docs/history/`). Polsia cut; **Set-Aside Radar built in-house and live** (`pbm-consulting-website/radar-worker/`, `pbm-radar-worker`, D1 `pbm_radar_db`, 24/24 tests). Resend key set on radar + leads workers. SAM key in; first real digest sent (spot-check vs SAM: exact match). Full entry in `docs/history/SESSION-LOG.md`.
 
 ## NEXT SESSION (top items — full list in docs/history/NEXT-SESSION-BACKLOG.md)
-- **Set-Aside Radar go-live:** Jerry's SAM.gov API key → vault → `wrangler secret put SAM_API_KEY` (in `pbm-consulting-website/radar-worker`); add Laurie's email + get her OK on the NAICS/state list; `POST /run?dry=1`, spot-check 5 bids + one manual sam.gov search, then a real send. See `radar-worker/README.md`.
+- **Set-Aside Radar is LIVE** (first real digest sent 2026-09-27; cron 6 AM CT). Left: Laurie's email + her OK on the NAICS/state list; watch the first week of digests vs SAM.gov (day-plan row 4). SAM key expires ~2026-12-26 (calendar reminder 12-19). PBM's own SAM registration (LLC → EIN → SAM, all Laurie's) waits on her; only cost is the ~$100 OK LLC filing.
 - **FIRST:** today's row in `docs/plans/day-by-day-2026-09.md`. Day 1 leftovers: ~~Resend key → pbm-leads-worker~~ (done 2026-09-27), www redirect, stamp logo on site. Jerry creates the YouTube channel (art in `E:/Phoenix/video/brand`). Then day 2 (Life First page off the VM).
 - **Every morning:** full-repo pentest + functionality round per `docs/compliance/pentest/PROTOCOL.md` until 3 consecutive PASS rounds.
 - **Open Jerry calls:** broad inbound `python.exe` firewall rule on this PC? lighter daily pentest?
