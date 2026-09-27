@@ -68,6 +68,8 @@ curl -X POST -H "Authorization: Bearer $PHOENIX_AUTH" "https://pbm-radar-worker.
 ```
 
 ## Not in v1 (schema ready)
+- **Self-serve profile editing** (Jerry 2026-09-27: "it needs an add or remove code"): a subscriber adds or removes NAICS codes (and states/certs) themselves, from a link in the digest. It would reuse the unsub-token pattern and a small form.
+- **Award watch** (2026-09-27, McConnell MACC): follow a bid and get its award notice, so you can pitch the winners for sub work.
 - Public signup page on pbmconsultingservice.com (would reuse pbm-leads' Turnstile + email code).
 - Paid tiers ($29 / $99).
 - Full bid descriptions (each one costs a SAM request).
