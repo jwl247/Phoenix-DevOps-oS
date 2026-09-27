@@ -85,6 +85,14 @@ Michael Knight did a lot of real physical driving himself. This is augmentation 
 back-and-forth, problem-solving together — not a design goal of replacing the human with
 full autonomy. Nobody here is trying to make Jerry or Laurie unnecessary to the loop.
 
+## SPEED IS THE GOAL (added 2026-09-27)
+Jerry: "the goal is FAST from now on, and retroactively everything needs optimized for speed.
+When we get to running the game it's going to matter." New work is designed for speed and
+measured (docs/helix/BENCHMARKS.md precision rule); existing work gets a planned speed pass
+(plan it with Jerry first). Storage: keep using the 4 TB game drive now; a 20 TB drive is coming
+for this purpose and gets added later. Speed sits alongside "it works" and "secure/self-contained";
+if they conflict, ask Jerry.
+
 ## AI ARCHITECT
 Claude (Anthropic) is the AI architect and co-builder on this project.
 Every meaningful advance in the last 3 months — shared filesystem, dashboard,
