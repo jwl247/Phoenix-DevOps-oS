@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phoenix Portal</title>
+<meta name="description" content="Phoenix Net: who's online, how every link is holding, and whether each service is up.">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <h1>Phoenix Net</h1>
+  <p class="checked" id="checked" aria-live="polite">Checking…</p>
+</header>
+
+<main>
+  <section class="sheet" aria-labelledby="plan-title">
+    <h2 id="plan-title" class="sr-only">Plan view of the network</h2>
+    <p class="banner" id="banner" hidden></p>
+    <div class="drawing">
+      <svg id="plan" role="img" aria-label="Network plan: machines and the links between them"></svg>
+      <table class="titleblock" aria-label="Drawing title block">
+        <tr><th scope="row">Drawing</th><td>Phoenix Net, plan view</td></tr>
+        <tr><th scope="row">Machines</th><td id="tb-machines">–</td></tr>
+        <tr><th scope="row">Drawn</th><td id="tb-drawn">–</td></tr>
+      </table>
+    </div>
+    <ul class="legend">
+      <li><svg width="36" height="10" aria-hidden="true"><line x1="0" y1="5" x2="36" y2="5" class="m-direct"/></svg>Direct link</li>
+      <li><svg width="36" height="10" aria-hidden="true"><line x1="0" y1="5" x2="36" y2="5" class="m-relay"/></svg>Relayed through the hub</li>
+      <li><svg width="36" height="10" aria-hidden="true"><line x1="0" y1="5" x2="36" y2="5" class="m-down"/></svg>Down</li>
+    </ul>
+  </section>
+
+  <div class="columns">
+    <section aria-labelledby="links-title">
+      <h2 id="links-title">Links, last hour</h2>
+      <p class="note">Each machine measures its own side, so every link shows up twice. Speed is the round trip in milliseconds.</p>
+      <div class="scroll">
+        <table class="grid" id="links">
+          <thead><tr>
+            <th scope="col">Link</th><th scope="col">Now</th><th scope="col">Last hour</th>
+            <th scope="col" class="num">Changes</th><th scope="col" class="num">Speed</th>
+            <th scope="col" class="num">Worst</th><th scope="col">Trend</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section aria-labelledby="svc-title">
+      <h2 id="svc-title">Services</h2>
+      <ul class="services" id="services"></ul>
+    </section>
+  </div>
+</main>
+
+<footer class="foot">
+  <p>Read-only for now. Buttons arrive with H.L.K's hands. Opens from any Phoenix machine at precision.phx:8470.</p>
+</footer>
+</body>
+</html>
