@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Checks for H.L.K-10's hands loop (hud/AiChatService.cs). A console
+       program on purpose: it runs the real code against the real Console,
+       hands and AI, not a mock. Run: dotnet run (add the live flag for part 2) -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>HudChecks</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\hud\Hud.csproj" />
+  </ItemGroup>
+</Project>

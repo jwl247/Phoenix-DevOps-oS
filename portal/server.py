@@ -450,7 +450,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except ValueError:
             return self._send(400, b'{"ok":false,"error":"body must be JSON"}', "application/json")
         fwd = {"tool": str(body.get("tool", "")), "args": body.get("args") or {}, "confirm": body.get("confirm") is True}
-        st, out, _ = hands_call(m[0], "POST", "/run", fwd, caller=f"console from {self.client_address[0]}")
+        via = " (H.L.K)" if self.headers.get("X-Phoenix-Via") == "hlk" else ""
+        st, out, _ = hands_call(m[0], "POST", "/run", fwd, caller=f"console from {self.client_address[0]}{via}")
         return self._send(st, out, "application/json")
 
 

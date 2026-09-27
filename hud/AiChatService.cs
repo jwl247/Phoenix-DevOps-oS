@@ -20,6 +20,8 @@ public class AiChatResult
     public string Provider { get; set; } = "";
     public string Reply { get; set; } = "";
     public string? Error { get; set; }
+    /// <summary>What H.L.K's hands did on the way to this reply, one line each.</summary>
+    public List<string> Steps { get; set; } = new();
 }
 
 public class AiAuthConfig
@@ -103,23 +105,114 @@ public class AiChatService
     /// </param>
     public async Task<AiChatResult> SendAsync(string message, string? imagePath = null, Action<string>? onChunk = null)
     {
+        var steps = new List<string>();
+
+        // A tool that "asks first" is waiting: THIS message is the user's answer.
+        // The HUD decides yes/no itself from the user's own words; the model is
+        // never asked and can never say yes on the user's behalf.
+        if (_pending is { } p)
+        {
+            _pending = null;
+            if (!IsYes(message))
+            {
+                _history.Add(("user", message));
+                _history.Add(("assistant", "Okay, I won't."));
+                steps.Add($"{p.Machine} · {p.Label} · you said no, nothing was done");
+                return new AiChatResult { Success = true, Provider = "hands", Reply = "Okay, I won't.", Steps = steps };
+            }
+            var (st, body) = await _hands.RunAsync(p.Machine, p.Tool, p.Args, confirm: true);
+            steps.Add(StepLine(p.Machine, p.Label, st, body, confirmed: true));
+            _history.Add(("user", $"{message}\n\n{ToolResultText(p.Machine, p.Tool, st, body)}"));
+            return await ModelLoopAsync(null, onChunk, steps);
+        }
+
         _history.Add(("user", message));
+        return await ModelLoopAsync(imagePath, onChunk, steps);
+    }
+
+    // ── H.L.K's hands: the fixed tool list, driven by any model ─────────────
+    // CLAUDE.md, "THE INTERACTION MODEL": Phoenix's own abilities as declared,
+    // callable tools with permission tiers, not a raw shell to improvise with.
+    // The protocol is one plain line (ACTION {json}) on purpose: a small local
+    // Ollama model can drive it too, so the fallback story holds.
+    private readonly HandsClient _hands = new();
+    private PendingAction? _pending;
+    private const int MaxSteps = 4;
+
+    private sealed record PendingAction(string Machine, string Tool, string Label, JsonElement Args);
+
+    private const string BasePrompt =
+        "You are H.L.K-10, the onboard AI running inside Phoenix's own HUD — Jerry's platform, " +
+        "not a demo. Be direct, useful, and concise.";
+
+    private async Task<AiChatResult> ModelLoopAsync(string? imagePath, Action<string>? onChunk, List<string> steps)
+    {
+        var catalog = await _hands.DescribeAsync();
+        var systemPrompt = catalog.Length == 0 ? BasePrompt : BasePrompt + "\n\n" +
+            "You can act on Phoenix machines through H.L.K's hands. The tools available right now:\n" + catalog +
+            "\nTo use one, reply with ONLY this single line and nothing else:\n" +
+            "ACTION {\"machine\": \"compaq\", \"tool\": \"status\", \"args\": {}}\n" +
+            "The HUD runs it and gives you the result; then answer the user in plain words (no raw JSON). " +
+            "Use a tool only when the user asks for something a tool does. Never say you did something " +
+            "unless a result came back saying it was done. Tools marked [asks the user first]: request them " +
+            "normally; the HUD asks the user and only the user's own yes runs them. Never ask for, assume or " +
+            "claim that yes yourself.";
+
+        string provider = "";
+        for (var i = 0; i < MaxSteps; i++)
+        {
+            var filter = new ActionAwareStream(onChunk);
+            var call = await CallProviderAsync(systemPrompt, i == 0 ? imagePath : null, filter.Push);
+            if (!call.ok)
+                return new AiChatResult { Success = false, Provider = call.provider, Error = call.error, Steps = steps };
+            provider = call.provider;
+
+            var action = ParseAction(call.reply);
+            if (action is null)
+            {
+                _history.Add(("assistant", call.reply));
+                return new AiChatResult { Success = true, Provider = provider, Reply = call.reply, Steps = steps };
+            }
+
+            _history.Add(("assistant", action.Value.raw));
+            var (st, body) = await _hands.RunAsync(action.Value.machine, action.Value.tool, action.Value.args, confirm: false);
+            var label = ToolLabel(action.Value.tool, action.Value.args);
+
+            if (st == 409 && body.TryGetProperty("needs_confirm", out var nc) && nc.ValueKind == JsonValueKind.True)
+            {
+                var question = (body.TryGetProperty("question", out var q) ? q.GetString() : null)
+                               ?? $"{label} on {action.Value.machine}?";
+                _pending = new PendingAction(action.Value.machine, action.Value.tool, label, action.Value.args);
+                var ask = $"{question} Say yes to go ahead, or no.";
+                _history.Add(("assistant", ask));
+                steps.Add($"{action.Value.machine} · {label} · waiting for your yes");
+                return new AiChatResult { Success = true, Provider = provider, Reply = ask, Steps = steps };
+            }
+
+            steps.Add(StepLine(action.Value.machine, label, st, body, confirmed: false));
+            _history.Add(("user", ToolResultText(action.Value.machine, action.Value.tool, st, body)));
+        }
+
+        const string stopped = "I stopped after four steps without a final answer. Tell me what you want next.";
+        _history.Add(("assistant", stopped));
+        return new AiChatResult { Success = true, Provider = provider, Reply = stopped, Steps = steps };
+    }
+
+    /// <summary>One model call on the configured provider chain. Doesn't touch history.</summary>
+    private async Task<(bool ok, string provider, string reply, string? error)> CallProviderAsync(
+        string systemPrompt, string? imagePath, Action<string>? onChunk)
+    {
         var provider = (Config.Provider ?? "helpdesk").ToLowerInvariant();
-        var systemPrompt = "You are H.L.K-10, the onboard AI running inside Phoenix's own HUD — Jerry's platform, " +
-                            "not a demo. Be direct, useful, and concise.";
 
         if (provider is "helpdesk" or "ollama")
         {
             try
             {
-                var reply = await ChatOllamaAsync(systemPrompt);
-                _history.Add(("assistant", reply));
-                return new AiChatResult { Success = true, Provider = "ollama", Reply = reply };
+                return (true, "ollama", await ChatOllamaAsync(systemPrompt), null);
             }
             catch (Exception e)
             {
-                if (provider == "ollama")
-                    return new AiChatResult { Success = false, Provider = "ollama", Error = e.Message };
+                if (provider == "ollama") return (false, "ollama", "", e.Message);
                 // helpdesk: fall through to restricted Claude CLI safety net, same as main.js
             }
         }
@@ -128,13 +221,11 @@ public class AiChatService
         {
             try
             {
-                var reply = await ChatClaudeApiStreamAsync(systemPrompt, imagePath, onChunk);
-                _history.Add(("assistant", reply));
-                return new AiChatResult { Success = true, Provider = $"claude/{Config.Model ?? "claude-sonnet-5"}", Reply = reply };
+                return (true, $"claude/{Config.Model ?? "claude-sonnet-5"}", await ChatClaudeApiStreamAsync(systemPrompt, imagePath, onChunk), null);
             }
             catch (Exception e)
             {
-                return new AiChatResult { Success = false, Provider = "claude", Error = e.Message };
+                return (false, "claude", "", e.Message);
             }
         }
 
@@ -142,31 +233,125 @@ public class AiChatService
         {
             try
             {
-                var reply = await RunClaudeCliAsync(BuildFullPrompt(systemPrompt, imagePath), fullTools: true, onChunk);
-                _history.Add(("assistant", reply));
-                return new AiChatResult { Success = true, Provider = "claude/subscription", Reply = reply };
+                return (true, "claude/subscription", await RunClaudeCliAsync(BuildFullPrompt(systemPrompt, imagePath), fullTools: true, onChunk), null);
             }
             catch (Exception e)
             {
-                return new AiChatResult { Success = false, Provider = "claude/subscription", Error = e.Message };
+                return (false, "claude/subscription", "", e.Message);
             }
         }
 
         // Ollama-failure fallback — restricted-tool Claude CLI, same safety net as main.js
         try
         {
-            var reply = await RunClaudeCliAsync(BuildFullPrompt(systemPrompt, imagePath), fullTools: false, onChunk: null);
-            _history.Add(("assistant", reply));
-            return new AiChatResult { Success = true, Provider = "claude/subscription", Reply = reply };
+            return (true, "claude/subscription", await RunClaudeCliAsync(BuildFullPrompt(systemPrompt, imagePath), fullTools: false, onChunk: null), null);
         }
         catch (Exception e)
         {
-            return new AiChatResult
+            return (false, "helpdesk", "",
+                $"All Help Desk providers unavailable. {e.Message}\nStart Ollama (ollama serve) or set ANTHROPIC_API_KEY for Claude.");
+        }
+    }
+
+    /// <summary>
+    /// Finds an "ACTION {json}" line. Only machine, tool and args are read: a
+    /// "confirm" the model writes is dropped, so it can never approve its own
+    /// ask-first action.
+    /// </summary>
+    internal static (string machine, string tool, JsonElement args, string raw)? ParseAction(string reply)
+    {
+        foreach (var rawLine in reply.Split('\n'))
+        {
+            var line = rawLine.Trim().Trim('`').Trim();
+            if (!line.StartsWith("ACTION", StringComparison.Ordinal)) continue;
+            var brace = line.IndexOf('{');
+            if (brace < 0) continue;
+            try
             {
-                Success = false,
-                Provider = "helpdesk",
-                Error = $"All Help Desk providers unavailable. {e.Message}\nStart Ollama (ollama serve) or set ANTHROPIC_API_KEY for Claude."
-            };
+                var j = JsonSerializer.Deserialize<JsonElement>(line[brace..]);
+                var machine = j.TryGetProperty("machine", out var m) ? m.GetString() : null;
+                var tool = j.TryGetProperty("tool", out var t) ? t.GetString() : null;
+                if (string.IsNullOrWhiteSpace(machine) || string.IsNullOrWhiteSpace(tool)) continue;
+                machine = machine.ToLowerInvariant().Replace(".phx", "");
+                var args = j.TryGetProperty("args", out var a) && a.ValueKind == JsonValueKind.Object
+                    ? a : JsonSerializer.Deserialize<JsonElement>("{}");
+                return (machine, tool, args, line);
+            }
+            catch (JsonException)
+            {
+                // not a real action line; keep looking
+            }
+        }
+        return null;
+    }
+
+    private static readonly HashSet<string> YesWords = new(StringComparer.OrdinalIgnoreCase)
+        { "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "confirm", "confirmed", "affirmative", "go", "proceed" };
+    private static readonly string[] NoWords = { "no", "nope", "don't", "dont", "not", "wait", "stop", "cancel", "hold" };
+
+    /// <summary>The user's own words decide; anything unclear counts as no.</summary>
+    internal static bool IsYes(string message)
+    {
+        var words = new string(message.ToLowerInvariant().Select(c => char.IsLetter(c) || c == '\'' || c == ' ' ? c : ' ').ToArray())
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0 || words.Length > 6) return false;
+        if (words.Any(w => NoWords.Contains(w))) return false;
+        var text = string.Join(' ', words);
+        return YesWords.Contains(words[0]) || text.StartsWith("do it") || text.StartsWith("go ahead");
+    }
+
+    private static string ToolLabel(string tool, JsonElement args)
+    {
+        string? arg(string k) => args.ValueKind == JsonValueKind.Object && args.TryGetProperty(k, out var v) ? v.GetString() : null;
+        return tool switch
+        {
+            "open_app" => $"open {arg("app") ?? "an app"}",
+            "restart_service" => $"restart {arg("service") ?? "a service"}",
+            "restart_pc" => "restart the machine",
+            "cancel_restart" => "cancel the restart",
+            _ => tool.Replace('_', ' '),
+        };
+    }
+
+    private static string StepLine(string machine, string label, int status, JsonElement body, bool confirmed)
+    {
+        var ok = status == 200 && body.TryGetProperty("ok", out var o) && o.ValueKind == JsonValueKind.True;
+        var err = body.TryGetProperty("error", out var e) ? e.GetString() : $"HTTP {status}";
+        return $"{machine} · {label} · {(ok ? (confirmed ? "done, you said yes" : "done") : $"not done: {err}")}";
+    }
+
+    private static string ToolResultText(string machine, string tool, int status, JsonElement body)
+    {
+        var json = body.GetRawText();
+        if (json.Length > 1500) json = json[..1500] + "…";
+        return $"[hands result: {machine} / {tool}, HTTP {status}] {json}\n" +
+               "Answer the user now in plain words from this result. Only use another ACTION if one more step is really needed.";
+    }
+
+    /// <summary>
+    /// Streams the reply to the screen, except an ACTION line: that is held
+    /// back (it's for the HUD, not the user). Text that clearly isn't an
+    /// ACTION flows through as it arrives.
+    /// </summary>
+    private sealed class ActionAwareStream(Action<string>? sink)
+    {
+        private readonly StringBuilder _held = new();
+        private bool _decided, _isAction;
+
+        public void Push(string chunk)
+        {
+            if (sink is null) return;
+            if (_decided)
+            {
+                if (!_isAction) sink(chunk);
+                return;
+            }
+            _held.Append(chunk);
+            var start = _held.ToString().TrimStart().TrimStart('`');
+            if (start.Length < "ACTION".Length && "ACTION".StartsWith(start, StringComparison.Ordinal)) return;
+            _decided = true;
+            _isAction = start.StartsWith("ACTION", StringComparison.Ordinal);
+            if (!_isAction) sink(_held.ToString());
         }
     }
 
@@ -180,18 +365,66 @@ public class AiChatService
         return $"{systemPrompt}{imageNote}\n\n{(historyText.Length > 0 ? historyText + "\n\n" : "")}User: {last}";
     }
 
+    // A small local model, left to write prose, ignored the ACTION protocol and
+    // made up a machine's status (live 2026-09-26: "8 GB, up 2 hours" for a
+    // 15.5 GB box it never asked). With the hands in play it now has to answer
+    // in a fixed shape Ollama enforces: {"say": ...} or {"action": {...}}.
+    private static readonly object OllamaReplyShape = new
+    {
+        type = "object",
+        properties = new
+        {
+            say = new { type = "string" },
+            action = new
+            {
+                type = "object",
+                properties = new
+                {
+                    machine = new { type = "string" },
+                    tool = new { type = "string" },
+                    args = new { type = "object" },
+                },
+                required = new[] { "machine", "tool" },
+            },
+        },
+    };
+
+    private const string OllamaShapeRules =
+        "\n\nReply ONLY with JSON. To use a tool: {\"action\": {\"machine\": \"compaq\", \"tool\": \"status\", \"args\": {}}}. " +
+        "To answer the user: {\"say\": \"your answer\"}. You know NOTHING about any machine's memory, disks, load, " +
+        "services or state unless a [hands result] in this conversation told you; if the user asks about a machine, " +
+        "use a tool first. Never say an action was sent, done or cancelled unless a [hands result] says so.";
+
     private async Task<string> ChatOllamaAsync(string systemPrompt)
     {
         var url = (Config.OllamaUrl ?? "http://localhost:11434").TrimEnd('/') + "/api/chat";
-        var messages = new List<object> { new { role = "system", content = systemPrompt } };
+        var tools = systemPrompt.Contains("ACTION {", StringComparison.Ordinal);
+        var messages = new List<object> { new { role = "system", content = tools ? systemPrompt + OllamaShapeRules : systemPrompt } };
         messages.AddRange(_history.Select(t => (object)new { role = t.role, content = t.content }));
-        var body = JsonSerializer.Serialize(new { model = "llama3", messages, stream = false });
+        var body = tools
+            ? JsonSerializer.Serialize(new { model = "llama3", messages, stream = false, format = OllamaReplyShape, options = new { temperature = 0 } })
+            : JsonSerializer.Serialize(new { model = "llama3", messages, stream = false });
         var res = await _http.PostAsync(url, new StringContent(body, Encoding.UTF8, "application/json"));
         if (!res.IsSuccessStatusCode) throw new Exception($"Ollama {(int)res.StatusCode}");
         var json = await res.Content.ReadAsStringAsync();
         var doc = JsonSerializer.Deserialize<JsonElement>(json);
         var reply = doc.GetProperty("message").GetProperty("content").GetString() ?? "";
         if (reply.Length == 0) throw new Exception("Ollama returned empty response");
+        return tools ? FromOllamaShape(reply) : reply;
+    }
+
+    /// <summary>{"action":...} -> an ACTION line for the loop; {"say":...} -> the answer.</summary>
+    internal static string FromOllamaShape(string reply)
+    {
+        try
+        {
+            var j = JsonSerializer.Deserialize<JsonElement>(reply);
+            if (j.TryGetProperty("action", out var a) && a.ValueKind == JsonValueKind.Object
+                && a.TryGetProperty("machine", out _) && a.TryGetProperty("tool", out _))
+                return "ACTION " + a.GetRawText();
+            if (j.TryGetProperty("say", out var s) && s.GetString() is { Length: > 0 } say) return say;
+        }
+        catch (JsonException) { }
         return reply;
     }
 
@@ -203,11 +436,20 @@ public class AiChatService
 
         // Real vision, not a file-path hint — only the last (current) user
         // turn gets the image, so history doesn't re-send stale screenshots.
-        var messages = new List<object>();
-        for (var i = 0; i < _history.Count; i++)
+        // Tool results can put two turns from the same side back to back; the
+        // API wants them alternating, so they're merged first.
+        var merged = new List<(string role, string content)>();
+        foreach (var h in _history)
         {
-            var t = _history[i];
-            var isCurrentUserTurn = i == _history.Count - 1 && t.role == "user";
+            if (merged.Count > 0 && merged[^1].role == h.role)
+                merged[^1] = (h.role, merged[^1].content + "\n\n" + h.content);
+            else merged.Add(h);
+        }
+        var messages = new List<object>();
+        for (var i = 0; i < merged.Count; i++)
+        {
+            var t = merged[i];
+            var isCurrentUserTurn = i == merged.Count - 1 && t.role == "user";
             if (isCurrentUserTurn && imagePath is not null && File.Exists(imagePath))
             {
                 var b64 = Convert.ToBase64String(File.ReadAllBytes(imagePath));

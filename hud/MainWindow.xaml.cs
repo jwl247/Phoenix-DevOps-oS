@@ -193,6 +193,15 @@ public partial class MainWindow : Window
             });
         });
 
+        // What the hands did on the way (open Office, status of the Compaq…),
+        // one line each, above the reply, so "what did you just do" is always
+        // on screen and in chat-log.txt.
+        if (result.Steps.Count > 0)
+        {
+            _lines.InsertRange(placeholderIndex, result.Steps.Select(s => $"[HANDS] {s}"));
+            placeholderIndex += result.Steps.Count;
+        }
+
         string? finalReply = null;
         if (result.Success)
         {
