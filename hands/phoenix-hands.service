@@ -2,15 +2,17 @@
 # UnitedSys — United Systems | jwl247 | GPL-3.0
 # Listens on 127.0.0.1 + this box's mesh address; only the Console's PC
 # (10.47.0.2, the hub) may call, and only with this box's token.
-# Installed by hands/install_remote.py.
+# Installed ONCE by hands/install_remote.py; after that it imports new
+# versions of itself from the clone pool through the hub (build once).
 [Unit]
 Description=Phoenix hands (Console actions on this machine)
 After=network-online.target phoenix-meshd.service
 Wants=network-online.target
 
 [Service]
-ExecStart=/usr/bin/python3 /opt/phoenix-hands/hands.py --mesh --allow-from 10.47.0.2
-Restart=on-failure
+ExecStart=/usr/bin/python3 /opt/phoenix-hands/hands.py --mesh --allow-from 10.47.0.2 --update-from http://precision.phx:8470/pool/hands.py
+# always: a self-update exits 0 on purpose so the new version starts
+Restart=always
 RestartSec=5
 PrivateTmp=yes
 

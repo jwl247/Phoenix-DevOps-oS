@@ -287,6 +287,67 @@ def hands_call(machine, method, path, body=None, caller=""):
         return 503, json.dumps({"ok": False, "error": f"hands unreachable ({type(e).__name__})"}).encode(), "application/json"
 
 
+
+# ── Clone pool relay: the family imports from the pool THROUGH the hub ──────
+# Build once, every machine imports (Jerry, 2026-09-26: "i thought we were
+# going to have a helper import them so you only had to build 1"). Only the
+# hub holds the pool keys (PHOENIX_AUTH + the Access service token); the boxes
+# never get them. The hub fetches the file from the clone pool, checks it
+# against its custody fingerprint (SHA3-512 in D1), and only then hands it on,
+# with that fingerprint, to a box that shows its own hands token. The box
+# checks the fingerprint again before it swaps anything in.
+import hashlib  # noqa: E402
+
+POOL_WORKER = os.environ.get("PHOENIX_WORKER_URL", "https://packages-worker.phoenix-jwl.workers.dev")
+POOL_SERVES = {"hands.py"}                 # what the family may import; grow on purpose, never by pattern
+POOL_TTL = 300                             # the pool is asked at most every 5 minutes per file
+_pool_cache = {}
+
+
+def _pool_get(path):
+    v = read_vault()
+    req = urllib.request.Request(POOL_WORKER + path, headers={
+        "Authorization": f"Bearer {v['PHOENIX_AUTH']}", "User-Agent": "phoenix-console/0",
+        "CF-Access-Client-Id": v.get("CF_ACCESS_CLIENT_ID", ""),
+        "CF-Access-Client-Secret": v.get("CF_ACCESS_CLIENT_SECRET", "")})
+    with _opener.open(req, timeout=30) as r:            # no redirects: an Access login page is a failure
+        if r.status != 200:
+            raise RuntimeError(f"pool answered {r.status}")
+        return r.read()
+
+
+def pool_fetch(name):
+    """-> (bytes, sha3_hex). Raises if the pool copy doesn't match its custody record."""
+    hit = _pool_cache.get(name)
+    if hit and time.time() - hit[2] < POOL_TTL:
+        return hit[0], hit[1]
+    hex_id = name.encode().hex()
+    meta = json.loads(_pool_get(f"/clonepool/{hex_id}?meta=true"))
+    row = meta.get("result") or meta.get("item") or meta
+    want = (row.get("hash_sha3") or "").lower()
+    if not want:
+        raise RuntimeError(f"{name} has no custody fingerprint in the pool")
+    data = _pool_get(f"/clonepool/{hex_id}")
+    got = hashlib.sha3_512(data).hexdigest()
+    if got != want:
+        raise RuntimeError(f"{name}: pool bytes don't match custody ({got[:12]} vs {want[:12]})")
+    _pool_cache[name] = (data, got, time.time())
+    return data, got
+
+
+def box_token_ok(header):
+    got = (header or "").replace("Bearer ", "", 1).strip()
+    if len(got) != 64:
+        return False
+    try:
+        with open(HANDS_TOKENS_FILE, encoding="utf-8") as f:
+            toks = json.load(f).values()
+    except (OSError, ValueError):
+        return False
+    import secrets as _s
+    return any(_s.compare_digest(got, t) for t in toks)
+
+
 # ── HTTP ───────────────────────────────────────────────────────────────────
 ALLOWED_HOSTS = {"precision.phx", "portal.phx", "localhost", "127.0.0.1"}
 
@@ -317,6 +378,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not self._host_ok():
             return self._send(421, b"wrong host", "text/plain")
         path = urllib.parse.urlparse(self.path).path
+        if path.startswith("/pool/"):
+            name = path[len("/pool/"):]
+            if name not in POOL_SERVES:
+                return self._send(404, b"not served", "text/plain")
+            if not box_token_ok(self.headers.get("Authorization")):
+                return self._send(401, b"unauthorized", "text/plain")
+            try:
+                data, sha3 = pool_fetch(name)
+            except Exception as e:
+                return self._send(502, f"pool: {e}".encode()[:300], "text/plain")
+            if (self.headers.get("X-Have-SHA3") or "").lower() == sha3:     # nothing new: no file sent
+                self.send_response(304)
+                self.send_header("X-Phoenix-SHA3", sha3)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("X-Phoenix-SHA3", sha3)
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if path == "/api/state":
             return self._send(200, json.dumps(build_state()).encode(), "application/json")
         if path == "/api/hands":

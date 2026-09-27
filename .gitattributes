@@ -13,3 +13,4 @@ Makefile    text eol=lf
 *.target    text eol=lf
 *.timer     text eol=lf
 *.conf      text eol=lf
+hands/** text eol=lf

@@ -75,7 +75,56 @@ def open_app_allowlist():
         pass
 
 
+def import_from_pool_is_checked():
+    import hashlib
+    import http.server
+    import threading
+    served = {}
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            data, claimed = served["data"], served["claim"]
+            self.send_response(200)
+            self.send_header("X-Phoenix-SHA3", claimed)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_address[1]}/pool/hands.py"
+    d = tempfile.mkdtemp()
+    fake_self = os.path.join(d, "hands.py")
+    old = b"print('v1')\n"
+    open(fake_self, "wb").write(old)
+    real_self, real_sha = hands.SELF, hands.SELF_SHA3
+    hands.SELF, hands.SELF_SHA3 = fake_self, hashlib.sha3_512(old).hexdigest()
+    try:
+        sha = lambda b: hashlib.sha3_512(b).hexdigest()
+        served.update(data=old, claim=sha(old))
+        assert hands.update_once(url, "t") == "current"
+        new = b"print('v2')\n"
+        served.update(data=new, claim=sha(b"something else"))
+        assert hands.update_once(url, "t").startswith("refused: the file doesn't match"), "wrong fingerprint refused"
+        assert open(fake_self, "rb").read() == old, "nothing swapped on refusal"
+        broken = b"def (\n"
+        served.update(data=broken, claim=sha(broken))
+        assert hands.update_once(url, "t").startswith("refused: new version doesn't compile")
+        assert open(fake_self, "rb").read() == old
+        served.update(data=new, claim=sha(new))
+        assert hands.update_once(url, "t") == "updated"
+        assert open(fake_self, "rb").read() == new, "new version swapped in"
+        assert hands.recent(1)[0]["tool"] == "self_update"
+    finally:
+        hands.SELF, hands.SELF_SHA3 = real_self, real_sha
+        srv.shutdown()
+
+
 t("base tier runs without asking", base_runs_without_asking)
+t("import from the pool: fingerprint + compile checked, atomic swap", import_from_pool_is_checked)
 t("ask tier runs only after a real yes (JSON true)", ask_tier_needs_a_real_yes)
 t("only the declared tools exist; none is tier never", only_declared_tools)
 t("bad arguments are refused", bad_args_refused)

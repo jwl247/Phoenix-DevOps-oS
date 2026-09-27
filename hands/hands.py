@@ -43,6 +43,16 @@ LOG_FILE = os.environ.get("PHOENIX_HANDS_LOG",
                           os.path.join(os.path.expanduser("~"), ".unitedsys", "logs", "hands.jsonl"))
 SHOT_DIR = os.path.join(os.path.expanduser("~"), "Pictures", "Phoenix")
 _log_lock = threading.Lock()
+SELF = os.path.abspath(__file__)
+
+
+def _sha3_file(path):
+    import hashlib
+    with open(path, "rb") as f:
+        return hashlib.sha3_512(f.read()).hexdigest()
+
+
+SELF_SHA3 = _sha3_file(SELF)          # the same fingerprint the clone pool keeps in custody
 
 
 # ── tools ──────────────────────────────────────────────────────────────────
@@ -102,7 +112,8 @@ class _MemStatus(ctypes.Structure):
 
 
 def tool_status():
-    out = {"host": socket.gethostname(), "os": f"{platform.system()} {platform.release()}"}
+    out = {"host": socket.gethostname(), "os": f"{platform.system()} {platform.release()}",
+           "hands_version": SELF_SHA3[:12]}
     if IS_WIN:
         m = _MemStatus(); m.dwLength = ctypes.sizeof(m)
         ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
@@ -167,7 +178,8 @@ RESTARTABLE = {"phoenix-meshd": "the mesh agent", "ollama": "Ollama (the local A
 
 
 def tool_status_linux():
-    out = {"host": socket.gethostname(), "os": f"{platform.system()} {platform.release()}"}
+    out = {"host": socket.gethostname(), "os": f"{platform.system()} {platform.release()}",
+           "hands_version": SELF_SHA3[:12]}
     mem = {}
     with open("/proc/meminfo") as f:
         for line in f:
@@ -367,7 +379,7 @@ def make_handler(token, allow_from=()):
             if not self._authed():
                 return self._send(401, {"ok": False, "error": "unauthorized"})
             if self.path == "/tools":
-                return self._send(200, {"ok": True, "host": phoenix_name(), "tools": public_tools()})
+                return self._send(200, {"ok": True, "host": phoenix_name(), "version": SELF_SHA3[:12], "tools": public_tools()})
             if self.path.startswith("/log"):
                 return self._send(200, {"ok": True, "entries": recent(20)})
             if self.path == "/shot/latest":
@@ -395,6 +407,60 @@ def make_handler(token, allow_from=()):
     return Handler
 
 
+# ── import from the clone pool (the boxes) ─────────────────────────────────
+# Build once: a new hands.py is intaked into the clone pool ONE time; the hub
+# relays it (checked against custody) and every box swaps it in here. Only the
+# very first install is by hand: a helper can't import itself before it exists.
+UPDATE_EVERY_S = 300
+
+
+def update_once(url, token):
+    """-> 'current' | 'updated' | an error string. On 'updated' the caller exits
+    and systemd starts the new version."""
+    import hashlib
+    import urllib.error
+    import urllib.request
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "User-Agent": "phoenix-hands/0",
+                                               "X-Have-SHA3": SELF_SHA3})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data, claimed = r.read(), (r.headers.get("X-Phoenix-SHA3") or "").lower()
+    except urllib.error.HTTPError as e:
+        if e.code == 304:                                # the hub says: you already have it
+            return "current"
+        return f"hub answered {e.code}"
+    except Exception as e:
+        return f"no answer from the hub ({type(e).__name__})"
+    got = hashlib.sha3_512(data).hexdigest()
+    if not claimed or got != claimed:
+        return "refused: the file doesn't match its custody fingerprint"
+    if got == SELF_SHA3:
+        return "current"
+    try:
+        compile(data, "hands.py", "exec")               # never swap in a file that won't even start
+    except SyntaxError as e:
+        return f"refused: new version doesn't compile ({e.msg})"
+    tmp = SELF + ".new"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, SELF)                                # atomic: old or new, never half
+    log({"caller": "clone pool via hub", "tool": "self_update", "ok": True,
+         "args": {"from": SELF_SHA3[:12], "to": got[:12]}})
+    return "updated"
+
+
+def update_loop(url, token):
+    time.sleep(20)
+    while True:
+        result = update_once(url, token)
+        if result == "updated":
+            print("hands: new version imported from the clone pool; restarting", flush=True)
+            os._exit(0)                                  # systemd (Restart=always) starts the new one
+        if result != "current":
+            print(f"hands: update check: {result}", flush=True)
+        time.sleep(UPDATE_EVERY_S)
+
+
 def mesh_ip():
     """This machine's 10.47.0.x from the mesh agent's WireGuard config (root-readable on Linux)."""
     conf = (os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "PhoenixMesh", "wg-phx.conf")
@@ -415,11 +481,15 @@ def main():
     ap.add_argument("--port", type=int, default=8471)
     ap.add_argument("--mesh", action="store_true", help="also listen on this machine's mesh address (the headless boxes)")
     ap.add_argument("--allow-from", default="", help="comma list of mesh IPs allowed to call (the Console's PC)")
+    ap.add_argument("--update-from", default="", help="the hub's clone-pool relay, e.g. http://precision.phx:8470/pool/hands.py")
     a = ap.parse_args()
     allow = tuple(x.strip() for x in a.allow_from.split(",") if x.strip())
     if a.mesh and not allow:
         raise SystemExit("--mesh needs --allow-from (never open the hands to the whole mesh)")
-    handler = make_handler(load_token(), allow)
+    token = load_token()
+    handler = make_handler(token, allow)
+    if a.update_from:
+        threading.Thread(target=update_loop, args=(a.update_from, token), daemon=True).start()
     addrs = ["127.0.0.1"]
     if a.mesh:
         while not mesh_ip():                      # the mesh can come up after us

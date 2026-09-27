@@ -330,6 +330,7 @@ function selectMachine(name) {
   $('hands-note').textContent = name === handsHere
     ? `These run on ${name} itself, whichever machine you're looking from. Anything with consequences asks first.`
     : `${name} has no screen, so it offers what a server can do. Anything with consequences asks first.`;
+  if (info.version) $('hands-note').textContent += ` Hands version ${info.version}.`;
   const have = new Set(info.tools.map(t => t.name));
   for (const g of GROUPS) {
     const btns = g.buttons.filter(b => have.has(b.tool));

@@ -20,11 +20,13 @@ TOKENS = os.path.join(os.path.expanduser("~"), ".phoenix", "hands-tokens.json")
 
 
 def ssh(alias, command, stdin=None):
-    r = subprocess.run(["ssh", "-o", "ConnectTimeout=10", alias, command], input=stdin,
-                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    """stdin goes as BYTES: a text-mode pipe on Windows turns every newline into
+    CR+LF, so the box got a copy that no longer matched the clone pool (found
+    2026-09-26)."""
+    r = subprocess.run(["ssh", "-o", "ConnectTimeout=10", alias, command], input=stdin, capture_output=True)
     if r.returncode != 0:
-        sys.exit(f"[{alias}] failed: {r.stderr.strip()[-400:]}")
-    return r.stdout
+        sys.exit(f"[{alias}] failed: {r.stderr.decode(errors='replace').strip()[-400:]}")
+    return r.stdout.decode("utf-8", errors="replace")
 
 
 def main():
@@ -37,8 +39,8 @@ def main():
     ssh(a.ssh, "sudo mkdir -p /opt/phoenix-hands")
     for src, dst in (("hands.py", "/opt/phoenix-hands/hands.py"),
                      ("phoenix-hands.service", "/etc/systemd/system/phoenix-hands.service")):
-        with open(os.path.join(HERE, src), encoding="utf-8") as f:
-            ssh(a.ssh, f"sudo tee {dst} >/dev/null", stdin=f.read().replace("\r\n", "\n"))
+        with open(os.path.join(HERE, src), "rb") as f:
+            ssh(a.ssh, f"sudo tee {dst} >/dev/null", stdin=f.read().replace(b"\r\n", b"\n"))
     ssh(a.ssh, "sudo systemctl daemon-reload && sudo systemctl enable phoenix-hands >/dev/null 2>&1 "
                "&& sudo systemctl restart phoenix-hands && sleep 3 && systemctl is-active phoenix-hands")
     token = ssh(a.ssh, "sudo cat /root/.phoenix/hands.token").strip()
