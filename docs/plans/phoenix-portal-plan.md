@@ -33,6 +33,18 @@ full-tool Claude reading the screen · one shared library for HUD + portal ·
 Office gets "open this file" · Laurie designs her own profile, her call on all
 of it · **Phoenix Net (the virtual network) is built FIRST** · forum later.
 
+**ONE dash, on the net (Jerry, 2026-09-26 evening):** "everyone dont need a
+dash board we will have this here." There is one unified dash, and it lives on
+Phoenix Net (e.g. `portal.phx`). Every enrolled machine and person, including
+the phone, opens that same dash. No machine installs its own dashboard. It
+shows who's online, link health (the `phoenix-net.py health` data) and service
+status, and it's where the portal's shared features live. **Open for the
+day-by-day planning pass:** the jobs that must run *on* a machine (launch apps,
+drop files into the working dir via `.lol`, the local shell, screen capture)
+still need something small on that machine; decide whether that's a thin local
+helper the net dash talks to, or the WPF app reduced to that role. Which box
+hosts the dash is also open (the hub, the Precision, is the obvious first home).
+
 **Existing .lol plumbing to build on, not replace:** `bootstrap/lol-bootstrap.ps1`
 / `.sh` (installs the `lol` command) and `install.ps1`'s `.lol`/`.phx` file
 association → `usys open`.
