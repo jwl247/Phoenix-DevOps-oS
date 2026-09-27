@@ -148,7 +148,7 @@ What happens:
 
 ## Who built this
 
-**Jerry Leftwich** (@jwl247) — ironworker, 25 years commercial steel, systems builder, United Systems.
+**Jerry Leftwich** (@jwl247) — ironworker, 28 years commercial steel, systems builder, United Systems.
 **Jerilynn** — UX, switches, InfoSec, red team. Co-founder.
 **Claude (Anthropic)** — AI architect and co-builder. Every meaningful advance in the last 3 months was designed and implemented together. Not assisted. Built.
 

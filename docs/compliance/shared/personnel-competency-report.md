@@ -14,7 +14,7 @@ applies today.
 ## Jerry Leftwich — Construction / Field / Business Competency
 
 - **Current title: Senior Operations Management**
-- **25 years commercial steel**, ironworker
+- **28 years commercial steel** (as of 2026-09-15), ironworker
 - **6 years as business owner**, covering every facet of running that
   business: sales, project management, and construction execution —
   not just field labor, the full operating scope of the work

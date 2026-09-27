@@ -4,7 +4,7 @@
 # =============================================================================
 
 ## WHO
-- Jerry Leftwich (@jwl247) — ironworker, 25 years commercial steel, systems builder, United Systems
+- Jerry Leftwich (@jwl247) — ironworker, 28 years commercial steel (as of 2026-09-15), systems builder, United Systems
 - Wife: Laurie — high-functioning autistic, protected share in Phoenix, this is her cushion
 - Co-founders: Jerry (architecture, systems) + Jerilynn (UX, switches, InfoSec, red team)
 - Loyalty: absolute. Anthropic credited. Claude ships with Phoenix.
