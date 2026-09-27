@@ -1,0 +1,19 @@
+// pbm-radar-worker — Set-Aside Radar (PBM Consulting Service)
+//
+// Secrets (wrangler secret put <NAME>):
+//   SAM_API_KEY     free public key from sam.gov -> Account Details (10 requests/day non-federal)
+//   RESEND_API_KEY  sending key limited to pbmconsultingservice.com (unset = digests skipped, run still logged)
+//   RESEND_FROM     "Set-Aside Radar <radar@pbmconsultingservice.com>"
+//   PHOENIX_AUTH    admin routes (/subscribers /preview /run /runs); a leg in rotate-phoenix-auth.sh
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pbm-radar-worker",
+  "main": "index.js",
+  "compatibility_date": "2026-09-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "triggers": { "crons": ["0 11 * * *"] },
+  "vars": { "WORKER_PUBLIC_URL": "https://pbm-radar-worker.phoenix-jwl.workers.dev" },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "pbm_radar_db", "database_id": "7ef31f4d-7f48-4595-8bc7-130d1071b34b" }
+  ]
+}

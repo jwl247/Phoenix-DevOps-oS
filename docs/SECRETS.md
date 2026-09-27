@@ -18,10 +18,11 @@ If that folder is gone (new machine, lost drive), rebuild from:
 
 | Secret | Unlocks | Missing? |
 |--------|---------|----------|
-| `PHOENIX_AUTH` | `packages-worker` (D1 custody + R2 clonepool), `office-notify-worker` (Office M3) | no — in Windows User env + 2 live CF worker secrets. `phoenix-clonepool-r2` (retired 2026-09-21) is **still deployed** with an old, out-of-sync value (verified 2026-09-25: current token → `401`) — delete that worker rather than resync it |
+| `PHOENIX_AUTH` | `packages-worker` (D1 custody + R2 clonepool), `office-notify-worker` (Office M3), `pbm-radar-worker` admin routes | no — in Windows User env + 2 live CF worker secrets. `phoenix-clonepool-r2` (retired 2026-09-21) is **still deployed** with an old, out-of-sync value (verified 2026-09-25: current token → `401`) — delete that worker rather than resync it |
 | `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | The `usys-cli` Cloudflare Access service token — required on top of `PHOENIX_AUTH` for anything calling `packages-worker.phoenix-jwl.workers.dev` (Security Gap 1) | no — Windows User env |
 | `OFFICE_AUTH` (worker secret) / `PHOENIX_OFFICE_AUTH` (client env var, `phoenix-office/main.js`) | `phoenix-office-worker` (standalone Office product — deliberately *not* `PHOENIX_AUTH`) | CF worker secret + Windows User env. **Not in the vault file** as of 2026-09-25 — add it, since worker secrets can't be read back |
-| `RESEND_API_KEY` | Email sending for `office-notify-worker` and `phoenix-office-worker` | no — set on both workers (2026-09-23). Still missing on `pbm-leads-worker` (verification emails record but don't send) |
+| `RESEND_API_KEY` | Email sending for `office-notify-worker`, `phoenix-office-worker`, `pbm-leads-worker`, `pbm-radar-worker` | no — Office workers since 2026-09-23; leads + radar set 2026-09-27 from the vault key ("newkey" in Resend, sending access, pbmconsultingservice.com). `RESEND_FROM` set per worker |
+| `SAM_API_KEY` | `pbm-radar-worker` (Set-Aside Radar) daily SAM.gov pull — 10 requests/day on a free non-federal key | **yes, as of 2026-09-27** — Jerry: sam.gov → Account Details → request public API key → vault → `wrangler secret put SAM_API_KEY` in `pbm-consulting-website/radar-worker` |
 | `TURNSTILE_SECRET` | `pbm-leads-worker` bot check | no — CF worker secret |
 | `MUSTANSWER_ACCESS_TOKEN` | `lifefirst-mustanswer` `/register` + `/sweep` (bespoke — not yet migrated to `PHOENIX_AUTH`, see `docs/compliance/pentest/`) | no — rotated 2026-09-25, in the vault |
 | `PHOENIX_MAPTILER_KEY` | Dashboard MAP pane | yes — optional |
@@ -32,8 +33,8 @@ If that folder is gone (new machine, lost drive), rebuild from:
 
 ## Rotating PHOENIX_AUTH
 
-Only ever with `sector2/package-handler/rotate-phoenix-auth.sh`. It pushes to both
-live legs (`packages-worker`, `office-notify-worker`), verifies each via `/whoami`,
+Only ever with `sector2/package-handler/rotate-phoenix-auth.sh`. It pushes to every
+live leg (`packages-worker`, `office-notify-worker`, `pbm-radar-worker`), verifies each via `/whoami`,
 and only then updates the registry. Hand-editing one leg = the 2026-08-21 / 08-22 /
 09-21 incidents. (`phoenix-clonepool-r2` was a leg until its 2026-09-21 retirement.)
 

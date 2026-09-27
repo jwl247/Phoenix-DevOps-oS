@@ -24,6 +24,7 @@ anything load-bearing before trusting it blindly.
 | [archive](archive/CONNECTIONS.md) | Fossil/consolidation dumps | Intentionally dead history, excluded from intake by design. Not a bug bucket to "clean up." |
 | [phoenix-core](phoenix-core/CONNECTIONS.md) | Standalone C intake engine (`phoenix-helix-c`) | Legacy/parallel to the bash intake pipeline; its `tools/intake.py` is explicitly deprecated. |
 | [deploy](deploy/CONNECTIONS.md) | Remote Ubuntu deploy scripts | `deploy.sh` pushes `sector3/services/` + `dashboard/` to a remote box over rsync/ssh. |
+| pbm-consulting-website | pbmconsultingservice.com (Workers static assets) + `worker/` (pbm-leads-worker: lead form, Turnstile, email code) + `radar-worker/` (Set-Aside Radar, see its README) | Three separate deploys from one folder; `.assetsignore` keeps both worker folders out of the public site. |
 
 **Root files not covered above:** `CLAUDE.md` (canonical law — read every session), `SESSION_STATE.md`
 (narrower "where we left off" snapshot), `install.ps1`/`install.sh` (unified installer),

@@ -8,6 +8,7 @@
 #   1. Windows registry (HKCU\Environment, via setx)         — what intake.sh reads
 #   2. packages-worker's Cloudflare secret                   — D1 + R2 sync
 #   3. office-notify-worker's Cloudflare secret               — Office Module 3 tamper alerts
+#   4. pbm-radar-worker's Cloudflare secret                   — Set-Aside Radar admin routes
 # (phoenix-clonepool-r2 was a 4th leg until it was retired 2026-09-21 in favor
 # of packages-worker's own integrated R2 handling — see sector2/package-handler/r2-worker/.)
 # The 2026-08-21 and 2026-08-22 incidents were exactly this: one of the legs
@@ -29,6 +30,8 @@ D1_WORKER_DIR="${SCRIPT_DIR}/worker"
 OFFICE_WORKER_DIR="${SCRIPT_DIR}/../apps/office/notify-worker"
 D1_WORKER_URL="https://packages-worker.phoenix-jwl.workers.dev"
 OFFICE_WORKER_URL="https://office-notify-worker.phoenix-jwl.workers.dev"
+RADAR_WORKER_DIR="${SCRIPT_DIR}/../../pbm-consulting-website/radar-worker"
+RADAR_WORKER_URL="https://pbm-radar-worker.phoenix-jwl.workers.dev"
 
 command -v wrangler >/dev/null 2>&1 || { echo "wrangler CLI not found on PATH — install it first (npm i -g wrangler)"; exit 1; }
 command -v setx >/dev/null 2>&1     || { echo "setx.exe not found — this must run under Windows/Git Bash"; exit 1; }
@@ -41,6 +44,7 @@ command -v curl >/dev/null 2>&1     || { echo "curl not found on PATH"; exit 1; 
 }
 [[ -d "${D1_WORKER_DIR}" ]] || { echo "missing ${D1_WORKER_DIR}"; exit 1; }
 [[ -d "${OFFICE_WORKER_DIR}" ]] || { echo "missing ${OFFICE_WORKER_DIR}"; exit 1; }
+[[ -d "${RADAR_WORKER_DIR}" ]] || { echo "missing ${RADAR_WORKER_DIR}"; exit 1; }
 
 echo ""
 echo "── Phoenix PHOENIX_AUTH rotation ──────────────────────────────"
@@ -105,13 +109,26 @@ if [[ "${code}" != "200" ]]; then
 fi
 echo "  office-notify-worker verified (/whoami → 200)"
 
+# ── pbm-radar-worker (Set-Aside Radar) ────────────────────────
+push_secret "${RADAR_WORKER_DIR}" "pbm-radar-worker"
+code="$(check_whoami_retry "${RADAR_WORKER_URL}")"
+if [[ "${code}" != "200" ]]; then
+  echo ""
+  echo "  ABORTED — pbm-radar-worker did not accept the new token (/whoami → ${code})."
+  echo "  WARNING: packages-worker and office-notify-worker are ALREADY on the NEW"
+  echo "  token, but this one and the registry are still on the OLD token. Re-run"
+  echo "  this script to finish — do not hand-edit anything, that's how they drift."
+  exit 1
+fi
+echo "  pbm-radar-worker verified (/whoami → 200)"
+
 # ── Only now touch the local registry value ───────────────────
 setx PHOENIX_AUTH "${NEW_TOKEN}" >/dev/null
 export PHOENIX_AUTH="${NEW_TOKEN}"
 echo "  Registry (HKCU\\Environment) updated for this Windows user."
 
 echo ""
-echo "── Done — both legs verified and in sync ──────────────────────"
+echo "── Done — all worker legs verified and in sync ──────────────────────"
 echo "This Git Bash session already has the new token exported."
 echo "Any OTHER already-open terminal (PowerShell, another Git Bash) needs to"
 echo "be closed and reopened to pick up the new registry value — that's a"
