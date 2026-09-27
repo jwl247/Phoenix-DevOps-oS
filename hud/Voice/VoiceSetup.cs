@@ -36,10 +36,20 @@ public static class VoiceSetup
 
         var piperDir = env.GetValueOrDefault("PHOENIX_PIPER_DIR") ?? @"E:\Phoenix\voice-models\piper";
         var piperVoice = env.GetValueOrDefault("PHOENIX_PIPER_VOICE") ?? "en_US-lessac-medium.onnx";
-        var piper = new PiperTextToSpeech(piperDir, piperVoice);
+        // Her pace (Jerry, 2026-09-27: "slow her cadence a little"): 1.15 is a
+        // little slower than the voice's natural speed, with a short breath
+        // between sentences. Tune in ~/.phoenix/phoenix.env without a rebuild.
+        var pace = ParseDouble(env.GetValueOrDefault("PHOENIX_VOICE_PACE"), 1.15, 0.7, 2.0);
+        var pause = ParseDouble(env.GetValueOrDefault("PHOENIX_VOICE_SENTENCE_PAUSE"), 0.3, 0.0, 2.0);
+        var piper = new PiperTextToSpeech(piperDir, piperVoice, pace, pause);
 
-        return new VoiceController(dispatcher, hotkey, whisper, piper.IsAvailable ? piper : null);
+        var micName = env.GetValueOrDefault("PHOENIX_VOICE_MIC");   // any part of the device name, e.g. V8S
+        return new VoiceController(dispatcher, hotkey, whisper, piper.IsAvailable ? piper : null, micName);
     }
+
+    private static double ParseDouble(string? v, double fallback, double min, double max) =>
+        double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d)
+            ? Math.Clamp(d, min, max) : fallback;
 
     private static Dictionary<string, string> ReadPhoenixEnv()
     {

@@ -11,6 +11,13 @@ namespace Hud.Voice;
 /// needs to know when to stop recording. A low-level keyboard hook gives
 /// real key-down/key-up events system-wide regardless of window focus, the
 /// same mechanism Discord/Mumble-style push-to-talk relies on.
+///
+/// The hook lives on its OWN thread with its own message loop. Windows calls
+/// a low-level hook on the thread that installed it, and silently removes it
+/// if that thread is too slow to answer (LowLevelHooksTimeout). On the HUD's
+/// UI thread — which also encodes a full-screen PNG for the Live Monitor —
+/// that risk is real and the failure is invisible. A dedicated thread does
+/// nothing else, so it always answers in time.
 /// </summary>
 public sealed class PushToTalkHotkey : IDisposable
 {
@@ -44,6 +51,11 @@ public sealed class PushToTalkHotkey : IDisposable
 
     private IntPtr _hookHandle = IntPtr.Zero;
     private bool _isDown;
+    private Thread? _thread;
+    private Dispatcher? _hookDispatcher;
+
+    /// <summary>Set if Windows refused the hook; null once it's installed.</summary>
+    public string? Error { get; private set; }
 
     public event Action? PressStart;
     public event Action? PressEnd;
@@ -57,10 +69,26 @@ public sealed class PushToTalkHotkey : IDisposable
 
     public void Start()
     {
-        if (_hookHandle != IntPtr.Zero) return;
-        using var curProcess = System.Diagnostics.Process.GetCurrentProcess();
-        using var curModule = curProcess.MainModule!;
-        _hookHandle = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, GetModuleHandle(curModule.ModuleName), 0);
+        if (_thread != null) return;
+        using var ready = new ManualResetEventSlim();
+        _thread = new Thread(() =>
+        {
+            _hookDispatcher = Dispatcher.CurrentDispatcher;
+            using (var curProcess = System.Diagnostics.Process.GetCurrentProcess())
+            using (var curModule = curProcess.MainModule!)
+            {
+                _hookHandle = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, GetModuleHandle(curModule.ModuleName), 0);
+            }
+            Error = _hookHandle == IntPtr.Zero
+                ? $"Windows refused the talk-key hook (error {Marshal.GetLastWin32Error()})"
+                : null;
+            ready.Set();
+            if (_hookHandle != IntPtr.Zero) Dispatcher.Run();   // the message loop the hook needs
+        })
+        { IsBackground = true, Name = "push-to-talk hook" };
+        _thread.SetApartmentState(ApartmentState.STA);
+        _thread.Start();
+        ready.Wait(TimeSpan.FromSeconds(5));
     }
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
@@ -91,10 +119,17 @@ public sealed class PushToTalkHotkey : IDisposable
 
     public void Dispose()
     {
-        if (_hookHandle != IntPtr.Zero)
+        var d = _hookDispatcher;
+        if (d is null) return;
+        d.Invoke(() =>
         {
-            UnhookWindowsHookEx(_hookHandle);
-            _hookHandle = IntPtr.Zero;
-        }
+            if (_hookHandle != IntPtr.Zero)
+            {
+                UnhookWindowsHookEx(_hookHandle);
+                _hookHandle = IntPtr.Zero;
+            }
+        });
+        d.InvokeShutdown();
+        _hookDispatcher = null;
     }
 }

@@ -67,8 +67,9 @@ public partial class MainWindow : Window
         _voice = VoiceSetup.Create(Dispatcher);
         _voice.StateChanged += state => Dispatcher.Invoke(() => VoiceIndicator.SetState(state));
         _voice.TranscriptReady += transcript => _ = SendMessageAsync(transcript, speak: true);
+        _voice.Note += line => { _lines.Add($"[SYS] {line}"); RefreshChatLog(); };
         _lines.Add(_voice.UnavailableReason is null
-            ? "[SYS] Voice armed — hold the hotkey to talk."
+            ? $"[SYS] {_voice.ArmedLine}"
             : $"[SYS] {_voice.UnavailableReason}");
         RefreshChatLog();
 
@@ -283,8 +284,11 @@ public partial class MainWindow : Window
         }
         RefreshChatLog();
 
-        if (speak && !string.IsNullOrWhiteSpace(finalReply) && _voice is not null)
-            await _voice.SpeakReplyAsync(finalReply);
+        // Always hand back to voice when the question came from voice: an
+        // empty reply (or an error) resets it to idle instead of leaving it
+        // stuck on "thinking".
+        if (speak && _voice is not null)
+            await _voice.SpeakReplyAsync(finalReply ?? "");
     }
 
     // Scrolling right after setting Text scrolls to the OLD extent — the new

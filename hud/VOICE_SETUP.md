@@ -58,3 +58,20 @@ again while it's still speaking interrupts playback and starts a new recording
 
 The **CLI** button next to the close button shows/hides the CLAUDE CLI pane — once
 voice is confirmed working, that pane no longer has to stay open all the time.
+
+
+## Settings (in `~/.phoenix/phoenix.env`, no rebuild needed — just reopen the HUD)
+| Setting | Default | What it does |
+|---|---|---|
+| `PHOENIX_VOICE_HOTKEY` | `RightCtrl` | the hold-to-talk key |
+| `PHOENIX_VOICE_MIC` | first input device | any part of the mic's name, e.g. `V8S` |
+| `PHOENIX_VOICE_PACE` | `1.15` | her speaking pace: 1.0 = natural, bigger = slower (0.7–2.0) |
+| `PHOENIX_VOICE_SENTENCE_PAUSE` | `0.3` | seconds of silence between sentences |
+
+## When voice doesn't work
+Every failure now writes a `[SYS] voice: …` line in H.L.K-10's pane (and in
+`E:\Phoenix\hud-live-monitor\chat-log.txt`): the mic that wouldn't start,
+"didn't catch anything" with how loud the recording was (around -80 dB means
+the mic is sending silence: check it's on, unmuted, gain up), speech
+recognition errors, or the voice failing to speak. The startup line names the
+key and the mic in use.

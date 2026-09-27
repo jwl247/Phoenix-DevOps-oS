@@ -19,9 +19,15 @@ public sealed class PiperTextToSpeech : IDisposable
     private readonly string _piperExe;
     private readonly string _voiceModelPath;
     private WaveOut? _player;
+    private readonly double _lengthScale;
+    private readonly double _sentencePause;
 
-    public PiperTextToSpeech(string piperDir, string voiceModelFileName)
+    /// <param name="lengthScale">Speaking pace: 1.0 = the voice's natural speed, bigger = slower.</param>
+    /// <param name="sentencePause">Seconds of silence after each sentence.</param>
+    public PiperTextToSpeech(string piperDir, string voiceModelFileName, double lengthScale = 1.15, double sentencePause = 0.3)
     {
+        _lengthScale = lengthScale;
+        _sentencePause = sentencePause;
         _piperExe = Path.Combine(piperDir, "piper.exe");
         _voiceModelPath = Path.Combine(piperDir, voiceModelFileName);
     }
@@ -37,7 +43,8 @@ public sealed class PiperTextToSpeech : IDisposable
         {
             await RunPiperAsync(text, tempWav, ct);
             ct.ThrowIfCancellationRequested();
-            if (!File.Exists(tempWav)) return;
+            if (!File.Exists(tempWav) || new FileInfo(tempWav).Length < 100)
+                throw new InvalidOperationException("the Piper voice made no audio");
             await PlayAsync(tempWav, ct);
         }
         finally
@@ -51,12 +58,14 @@ public sealed class PiperTextToSpeech : IDisposable
         var psi = new ProcessStartInfo
         {
             FileName = _piperExe,
-            Arguments = $"--model \"{_voiceModelPath}\" --output_file \"{outputWavPath}\"",
+            Arguments = FormattableString.Invariant(
+                $"--model \"{_voiceModelPath}\" --output_file \"{outputWavPath}\" --length_scale {_lengthScale:0.00} --sentence_silence {_sentencePause:0.00}"),
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            StandardInputEncoding = new System.Text.UTF8Encoding(false),
         };
 
         using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start piper.exe");

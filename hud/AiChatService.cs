@@ -544,7 +544,12 @@ public class AiChatService
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            // Claude Code writes UTF-8. Without these, .NET read it as the
+            // console code page and every em dash came out as "â€”".
+            StandardInputEncoding = new UTF8Encoding(false),
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
         };
         // Same reasoning as main.js: strip API-key auth so a CLI-tier call
         // can't silently fall back to pay-per-token billing.

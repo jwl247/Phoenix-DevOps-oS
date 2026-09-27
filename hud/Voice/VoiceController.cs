@@ -18,7 +18,8 @@ public enum VoiceState { Idle, Listening, Thinking, Speaking }
 public sealed class VoiceController : IDisposable
 {
     private readonly PushToTalkHotkey _hotkey;
-    private readonly MicrophoneCapture _mic = new();
+    private readonly MicrophoneCapture _mic;
+    private readonly string _keyName;
     private readonly WhisperTranscriber? _whisper;
     private readonly PiperTextToSpeech? _tts;
     private readonly Dispatcher _dispatcher;
@@ -27,12 +28,24 @@ public sealed class VoiceController : IDisposable
     public event Action<VoiceState>? StateChanged;
     public event Action<string>? TranscriptReady;
 
-    /// <summary>Non-null when voice is armed but not fully usable yet (e.g. no local model installed) — surfaced as a status line, not a crash.</summary>
-    public string? UnavailableReason { get; }
+    /// <summary>
+    /// A plain-words line for H.L.K-10's pane whenever voice can't finish a
+    /// step. Before 2026-09-27 every failure here returned to Idle silently,
+    /// so "nothing happened" could mean any of five different problems.
+    /// </summary>
+    public event Action<string>? Note;
 
-    public VoiceController(Dispatcher dispatcher, Key hotkeyKey, WhisperTranscriber? whisper, PiperTextToSpeech? tts)
+    /// <summary>What's armed: key + mic, shown once at startup.</summary>
+    public string ArmedLine => $"Voice armed — hold {_keyName} to talk. Mic: {_mic.DeviceName}.";
+
+    /// <summary>Non-null when voice is armed but not fully usable yet (e.g. no local model installed) — surfaced as a status line, not a crash.</summary>
+    public string? UnavailableReason { get; private set; }
+
+    public VoiceController(Dispatcher dispatcher, Key hotkeyKey, WhisperTranscriber? whisper, PiperTextToSpeech? tts, string? micName = null)
     {
         _dispatcher = dispatcher;
+        _mic = new MicrophoneCapture(micName);
+        _keyName = hotkeyKey switch { Key.RightCtrl => "Right Ctrl", Key.LeftCtrl => "Left Ctrl", Key.RightAlt => "Right Alt", _ => hotkeyKey.ToString() };
         _whisper = whisper;
         _tts = tts;
 
@@ -46,7 +59,10 @@ public sealed class VoiceController : IDisposable
         _hotkey.PressStart += OnPressStart;
         _hotkey.PressEnd += OnPressEnd;
         _hotkey.Start();
+        if (_hotkey.Error is not null) UnavailableReason = $"{_hotkey.Error}. Voice can't hear the talk key.";
     }
+
+    private void Tell(string line) => _dispatcher.BeginInvoke(() => Note?.Invoke(line));
 
     private void OnPressStart()
     {
@@ -56,7 +72,16 @@ public sealed class VoiceController : IDisposable
         // cancels playback immediately instead of waiting it out.
         if (State == VoiceState.Speaking) _tts?.Stop();
 
-        _mic.Start();
+        try
+        {
+            _mic.Start();
+        }
+        catch (Exception ex)
+        {
+            Tell($"voice: the mic ({_mic.DeviceName}) wouldn't start: {ex.Message}");
+            SetState(VoiceState.Idle);
+            return;
+        }
         SetState(VoiceState.Listening);
     }
 
@@ -71,13 +96,21 @@ public sealed class VoiceController : IDisposable
         {
             wav = await _mic.StopAsync();
         }
-        catch
+        catch (Exception ex)
         {
+            Tell($"voice: the mic didn't stop cleanly: {ex.Message}");
             SetState(VoiceState.Idle);
             return;
         }
 
-        if (wav is null) { SetState(VoiceState.Idle); return; }
+        if (wav is null)
+        {
+            Tell($"voice: nothing was recorded from {_mic.DeviceName}.");
+            SetState(VoiceState.Idle);
+            return;
+        }
+        // A tap, not a hold: ignore quietly.
+        if (_mic.LastSeconds < 0.4) { wav.Dispose(); SetState(VoiceState.Idle); return; }
 
         string transcript;
         using (wav)
@@ -86,19 +119,43 @@ public sealed class VoiceController : IDisposable
             {
                 transcript = await _whisper.TranscribeAsync(wav);
             }
-            catch
+            catch (Exception ex)
             {
+                Tell($"voice: speech recognition failed: {ex.Message}");
                 SetState(VoiceState.Idle);
                 return;
             }
         }
 
-        if (string.IsNullOrWhiteSpace(transcript)) { SetState(VoiceState.Idle); return; }
+        if (string.IsNullOrWhiteSpace(transcript) || IsSilenceGuess(transcript))
+        {
+            var level = _mic.LastPeakDb < -45
+                ? $"the mic sounded nearly silent (loudest {_mic.LastPeakDb:0} dB) — check {_mic.DeviceName} is on, unmuted and the gain is up"
+                : $"loudest {_mic.LastPeakDb:0} dB, so sound came in but no words were recognized";
+            Tell($"voice: didn't catch anything ({_mic.LastSeconds:0.0} s recorded; {level}).");
+            SetState(VoiceState.Idle);
+            return;
+        }
 
         // Stays in Thinking until the caller's Claude round-trip finishes and
         // calls SpeakReplyAsync (or decides not to speak at all) — this
         // event is the hand-off seam between the two.
         TranscriptReady?.Invoke(transcript);
+    }
+
+    // What Whisper famously "hears" in near-silence (room noise, a held key
+    // with nobody talking). Seen live 2026-09-27: a silent 2 s hold came back
+    // as "you" and got sent to H.L.K-10 as a question.
+    private static readonly HashSet<string> SilenceGuesses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "you", "thank you", "thanks", "thanks for watching", "thank you for watching", "bye", "okay",
+        "[blank_audio]", "[silence]", "(silence)", "[music]", "(music)", "[no speech]",
+    };
+
+    private static bool IsSilenceGuess(string transcript)
+    {
+        var t = transcript.Trim().Trim('.', '!', '?', ',', ' ').Trim();
+        return t.Length == 0 || SilenceGuesses.Contains(t);
     }
 
     // Serializes playback across overlapping SpeakReplyAsync calls. MainWindow
@@ -129,10 +186,11 @@ public sealed class VoiceController : IDisposable
         {
             await _tts.SpeakAsync(SpeechTextSanitizer.ForSpeech(text));
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // A TTS failure shouldn't crash the HUD — the reply is already
-            // visible as text in the chat pane regardless.
+            // visible as text in the chat pane regardless. Say so, though.
+            Tell($"voice: couldn't speak the reply: {ex.Message}");
         }
         finally
         {
