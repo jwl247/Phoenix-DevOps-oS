@@ -148,30 +148,96 @@ def tool_screenshot():
 
 
 def tool_restart_pc():
-    subprocess.run(["shutdown", "/r", "/t", "60", "/c", "Phoenix Console: restart requested. Cancel with the Console or 'shutdown /a'."],
-                   check=True, capture_output=True)
+    if IS_WIN:
+        subprocess.run(["shutdown", "/r", "/t", "60", "/c", "Phoenix Console: restart requested. Cancel with the Console or 'shutdown /a'."],
+                       check=True, capture_output=True)
+    else:                                         # Linux counts in minutes
+        subprocess.run(["shutdown", "-r", "+1", "Phoenix Console: restart requested"], check=True, capture_output=True)
     return {"restarting_in_s": 60}
 
 
 def tool_cancel_restart():
-    r = subprocess.run(["shutdown", "/a"], capture_output=True, text=True)
+    r = subprocess.run(["shutdown", "/a"] if IS_WIN else ["shutdown", "-c"], capture_output=True, text=True)
     return {"cancelled": r.returncode == 0}
 
 
+# ── Linux (the headless boxes: no screen, so no open_app / screenshot) ─────
+LINUX_SERVICES = ["phoenix-meshd", "helix", "phoenix-paging", "ollama", "ssh", "nftables"]
+RESTARTABLE = {"phoenix-meshd": "the mesh agent", "ollama": "Ollama (the local AI)"}
+
+
+def tool_status_linux():
+    out = {"host": socket.gethostname(), "os": f"{platform.system()} {platform.release()}"}
+    mem = {}
+    with open("/proc/meminfo") as f:
+        for line in f:
+            k, _, v = line.partition(":")
+            mem[k] = int(v.split()[0]) * 1024
+    total, avail = mem.get("MemTotal", 0), mem.get("MemAvailable", 0)
+    out["memory"] = {"total_gb": round(total / 2**30, 1), "free_gb": round(avail / 2**30, 1),
+                     "used_pct": round(100 * (total - avail) / total) if total else None}
+    with open("/proc/uptime") as f:
+        out["uptime_h"] = round(float(f.read().split()[0]) / 3600, 1)
+    out["load"] = [round(x, 2) for x in os.getloadavg()]
+    out["cpus"] = os.cpu_count()
+    drives, seen = [], set()
+    with open("/proc/mounts") as f:
+        for line in f:
+            dev, mnt, fs = line.split()[:3]
+            if fs not in ("ext4", "xfs", "btrfs", "vfat") or dev in seen:
+                continue
+            seen.add(dev)
+            s = os.statvfs(mnt)
+            drives.append({"drive": mnt, "label": dev.split("/")[-1],
+                           "total_gb": round(s.f_blocks * s.f_frsize / 2**30), "free_gb": round(s.f_bavail * s.f_frsize / 2**30)})
+    out["drives"] = drives
+    return out
+
+
+def tool_services():
+    r = subprocess.run(["systemctl", "is-active", *LINUX_SERVICES], capture_output=True, text=True)
+    states = r.stdout.split()
+    return {"services": [{"name": n, "state": states[i] if i < len(states) else "unknown"}
+                         for i, n in enumerate(LINUX_SERVICES)]}
+
+
+def tool_restart_service(service):
+    if service not in RESTARTABLE:
+        raise ValueError(f"only these can be restarted from the Console: {', '.join(RESTARTABLE)}")
+    subprocess.run(["systemctl", "restart", service], check=True, capture_output=True, timeout=60)
+    r = subprocess.run(["systemctl", "is-active", service], capture_output=True, text=True)
+    return {"service": service, "state": r.stdout.strip()}
+
+
 # The declared tool list. The Console and H.L.K see exactly this, nothing else.
-TOOLS = {
-    "status": {"fn": tool_status, "tier": "base", "label": "Machine status",
-               "says": "Memory, drives and uptime of this PC."},
-    "open_app": {"fn": tool_open_app, "tier": "base", "label": "Open an app",
-                 "says": "Opens an app on this PC's screen.", "params": {"app": list(APPS), "folder": "optional, explorer only"}},
-    "screenshot": {"fn": tool_screenshot, "tier": "base", "label": "Take a screenshot",
-                   "says": "Saves a picture of this PC's screen to Pictures\\Phoenix."},
-    "restart_pc": {"fn": tool_restart_pc, "tier": "ask", "label": "Restart this PC",
-                   "says": "Restarts this PC in 60 seconds. Anything unsaved is lost.",
-                   "question": "Restart {host} in 60 seconds? Anything unsaved on it will be lost."},
-    "cancel_restart": {"fn": tool_cancel_restart, "tier": "base", "label": "Cancel a restart",
-                       "says": "Stops a restart that's counting down."},
-}
+_RESTART = {"fn": tool_restart_pc, "tier": "ask", "label": "Restart this machine",
+            "says": "Restarts this machine in about a minute. Anything unsaved is lost.",
+            "question": "Restart {host} in about a minute? Anything unsaved on it will be lost."}
+_CANCEL = {"fn": tool_cancel_restart, "tier": "base", "label": "Cancel a restart",
+           "says": "Stops a restart that's counting down."}
+if IS_WIN:
+    TOOLS = {
+        "status": {"fn": tool_status, "tier": "base", "label": "Machine status",
+                   "says": "Memory, drives and uptime of this PC."},
+        "open_app": {"fn": tool_open_app, "tier": "base", "label": "Open an app",
+                     "says": "Opens an app on this PC's screen.", "params": {"app": list(APPS), "folder": "optional, explorer only"}},
+        "screenshot": {"fn": tool_screenshot, "tier": "base", "label": "Take a screenshot",
+                       "says": "Saves a picture of this PC's screen to Pictures\\Phoenix."},
+        "restart_pc": _RESTART,
+        "cancel_restart": _CANCEL,
+    }
+else:
+    TOOLS = {
+        "status": {"fn": tool_status_linux, "tier": "base", "label": "Machine status",
+                   "says": "Memory, disks, load and uptime of this machine."},
+        "services": {"fn": tool_services, "tier": "base", "label": "Phoenix services",
+                     "says": "Which Phoenix services are running here."},
+        "restart_service": {"fn": tool_restart_service, "tier": "ask", "label": "Restart a service",
+                            "says": "Restarts the mesh agent or Ollama.", "params": {"service": list(RESTARTABLE)},
+                            "question": "Restart {what} on {host}? It drops out for a few seconds."},
+        "restart_pc": _RESTART,
+        "cancel_restart": _CANCEL,
+    }
 
 
 def _name_from_hosts():
@@ -229,16 +295,20 @@ def recent(n=20):
 
 def run(tool, args, confirm, caller):
     """Tier check + run + audit. Returns (http_status, body)."""
+    if not isinstance(args, dict):
+        return 400, {"ok": False, "error": "args must be an object"}
     t = TOOLS.get(tool)
     if not t:
         log({"caller": caller, "tool": tool, "ok": False, "error": "no such tool"})
         return 404, {"ok": False, "error": f"no such tool '{tool}'"}
-    if not isinstance(args, dict):
-        return 400, {"ok": False, "error": "args must be an object"}
+    if tool == "restart_service" and args.get("service") not in RESTARTABLE:   # refuse before asking anyone
+        log({"caller": caller, "tool": tool, "args": args, "tier": "ask", "ok": False, "error": "not on the restart list"})
+        return 400, {"ok": False, "error": f"only these can be restarted: {', '.join(RESTARTABLE)}"}
     if t["tier"] == "ask" and confirm is not True:
         log({"caller": caller, "tool": tool, "args": args, "tier": "ask", "ok": False, "error": "waiting for confirmation"})
+        what = RESTARTABLE.get(args.get("service"), "") if isinstance(args, dict) else ""
         return 409, {"ok": False, "needs_confirm": True,
-                     "question": t["question"].format(host=phoenix_name())}
+                     "question": t["question"].format(host=phoenix_name(), what=what)}
     try:
         result = t["fn"](**args)
     except TypeError as e:
@@ -267,7 +337,7 @@ def load_token():
     return tok
 
 
-def make_handler(token):
+def make_handler(token, allow_from=()):
     def eq(a, b):
         return secrets.compare_digest(a.encode(), b.encode())
 
@@ -287,6 +357,9 @@ def make_handler(token):
             self.wfile.write(body)
 
         def _authed(self):
+            ip = self.client_address[0]
+            if allow_from and ip != "127.0.0.1" and ip not in allow_from:
+                return False                      # on the mesh, only the Console's PC may call
             got = (self.headers.get("Authorization") or "").replace("Bearer ", "", 1).strip()
             return bool(got) and eq(got, token)
 
@@ -322,13 +395,42 @@ def make_handler(token):
     return Handler
 
 
+def mesh_ip():
+    """This machine's 10.47.0.x from the mesh agent's WireGuard config (root-readable on Linux)."""
+    conf = (os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "PhoenixMesh", "wg-phx.conf")
+            if IS_WIN else "/etc/phoenix-mesh/wg-phx.conf")
+    try:
+        with open(conf, encoding="utf-8") as f:
+            for line in f:
+                k, _, v = line.partition("=")
+                if k.strip() == "Address" and v.strip().startswith("10.47.0."):
+                    return v.strip().split("/")[0]
+    except OSError:
+        pass
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser(prog="phoenix-hands")
     ap.add_argument("--port", type=int, default=8471)
+    ap.add_argument("--mesh", action="store_true", help="also listen on this machine's mesh address (the headless boxes)")
+    ap.add_argument("--allow-from", default="", help="comma list of mesh IPs allowed to call (the Console's PC)")
     a = ap.parse_args()
-    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(load_token()))
-    print(f"hands: http://127.0.0.1:{a.port}", flush=True)
-    httpd.serve_forever()
+    allow = tuple(x.strip() for x in a.allow_from.split(",") if x.strip())
+    if a.mesh and not allow:
+        raise SystemExit("--mesh needs --allow-from (never open the hands to the whole mesh)")
+    handler = make_handler(load_token(), allow)
+    addrs = ["127.0.0.1"]
+    if a.mesh:
+        while not mesh_ip():                      # the mesh can come up after us
+            time.sleep(10)
+        addrs.append(mesh_ip())
+    for addr in addrs[:-1]:
+        srv = http.server.ThreadingHTTPServer((addr, a.port), handler)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        print(f"hands: http://{addr}:{a.port}", flush=True)
+    print(f"hands: http://{addrs[-1]}:{a.port}" + (f" (callers: {', '.join(allow)})" if allow else ""), flush=True)
+    http.server.ThreadingHTTPServer((addrs[-1], a.port), handler).serve_forever()
 
 
 if __name__ == "__main__":

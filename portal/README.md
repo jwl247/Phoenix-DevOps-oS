@@ -17,7 +17,17 @@ own machine; every Phoenix machine opens this page (decision 2026-09-26, see
   Cloudflare tunnel and mesh agent.
 - A banner names anything that's down, in plain words.
 
-**Actions** (same night): buttons for this PC run through H.L.K's hands (`hands/hands.py`, task `PhoenixHands`): open Office / the HUD / PowerShell / Explorer, status, screenshot, restart (asks first). One page only: no test copies.
+**Actions** (same night): a tab per machine, each showing only what its own
+hands offer (`hands/hands.py`):
+- **precision** (this PC, task `PhoenixHands`, 127.0.0.1): open Office / the
+  HUD / PowerShell / Explorer, status, screenshot, restart (asks first).
+- **compaq, pbm3** (service `phoenix-hands`, on their mesh address, answer
+  ONLY 10.47.0.2 and only with their own token): status, Phoenix services,
+  restart the mesh agent or Ollama (asks first), restart (asks first).
+  Installed with `python hands/install_remote.py NAME --ssh ALIAS`; tokens in
+  `~/.phoenix/hands-tokens.json` on this PC (owner-only).
+Every action lands in that machine's own log (Recent actions). One page only:
+no test copies.
 
 ## How it runs
 - `server.py`: Python standard library only. Asks the switchboard

@@ -160,14 +160,6 @@ def local_checks():
                     "note": "running" if up else "stopped", "ms": None})
     except Exception as e:
         out.append({"name": "Cloudflare tunnel", "detail": "Cloudflared service on this PC", "up": False, "note": type(e).__name__, "ms": None})
-    try:
-        r = subprocess.run(["schtasks", "/Query", "/TN", "PhoenixMesh", "/FO", "CSV", "/NH"],
-                           capture_output=True, text=True, timeout=5)
-        up = "Running" in r.stdout
-        out.append({"name": "Mesh agent on this PC", "detail": "PhoenixMesh task", "up": up,
-                    "note": "running" if up else "not running", "ms": None})
-    except Exception as e:
-        out.append({"name": "Mesh agent on this PC", "detail": "PhoenixMesh task", "up": False, "note": type(e).__name__, "ms": None})
     return out
 
 
@@ -197,7 +189,16 @@ def build_state():
             state["switchboard"] = "ok"
         except Exception as e:                   # the page still loads and says what's wrong
             state.update({"machines": [], "links": [], "switchboard": f"unreachable ({type(e).__name__})"})
-        state["services"] = services()
+        # The mesh agent runs as SYSTEM, so a normal user can't ask Windows about
+        # its task (that read as "not running", found live 2026-09-26). The honest
+        # test is the switchboard itself: is this PC checking in?
+        me = local_name()
+        mine = next((m for m in state.get("machines", []) if m["name"] == me), None)
+        agent = {"name": "Mesh agent on this PC", "detail": "checking in with the switchboard", "ms": None,
+                 "up": bool(mine and mine["online"]),
+                 "note": (f"last check-in {mine['seen_s']} s ago" if mine and mine["seen_s"] is not None
+                          else "not checking in")}
+        state["services"] = services() + [agent]
         _cache["state"], _cache["state_t"] = state, time.time()
         return state
 
@@ -241,13 +242,39 @@ def local_name():
         return _name_from_hosts()
 
 
-def hands_call(method, path, body=None, caller=""):
-    """-> (status, bytes, content-type). Never raises."""
+HANDS_TOKENS_FILE = os.path.join(os.path.expanduser("~"), ".phoenix", "hands-tokens.json")   # the boxes' tokens (install_remote.py)
+HANDS_PORT = 8471
+
+
+def hands_targets():
+    """{machine: (url, token)} for every machine whose hands the Console can reach:
+    this PC on 127.0.0.1, the boxes on their mesh address."""
+    out = {}
+    me = local_name()
     try:
-        tok = open(HANDS_TOKEN_FILE, encoding="utf-8").read().strip()
+        out[me] = (HANDS_URL, open(HANDS_TOKEN_FILE, encoding="utf-8").read().strip())
     except OSError:
-        return 503, json.dumps({"ok": False, "error": "hands not running on this PC"}).encode(), "application/json"
-    req = urllib.request.Request(HANDS_URL + path, method=method,
+        pass
+    try:
+        with open(HANDS_TOKENS_FILE, encoding="utf-8") as f:
+            remote = json.load(f)
+    except (OSError, ValueError):
+        remote = {}
+    if remote:
+        ips = {m["name"]: m["mesh_ip"] for m in (build_state().get("machines") or [])}
+        for name, tok in remote.items():
+            if MACHINE_RE.match(name) and name in ips and name != me:
+                out[name] = (f"http://{ips[name]}:{HANDS_PORT}", tok)
+    return {k: v for k, v in out.items() if k}
+
+
+def hands_call(machine, method, path, body=None, caller=""):
+    """-> (status, bytes, content-type). Never raises."""
+    target = hands_targets().get(machine)
+    if not target:
+        return 404, json.dumps({"ok": False, "error": f"no hands on {machine}"}).encode(), "application/json"
+    url, tok = target
+    req = urllib.request.Request(url + path, method=method,
                                  data=json.dumps(body).encode() if body is not None else None,
                                  headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json",
                                           "X-Caller": caller[:80]})
@@ -294,12 +321,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(200, json.dumps(build_state()).encode(), "application/json")
         if path == "/api/hands":
             me = local_name()
-            st, body, _ = hands_call("GET", "/tools")
-            info = json.loads(body) if st == 200 else {"ok": False, "error": json.loads(body).get("error", "unavailable")}
-            return self._send(200, json.dumps({"machines": {me: info} if me else {}}).encode(), "application/json")
+            machines = {}
+            for name in sorted(hands_targets(), key=lambda n: (n != me, n)):     # this PC first
+                st, body, _ = hands_call(name, "GET", "/tools")
+                try:
+                    info = json.loads(body)
+                except ValueError:
+                    info = {}
+                machines[name] = info if st == 200 else {"ok": False, "error": info.get("error", f"HTTP {st}")}
+            return self._send(200, json.dumps({"machines": machines, "here": me}).encode(), "application/json")
         m = self._hands_path(path)
         if m and m[1] in ("log", "shot"):
-            st, body, ctype = hands_call("GET", "/log" if m[1] == "log" else "/shot/latest")
+            st, body, ctype = hands_call(m[0], "GET", "/log" if m[1] == "log" else "/shot/latest")
             return self._send(st, body, ctype if st == 200 else "application/json")
         files = {"/": ("index.html", "text/html; charset=utf-8"),
                  "/app.js": ("app.js", "text/javascript; charset=utf-8"),
@@ -311,9 +344,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return self._send(404, b"not found", "text/plain")
 
     def _hands_path(self, path):
-        """/api/hands/<machine>/<what> for THIS machine only -> (machine, what) or None."""
+        """/api/hands/<machine>/<what> for a machine whose hands we know -> (machine, what) or None."""
         parts = path.strip("/").split("/")
-        if len(parts) == 4 and parts[:2] == ["api", "hands"] and MACHINE_RE.match(parts[2]) and parts[2] == local_name():
+        if len(parts) == 4 and parts[:2] == ["api", "hands"] and MACHINE_RE.match(parts[2]) and parts[2] in hands_targets():
             return parts[2], parts[3]
         return None
 
@@ -333,7 +366,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except ValueError:
             return self._send(400, b'{"ok":false,"error":"body must be JSON"}', "application/json")
         fwd = {"tool": str(body.get("tool", "")), "args": body.get("args") or {}, "confirm": body.get("confirm") is True}
-        st, out, _ = hands_call("POST", "/run", fwd, caller=f"console from {self.client_address[0]}")
+        st, out, _ = hands_call(m[0], "POST", "/run", fwd, caller=f"console from {self.client_address[0]}")
         return self._send(st, out, "application/json")
 
 

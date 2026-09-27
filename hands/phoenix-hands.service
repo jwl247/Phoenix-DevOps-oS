@@ -1,0 +1,18 @@
+# phoenix-hands — H.L.K's hands on a headless Phoenix box (hands/hands.py).
+# UnitedSys — United Systems | jwl247 | GPL-3.0
+# Listens on 127.0.0.1 + this box's mesh address; only the Console's PC
+# (10.47.0.2, the hub) may call, and only with this box's token.
+# Installed by hands/install_remote.py.
+[Unit]
+Description=Phoenix hands (Console actions on this machine)
+After=network-online.target phoenix-meshd.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/phoenix-hands/hands.py --mesh --allow-from 10.47.0.2
+Restart=on-failure
+RestartSec=5
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
