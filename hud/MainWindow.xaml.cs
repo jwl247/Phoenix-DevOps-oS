@@ -81,7 +81,8 @@ public partial class MainWindow : Window
         // resolution-independence reasoning as the full-screen MainWindow
         // sizing fix (SystemParameters, not a fixed number that only looks
         // right on the one screen it was tuned against).
-        ClaudeCodePane.Height = SystemParameters.PrimaryScreenHeight / 3;
+        // Same height as the Live Monitor panel beside it (Jerry, 2026-09-27).
+        ClaudeCodePane.Height = 200;
 
         // Fill the work area, not the whole screen — at full screen height the
         // bottom-anchored H.L.K-10 panel's input row sat behind the taskbar.
