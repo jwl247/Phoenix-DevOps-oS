@@ -35,15 +35,38 @@ of it · **Phoenix Net (the virtual network) is built FIRST** · forum later.
 
 **ONE dash, on the net (Jerry, 2026-09-26 evening):** "everyone dont need a
 dash board we will have this here." There is one unified dash, and it lives on
-Phoenix Net (e.g. `portal.phx`). Every enrolled machine and person, including
-the phone, opens that same dash. No machine installs its own dashboard. It
-shows who's online, link health (the `phoenix-net.py health` data) and service
-status, and it's where the portal's shared features live. **Open for the
-day-by-day planning pass:** the jobs that must run *on* a machine (launch apps,
-drop files into the working dir via `.lol`, the local shell, screen capture)
-still need something small on that machine; decide whether that's a thin local
-helper the net dash talks to, or the WPF app reduced to that role. Which box
-hosts the dash is also open (the hub, the Precision, is the obvious first home).
+Phoenix Net (e.g. `portal.phx`). Every enrolled machine and person opens that
+same dash (the phone waits until everything else is done). No machine installs
+its own dashboard. It shows who's online, link health (the `phoenix-net.py
+health` data) and service status, and it's where the portal's shared features
+live. Which box hosts it is open (the hub, the Precision, is the obvious first
+home).
+
+**The shape (agreed 2026-09-26):**
+- **Dashboard** = the web page on the net: the screen and the controls.
+- **H.L.K** = the brain and voice (the HUD's H.L.K-10, a WPF app, only where
+  wanted).
+- **The helper = H.L.K's hands**: a small headless service on every PC,
+  installed once (the one thing that can't import itself). It does the jobs a
+  web page can't: launch apps, `.lol` files into the working dir, screen
+  capture, the local shell. It holds Phoenix's declared tool list with the
+  permission tiers from CLAUDE.md's interaction model (read = runs; touches the
+  world = asks; AI safety rules = never). Both the dashboard (click) and H.L.K
+  (voice) drive the same hands; a fixed tool list is also what lets Ollama
+  drive them if hosted Claude goes away.
+- **Clone pool** = the cloud holds everything; when a PC lacks something the
+  hands import it (R2 + D1 custody, integrity-checked), Frank's import method,
+  the same way `usys open x.lol` and Office's LibreOffice fetch already work.
+- **PS7 compatibility, both directions:** the hands call the existing PS7
+  commands (`usys`, `.lol`, clone) instead of reimplementing them; PS7 can
+  drive the hands (type = click = talk, three doors, same hands); the
+  dashboard's shell is a PS7 session through the hands, in the ask-first tier,
+  never admin by default (Round 2 finding). PS7 on Linux keeps the Compaq and
+  pbm3 on the same commands.
+
+This replaces the "WPF rebuild of the dashboard" direction below: the WPF
+work shrinks to the HUD, and Phase 1's shared library serves the HUD + hands.
+Rewrite the phases to match in the day-by-day planning pass.
 
 **Existing .lol plumbing to build on, not replace:** `bootstrap/lol-bootstrap.ps1`
 / `.sh` (installs the `lol` command) and `install.ps1`'s `.lol`/`.phx` file
