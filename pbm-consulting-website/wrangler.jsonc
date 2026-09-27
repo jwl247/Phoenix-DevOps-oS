@@ -1,0 +1,15 @@
+{
+  // pbm-consulting-website: the static PBM Consulting Service site, served by
+  // Cloudflare Workers static assets (Cloudflare's recommended successor to
+  // Pages; `wrangler pages project create` now steers here). No script: files
+  // only, with _headers applied. The lead form's backend is the separate
+  // worker in ./worker (pbm-leads-worker). .assetsignore keeps that source
+  // and these config files out of what gets published.
+  // UnitedSys — United Systems | jwl247 | GPL-3.0
+  "name": "pbm-consulting-website",
+  "compatibility_date": "2026-09-01",
+  "assets": { "directory": "." },
+  "routes": [
+    { "pattern": "pbmconsultingservice.com", "custom_domain": true }
+  ]
+}
