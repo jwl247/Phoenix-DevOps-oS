@@ -30,21 +30,66 @@
                            FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,126,0"/>
                 <Button x:Name="CliToggleButton" Content="CLI" Width="40" Height="28" HorizontalAlignment="Right"
                         Margin="0,0,36,0" Style="{StaticResource HudButton}" Click="ToggleCli_Click"
-                        ToolTip="Show/hide the CLAUDE CLI pane"/>
+                        ToolTip="Show/hide the CLAUDE CODE pane"/>
                 <Button Content="✕" Width="28" Height="28" HorizontalAlignment="Right"
                         Style="{StaticResource HudButton}" Click="Close_Click"/>
             </Grid>
         </Border>
 
-        <!-- CLAUDE CLI dock anchor — invisible layout placeholder only. The real
-             terminal pane is a separate, non-transparent top-level window
-             (ClaudeCliWindow) kept synced to this rectangle's screen bounds.
-             WPF cannot host a native ConPTY-backed control inside a window
-             with AllowsTransparency="True" (it never renders — see
-             MainWindow.xaml.cs / ClaudeCliWindow.xaml.cs for the full note),
-             so this anchor exists purely to tell that window where to sit. -->
-        <Border x:Name="ClaudeCliDockAnchor" HorizontalAlignment="Stretch" VerticalAlignment="Top"
-                Margin="0,64,356,0" Background="Transparent"/>
+        <!-- CLAUDE CODE — full Claude Code (every tool, in the repo), built the
+             same way as H.L.K-10's pane: part of the HUD, see-through, driven
+             by background `claude -p` runs (ClaudeCodeSession). Replaced the
+             old ConPTY terminal, which had to live in a separate opaque window
+             (WPF can't draw native controls in a transparent window) and died
+             to "Session Terminated". Jerry, 2026-09-27: "make claude cli like
+             the hlk10's, it'd work, being clear". -->
+        <Border x:Name="ClaudeCodePane" Style="{StaticResource HudPanel}" HorizontalAlignment="Stretch"
+                VerticalAlignment="Top" Margin="0,64,356,0">
+            <Grid Margin="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,8">
+                    <TextBlock Text="CLAUDE CODE" Foreground="{StaticResource HoloCyan}" FontSize="13"
+                               FontWeight="Bold" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                    <TextBlock x:Name="ClaudeCodeStatus" Text="ready" Foreground="{StaticResource PhoenixGold}"
+                               FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="110,0,0,0"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button x:Name="ClaudeCodeStopButton" Content="STOP" Style="{StaticResource HudButton}"
+                                Padding="8,2" Margin="0,0,6,0" IsEnabled="False" Click="ClaudeCodeStop_Click"
+                                ToolTip="Stop what it's doing right now"/>
+                        <Button Content="NEW" Style="{StaticResource HudButton}" Padding="8,2"
+                                Click="ClaudeCodeNew_Click" ToolTip="Start a fresh conversation"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Same readable backing + bright-yellow text as H.L.K-10's log,
+                     and a read-only TextBox so it can be selected and copied. -->
+                <Border Grid.Row="1" Background="#0C0E12" Opacity="0.9" CornerRadius="4" Padding="6">
+                    <TextBox x:Name="ClaudeCodeLog" IsReadOnly="True" IsReadOnlyCaretVisible="True"
+                             TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
+                             Background="Transparent" Foreground="#FFFF00" BorderThickness="0"
+                             FontSize="13" Cursor="IBeam"/>
+                </Border>
+
+                <Grid Grid.Row="2" Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="ClaudeCodeInput" Grid.Column="0" Background="#0A0D10" Foreground="White"
+                             BorderBrush="{StaticResource HoloCyan}" BorderThickness="1" Padding="6"
+                             AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="90"
+                             VerticalScrollBarVisibility="Auto" PreviewKeyDown="ClaudeCodeInput_PreviewKeyDown"
+                             ToolTip="Enter sends · Shift+Enter for a new line"/>
+                    <Button Grid.Column="1" Content="SEND" Style="{StaticResource HudButton}"
+                            Margin="6,0,0,0" Click="ClaudeCodeSend_Click"/>
+                </Grid>
+            </Grid>
+        </Border>
 
         <!-- Live Monitor — continuous desktop capture, top-right corner, edge-anchored -->
         <Border Style="{StaticResource HudPanel}" Width="340" Height="200"

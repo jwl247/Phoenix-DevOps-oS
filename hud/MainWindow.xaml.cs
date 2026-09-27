@@ -11,7 +11,10 @@ public partial class MainWindow : Window
     private readonly AiChatService _ai = new();
     private readonly ScreenCaptureService _capture = new(TimeSpan.FromMilliseconds(1000));
     private readonly List<string> _lines = new();
-    private ClaudeCliWindow? _claudeCli;
+    private ClaudeCodeSession? _claudeCode;
+    private readonly List<string> _codeLines = new();
+    private System.Windows.Threading.DispatcherTimer? _codeTimer;
+    private DateTime _codeStarted;
     private VoiceController? _voice;
     private int _frameSaveCounter;
 
@@ -34,6 +37,10 @@ public partial class MainWindow : Window
     // Claude Code session, not OCR'd off an image.
     private static readonly string ChatLogPath =
         Path.Combine(@"E:\", "Phoenix", "hud-live-monitor", "chat-log.txt");
+
+    // The CLAUDE CODE pane's transcript, same idea: readable as exact text.
+    private static readonly string ClaudeCodeLogPath =
+        Path.Combine(@"E:\", "Phoenix", "hud-live-monitor", "claude-code-log.txt");
 
     public MainWindow()
     {
@@ -65,10 +72,7 @@ public partial class MainWindow : Window
             : $"[SYS] {_voice.UnavailableReason}");
         RefreshChatLog();
 
-        // Rooted here so the CLAUDE CLI pane's spawned shell inherits it as
-        // its working directory (EasyWindowsTerminalControl exposes no
-        // per-process working-directory API — see ClaudeCliWindow.xaml's
-        // note — so the whole HUD process's cwd is what the child inherits).
+        // The CLAUDE CODE pane works in the Phoenix repo.
         var root = Environment.GetEnvironmentVariable("PHOENIX_ROOT");
         if (!string.IsNullOrEmpty(root) && Directory.Exists(root)) Environment.CurrentDirectory = root;
 
@@ -76,7 +80,7 @@ public partial class MainWindow : Window
         // resolution-independence reasoning as the full-screen MainWindow
         // sizing fix (SystemParameters, not a fixed number that only looks
         // right on the one screen it was tuned against).
-        ClaudeCliDockAnchor.Height = SystemParameters.PrimaryScreenHeight / 3;
+        ClaudeCodePane.Height = SystemParameters.PrimaryScreenHeight / 3;
 
         // Same reason dashboard/terminal-pty.js's cleanEnv() strips these:
         // if Hud.exe itself ever gets launched from inside a running Claude
@@ -92,49 +96,25 @@ public partial class MainWindow : Window
                 Environment.SetEnvironmentVariable(name, null);
         }
 
-        // WPF refuses Owner = a window that hasn't been shown yet, and this
-        // constructor runs before MainWindow itself is shown — so creating/
-        // showing the docked companion has to wait for Loaded, not happen
-        // here. Confirmed the hard way: this threw XamlParseException /
-        // InvalidOperationException on first launch.
-        Loaded += (_, _) =>
+        _claudeCode = new ClaudeCodeSession(Environment.CurrentDirectory);
+        _claudeCode.Said += text => Dispatcher.Invoke(() => AddCode($"[CLAUDE] {text}"));
+        _claudeCode.UsedTool += what => Dispatcher.Invoke(() => AddCode($"  > {what}"));
+        _claudeCode.ToolFailed += why => Dispatcher.Invoke(() => AddCode($"  ! {why}"));
+        _claudeCode.Finished += (ok, error, secs) => Dispatcher.Invoke(() =>
         {
-            _claudeCli = new ClaudeCliWindow { Owner = this };
-            _claudeCli.Show();
-            SyncClaudeCliDock();
-        };
-        LocationChanged += (_, _) => SyncClaudeCliDock();
-        SizeChanged += (_, _) => SyncClaudeCliDock();
-        StateChanged += (_, _) =>
-        {
-            if (_claudeCli is null) return;
-            _claudeCli.Visibility = WindowState == WindowState.Minimized ? Visibility.Hidden : Visibility.Visible;
-        };
-        ClaudeCliDockAnchor.SizeChanged += (_, _) => SyncClaudeCliDock();
+            _codeTimer?.Stop();
+            AddCode(ok ? $"[DONE · {secs:0}s]" : $"[STOPPED · {secs:0}s] {error}");
+            SetCodeBusy(false);
+        });
+        _codeLines.Add($"[SYS] Claude Code online, working in {Environment.CurrentDirectory}. Type below and press Enter.");
+        RefreshCodeLog();
 
         Closed += (_, _) =>
         {
             _capture.Dispose();
             _voice?.Dispose();
-            _claudeCli?.Close();
-            _claudeCli = null;
+            _claudeCode?.Stop();
         };
-    }
-
-    // Keeps the separate, opaque ClaudeCliWindow pixel-aligned to the
-    // invisible ClaudeCliDockAnchor placeholder in this (transparent)
-    // window, so the two windows read as one seamless HUD pane. Staying in
-    // WPF device-independent coordinates throughout (TransformToAncestor +
-    // Window.Left/Top, never raw screen pixels) keeps this correct without
-    // needing a separate DPI conversion step.
-    private void SyncClaudeCliDock()
-    {
-        if (_claudeCli is null || !IsLoaded) return;
-        var topLeft = ClaudeCliDockAnchor.TransformToAncestor(this).Transform(new Point(0, 0));
-        _claudeCli.Left = Left + topLeft.X;
-        _claudeCli.Top = Top + topLeft.Y;
-        _claudeCli.Width = ClaudeCliDockAnchor.ActualWidth;
-        _claudeCli.Height = ClaudeCliDockAnchor.ActualHeight;
     }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -144,10 +124,90 @@ public partial class MainWindow : Window
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
-    private void ToggleCli_Click(object sender, RoutedEventArgs e)
+    private void ToggleCli_Click(object sender, RoutedEventArgs e) =>
+        ClaudeCodePane.Visibility = ClaudeCodePane.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+
+    // ---- CLAUDE CODE pane ----------------------------------------------
+
+    private void ClaudeCodeInput_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (_claudeCli is null) return;
-        _claudeCli.Visibility = _claudeCli.Visibility == Visibility.Visible ? Visibility.Hidden : Visibility.Visible;
+        if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
+        {
+            e.Handled = true;
+            SendToClaudeCode();
+        }
+    }
+
+    private void ClaudeCodeSend_Click(object sender, RoutedEventArgs e) => SendToClaudeCode();
+
+    private void ClaudeCodeStop_Click(object sender, RoutedEventArgs e) => _claudeCode?.Stop();
+
+    private void ClaudeCodeNew_Click(object sender, RoutedEventArgs e)
+    {
+        if (_claudeCode is null || _claudeCode.IsRunning) return;
+        _claudeCode.NewSession();
+        _codeLines.Clear();
+        _codeLines.Add("[SYS] New conversation.");
+        RefreshCodeLog();
+    }
+
+    private void SendToClaudeCode()
+    {
+        var message = ClaudeCodeInput.Text.Trim();
+        if (message.Length == 0 || _claudeCode is null || _claudeCode.IsRunning) return;
+        ClaudeCodeInput.Text = "";
+        AddCode($"[YOU] {message}");
+        SetCodeBusy(true);
+        try
+        {
+            _claudeCode.Send(message);
+        }
+        catch (Exception ex)
+        {
+            AddCode($"[ERROR] couldn't start Claude Code: {ex.Message}");
+            SetCodeBusy(false);
+        }
+    }
+
+    private void SetCodeBusy(bool busy)
+    {
+        ClaudeCodeStopButton.IsEnabled = busy;
+        if (busy)
+        {
+            _codeStarted = DateTime.UtcNow;
+            _codeTimer ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _codeTimer.Tick -= CodeTimerTick;
+            _codeTimer.Tick += CodeTimerTick;
+            _codeTimer.Start();
+            ClaudeCodeStatus.Text = "working… 0s";
+        }
+        else ClaudeCodeStatus.Text = "ready";
+    }
+
+    private void CodeTimerTick(object? sender, EventArgs e) =>
+        ClaudeCodeStatus.Text = $"working… {(DateTime.UtcNow - _codeStarted).TotalSeconds:0}s";
+
+    private void AddCode(string line)
+    {
+        _codeLines.Add(line);
+        RefreshCodeLog();
+    }
+
+    private void RefreshCodeLog()
+    {
+        var text = string.Join("\n\n", _codeLines);
+        ClaudeCodeLog.Text = text;
+        ClaudeCodeLog.CaretIndex = text.Length;
+        ClaudeCodeLog.ScrollToEnd();
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(ClaudeCodeLogPath)!);
+            File.WriteAllText(ClaudeCodeLogPath, text);
+        }
+        catch
+        {
+            // Transient (a reader has it open) — next refresh retries.
+        }
     }
 
     private void ChatInput_KeyDown(object sender, KeyEventArgs e)
