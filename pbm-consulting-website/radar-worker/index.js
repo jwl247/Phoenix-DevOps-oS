@@ -399,9 +399,9 @@ async function sendEmail(env, { to, subject, text, htmlBody, unsubUrl }) {
   try {
     const payload = {
       from: env.RESEND_FROM || 'Set-Aside Radar <onboarding@resend.dev>',
-      to: [to], subject, text,
-      headers: { 'List-Unsubscribe': `<${unsubUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+      to: Array.isArray(to) ? to : [to], subject, text,
     };
+    if (unsubUrl) payload.headers = { 'List-Unsubscribe': `<${unsubUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' };
     if (htmlBody) payload.html = htmlBody;
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -522,11 +522,8 @@ function validateSubscriber(b) {
   return errs;
 }
 
-async function upsertSubscriber(req, env) {
-  let b;
-  try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
-  const errs = validateSubscriber(b);
-  if (errs.length) return json({ ok: false, errors: errs }, 400);
+// Create or update a subscriber by email. `b` must already pass validateSubscriber.
+async function saveSubscriber(env, b) {
   const email = b.email.trim().toLowerCase();
   const fields = [
     b.name || null,
@@ -537,14 +534,24 @@ async function upsertSubscriber(req, env) {
     b.mode || 'certified',
     b.active === false ? 0 : 1,
   ];
-  const existing = await env.DB.prepare('SELECT id FROM subscribers WHERE email = ?').bind(email).first();
+  const existing = await env.DB.prepare('SELECT id, unsub_token FROM subscribers WHERE email = ?').bind(email).first();
   if (existing) {
     await env.DB.prepare('UPDATE subscribers SET name=?, naics=?, certs=?, states=?, ptypes=?, mode=?, active=? WHERE id=?').bind(...fields, existing.id).run();
-    return json({ ok: true, id: existing.id, updated: true });
+    return { id: existing.id, created: false, unsub_token: existing.unsub_token };
   }
+  const token = genToken();
   const r = await env.DB.prepare('INSERT INTO subscribers (email, name, naics, certs, states, ptypes, mode, active, unsub_token, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
-    .bind(email, ...fields, genToken(), new Date().toISOString()).run();
-  return json({ ok: true, id: r.meta && r.meta.last_row_id, created: true });
+    .bind(email, ...fields, token, new Date().toISOString()).run();
+  return { id: r.meta && r.meta.last_row_id, created: true, unsub_token: token };
+}
+
+async function upsertSubscriber(req, env) {
+  let b;
+  try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
+  const errs = validateSubscriber(b);
+  if (errs.length) return json({ ok: false, errors: errs }, 400);
+  const r = await saveSubscriber(env, b);
+  return json({ ok: true, id: r.id, created: r.created, updated: !r.created });
 }
 
 async function preview(url, env) {
@@ -583,11 +590,255 @@ async function handleUnsub(req, env, token) {
   return html(unsubPage('Done — you will not get Set-Aside Radar emails anymore.'));
 }
 
+// ---------------------------------------------------------------- applications
+//
+// Public form at pbmconsultingservice.com/radar.html. Flow:
+//   POST /apply         Turnstile + validation -> 6-digit code emailed (15 min, 5 tries)
+//   POST /apply/verify  code ok -> status 'review', Jerry/Laurie get a notice with a review link
+//   GET  /review/:token shows the application; POST approves or declines (a GET never acts)
+// Approval turns it into a subscriber and sends the applicant a welcome note.
+// Free beta: no payment anywhere in this path.
+
+const SITE_ORIGIN = 'https://pbmconsultingservice.com';
+const PUBLIC_CERTS = ['small', 'wosb', 'edwosb', 'hubzone', '8a', 'sdvosb', 'vosb'];
+const CERT_LABEL = { small: 'Small business', wosb: 'WOSB', edwosb: 'EDWOSB', hubzone: 'HUBZone', '8a': '8(a)', sdvosb: 'SDVOSB', vosb: 'VOSB (VA)', iee: 'IEE', isbee: 'ISBEE', buyindian: 'Buy Indian' };
+const APP_TURNSTILE_ACTION = 'radar_apply';
+
+function corsJson(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': SITE_ORIGIN, Vary: 'Origin' },
+  });
+}
+
+async function sha256Hex(text) {
+  return Array.from(await sha256(text)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function generateCode() {
+  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1000000;
+  return String(n).padStart(6, '0');
+}
+
+function splitList(v) {
+  if (Array.isArray(v)) return v.map(x => String(x).trim()).filter(Boolean);
+  return String(v || '').split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
+}
+
+// Fails closed: no secret, no hostnames, network error or a bad verdict = refused.
+async function verifyTurnstile(env, token, ip) {
+  const hosts = new Set(String(env.TURNSTILE_HOSTNAMES || '').split(',').map(h => h.trim()).filter(Boolean));
+  if (!env.TURNSTILE_SECRET || !hosts.size) return false;
+  if (typeof token !== 'string' || !token || token.length > 2048) return false;
+  try {
+    const body = new URLSearchParams({ secret: env.TURNSTILE_SECRET, response: token });
+    if (ip) body.set('remoteip', ip);
+    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!r.ok) return false;
+    const v = await r.json();
+    return v.success === true && v.action === APP_TURNSTILE_ACTION && hosts.has(v.hostname);
+  } catch {
+    return false;
+  }
+}
+
+// Shape + sanity of what a stranger typed. Returns { app, errors }.
+function parseApplication(b) {
+  const errors = [];
+  if (!b || typeof b !== 'object') return { app: null, errors: ['Something went wrong reading the form.'] };
+  const email = String(b.email || '').trim().toLowerCase();
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Please enter a valid email address.');
+  const business = String(b.business_name || '').trim();
+  if (!business || business.length > 200) errors.push('Please enter your business name.');
+  const name = String(b.name || '').trim();
+  if (name.length > 120) errors.push('Name is too long.');
+  const work = String(b.work_desc || '').trim();
+  if (work.length > 1000) errors.push('Please keep the work description under 1,000 characters.');
+  const naics = splitList(b.naics);
+  if (naics.length > 20 || !naics.every(n => /^\d{2,6}$/.test(n))) errors.push('NAICS codes are 2 to 6 digits, separated by commas.');
+  if (!naics.length && !work) errors.push('Give us your NAICS codes, or tell us what kind of work you do and we will look them up.');
+  const certs = splitList(b.certs).map(c => c.toLowerCase());
+  if (!certs.length || !certs.every(c => PUBLIC_CERTS.includes(c))) errors.push('Pick at least one certification.');
+  const nationwide = b.nationwide === true || b.nationwide === 'on' || b.nationwide === 'true';
+  const states = nationwide ? [] : splitList(b.states).map(s => s.toUpperCase());
+  if (!nationwide && !states.length) errors.push('List the states you work in, or check "Anywhere in the U.S."');
+  if (states.length > 60 || !states.every(s => STATE_CODES.has(s))) errors.push('Use 2-letter state codes, like OK, TX.');
+  const mode = b.mode === 'certified' ? 'certified' : 'planning';
+  return { app: { email, business_name: business, name, work_desc: work, naics, certs, states, mode }, errors };
+}
+
+function appSummaryText(a) {
+  const certs = parseList(a.certs).map(c => CERT_LABEL[c] || c).join(', ');
+  const states = parseList(a.states);
+  return [
+    `Business: ${a.business_name}`,
+    `Contact:  ${a.name || '(no name)'} <${a.email}>`,
+    `NAICS:    ${parseList(a.naics).join(', ') || '(none given, see work description)'}`,
+    `Work:     ${a.work_desc || '(not given)'}`,
+    `Certs:    ${certs} (${a.mode === 'certified' ? 'holds them now' : 'pursuing'})`,
+    `States:   ${states.length ? states.join(', ') : 'Anywhere in the U.S.'}`,
+  ].join('\n');
+}
+
+async function handleApply(req, env) {
+  let b;
+  try { b = await req.json(); } catch { return corsJson({ ok: false, error: 'Something went wrong reading the form.' }, 400); }
+  const { app, errors } = parseApplication(b);
+  if (errors.length) return corsJson({ ok: false, error: errors[0], errors }, 400);
+  if (!(await verifyTurnstile(env, b.turnstile_token, req.headers.get('CF-Connecting-IP')))) {
+    return corsJson({ ok: false, error: 'The bot check did not pass. Please try again.' }, 403);
+  }
+
+  const inReview = await env.DB.prepare("SELECT id FROM applications WHERE email = ? AND status IN ('review','approved') LIMIT 1").bind(app.email).first();
+  if (inReview) return corsJson({ ok: true, already: true, message: 'We already have your application. You will hear from us by email.' });
+
+  const code = generateCode();
+  const codeHash = await sha256Hex(code);
+  const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const cols = [app.name || null, app.business_name, JSON.stringify(app.naics), app.work_desc || null, JSON.stringify(app.certs), JSON.stringify(app.states), app.mode];
+  const pending = await env.DB.prepare("SELECT id FROM applications WHERE email = ? AND status = 'email' ORDER BY id DESC LIMIT 1").bind(app.email).first();
+  if (pending) {
+    await env.DB.prepare('UPDATE applications SET name=?, business_name=?, naics=?, work_desc=?, certs=?, states=?, mode=?, code_hash=?, code_expires_at=?, attempt_count=0 WHERE id=?')
+      .bind(...cols, codeHash, expires, pending.id).run();
+  } else {
+    await env.DB.prepare('INSERT INTO applications (email, name, business_name, naics, work_desc, certs, states, mode, code_hash, code_expires_at, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      .bind(app.email, ...cols, codeHash, expires, new Date().toISOString()).run();
+  }
+
+  const sent = await sendEmail(env, {
+    to: app.email,
+    subject: `Your Set-Aside Radar code: ${code}`,
+    text: `Your Set-Aside Radar verification code is ${code}\n\nEnter it on the page where you applied. It expires in 15 minutes and works once.\n\nIf you did not apply for Set-Aside Radar, ignore this email.\n\nPBM Consulting Service · 6814 Chris Madsen Rd, Guthrie, OK 73044`,
+  });
+  if (sent !== 'ok') return corsJson({ ok: false, error: 'We could not send the code email right now. Please try again shortly.' }, 502);
+  return corsJson({ ok: true });
+}
+
+async function handleApplyVerify(req, env) {
+  let b;
+  try { b = await req.json(); } catch { return corsJson({ ok: false, error: 'Something went wrong.' }, 400); }
+  const email = String(b.email || '').trim().toLowerCase();
+  const code = String(b.code || '').trim();
+  const a = await env.DB.prepare("SELECT * FROM applications WHERE email = ? AND status = 'email' ORDER BY id DESC LIMIT 1").bind(email).first();
+  if (!a) return corsJson({ ok: false, error: 'No pending application for that email. Please start again.' }, 404);
+  if (a.attempt_count >= 5) return corsJson({ ok: false, error: 'Too many tries. Please submit the form again for a new code.' }, 429);
+  await env.DB.prepare('UPDATE applications SET attempt_count = attempt_count + 1 WHERE id = ?').bind(a.id).run();
+  if (!a.code_expires_at || Date.parse(a.code_expires_at) < Date.now()) return corsJson({ ok: false, error: 'That code expired. Please submit the form again for a new one.' }, 410);
+  if (!/^\d{6}$/.test(code) || (await sha256Hex(code)) !== a.code_hash) return corsJson({ ok: false, error: 'That code does not match. Check the email and try again.' }, 401);
+
+  const reviewToken = genToken();
+  const now = new Date().toISOString();
+  await env.DB.prepare("UPDATE applications SET status='review', verified_at=?, review_token=?, code_hash=NULL WHERE id=?").bind(now, reviewToken, a.id).run();
+
+  const admins = splitList(env.ADMIN_NOTIFY_EMAIL).filter(e => e.includes('@'));
+  if (admins.length) {
+    await sendEmail(env, {
+      to: admins,
+      subject: `New Radar application: ${a.business_name}`,
+      text: `A new Set-Aside Radar application came in and the email is confirmed.\n\n${appSummaryText(a)}\n\nReview it (approve or decline): ${baseUrl(env)}/review/${reviewToken}\n`,
+    });
+  }
+  await sendEmail(env, {
+    to: a.email,
+    subject: 'We got your Set-Aside Radar application',
+    text: `Thanks${a.name ? ', ' + a.name : ''}. Your email is confirmed and your application for ${a.business_name} is in.\n\nWe review each one by hand. Once it is approved you will start getting matched federal set-aside bids by email each weekday morning. Radar is free during the beta.\n\nPBM Consulting Service · 6814 Chris Madsen Rd, Guthrie, OK 73044`,
+  });
+  return corsJson({ ok: true });
+}
+
+// overrides: optional corrections from the reviewer (e.g. NAICS picked from the work description).
+async function approveApplication(env, a, overrides = {}) {
+  const sub = {
+    email: a.email,
+    name: a.business_name,
+    naics: overrides.naics || parseList(a.naics),
+    certs: overrides.certs || parseList(a.certs),
+    states: overrides.states || parseList(a.states),
+    mode: overrides.mode || a.mode,
+  };
+  const errs = validateSubscriber(sub);
+  if (errs.length) return { ok: false, errors: errs };
+  const r = await saveSubscriber(env, { ...sub, active: true });
+  await env.DB.prepare("UPDATE applications SET status='approved', subscriber_id=?, reviewed_at=?, review_token=NULL WHERE id=?").bind(r.id, new Date().toISOString(), a.id).run();
+  const unsubUrl = `${baseUrl(env)}/unsub/${r.unsub_token}`;
+  await sendEmail(env, {
+    to: a.email,
+    subject: "You're in: Set-Aside Radar starts tomorrow",
+    text: `Good news${a.name ? ', ' + a.name : ''}: your Set-Aside Radar application for ${a.business_name} is approved.\n\nStarting tomorrow morning, whenever a new federal set-aside bid matches your NAICS codes, certifications and states, you will get one short email with the bid, the deadline and a link to it on SAM.gov. Quiet weeks get a short Monday check-in so you know it is still watching.\n\nWatching: NAICS ${sub.naics.join(', ')} · ${sub.states.length ? sub.states.join(', ') : 'anywhere in the U.S.'}\n\nFree during the beta. To stop at any time: ${unsubUrl}\n\nPBM Consulting Service · 6814 Chris Madsen Rd, Guthrie, OK 73044`,
+    unsubUrl,
+  });
+  return { ok: true, subscriber_id: r.id };
+}
+
+async function rejectApplication(env, a) {
+  await env.DB.prepare("UPDATE applications SET status='rejected', reviewed_at=?, review_token=NULL WHERE id=?").bind(new Date().toISOString(), a.id).run();
+  return { ok: true };
+}
+
+function reviewPage(a, token, msg) {
+  const pre = a ? `<pre style="white-space:pre-wrap;font:14px/1.5 Consolas,monospace;background:#EFEAD9;padding:12px;">${escapeHtml(appSummaryText(a))}</pre>` : '';
+  const needsNaics = a && !parseList(a.naics).length;
+  const approveBtn = needsNaics
+    ? '<p style="color:#8C2F1B;">No NAICS codes yet. Tell Claude which codes to use and it will approve it with them.</p>'
+    : '<form method="POST" style="display:inline"><input type="hidden" name="action" value="approve"><button style="font:16px Georgia,serif;padding:10px 18px;background:#1F3D2B;color:#fff;border:0;cursor:pointer;">Approve</button></form>';
+  const forms = token ? `${approveBtn}
+    <form method="POST" style="display:inline;margin-left:10px"><input type="hidden" name="action" value="reject"><button style="font:16px Georgia,serif;padding:10px 18px;background:#fff;color:#8C2F1B;border:2px solid #8C2F1B;cursor:pointer;">Decline</button></form>` : '';
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Radar application</title></head>
+  <body style="margin:0;background:#EFEAD9;font-family:Georgia,serif;color:#2B2620;">
+  <div style="max-width:560px;margin:40px auto;padding:28px;background:#fff;border:1px solid #CFC6A8;">
+  <div style="font-size:12px;letter-spacing:2px;color:#8C2F1B;font-family:Arial,sans-serif;">SET-ASIDE RADAR · APPLICATION</div>
+  ${msg ? `<p>${escapeHtml(msg)}</p>` : ''}${pre}${forms}</div></body></html>`;
+}
+
+async function handleReview(req, env, token) {
+  const a = token ? await env.DB.prepare("SELECT * FROM applications WHERE review_token = ? AND status = 'review'").bind(token).first() : null;
+  if (!a) return html(reviewPage(null, null, 'This review link is not valid, or the application was already handled.'), 404);
+  if (req.method === 'GET') return html(reviewPage(a, token, ''));
+  let action = '';
+  try { action = String((await req.formData()).get('action') || ''); } catch { action = ''; }
+  if (action === 'approve') {
+    const r = await approveApplication(env, a);
+    return html(reviewPage(a, null, r.ok ? 'Approved. They get a welcome email now and their first matches tomorrow morning.' : `Could not approve: ${r.errors.join('; ')}`), r.ok ? 200 : 400);
+  }
+  if (action === 'reject') {
+    await rejectApplication(env, a);
+    return html(reviewPage(a, null, 'Declined. Nothing was sent to them.'));
+  }
+  return html(reviewPage(a, token, 'Pick Approve or Decline.'), 400);
+}
+
+async function adminApplications(req, url, env, path) {
+  const cols = 'id,email,name,business_name,naics,work_desc,certs,states,mode,status,created_at,verified_at,reviewed_at,subscriber_id';
+  if (path === '/applications' && req.method === 'GET') {
+    const status = url.searchParams.get('status');
+    const q = status
+      ? env.DB.prepare(`SELECT ${cols} FROM applications WHERE status = ? ORDER BY id DESC LIMIT 100`).bind(status)
+      : env.DB.prepare(`SELECT ${cols} FROM applications ORDER BY id DESC LIMIT 100`);
+    return json({ ok: true, applications: (await q.all()).results || [] });
+  }
+  const id = Number(url.searchParams.get('id'));
+  const a = id ? await env.DB.prepare("SELECT * FROM applications WHERE id = ? AND status = 'review'").bind(id).first() : null;
+  if (!a) return json({ ok: false, error: 'no application in review with that id' }, 404);
+  if (path === '/applications/approve' && req.method === 'POST') {
+    let o = {};
+    try { const t = await req.text(); o = t ? JSON.parse(t) : {}; } catch { return json({ ok: false, error: 'bad json' }, 400); }
+    const r = await approveApplication(env, a, o);
+    return json(r, r.ok ? 200 : 400);
+  }
+  if (path === '/applications/reject' && req.method === 'POST') return json(await rejectApplication(env, a));
+  return json({ ok: false, error: 'method not allowed' }, 405);
+}
+
 // ---------------------------------------------------------------- entry
 
 export {
   CERT_SETASIDES, normalize, matches, stateFromText, realCity, isOpen, normSub, eligibleSetAsides, ptypeOf, chicagoDate, addDays, toSamDate,
-  redact, isAuthorized, fetchPosted, runRadar, subjectFor, footerLine, validateSubscriber, digestText,
+  redact, isAuthorized, fetchPosted, runRadar, subjectFor, footerLine, validateSubscriber, digestText, parseApplication,
 };
 
 export default {
@@ -603,8 +854,28 @@ export default {
         sam_key: env.SAM_API_KEY ? 'set' : 'UNSET',
         transport: env.RESEND_API_KEY ? 'resend' : 'NONE',
         admin_auth: env.PHOENIX_AUTH ? 'set' : 'UNSET',
+        turnstile_enforced: !!(env.TURNSTILE_SECRET && env.TURNSTILE_HOSTNAMES),
+        admin_notify: env.ADMIN_NOTIFY_EMAIL ? 'set' : 'UNSET',
         last_run: last || null,
       });
+    }
+
+    if (req.method === 'OPTIONS' && (path === '/apply' || path === '/apply/verify')) {
+      return new Response(null, { headers: {
+        'Access-Control-Allow-Origin': SITE_ORIGIN,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Max-Age': '86400',
+        Vary: 'Origin',
+      } });
+    }
+    if (path === '/apply' && req.method === 'POST') return handleApply(req, env);
+    if (path === '/apply/verify' && req.method === 'POST') return handleApplyVerify(req, env);
+
+    if (path.startsWith('/review/') && (req.method === 'GET' || req.method === 'POST')) {
+      let token = '';
+      try { token = decodeURIComponent(path.slice('/review/'.length)); } catch { token = ''; }
+      return handleReview(req, env, token);
     }
 
     if (path.startsWith('/unsub/') && (req.method === 'GET' || req.method === 'POST')) {
@@ -613,11 +884,12 @@ export default {
       return handleUnsub(req, env, token);
     }
 
-    const admin = ['/whoami', '/subscribers', '/preview', '/run', '/runs'];
+    const admin = ['/whoami', '/subscribers', '/preview', '/run', '/runs', '/applications', '/applications/approve', '/applications/reject'];
     if (admin.includes(path)) {
       if (!(await isAuthorized(req, env))) return json({ ok: false, error: 'unauthorized' }, 401);
       // rotate-phoenix-auth.sh verifies each leg here.
       if (path === '/whoami') return json({ ok: true, worker: 'pbm-radar-worker' });
+      if (path.startsWith('/applications')) return adminApplications(req, url, env, path);
       if (path === '/subscribers' && req.method === 'POST') return upsertSubscriber(req, env);
       if (path === '/subscribers' && req.method === 'GET') {
         const r = await env.DB.prepare('SELECT id, email, name, naics, certs, states, ptypes, mode, active, created_at FROM subscribers ORDER BY id').all();

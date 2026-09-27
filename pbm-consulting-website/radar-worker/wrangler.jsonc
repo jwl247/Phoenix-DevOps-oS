@@ -4,6 +4,8 @@
 //   SAM_API_KEY     free public key from sam.gov -> Account Details (10 requests/day non-federal)
 //   RESEND_API_KEY  sending key limited to pbmconsultingservice.com (unset = digests skipped, run still logged)
 //   RESEND_FROM     "Set-Aside Radar <radar@pbmconsultingservice.com>"
+//   TURNSTILE_SECRET application-form bot check (widget pbm-radar-application); vault: RADAR_TURNSTILE_SECRET
+//   ADMIN_NOTIFY_EMAIL comma list that gets 'new application' notices (kept out of the public repo)
 //   PHOENIX_AUTH    admin routes (/subscribers /preview /run /runs); a leg in rotate-phoenix-auth.sh
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -12,7 +14,11 @@
   "compatibility_date": "2026-09-22",
   "compatibility_flags": ["nodejs_compat"],
   "triggers": { "crons": ["0 11 * * *"] },
-  "vars": { "WORKER_PUBLIC_URL": "https://pbm-radar-worker.phoenix-jwl.workers.dev" },
+  "vars": {
+    "WORKER_PUBLIC_URL": "https://pbm-radar-worker.phoenix-jwl.workers.dev",
+    // Production hostnames the application form may come from (never localhost here).
+    "TURNSTILE_HOSTNAMES": "pbmconsultingservice.com"
+  },
   "d1_databases": [
     { "binding": "DB", "database_name": "pbm_radar_db", "database_id": "7ef31f4d-7f48-4595-8bc7-130d1071b34b" }
   ]

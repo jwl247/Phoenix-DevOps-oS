@@ -56,3 +56,29 @@ CREATE TABLE IF NOT EXISTS runs (
   created_at      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_runs_date ON runs(run_date);
+
+-- Public applications (radar.html). Flow: submit -> email code -> verified
+-- (status 'review') -> Jerry/Laurie approve via a one-click link in their
+-- notice email (or POST /applications/approve) -> becomes a subscriber.
+CREATE TABLE IF NOT EXISTS applications (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  email           TEXT NOT NULL,
+  name            TEXT,
+  business_name   TEXT NOT NULL,
+  naics           TEXT NOT NULL DEFAULT '[]',   -- JSON list, may be empty if they only described their work
+  work_desc       TEXT,                         -- "what kind of work do you do" (for Laurie to pick NAICS)
+  certs           TEXT NOT NULL DEFAULT '[]',
+  states          TEXT NOT NULL DEFAULT '[]',
+  mode            TEXT NOT NULL DEFAULT 'planning' CHECK (mode IN ('certified','planning')),
+  status          TEXT NOT NULL DEFAULT 'email' CHECK (status IN ('email','review','approved','rejected')),
+  code_hash       TEXT,
+  code_expires_at TEXT,
+  attempt_count   INTEGER NOT NULL DEFAULT 0,
+  review_token    TEXT UNIQUE,
+  subscriber_id   INTEGER REFERENCES subscribers(id),
+  created_at      TEXT NOT NULL,
+  verified_at     TEXT,
+  reviewed_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_app_email ON applications(email);
+CREATE INDEX IF NOT EXISTS idx_app_status ON applications(status);

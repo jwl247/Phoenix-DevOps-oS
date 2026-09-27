@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set-Aside Radar — PBM Consulting Service</title>
+<meta name="description" content="Every weekday morning, the new federal set-aside bids that fit your trade, your certifications and your states. One short email. Free during the beta.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+
+<header class="masthead">
+  <a href="index.html"><img class="wordmark" src="assets/logo.svg" alt="PBM Consulting Service"></a>
+</header>
+
+<main>
+
+  <section class="hero radar-hero">
+    <p class="kicker">Set-Aside Radar · free during the beta</p>
+    <h1>The federal bids set aside for businesses like yours,<br>in your inbox before coffee.</h1>
+    <p class="lede">Every weekday morning Radar reads everything the government
+    posted to SAM.gov the day before, keeps only the set-aside bids, and sends
+    you the ones that fit your trade, your certifications and the states you
+    work in. One short email. Soonest deadline first. Nothing on the days
+    there's nothing.</p>
+    <a class="cta" href="#apply">Apply for Radar</a>
+  </section>
+
+  <section class="folio" id="how">
+    <div class="tab">how it works</div>
+    <div class="folio-body">
+      <h2>Built for people who'd rather be working</h2>
+      <ol class="steps">
+        <li><span class="num">1</span><div><h3>Matched three ways</h3>
+          <p>Your NAICS codes, the set-aside programs your certifications
+          qualify you for (small business, WOSB, EDWOSB, HUBZone, 8(a),
+          SDVOSB), and your states. A bid has to fit all three.</p></div></li>
+        <li><span class="num">2</span><div><h3>Ten seconds to read</h3>
+          <p>Each bid shows the program, the agency, the deadline, the place,
+          and a link straight to it on SAM.gov. The bottom line tells you
+          exactly how many notices were checked, so you know it looked.</p></div></li>
+        <li><span class="num">3</span><div><h3>Not certified yet? Still useful.</h3>
+          <p>Tell us which certifications you're working toward and Radar
+          shows the bids you'd be eligible for once you have them. It's the
+          plainest answer to "is certification worth it for me?"</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="folio" id="sample">
+    <div class="tab">sample</div>
+    <div class="folio-body">
+      <h2>What a morning looks like</h2>
+      <p>A real match from Friday, September 25, 2026, for a steel and
+      general-construction business in Oklahoma and its neighbors:</p>
+      <div class="sample-digest" aria-label="Sample Radar email">
+        <p class="sample-kicker">SET-ASIDE RADAR</p>
+        <p class="sample-title">2 new set-aside bids for you</p>
+        <div class="sample-item">
+          <span class="badge">SBA</span>
+          <p class="sample-bid">Repair Hail Damage Booneville, AR</p>
+          <p class="sample-meta">Agriculture, Department of — USDA Forest Service</p>
+          <p class="sample-meta"><strong class="urgent">Due Sep 29 · 2 days left</strong> · AR · NAICS 236220 · Solicitation</p>
+        </div>
+        <div class="sample-item">
+          <span class="badge">SBA</span>
+          <p class="sample-bid">FY27 McConnell AFB — Multiple Award Construction Contract (MACC)</p>
+          <p class="sample-meta">Dept of Defense — 22nd Contracting Squadron</p>
+          <p class="sample-meta"><strong>Due Oct 7 · 11 days left</strong> · KS · NAICS 236220 · Solicitation</p>
+        </div>
+        <p class="sample-foot">Checked 933 notices posted Fri Sep 25 · 396 were set-asides · 2 matched you.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="folio start" id="apply">
+    <div class="tab">apply</div>
+    <div class="folio-body">
+      <h2>Apply for Set-Aside Radar</h2>
+      <p>Free during the beta. We read every application ourselves, then
+      turn your Radar on. First we'll email you a 6-digit code to confirm
+      the address is yours.</p>
+
+      <form id="apply-form" class="apply-form" novalidate>
+        <div class="field-row">
+          <div class="field"><label for="ap-name">Your name</label>
+            <input id="ap-name" name="name" type="text" autocomplete="name" maxlength="120"></div>
+          <div class="field"><label for="ap-business">Business name</label>
+            <input id="ap-business" name="business_name" type="text" required autocomplete="organization" maxlength="200"></div>
+        </div>
+        <div class="field"><label for="ap-email">Email for your daily Radar</label>
+          <input id="ap-email" name="email" type="email" required autocomplete="email" maxlength="254"></div>
+
+        <div class="field"><label for="ap-naics">Your NAICS codes</label>
+          <input id="ap-naics" name="naics" type="text" inputmode="numeric" placeholder="e.g. 238120, 332312" maxlength="200">
+          <p class="hint">Separate with commas. The first few digits work too (2381 covers all of 2381xx).</p></div>
+        <div class="field"><label for="ap-work">Not sure of your codes? Tell us what you do</label>
+          <textarea id="ap-work" name="work_desc" rows="3" maxlength="1000" placeholder="e.g. We erect structural steel for commercial and metal buildings"></textarea>
+          <p class="hint">We'll look up the right codes for you.</p></div>
+
+        <fieldset class="field">
+          <legend>Certifications</legend>
+          <div class="checks">
+            <label><input type="checkbox" name="certs" value="small"> Small business</label>
+            <label><input type="checkbox" name="certs" value="wosb"> Woman-owned (WOSB)</label>
+            <label><input type="checkbox" name="certs" value="edwosb"> Economically disadvantaged WOSB</label>
+            <label><input type="checkbox" name="certs" value="hubzone"> HUBZone</label>
+            <label><input type="checkbox" name="certs" value="8a"> 8(a)</label>
+            <label><input type="checkbox" name="certs" value="sdvosb"> Service-disabled veteran-owned</label>
+            <label><input type="checkbox" name="certs" value="vosb"> Veteran-owned (VA bids)</label>
+          </div>
+        </fieldset>
+        <fieldset class="field">
+          <legend>Do you hold these today?</legend>
+          <div class="checks">
+            <label><input type="radio" name="mode" value="certified"> Yes, we're certified</label>
+            <label><input type="radio" name="mode" value="planning" checked> Not yet, we're working toward them</label>
+          </div>
+        </fieldset>
+
+        <div class="field"><label for="ap-states">States you work in</label>
+          <input id="ap-states" name="states" type="text" placeholder="e.g. OK, TX, KS" maxlength="200">
+          <label class="inline-check"><input type="checkbox" id="ap-nationwide" name="nationwide"> Anywhere in the U.S.</label></div>
+
+        <div class="cf-turnstile" data-sitekey="0x4AAAAAAFFZlAsR3JQ08oA0" data-action="radar_apply"></div>
+
+        <button type="submit" class="cta">Email me my code</button>
+        <p class="form-status" id="apply-status" role="status"></p>
+      </form>
+
+      <form id="apply-verify" class="apply-form" hidden novalidate>
+        <div class="field"><label for="av-code">6-digit code from your email</label>
+          <input id="av-code" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code"></div>
+        <button type="submit" class="cta">Confirm</button>
+        <p class="form-status" id="verify-status" role="status"></p>
+      </form>
+
+      <p class="form-fallback">Questions? <a href="mailto:hello@pbmconsultingservice.com?subject=Set-Aside%20Radar">hello@pbmconsultingservice.com</a></p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div>
+    <strong>PBM Consulting Service</strong><br>
+    6814 Chris Madsen Rd, Guthrie, OK 73044
+  </div>
+  <div class="disclaimer">
+    Bid data comes from SAM.gov. PBM Consulting Service is not affiliated
+    with or endorsed by the U.S. Small Business Administration, GSA or any
+    federal agency. Always read the full solicitation on SAM.gov before bidding.<br>
+    <a href="privacy.html">Privacy Policy</a> &nbsp;|&nbsp; <a href="terms.html">Terms of Service</a>
+  </div>
+</footer>
+
+<script src="radar.js" defer></script>
+
+</body>
+</html>

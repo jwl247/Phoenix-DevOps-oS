@@ -194,3 +194,44 @@ a:focus-visible, .cta:focus-visible {
    (style-src without unsafe-inline) blocks */
 .no-rule { border-top: none; }
 .doc-meta { font-size: 13px; color: #5a5346; }
+
+/* ── Set-Aside Radar page (radar.html) ────────────────────────────── */
+.kicker { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--oxblood); margin: 0 0 0.6em; }
+.radar-hero { display: block; }
+.radar-hero h1 { max-width: 24ch; }
+
+.sample-digest { background: #fff; border: 1px solid var(--line); padding: 20px 22px; max-width: 560px; font-family: Georgia, serif; }
+.sample-kicker { font: 600 11px 'IBM Plex Sans', sans-serif; letter-spacing: 0.14em; color: var(--oxblood); margin: 0; }
+.sample-title { font-size: 19px; font-weight: bold; color: var(--forest); margin: 2px 0 10px; padding-bottom: 10px; border-bottom: 2px solid var(--forest); }
+.sample-item { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.sample-bid { font-weight: bold; margin: 6px 0 2px; }
+.sample-meta { font-size: 13px; color: #5a5346; margin: 0; }
+.sample-meta strong { color: var(--ink); }
+.sample-meta .urgent { color: var(--oxblood); }
+.sample-foot { font-size: 12px; color: #5a5346; margin: 12px 0 0; }
+.badge { display: inline-block; font: 600 11px 'IBM Plex Sans', sans-serif; letter-spacing: 0.08em; color: #fff; background: var(--forest); padding: 2px 7px; }
+
+.apply-form { max-width: 620px; margin-top: 18px; }
+.apply-form .field { margin: 0 0 16px; }
+.apply-form .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.apply-form label, .apply-form legend { display: block; font-weight: 600; font-size: 14px; margin-bottom: 5px; }
+.apply-form input[type=text], .apply-form input[type=email], .apply-form textarea {
+  width: 100%; box-sizing: border-box; font: 16px 'IBM Plex Sans', sans-serif; color: var(--ink);
+  background: #fff; border: 1px solid var(--line); border-radius: 3px; padding: 10px 12px;
+}
+.apply-form input:focus, .apply-form textarea:focus { outline: 3px solid var(--brass); outline-offset: 1px; }
+.apply-form input:disabled { background: var(--paper-dark); color: #8a8270; }
+.apply-form fieldset { border: 0; padding: 0; }
+.apply-form .checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; }
+.apply-form .checks label, .apply-form .inline-check { font-weight: 400; font-size: 15px; display: flex; gap: 8px; align-items: center; margin: 0; }
+.apply-form .inline-check { margin-top: 8px; }
+.apply-form .hint { font-size: 13px; color: #5a5346; margin: 4px 0 0; }
+.apply-form button.cta { border: 0; cursor: pointer; font: 600 16px 'IBM Plex Sans', sans-serif; }
+.form-status { min-height: 1.4em; font-weight: 500; margin-top: 12px; }
+
+.radar-callout { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; }
+.radar-callout p { margin: 0; }
+
+@media (max-width: 760px) {
+  .apply-form .field-row, .apply-form .checks { grid-template-columns: 1fr; }
+}

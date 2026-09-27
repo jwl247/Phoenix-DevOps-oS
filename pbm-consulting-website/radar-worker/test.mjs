@@ -53,6 +53,13 @@ globalThis.fetch = async (url, opts = {}) => {
     const off = Number(u.searchParams.get('offset')), lim = Number(u.searchParams.get('limit'));
     return { ok: true, status: 200, json: async () => ({ totalRecords: SAM_NOTICES.length, opportunitiesData: SAM_NOTICES.slice(off, off + lim) }) };
   }
+  if (u.hostname === 'challenges.cloudflare.com') {
+    const tok = new URLSearchParams(String(opts.body)).get('response');
+    const v = { good: { success: true, action: 'radar_apply', hostname: 'pbmconsultingservice.com' },
+      'wrong-action': { success: true, action: 'lead', hostname: 'pbmconsultingservice.com' },
+      'wrong-host': { success: true, action: 'radar_apply', hostname: 'evil.example' } }[tok] || { success: false };
+    return { ok: true, status: 200, json: async () => v };
+  }
   if (u.hostname === 'api.resend.com') {
     emails.push({ headers: opts.headers, body: JSON.parse(opts.body) });
     return { ok: true, status: 200, text: async () => '{"id":"x"}' };
@@ -297,6 +304,147 @@ await t('scheduled() runs the radar via waitUntil', async () => {
 await t('/health reports what is wired, no secrets', async () => {
   const h = await (await worker.fetch(new Request('https://radar.test/health'), freshEnv())).json();
   eq([h.db_bound, h.sam_key, h.transport, h.admin_auth], [true, 'set', 'resend', 'set']);
+});
+
+// ---------------------------------------------------------------- applications (public form)
+const SITE = 'https://pbmconsultingservice.com';
+const appEnv = (extra = {}) => freshEnv({ TURNSTILE_SECRET: 'ts-secret', TURNSTILE_HOSTNAMES: 'pbmconsultingservice.com', ADMIN_NOTIFY_EMAIL: 'boss@example.com, laurie@example.com', ...extra });
+const APP = { name: 'Dana', business_name: 'Red Dirt Steel LLC', email: 'Dana@RedDirt.example', naics: '238120, 332312', certs: ['wosb', 'small'], states: 'ok, tx', mode: 'planning', turnstile_token: 'good' };
+const post = (env, path, body, headers = {}) => worker.fetch(new Request('https://radar.test' + path, {
+  method: 'POST', headers: { 'Content-Type': 'application/json', Origin: SITE, ...headers }, body: JSON.stringify(body),
+}), env);
+const codeFrom = () => { const m = emails.map(e => e.body.subject).join(' ').match(/code: (\d{6})/); return m && m[1]; };
+const reviewLink = () => { const e = emails.find(x => x.body.subject.startsWith('New Radar application')); return e && e.body.text.match(/\/review\/([A-Za-z0-9_-]+)/)[1]; };
+async function applyAndVerify(env, body = APP) {
+  const r = await post(env, '/apply', body);
+  const code = codeFrom();
+  const v = await post(env, '/apply/verify', { email: body.email, code });
+  return { r, v, code };
+}
+
+await t('apply: bot check + code email, then verify -> review + notices to reviewers and applicant', async () => {
+  const env = appEnv();
+  const r = await post(env, '/apply', APP);
+  eq(r.status, 200);
+  eq(r.headers.get('Access-Control-Allow-Origin'), SITE);
+  const code = codeFrom();
+  ok(/^\d{6}$/.test(code), 'code emailed');
+  eq(emails[0].body.to, ['dana@reddirt.example']);
+  ok(!emails[0].body.headers, 'no unsubscribe header on a code email');
+  const row = env.DB.raw.prepare('SELECT * FROM applications').get();
+  eq([row.status, row.naics, row.states, row.certs], ['email', '["238120","332312"]', '["OK","TX"]', '["wosb","small"]']);
+  ok(row.code_hash && row.code_hash !== code, 'only the hash is stored');
+  emails = [];
+  const v = await post(env, '/apply/verify', { email: APP.email, code });
+  eq(v.status, 200);
+  eq(env.DB.raw.prepare('SELECT status FROM applications').get().status, 'review');
+  const notice = emails.find(e => e.body.subject === 'New Radar application: Red Dirt Steel LLC');
+  ok(notice, 'reviewer notice');
+  eq(notice.body.to, ['boss@example.com', 'laurie@example.com']);
+  ok(notice.body.text.includes('https://radar.test/review/'), 'review link');
+  ok(emails.some(e => e.body.subject === 'We got your Set-Aside Radar application'), 'applicant confirmation');
+});
+await t('apply: bot check fails closed (bad token, wrong action, wrong host, no secret)', async () => {
+  for (const [tok, extra] of [['bad', {}], ['wrong-action', {}], ['wrong-host', {}], ['good', { TURNSTILE_SECRET: undefined }], ['good', { TURNSTILE_HOSTNAMES: '' }]]) {
+    const env = appEnv(extra);
+    const r = await post(env, '/apply', { ...APP, turnstile_token: tok });
+    eq(r.status, 403, `token ${tok}`);
+    eq(env.DB.raw.prepare('SELECT COUNT(*) n FROM applications').get().n, 0);
+    eq(emails.length, 0);
+  }
+});
+await t('apply: validation messages a real person can act on', async () => {
+  const env = appEnv();
+  const bad = async (patch, needle) => {
+    const r = await post(env, '/apply', { ...APP, ...patch });
+    eq(r.status, 400);
+    const body = await r.json();
+    ok(body.errors.some(e => e.includes(needle)), `${needle} in ${JSON.stringify(body.errors)}`);
+  };
+  await bad({ email: 'nope' }, 'valid email');
+  await bad({ business_name: '' }, 'business name');
+  await bad({ naics: '', work_desc: '' }, 'kind of work');
+  await bad({ naics: '23812x' }, '2 to 6 digits');
+  await bad({ certs: [] }, 'certification');
+  await bad({ certs: ['kernel'] }, 'certification');
+  await bad({ states: '' }, 'Anywhere');
+  await bad({ states: 'Oklahoma' }, '2-letter');
+  eq(samCalls.length + emails.length, 0, 'nothing sent on invalid input');
+});
+await t('verify: wrong code 401, 5 tries then 429, expired 410', async () => {
+  const env = appEnv();
+  await post(env, '/apply', APP);
+  eq((await post(env, '/apply/verify', { email: APP.email, code: '000000' })).status, 401);
+  for (let i = 0; i < 4; i++) await post(env, '/apply/verify', { email: APP.email, code: '000000' });
+  eq((await post(env, '/apply/verify', { email: APP.email, code: codeFrom() })).status, 429, 'locked even with the right code');
+  const env2 = appEnv();
+  await post(env2, '/apply', APP);
+  env2.DB.raw.prepare("UPDATE applications SET code_expires_at = '2000-01-01T00:00:00Z'").run();
+  eq((await post(env2, '/apply/verify', { email: APP.email, code: codeFrom() })).status, 410);
+  eq((await post(env2, '/apply/verify', { email: 'nobody@x.example', code: '123456' })).status, 404);
+});
+await t('review link: GET only shows, POST approve -> subscriber + welcome email, link then dead', async () => {
+  const env = appEnv();
+  await applyAndVerify(env);
+  const tok = reviewLink();
+  const g = await worker.fetch(new Request(`https://radar.test/review/${tok}`), env);
+  const page = await g.text();
+  ok(page.includes('Red Dirt Steel LLC') && page.includes('Approve'), 'shows the application');
+  eq(env.DB.raw.prepare('SELECT COUNT(*) n FROM subscribers').get().n, 0, 'GET must not act');
+  emails = [];
+  const p = await worker.fetch(new Request(`https://radar.test/review/${tok}`, { method: 'POST', body: new URLSearchParams({ action: 'approve' }) }), env);
+  eq(p.status, 200);
+  const sub = env.DB.raw.prepare('SELECT * FROM subscribers').get();
+  eq([sub.email, sub.name, sub.mode, sub.active, sub.states], ['dana@reddirt.example', 'Red Dirt Steel LLC', 'planning', 1, '["OK","TX"]']);
+  const welcome = emails.find(e => e.body.subject.startsWith("You're in"));
+  ok(welcome && welcome.body.headers['List-Unsubscribe'].includes(sub.unsub_token), 'welcome with unsubscribe');
+  eq(env.DB.raw.prepare('SELECT status, subscriber_id FROM applications').get().status, 'approved');
+  eq((await worker.fetch(new Request(`https://radar.test/review/${tok}`), env)).status, 404, 'link is single-use');
+});
+await t('review link: decline sends the applicant nothing', async () => {
+  const env = appEnv();
+  await applyAndVerify(env);
+  const tok = reviewLink();
+  emails = [];
+  await worker.fetch(new Request(`https://radar.test/review/${tok}`, { method: 'POST', body: new URLSearchParams({ action: 'reject' }) }), env);
+  eq(env.DB.raw.prepare('SELECT status FROM applications').get().status, 'rejected');
+  eq(emails.length, 0);
+  eq(env.DB.raw.prepare('SELECT COUNT(*) n FROM subscribers').get().n, 0);
+});
+await t('work description only: no Approve button until a reviewer supplies NAICS via the admin API', async () => {
+  const env = appEnv();
+  await applyAndVerify(env, { ...APP, naics: '', work_desc: 'We erect structural steel for metal buildings' });
+  const tok = reviewLink();
+  const page = await (await worker.fetch(new Request(`https://radar.test/review/${tok}`), env)).text();
+  ok(!page.includes('value="approve"') && page.includes('No NAICS codes yet'), 'no approve button');
+  const id = env.DB.raw.prepare('SELECT id FROM applications').get().id;
+  eq((await admin(env, `/applications/approve?id=${id}`, 'POST', {})).status, 400, 'refused without NAICS');
+  const ok2 = await (await admin(env, `/applications/approve?id=${id}`, 'POST', { naics: ['238120'] })).json();
+  ok(ok2.ok && ok2.subscriber_id, 'approved with NAICS supplied');
+  eq(env.DB.raw.prepare('SELECT naics FROM subscribers').get().naics, '["238120"]');
+});
+await t('admin applications API needs the token; list works', async () => {
+  const env = appEnv();
+  await applyAndVerify(env);
+  eq((await worker.fetch(new Request('https://radar.test/applications'), env)).status, 401);
+  eq((await worker.fetch(new Request('https://radar.test/applications/approve?id=1', { method: 'POST' }), env)).status, 401);
+  const list = await (await admin(env, '/applications?status=review')).json();
+  eq(list.applications.length, 1);
+  ok(!('code_hash' in list.applications[0]) && !('review_token' in list.applications[0]), 'no secrets in the list');
+});
+await t('applying again while in review does not create a second application', async () => {
+  const env = appEnv();
+  await applyAndVerify(env);
+  emails = [];
+  const r = await (await post(env, '/apply', APP)).json();
+  ok(r.ok && r.already);
+  eq(env.DB.raw.prepare('SELECT COUNT(*) n FROM applications').get().n, 1);
+  eq(emails.length, 0);
+});
+await t('CORS preflight allows only the PBM site', async () => {
+  const r = await worker.fetch(new Request('https://radar.test/apply', { method: 'OPTIONS', headers: { Origin: 'https://evil.example' } }), appEnv());
+  eq(r.headers.get('Access-Control-Allow-Origin'), SITE);
+  eq(r.headers.get('Access-Control-Allow-Methods'), 'POST, OPTIONS');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

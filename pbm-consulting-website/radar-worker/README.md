@@ -1,5 +1,7 @@
 # Set-Aside Radar — `pbm-radar-worker`
 
+Public page + application form: https://pbmconsultingservice.com/radar (`../radar.html`, `../radar.js`). Free beta; every application is reviewed by hand.
+
 Every morning (6 AM Central, cron `0 11 * * *`) Radar pulls the federal opportunities
 posted the previous day from the **SAM.gov Opportunities API v2**, keeps only the
 **set-asides**, matches them to each subscriber by **NAICS + certification + state +
@@ -44,6 +46,13 @@ It's Laurie's product, and PBM is customer zero.
 | Route | Auth | What |
 |---|---|---|
 | `GET /health` | none | db / sam_key / transport / admin_auth / last run (no secret values) |
+| `POST /apply` | Turnstile (`radar_apply`) | public application from `pbmconsultingservice.com/radar`: validates, emails a 6-digit code (15 min, 5 tries, hash only stored) |
+| `POST /apply/verify` | code | confirms email -> status `review`, emails reviewers (`ADMIN_NOTIFY_EMAIL`) a one-time review link, tells the applicant it's in |
+| `GET /review/:token` | token | shows the application with Approve / Decline (GET never acts) |
+| `POST /review/:token` | token | `action=approve` -> subscriber + welcome email; `action=reject` -> declined, applicant not emailed. Link dies after use |
+| `GET /applications?status=` | Bearer | list (no hashes/tokens) |
+| `POST /applications/approve?id=` | Bearer | approve, optional JSON overrides `{naics,states,certs,mode}` (needed when they only described their work) |
+| `POST /applications/reject?id=` | Bearer | decline |
 | `GET /unsub/:token` | token | confirm page (a GET alone never acts; mail scanners follow links) |
 | `POST /unsub/:token` | token | unsubscribe (RFC 8058 one-click lands here) |
 | `GET /whoami` | Bearer `PHOENIX_AUTH` | rotation check |
@@ -57,11 +66,13 @@ It's Laurie's product, and PBM is customer zero.
 - `SAM_API_KEY`: sam.gov → Account Details → request public API key. **Expires every 90 days.**
 - `RESEND_API_KEY`
 - `RESEND_FROM`: `Set-Aside Radar <radar@pbmconsultingservice.com>`
+- `TURNSTILE_SECRET`: application-form bot check, widget `pbm-radar-application` (sitekey `0x4AAAAAAFFZlAsR3JQ08oA0`). Vault copy: `RADAR_TURNSTILE_SECRET`. `TURNSTILE_HOSTNAMES` var = `pbmconsultingservice.com` (no localhost in production). Fails closed.
+- `ADMIN_NOTIFY_EMAIL`: comma list of reviewers who get "new application" notices (a secret so emails stay out of the public repo).
 - `PHOENIX_AUTH`: a leg in `sector2/package-handler/rotate-phoenix-auth.sh`. Never hand-set it.
 
 ## Run / test / deploy
 ```bash
-npm test                                  # 25 tests, real SQLite via node:sqlite, SAM + Resend faked
+npm test                                  # 35 tests, real SQLite via node:sqlite, SAM + Resend faked
 npx wrangler deploy
 npx wrangler d1 execute pbm_radar_db --remote --file=schema.sql   # schema (idempotent)
 curl -X POST -H "Authorization: Bearer $PHOENIX_AUTH" "https://pbm-radar-worker.phoenix-jwl.workers.dev/run?dry=1"
@@ -70,6 +81,5 @@ curl -X POST -H "Authorization: Bearer $PHOENIX_AUTH" "https://pbm-radar-worker.
 ## Not in v1 (schema ready)
 - **Self-serve profile editing** (Jerry 2026-09-27: "it needs an add or remove code"): a subscriber adds or removes NAICS codes (and states/certs) themselves, from a link in the digest. It would reuse the unsub-token pattern and a small form.
 - **Award watch** (2026-09-27, McConnell MACC): follow a bid and get its award notice, so you can pitch the winners for sub work.
-- Public signup page on pbmconsultingservice.com (would reuse pbm-leads' Turnstile + email code).
 - Paid tiers ($29 / $99).
 - Full bid descriptions (each one costs a SAM request).

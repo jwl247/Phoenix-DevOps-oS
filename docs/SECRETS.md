@@ -23,7 +23,9 @@ If that folder is gone (new machine, lost drive), rebuild from:
 | `OFFICE_AUTH` (worker secret) / `PHOENIX_OFFICE_AUTH` (client env var, `phoenix-office/main.js`) | `phoenix-office-worker` (standalone Office product — deliberately *not* `PHOENIX_AUTH`) | CF worker secret + Windows User env. **Not in the vault file** as of 2026-09-25 — add it, since worker secrets can't be read back |
 | `RESEND_API_KEY` | Email sending for `office-notify-worker`, `phoenix-office-worker`, `pbm-leads-worker`, `pbm-radar-worker` | no — Office workers since 2026-09-23; leads + radar set 2026-09-27 from the vault key ("newkey" in Resend, sending access, pbmconsultingservice.com). `RESEND_FROM` set per worker |
 | `SAM_API_KEY` | `pbm-radar-worker` (Set-Aside Radar) daily SAM.gov pull — 10 requests/day on a free non-federal key | no — Jerry's personal SAM.gov key, set 2026-09-27 (vault + worker secret). **Expires every 90 days** (~2026-12-26); Google Calendar reminder 2026-12-19. Switch to a key tied to PBM's entity (1,000/day) once PBM is registered |
-| `TURNSTILE_SECRET` | `pbm-leads-worker` bot check | no — CF worker secret |
+| `TURNSTILE_SECRET` | `pbm-leads-worker` bot check (widget `pbm-consulting-lead-form`) | CF worker secret only — **not in the vault** (was never saved; worker secrets can't be read back) |
+| `RADAR_TURNSTILE_SECRET` (worker name `TURNSTILE_SECRET`) | `pbm-radar-worker` application form (widget `pbm-radar-application`) | no — set 2026-09-27, in the vault + worker |
+| `ADMIN_NOTIFY_EMAIL` | who gets "new Radar application" notices (`pbm-radar-worker`) | set 2026-09-27 to Jerry; add Laurie (comma list) |
 | `MUSTANSWER_ACCESS_TOKEN` | `lifefirst-mustanswer` `/register` + `/sweep` (bespoke — not yet migrated to `PHOENIX_AUTH`, see `docs/compliance/pentest/`) | no — rotated 2026-09-25, in the vault |
 | `PHOENIX_MAPTILER_KEY` | Dashboard MAP pane | yes — optional |
 | `PHOENIX_OFFICE_GOOGLE_CLIENT_ID` / `_SECRET` | `phoenix-office` "sign in with Google" (device flow — required for Sign / Legal hold) | set as local env vars on this machine (2026-09-23); not needed by the worker |
