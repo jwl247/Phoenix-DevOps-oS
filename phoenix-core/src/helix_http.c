@@ -292,6 +292,20 @@ helix_result_t helix_http_put_content(const char* worker_url,
     snprintf(auth_hdr, sizeof(auth_hdr), "Authorization: Bearer %s", auth_token);
     hdrs = curl_slist_append(hdrs, "Content-Type: application/octet-stream");
     hdrs = curl_slist_append(hdrs, auth_hdr);
+    /* Same Cloudflare Access service token as every other request: without
+     * it this PUT got the Access login page and helix_ingress still reported
+     * "registered in R2 + D1" (round-3 S1-F23). */
+    {
+        const char* cf_id  = getenv("CF_ACCESS_CLIENT_ID");
+        const char* cf_sec = getenv("CF_ACCESS_CLIENT_SECRET");
+        if (cf_id && *cf_id && cf_sec && *cf_sec) {
+            char cf_hdr[512];
+            snprintf(cf_hdr, sizeof(cf_hdr), "CF-Access-Client-Id: %s", cf_id);
+            hdrs = curl_slist_append(hdrs, cf_hdr);
+            snprintf(cf_hdr, sizeof(cf_hdr), "CF-Access-Client-Secret: %s", cf_sec);
+            hdrs = curl_slist_append(hdrs, cf_hdr);
+        }
+    }
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hdrs);
 
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST,    "PUT");

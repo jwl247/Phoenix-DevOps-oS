@@ -14,7 +14,8 @@ EnvironmentFile=-/etc/default/helix-vram
 Environment=HELIX_LIBHELIX_DIR=/opt/phoenix/sector1/kernels/libhelix
 Environment=PYTHONUNBUFFERED=1
 RuntimeDirectory=phoenix
-RuntimeDirectoryMode=0750
+RuntimeDirectoryMode=0755
+# the directory must be traversable by group phoenix; the SOCKET (0660 root:phoenix) is the gate (round-3 S1-F26)
 RuntimeDirectoryPreserve=yes
 ExecStart=/usr/bin/python3 /opt/phoenix/sector1/helix/helix_vramd.py serve
 Restart=on-failure

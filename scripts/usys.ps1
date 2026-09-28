@@ -925,125 +925,144 @@ function Get-UsysRuntimeForEntry {
 
 # COMMAND: pull — fetch a suite from D1/clonepool by name and stage it locally
 # =============================================================================
+function Get-UsysSha3512 {
+    # SHA3-512 of a file, as intake.sh records it. .NET 8+ has SHA3_512 where
+    # the OS provides it (Windows 11 24H2+, OpenSSL 1.1.1+); otherwise
+    # python3 (hashlib) or openssl (Git for Windows). No hasher = no pull:
+    # nothing unverified is ever staged (round-2 S34OPS-S27).
+    param([Parameter(Mandatory)][string]$Path)
+    try {
+        if ([System.Security.Cryptography.SHA3_512]::IsSupported) {
+            $h = [System.Security.Cryptography.SHA3_512]::Create()
+            $fs = [IO.File]::OpenRead($Path)
+            try { return ([BitConverter]::ToString($h.ComputeHash($fs)) -replace '-', '').ToLowerInvariant() } finally { $fs.Dispose() }
+        }
+    } catch { }
+    $py = Get-Command python3, python -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($py) {
+        $out = & $py.Source -c "import hashlib,sys;print(hashlib.sha3_512(open(sys.argv[1],'rb').read()).hexdigest())" $Path 2>$null
+        if ($out -match '^[0-9a-f]{128}$') { return $out.Trim() }
+    }
+    $ossl = Get-Command openssl -ErrorAction SilentlyContinue
+    if ($ossl) {
+        $out = & $ossl.Source dgst -sha3-512 -r $Path 2>$null
+        if ($out -match '^([0-9a-f]{128})') { return $Matches[1] }
+    }
+    throw 'no SHA3-512 hasher available (.NET SHA3_512, python3 or openssl) - refusing to stage unverified bytes'
+}
+
+# COMMAND: pull — restore a suite from D1 + R2 onto this machine, hash-verified.
+#   directory suite: the D1 row's hash covers the manifest (the directory's own
+#   R2 object); every file is fetched by its content key
+#   <filehex>/versions/<sha3[0:16]> and verified; a single mismatch stages nothing.
+#   single file: current bytes, verified against the row's hash.
+# Twin of `intake pull` in sector2/package-handler/intake.sh (2026-09-28).
 function Invoke-UsysPull {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory, Position = 0)]
         [string]$SuiteName,
-        # Where to write the real bytes once fetched from R2. Default (unset)
-        # keeps the original stub-manifest-only behavior for suite staging.
-        # Pass a folder to actually pull the file down into it — this is what
-        # the .lol clone-to-workdir alias uses.
+        # -Destination: put the single file there (the .lol clone-to-workdir alias)
+        # instead of staging a suite under the clone pool.
         [string]$Destination = '',
         [switch]$DryRun
     )
 
-    $workerUrl  = $env:PHOENIX_WORKER_URL
-
-    if (-not $workerUrl) {
-        Write-UsysErr 'PHOENIX_WORKER_URL not set — cannot pull from D1'
-        return
-    }
+    $workerUrl = $env:PHOENIX_WORKER_URL
+    if (-not $workerUrl) { Write-UsysErr 'PHOENIX_WORKER_URL not set — cannot pull from D1'; return }
+    if ($SuiteName -match '[\\/]' -or $SuiteName -match '^\.' -or $SuiteName -in 'T1', 'T2', 'T3', 'T4') { Write-UsysErr "refusing suite name '$SuiteName'"; return }
+    $base = $workerUrl.TrimEnd('/')
+    $headers = Get-UsysWorkerHeaders -Accept
 
     Write-Host ''
-    Write-UsysInfo "Pulling suite from D1: $SuiteName"
-
-    # Ask D1 for the record
+    Write-UsysInfo "Pulling from D1: $SuiteName"
     try {
-        $uri = "$($workerUrl.TrimEnd('/'))/clonepool/$([Uri]::EscapeDataString($SuiteName))"
-        $headers = Get-UsysWorkerHeaders -Accept
-        $resp = Invoke-RestMethod -Uri $uri -Headers $headers -Method GET -ErrorAction Stop
+        $resp = Invoke-RestMethod -Uri "$base/clonepool/$([Uri]::EscapeDataString($SuiteName))?meta=true" -Headers $headers -Method GET -ErrorAction Stop
     } catch {
-        Write-UsysErr "Suite '$SuiteName' not found in D1 — has it been intaked?"
-        return
+        Write-UsysErr "Suite '$SuiteName' not found in D1 — has it been intaked?"; return
     }
-
-    $hexDisplay = if ($resp.hex_id) { $resp.hex_id.Substring(0,16) } else { $resp.b58 }
-    Write-UsysOk "Found in D1: $($resp.name) hex=$hexDisplay..."
-
+    if ($resp.result) { $resp = $resp.result }
+    $hexId = [string]$resp.hex_id
+    $rowSha3 = ([string]$resp.hash_sha3).ToLowerInvariant()
+    if (-not $hexId) { Write-UsysErr "'$SuiteName' has no hex_id in D1"; return }
+    Write-UsysOk "Found in D1: $($resp.name) hex=$($hexId.Substring(0, [Math]::Min(16, $hexId.Length)))..."
     if ($DryRun) {
-        Write-Host ''
-        Write-Host '  [DRY RUN] Would stage suite to clonepool:' -ForegroundColor Cyan
-        Write-Host "    Name     : $($resp.name)"
-        Write-Host "    hex_id   : $($resp.hex_id)"
-        Write-Host "    pool_path: $($resp.pool_path)"
-        Write-Host ''
+        Write-Host "  [DRY RUN] would pull hex $hexId (baseline $(if ($rowSha3) { $rowSha3.Substring(0,12) } else { 'NONE' }))" -ForegroundColor Cyan
         return
     }
+    if (-not $rowSha3) { Write-UsysErr "'$SuiteName' has no integrity baseline in D1 — refusing an unverifiable pull"; return }
 
-    # -Destination given: this is a real pull-to-workdir request (the .lol
-    # clone-to-workdir alias), not suite staging. Fetch the actual bytes.
-    # phoenix-clonepool-r2 was retired 2026-09-21 (see CLAUDE.md SESSION LOG)
-    # in favor of packages-worker's own integrated R2 binding — same
-    # GET /clonepool/:id route as the metadata lookup above, just keyed by
-    # hex_id instead of name so it hits the R2 object directly.
-    if ($Destination) {
-        if (-not $resp.hex_id) {
-            Write-UsysErr "'$SuiteName' has no hex_id in D1 — can't fetch content."
-            return
-        }
-        $objUri = "$($workerUrl.TrimEnd('/'))/clonepool/$([Uri]::EscapeDataString($resp.hex_id))"
-        $headers = Get-UsysWorkerHeaders
-
-        New-Item -ItemType Directory -Path $Destination -Force | Out-Null
-        # resp.name comes from D1 -- strip any directory parts so a crafted
-        # record can't write outside the destination folder.
-        $safeName = [System.IO.Path]::GetFileName([string]$resp.name)
-        if (-not $safeName -or $safeName -in '.', '..') { Write-UsysErr "invalid name in D1 record: '$($resp.name)'"; return }
-        $outFile = Join-Path $Destination $safeName
-
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) ("usys-pull-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
+    New-Item -ItemType Directory -Path $tmp -Force | Out-Null
+    $stage = Join-Path $tmp 'suite'; New-Item -ItemType Directory -Path $stage -Force | Out-Null
+    $rawHeaders = Get-UsysWorkerHeaders
+    try {
+        $obj = Join-Path $tmp 'object'
         try {
-            Invoke-WebRequest -Uri $objUri -Headers $headers -Method GET -OutFile $outFile -ErrorAction Stop | Out-Null
+            Invoke-WebRequest -Uri "$base/clonepool/$([Uri]::EscapeDataString($hexId))" -Headers $rawHeaders -Method GET -OutFile $obj -ErrorAction Stop | Out-Null
         } catch {
-            $statusCode = $_.Exception.Response.StatusCode.value__
-            if ($statusCode -eq 404) {
-                Write-UsysErr "'$($resp.name)' is in D1 but not in R2 — it likely predates R2 upload being wired (2026-08-22), or was never uploaded. Nothing to pull down."
-            } else {
-                Write-UsysErr "R2 fetch failed: $_"
+            $code = $_.Exception.Response.StatusCode.value__
+            Write-UsysErr "'$SuiteName' is in D1 but its bytes are not in R2 ($code)"; return
+        }
+        $got = Get-UsysSha3512 $obj
+        if ($got -ne $rowSha3) {
+            Write-UsysErr "INTEGRITY FAILURE — R2 bytes of '$SuiteName' do not match the D1 baseline ($($got.Substring(0,12)) vs $($rowSha3.Substring(0,12))). Nothing written."; return
+        }
+
+        $text = Get-Content $obj -Raw -ErrorAction SilentlyContinue
+        $manifest = $null
+        if ($text -and $text -match '"type"\s*:\s*"directory"') { try { $manifest = $text | ConvertFrom-Json } catch { $manifest = $null } }
+
+        if ($manifest) {
+            $files = @($manifest.files); $i = 0
+            foreach ($f in $files) {
+                $i++
+                $rel = [string]$f.path; $fhex = [string]$f.hex; $fsha = ([string]$f.hash_sha3).ToLowerInvariant()
+                if (-not $rel -or $rel -match '^[\\/]|\.\.[\\/]|^\.\.$|^[A-Za-z]:') { Write-UsysErr "manifest path '$rel' refused"; return }
+                if (-not $fsha) { Write-UsysErr "'$rel' has no hash_sha3 in the manifest (intaked before 1.8.0) — re-intake the directory"; return }
+                $dst = Join-Path $stage ($rel -replace '/', '\')
+                New-Item -ItemType Directory -Path (Split-Path $dst -Parent) -Force | Out-Null
+                $ok = $false
+                foreach ($u in @("$base/clonepool/$fhex/versions/$($fsha.Substring(0,16))", "$base/clonepool/$fhex")) {
+                    try { Invoke-WebRequest -Uri $u -Headers $rawHeaders -Method GET -OutFile $dst -ErrorAction Stop | Out-Null; $ok = $true; break } catch { }
+                }
+                if (-not $ok) { Write-UsysErr "'$rel' bytes not in R2"; return }
+                if ((Get-UsysSha3512 $dst) -ne $fsha) { Write-UsysErr "INTEGRITY FAILURE — '$rel' does not match its manifest hash. Nothing written."; return }
+                Write-Host ("`r  Phoenix  {0} / {1}  {2,-60}" -f $i, $files.Count, $rel) -NoNewline
             }
-            return
+            Write-Host ''
+            Copy-Item $obj (Join-Path $stage '.pool-manifest.json')
+            $mf = Get-ChildItem $stage -Force -File | Where-Object { $_.Name -eq '.suite.json' -or $_.Name -like '*.suite.json' } | Select-Object -First 1
+            if ($mf -and $mf.Name -ne '.suite.json') { Copy-Item $mf.FullName (Join-Path $stage '.suite.json') }
+            if (-not $mf) { Write-UsysWarn "'$SuiteName' has no suite manifest; restored as a plain directory" }
+        } else {
+            if ($Destination) {
+                New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+                $safeName = [IO.Path]::GetFileName([string]$resp.name)
+                Move-Item $obj (Join-Path $Destination $safeName) -Force
+                Write-UsysOk "Cloned (verified) to: $(Join-Path $Destination $safeName)"; return
+            }
+            $safeName = [IO.Path]::GetFileName([string]$resp.name)
+            Move-Item $obj (Join-Path $stage $safeName) -Force
+            $manifestObj = @{
+                name = $resp.name; version = ConvertTo-UsysSuiteVersion ([string]$resp.version)
+                description = "Pulled from Phoenix D1/R2 — hex $($hexId.Substring(0, [Math]::Min(16, $hexId.Length)))"
+                type = 'script'; entry = $safeName; runtime = Get-UsysRuntimeForEntry $safeName
+                metadata = @{ hex_id = $hexId; hash_sha3 = $rowSha3; pulled_at = (Get-Date -Format 'o'); source = 'D1+R2' }
+            }
+            $manifestObj | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $stage '.suite.json') -Encoding UTF8
         }
 
-        Write-UsysOk "Cloned to working directory: $outFile"
-        return
+        # everything verified: swap the suite directory in
+        $suiteDir = Join-Path (Get-UsysClonepoolDir) $SuiteName
+        if (Test-Path $suiteDir) { $prev = "$suiteDir.previous"; if (Test-Path $prev) { Remove-Item $prev -Recurse -Force }; Move-Item $suiteDir $prev }
+        New-Item -ItemType Directory -Path (Split-Path $suiteDir -Parent) -Force | Out-Null
+        Move-Item $stage $suiteDir
+        Write-UsysOk "Pulled and verified: $suiteDir"
+        if (Test-Path (Join-Path $suiteDir '.suite.json')) { Write-UsysInfo "Runnable: usys run $SuiteName" }
+    } finally {
+        Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }
-
-    # If pool_path is a local path on the source machine it won't exist here —
-    # that is expected on a second machine. We stage from what D1 knows.
-    $safeSuite = [System.IO.Path]::GetFileName([string]$resp.name)
-    if (-not $safeSuite -or $safeSuite -in '.', '..') { Write-UsysErr "invalid name in D1 record: '$($resp.name)'"; return }
-    $suiteDir = Join-Path (Get-UsysClonepoolDir) $safeSuite
-    New-Item -ItemType Directory -Path $suiteDir -Force | Out-Null
-
-    # Write a stub .suite.json so the suite is runnable if the binary is already present.
-    # version: usys run sorts suites with [version], so the label must parse as one.
-    # The pool's own label is 'vN' (intake.sh); D1 may also hold a real semver.
-    # runtime: from the entry's extension, so a pulled .py/.sh/.ps1/.js runs
-    # under the right host instead of being exec'd as a binary (round-2 S34OPS-F17).
-    $suiteVersion = ConvertTo-UsysSuiteVersion ([string]$resp.version)
-    $suiteRuntime = Get-UsysRuntimeForEntry $safeSuite
-    $manifest = @{
-        name        = $resp.name
-        version     = $suiteVersion
-        description = "Pulled from Phoenix D1 — hex $hexDisplay"
-        type        = 'script'
-        entry       = $resp.name
-        runtime     = $suiteRuntime
-        metadata    = @{
-            hex_id     = $resp.hex_id
-            b58        = $resp.b58
-            pulled_at  = (Get-Date -Format 'o')
-            source     = 'D1'
-        }
-    }
-    $manifest | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $suiteDir '.suite.json') -Encoding UTF8
-
-    Write-UsysOk "Staged at: $suiteDir"
-    if ($resp.hex_id) { Write-Host "  hex_id  : $($resp.hex_id)" -ForegroundColor DarkGray }
-    if ($resp.b58)    { Write-Host "  b58     : $($resp.b58)"    -ForegroundColor DarkGray }
-    Write-Host ''
-    Write-UsysInfo "Next: place the binary/script in $suiteDir then: usys run $SuiteName"
-    Write-Host ''
 }
 
 # =============================================================================
@@ -2108,7 +2127,7 @@ function Show-UsysHelp {
 
   Discovery:
     search <query>               Search clonepool + catalog
-    pull <suite>                 Pull suite record from D1 and stage locally
+    pull <suite>                 Pull a suite from D1 + R2, every file hash-verified, into the clone pool
 
   Distros (Linux VMs via QEMU — no install, no WSL, Phoenix brings the OS):
     distro list                  Show registered distros

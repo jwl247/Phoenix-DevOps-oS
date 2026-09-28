@@ -18,6 +18,11 @@ cd "$(dirname "$0")"
 LOG=${HELIX_FD_LOG:-./freedrive-$(date +%Y%m%d-%H%M%S).log}
 exec > >(tee "$LOG") 2>&1
 IMG=${HELIX_TEST_IMG:-$HOME/helixdm/origin.img}
+# This script formats $IMG (mkfs.ext4 -F). It exists for IMAGE FILES. A block
+# device here would be wiped — CLAUDE.md AI SAFETY RULES class of accident.
+if [ -b "$IMG" ] && [ "${HELIX_TEST_ALLOW_BLOCK:-0}" != 1 ]; then
+  echo "refusing: HELIX_TEST_IMG=$IMG is a block device (set HELIX_TEST_ALLOW_BLOCK=1 only for a disk you mean to wipe)"; exit 3
+fi
 BIMG=${HELIX_B_IMG:-/mnt/helix/helix-strandB-8g.img}
 RAM=${HELIX_RAM_MB:-auto}          # auto = her real size: half the machine's RAM
 BMB=${HELIX_B_MB:-8192}

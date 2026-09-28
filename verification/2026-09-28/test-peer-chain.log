@@ -1,0 +1,52 @@
+# test-peer-chain
+# host=claude-cloud commit=ba5f834 dirty=true utc=2026-09-28T20:57:16Z
+# $ python3 -c "import zmq" 2>/dev/null && python3 tools/helix-team/test_peer_chain.py || { echo SKIP-REASON: pyzmq not installed; exit 0; }
+
+  ok  juliet refuses to bind off-loopback without a secret
+FAIL  romeo + juliet come up, signed hop
+      AssertionError: 'ingress active' not seen (rc=1); got:
+Exception in thread Thread-1 (run):
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/user/Phoenix-DevOps-oS/sector3/romeo_juliet/romeo.py", line 166, in run
+    recv_sock.bind(f"tcp://{BIND_ADDR}:{ROMEO_RECV_PORT}")
+  File "/usr/local/lib/python3.11/dist-packages/zmq/sugar/socket.py", line 322, in bind
+    super().bind(addr)
+  File "zmq/backend/cython/_zmq.py", line 1009, in zmq.backend.cython._zmq.Socket.bind
+  File "zmq/backend/cython/_zmq.py", line 190, in zmq.backend.cython._zmq._check_rc
+zmq.error.ZMQError: Address already in use (addr='tcp://127.0.0.1:5580')
+[2026-09-28 20:57:19,283] [ROMEO] worker thread died; exiting 1
+
+FAIL  a signed message crosses untranslated (non-package)
+      AssertionError: None
+FAIL  a package_* message is translated on output
+      AssertionError: None
+  ok  an unsigned message straight at juliet is rejected
+  ok  a replayed or stale signed message is rejected
+FAIL  romeo rejects pre-translated payloads
+      AssertionError: 'Rejected: pre-translated' not seen (rc=1); got:
+Exception in thread Thread-1 (run):
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/user/Phoenix-DevOps-oS/sector3/romeo_juliet/romeo.py", line 166, in run
+    recv_sock.bind(f"tcp://{BIND_ADDR}:{ROMEO_RECV_PORT}")
+  File "/usr/local/lib/python3.11/dist-packages/zmq/sugar/socket.py", line 322, in bind
+    super().bind(addr)
+  File "zmq/backend/cython/_zmq.py", line 1009, in zmq.backend.cython._zmq.Socket.bind
+  File "zmq/backend/cython/_zmq.py", line 190, in zmq.backend.cython._zmq._check_rc
+zmq.error.ZMQError: Address already in use (addr='tcp://127.0.0.1:5580')
+[2026-09-28 20:57:19,283] [ROMEO] worker thread died; exiting 1
+
+  ok  barrel 2 gets 5583/5584 (no collision with barrel 1)
+FAIL  SIGTERM stops both cleanly
+      AssertionError: (1, 0)
+
+4 passing, 5 failing
+SKIP-REASON: pyzmq not installed
+# exit=0

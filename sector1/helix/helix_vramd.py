@@ -187,8 +187,14 @@ def serve(path=None, manager=None, ready=None):
     stop = threading.Event()
 
     def _stop(*_):
-        stop.set()
-        server.shutdown()
+        # Python runs signal handlers on the main thread, which is the thread
+        # inside serve_forever(); shutdown() waits for serve_forever() to
+        # return, so calling it here deadlocks (round-3 S1-F22: alive 8 s
+        # after SIGTERM, killed by systemd's TimeoutStopSec). Ask from a
+        # helper thread instead.
+        if not stop.is_set():
+            stop.set()
+            threading.Thread(target=server.shutdown, name="helix-vramd-stop", daemon=True).start()
 
     if threading.current_thread() is threading.main_thread():
         signal.signal(signal.SIGTERM, _stop)

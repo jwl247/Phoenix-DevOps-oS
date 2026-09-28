@@ -112,6 +112,38 @@ echo "== clone-out restores a specific version"
 ( cd "${WORK}" && bash "${INTAKE}" clone alpha.txt v1 >/dev/null 2>&1 )
 ok "[[ \"\$(cat '${WORK}/alpha.txt')\" == 'one' ]]" "intake clone alpha.txt v1 -> 'one'"
 
+echo "== pull: a directory suite comes back from D1+R2 onto an empty pool, verified"
+P="${SRC}/pullme"; mkdir -p "${P}/lib"
+printf 'echo pulled\n' > "${P}/go.sh"; printf 'x=1\n' > "${P}/lib/mod.py"
+cat > "${P}/pullme.suite.json" <<'J'
+{ "name": "pullme", "version": "2.1.0", "type": "service", "entry": "go.sh", "runtime": "bash" }
+J
+run_intake "${P}"
+PHEX=$(hexof pullme)
+ok "[[ -f '${STATE}/objects/${PHEX}' ]] && grep -q '\"type\": \"directory\"' '${STATE}/objects/${PHEX}'" "directory manifest uploaded to R2 at the dir hex"
+ok "grep -q '\"hash_sha3\"' '${STATE}/objects/${PHEX}'" "manifest entries carry hash_sha3"
+mv "${CLONEPOOL_DIR}" "${CLONEPOOL_DIR}.intaker"; mkdir -p "${CLONEPOOL_DIR}"   # a second machine: empty pool
+run_intake pull pullme
+ok "[[ $(cat ${WORK}/last.rc) -eq 0 ]]" "intake pull pullme exits 0"
+ok "[[ -f '${CLONEPOOL_DIR}/pullme/go.sh' && -f '${CLONEPOOL_DIR}/pullme/lib/mod.py' && -f '${CLONEPOOL_DIR}/pullme/.suite.json' ]]" "files + .suite.json restored under clonepool/pullme/"
+ok "cmp -s '${CLONEPOOL_DIR}/pullme/lib/mod.py' '${P}/lib/mod.py'" "restored bytes identical"
+ok "[[ $(reqs GET /clonepool/$(hexof mod.py)/versions/$(sha3p ${P}/lib/mod.py)) -ge 1 ]]" "fetched by immutable version key"
+ok "grep -q 'runnable: usys run pullme' '${WORK}/last.out'" "pull says it is runnable"
+
+echo "== pull: tampered R2 bytes are refused and nothing is written"
+printf 'x=EVIL\n' > "${STATE}/objects/$(hexof mod.py)__versions__$(sha3p ${P}/lib/mod.py)"
+rm -rf "${CLONEPOOL_DIR}/pullme"
+run_intake pull pullme
+ok "[[ $(cat ${WORK}/last.rc) -ne 0 ]]" "pull exits non-zero on a hash mismatch"
+ok "[[ ! -d '${CLONEPOOL_DIR}/pullme' ]]" "no suite directory left behind"
+ok "grep -q 'INTEGRITY FAILURE' '${WORK}/last.out'" "reason is stated"
+
+echo "== pull: single file comes back verified"
+run_intake pull alpha.txt
+ok "[[ $(cat ${WORK}/last.rc) -eq 0 && -f '${CLONEPOOL_DIR}/alpha.txt/alpha.txt' ]]" "single-file pull restores clonepool/alpha.txt/alpha.txt"
+ok "grep -q '\"runtime\": \"binary\"' '${CLONEPOOL_DIR}/alpha.txt/.suite.json' && grep -q '\"version\": \"3.0.0\"' '${CLONEPOOL_DIR}/alpha.txt/.suite.json'" "stub manifest: runtime by extension, version v3 -> 3.0.0"
+rm -rf "${CLONEPOOL_DIR}"; mv "${CLONEPOOL_DIR}.intaker" "${CLONEPOOL_DIR}"
+
 echo "== wrong token is refused before any file is touched"
 rm -rf "${CLONEPOOL_DIR}/T1/$(hexof zeta.txt)"
 printf 'z\n' > "${SRC}/zeta.txt"

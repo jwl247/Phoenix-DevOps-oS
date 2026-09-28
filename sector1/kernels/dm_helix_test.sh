@@ -5,6 +5,11 @@
 # Exit code = number of failed checks (0 = all passed).
 set -u
 IMG=${HELIX_TEST_IMG:-$HOME/helixdm/origin.img}
+# This script formats $IMG (mkfs.ext4 -F). It exists for IMAGE FILES. A block
+# device here would be wiped — CLAUDE.md AI SAFETY RULES class of accident.
+if [ -b "$IMG" ] && [ "${HELIX_TEST_ALLOW_BLOCK:-0}" != 1 ]; then
+  echo "refusing: HELIX_TEST_IMG=$IMG is a block device (set HELIX_TEST_ALLOW_BLOCK=1 only for a disk you mean to wipe)"; exit 3
+fi
 LOG=${HELIX_TEST_LOG:-./dm_helix_test-$(date +%Y%m%d-%H%M%S).log}
 exec > >(tee "$LOG") 2>&1
 fail=0; ok(){ echo "  ok   $1"; }; bad(){ echo "  FAIL $1"; fail=$((fail+1)); }

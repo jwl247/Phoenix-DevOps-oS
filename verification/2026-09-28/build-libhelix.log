@@ -1,5 +1,5 @@
 # build-libhelix
-# host=claude-cloud commit=2ddcd24 dirty=true utc=2026-09-28T20:20:56Z
+# host=claude-cloud commit=ba5f834 dirty=true utc=2026-09-28T20:59:02Z
 # $ cd sector1/kernels/libhelix && gcc -O2 -shared -fPIC -o /tmp/libhelix-verify.so libhelix.c && echo built
 
 built

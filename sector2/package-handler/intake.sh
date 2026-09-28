@@ -232,6 +232,8 @@ get_checksum() {
   fi
 }
 
+sha3_of() { openssl dgst -sha3-512 -r "${1}" 2>/dev/null | awk '{print $1}'; }
+
 # ── Filetype detection ────────────────────────────────────────
 detect_filetype() {
   local ext="${1##*.}"
@@ -364,6 +366,7 @@ evict_old_versions() {
   local pool_dir="$1"
   local name="$2"
   local silent="${3:-false}"
+  local f idx   # this function is called from inside intake_directory's `for f` loop
 
   # Get latest file — never evict this one
   local latest
@@ -1285,6 +1288,7 @@ show_help() {
     intake clone <file.lol>          Short syntax works too
 
   MAINTENANCE:
+    intake pull <name>               Restore a suite/file from D1 + R2, hash-verified, into clonepool/<name>/
     intake prune                     Evict versions beyond ${MAX_VERSIONS} per file across pool
     intake status                    Show clonepool status
     intake help                      This screen
@@ -1340,6 +1344,11 @@ is_skip_ext() {
 
 is_known_type() {
   local file="$1"
+  local base; base=$(basename "${file}")
+  # extensionless build/script files are part of a directory suite too:
+  # Makefile, Dockerfile, and anything with a shebang (bin/usys, helix_run …)
+  case "${base}" in Makefile|makefile|GNUmakefile|Dockerfile|Justfile) return 0 ;; esac
+  if [[ "${base}" != *.* ]] && head -c 2 "${file}" 2>/dev/null | grep -q '^#!'; then return 0; fi
   local ext="${file##*.}"; ext="${ext,,}"
   case "${ext}" in
     sh|bash|zsh|py|js|mjs|cjs|ts|json|yaml|yml|toml|env|\
@@ -1532,6 +1541,7 @@ intake_directory() {
     local category_hex; category_hex=$(filetype_to_category "${filetype}")
     local size;      size=$(get_size "${f}")
     local checksum;  checksum=$(get_checksum "${f}")
+    local file_sha3; file_sha3=$(sha3_of "${f}")
 
     # Was this file flagged sensitive earlier? (already survived the
     # proceed/exclude gate above — if excluded, it's not in known_files)
@@ -1557,7 +1567,7 @@ intake_directory() {
     if [[ "${dup_result}" == dup:* ]]; then
       local existing_ver; existing_ver=$(basename "${dup_result#dup:}" | grep -o '^v[0-9]*')
       log "INFO" "dir dup (pool unchanged, snapshot has it): ${rel} = ${existing_ver}"
-      manifest_entries+="  {\"hex\":\"$(json_escape "${file_hex}")\",\"name\":\"$(json_escape "${file_orig}")\",\"path\":\"$(json_escape "${rel}")\",\"version\":\"$(json_escape "${existing_ver}")\",\"checksum\":\"$(json_escape "${checksum}")\"},"
+      manifest_entries+="  {\"hex\":\"$(json_escape "${file_hex}")\",\"name\":\"$(json_escape "${file_orig}")\",\"path\":\"$(json_escape "${rel}")\",\"version\":\"$(json_escape "${existing_ver}")\",\"checksum\":\"$(json_escape "${checksum}")\",\"hash_sha3\":\"${file_sha3}\"},"
       (( success++ )) || true
       printf "\r  Phoenix  %d / %d  %-60s" "${success}" "${#known_files[@]}" "${rel}"
       continue
@@ -1581,7 +1591,7 @@ intake_directory() {
     # Auto evict old versions
     evict_old_versions "${file_pool}" "${file_orig}" "true"
 
-    manifest_entries+="  {\"hex\":\"$(json_escape "${file_hex}")\",\"name\":\"$(json_escape "${file_orig}")\",\"path\":\"$(json_escape "${rel}")\",\"version\":\"$(json_escape "${file_version}")\",\"checksum\":\"$(json_escape "${checksum}")\"},"
+    manifest_entries+="  {\"hex\":\"$(json_escape "${file_hex}")\",\"name\":\"$(json_escape "${file_orig}")\",\"path\":\"$(json_escape "${rel}")\",\"version\":\"$(json_escape "${file_version}")\",\"checksum\":\"$(json_escape "${checksum}")\",\"hash_sha3\":\"${file_sha3}\"},"
     (( success++ )) || true
     # Phoenix progress line — single in-place update, no per-file scroll
     printf "\r  Phoenix  %d / %d  %-60s" "${success}" "${#known_files[@]}" "${rel}"
@@ -1620,8 +1630,13 @@ DIRSIDECAR
 
   custody_log_local "${hex}" "${dirname}" "dir_intake" "${version}" \
     "${dirpath}" "${snapshot_dir}" "white" "${backend}"
+  # The directory's D1 row hashes its sidecar and its R2 object IS the
+  # sidecar: the manifest (files[] with per-file hex + hash_sha3) is then
+  # retrievable and verifiable from anywhere, which is what `intake pull`
+  # / `usys pull` restore a directory suite from (2026-09-28).
   report_clonepool "${hex}" "${dirname}" "${version}" "white" \
-    "${pool_dir}" "${dir_sidecar}" "1" "${total_size}" "${any_sensitive_included}"
+    "${pool_dir}" "${dir_sidecar}" "1" "${total_size}" "${any_sensitive_included}" "${dir_sidecar}"
+  upload_to_r2 "${hex}" "${dir_sidecar}"
   report_custody "${hex}" "${dirname}" "dir_intake" "white" "${backend}"
   report_glossary "${hex}" "${dirname}" \
     "Directory snapshot: ${#known_files[@]} files, ${version}" \
@@ -1750,6 +1765,121 @@ intake_clone_directory() {
   echo "[intake:OK] $(ls "${dest}" | wc -l | tr -d ' ') files restored"
   echo "[intake:OK] This is the ${ver} snapshot — ready to use"
 }
+# ══════════════════════════════════════════════════════════════
+# PULL — restore a suite from D1 + R2 onto a machine that has nothing
+# ══════════════════════════════════════════════════════════════
+# intake pull <name>  →  ${CLONEPOOL_DIR}/<name>/ (runnable: .suite.json + files)
+#   directory suite: GET the manifest (its R2 object), verify it against the
+#     D1 row's SHA3-512, then every file from its immutable version key
+#     <filehex>/versions/<sha3[0:16]> and verify the full SHA3-512;
+#   single file: GET the current bytes, verify against the row's SHA3-512.
+# Nothing unverified is ever written into the suite directory: a mismatch
+# stops the pull and leaves nothing behind. Needs PHOENIX_AUTH, python3.
+intake_pull() {
+  local name="${1:-}"
+  [[ -z "${name}" ]] && { echo "[intake] Usage: intake pull <name>"; return 1; }
+  [[ "${name}" == *.lol ]] && name="${name%.lol}"
+  [[ -z "${PHOENIX_AUTH}" ]] && { echo "[intake:MISS] PHOENIX_AUTH not set — nothing to pull from"; return 1; }
+  local py; py=$(_find_python 2>/dev/null || true)
+  [[ -z "${py}" ]] && { echo "[intake:MISS] python3 is needed for pull (manifest parsing)"; return 1; }
+  case "${name}" in */*|*\\*|.*|T1|T2|T3|T4) echo "[intake:MISS] refusing suite name '${name}'"; return 1 ;; esac
+
+  local hdr=(-H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}")
+  local meta; meta=$(curl -s "${hdr[@]}" "${WORKER_URL}/clonepool/$(python_urlencode "${name}")?meta=true" 2>/dev/null || true)
+  local hex row_sha3 row_version
+  read -r hex row_sha3 row_version < <("${py}" - "${meta}" <<'PYEOF'
+import json, sys
+try:
+    m = json.loads(sys.argv[1])
+except Exception:
+    print("", "", ""); sys.exit(0)
+row = m.get("result") or m.get("item") or m
+print(row.get("hex_id") or "", (row.get("hash_sha3") or "").lower(), row.get("version") or "")
+PYEOF
+)
+  [[ -z "${hex}" ]] && { echo "[intake:MISS] '${name}' is not in D1"; return 1; }
+  [[ -z "${row_sha3}" ]] && { echo "[intake:MISS] '${name}' has no integrity baseline in D1 — refusing an unverifiable pull"; return 1; }
+
+  local tmp; tmp=$(mktemp -d)
+  local code; code=$(curl -s -o "${tmp}/object" -w "%{http_code}" "${hdr[@]}" "${WORKER_URL}/clonepool/${hex}" 2>/dev/null || echo 000)
+  [[ "${code}" != "200" ]] && { echo "[intake:MISS] '${name}' is in D1 but its bytes are not in R2 (${code})"; rm -rf "${tmp}"; return 1; }
+  local got; got=$(sha3_of "${tmp}/object")
+  if [[ "${got}" != "${row_sha3}" ]]; then
+    echo " ⚠  INTEGRITY FAILURE — R2 bytes of '${name}' do not match the D1 baseline (${got:0:12} vs ${row_sha3:0:12}). Nothing written."
+    log "WARN" "pull BLOCKED (hash mismatch): ${name}"; rm -rf "${tmp}"; return 1
+  fi
+
+  local dest="${CLONEPOOL_DIR}/${name}" stage="${tmp}/suite"
+  mkdir -p "${stage}"
+  local kind="file"
+  if grep -q '"type":[[:space:]]*"directory"' "${tmp}/object" 2>/dev/null; then
+    kind="directory"
+    local n_ok=0 n_total=0 fhex fpath fsha3 fcode
+    while IFS=$'\t' read -r fhex fpath fsha3; do
+      [[ -z "${fhex}" ]] && continue
+      n_total=$((n_total+1))
+      case "${fpath}" in /*|*../*|../*) echo "[intake:MISS] manifest path '${fpath}' refused"; rm -rf "${tmp}"; return 1 ;; esac
+      if [[ -z "${fsha3}" ]]; then
+        echo "[intake:MISS] '${fpath}' has no hash_sha3 in the manifest (intaked before 1.8.0) — re-intake the directory"; rm -rf "${tmp}"; return 1
+      fi
+      fcode=$(curl -s -o "${tmp}/f" -w "%{http_code}" "${hdr[@]}" "${WORKER_URL}/clonepool/${fhex}/versions/${fsha3:0:16}" 2>/dev/null || echo 000)
+      if [[ "${fcode}" != "200" ]]; then
+        # older intake: fall back to the current object, still verified below
+        fcode=$(curl -s -o "${tmp}/f" -w "%{http_code}" "${hdr[@]}" "${WORKER_URL}/clonepool/${fhex}" 2>/dev/null || echo 000)
+        [[ "${fcode}" != "200" ]] && { echo "[intake:MISS] '${fpath}' bytes not in R2 (${fcode})"; rm -rf "${tmp}"; return 1; }
+      fi
+      if [[ "$(sha3_of "${tmp}/f")" != "${fsha3}" ]]; then
+        echo " ⚠  INTEGRITY FAILURE — '${fpath}' does not match its manifest hash. Nothing written."
+        log "WARN" "pull BLOCKED (file hash mismatch): ${name}/${fpath}"; rm -rf "${tmp}"; return 1
+      fi
+      mkdir -p "${stage}/$(dirname "${fpath}")"
+      mv "${tmp}/f" "${stage}/${fpath}"
+      n_ok=$((n_ok+1))
+      printf "\r  Phoenix  %d / %d  %-60s" "${n_ok}" "${n_total}" "${fpath}"
+    done < <("${py}" - "${tmp}/object" <<'PYEOF'
+import json, sys
+m = json.load(open(sys.argv[1]))
+for f in m.get("files", []):
+    print(f.get("hex", ""), f.get("path", ""), (f.get("hash_sha3") or "").lower(), sep="\t")
+PYEOF
+)
+    echo ""
+    cp "${tmp}/object" "${stage}/.pool-manifest.json"
+    # a suite manifest inside the snapshot becomes .suite.json (same rule as intake)
+    local cand mf=""
+    for cand in "${stage}/.suite.json" "${stage}"/*.suite.json; do [[ -f "${cand}" ]] && { mf="${cand}"; break; }; done
+    if [[ -n "${mf}" && "${mf}" != "${stage}/.suite.json" ]]; then cp "${mf}" "${stage}/.suite.json"; fi
+    [[ -z "${mf}" ]] && log "INFO" "pull: ${name} has no suite manifest; restored as a plain directory"
+  else
+    mv "${tmp}/object" "${stage}/${name}"
+    local runtime="binary"
+    case "${name}" in *.py) runtime=python ;; *.sh|*.bash) runtime=bash ;; *.ps1) runtime=powershell ;; *.js|*.mjs|*.cjs) runtime=node ;; *.qcow2|*.img) runtime=qemu ;; esac
+    local semver; semver=$(printf '%s' "${row_version}" | sed -E 's/^v([0-9]+)$/\1.0.0/; t; s/^[0-9]+(\.[0-9]+){1,3}$/&/; t; s/.*/0.0.0/')
+    cat > "${stage}/.suite.json" <<EOF
+{
+  "name": "$(json_escape "${name}")",
+  "version": "${semver}",
+  "description": "Pulled from Phoenix D1/R2 — hex ${hex:0:16}",
+  "type": "script",
+  "entry": "$(json_escape "${name}")",
+  "runtime": "${runtime}",
+  "metadata": { "hex_id": "${hex}", "hash_sha3": "${row_sha3}", "pulled_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)", "source": "D1+R2" }
+}
+EOF
+  fi
+
+  # everything verified: swap the suite directory in atomically
+  rm -rf "${dest}.pulling"; mv "${stage}" "${dest}.pulling"
+  [[ -d "${dest}" ]] && { rm -rf "${dest}.previous"; mv "${dest}" "${dest}.previous"; }
+  mv "${dest}.pulling" "${dest}"
+  rm -rf "${tmp}"
+  custody_log_local "${hex}" "${name}" "pull" "${row_version}" "${WORKER_URL}" "${dest}" "white" "user"
+  report_custody "${hex}" "${name}" "pull" "white" "user"
+  echo "[intake:OK] ${name} (${kind}) pulled and verified → ${dest}"
+  [[ -f "${dest}/.suite.json" ]] && echo "[intake:OK] runnable: usys run ${name}   (Linux: cd ${dest} && bash <entry from .suite.json>)"
+  return 0
+}
+
 # ── .lol resolver ─────────────────────────────────────────────
 resolve_lol() {
   local arg="${1:-}"
@@ -1786,6 +1916,7 @@ case "${1:-help}" in
     fi
     ;;
   prune)          intake_prune ;;
+  pull)           shift; intake_pull "${1:-}" ;;
   backend)        shift; intake_from_backend "$@" ;;
   *)
     first_arg=$(normalize_path "$(resolve_lol "${1:-}")")

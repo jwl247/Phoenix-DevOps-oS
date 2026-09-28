@@ -1,5 +1,5 @@
 # wrangler-dry-run-phoenix-office-worker
-# host=claude-cloud commit=2ddcd24 dirty=true utc=2026-09-28T20:20:44Z
+# host=claude-cloud commit=ba5f834 dirty=true utc=2026-09-28T20:58:51Z
 # $ cd phoenix-office/worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5
 
 env.OFFICE_DOCS (phoenix-office-documents)                              R2 Bucket                 

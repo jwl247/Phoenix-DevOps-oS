@@ -1,8 +1,8 @@
 # test-helix-vramd
-# host=claude-cloud commit=d148904 dirty=true utc=2026-09-28T20:31:02Z
+# host=claude-cloud commit=ba5f834 dirty=true utc=2026-09-28T20:57:11Z
 # $ HELIX_VRAM_NO_KERNEL=1 python3 sector1/helix/test_helix_vramd.py
 
-helix_vramd: listening on /tmp/vramd-test-fm8vf8qi/helix-vram.sock (kernel standalone)
+helix_vramd: listening on /tmp/vramd-test-ew5c7qud/helix-vram.sock (kernel standalone)
   ok  socket is 0660
   ok  ping + stat
   ok  alloc/read/write/free
@@ -14,6 +14,7 @@ helix_vramd: listening on /tmp/vramd-test-fm8vf8qi/helix-vram.sock (kernel stand
   ok  status CLI
 helix_vramd: stopped
   ok  stops cleanly, socket removed
+  ok  real SIGTERM in a subprocess stops it (no deadlock)
 
-10 passing, 0 failing
+11 passing, 0 failing
 # exit=0

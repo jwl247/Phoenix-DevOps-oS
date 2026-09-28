@@ -186,5 +186,35 @@ t("8 clients at once", many_clients_at_once)
 t("status CLI", status_cli)
 t("stops cleanly, socket removed", stops_cleanly)
 
-print(f"\n{10 - failures} passing, {failures} failing")
+
+def real_sigterm_in_a_subprocess():
+    """The daemon as systemd runs it: main thread in serve_forever, SIGTERM
+    from outside, must exit 0 within a few seconds and remove its socket."""
+    import subprocess, signal as _sig
+    sock = os.path.join(TMP, "sig.sock")
+    env = dict(os.environ, HELIX_VRAM_SOCK=sock, HELIX_VRAM_NO_KERNEL="1", HELIX_VRAM_STRAND_B=TMP,
+               HELIX_VRAM_HOT_MB="1", HELIX_VRAM_WARM_MB="1", HELIX_VRAM_COLD_MB="1", HELIX_VRAM_STRAND_B_MB="2")
+    p = subprocess.Popen([sys.executable, os.path.join(HERE, "helix_vramd.py"), "serve"], env=env,
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    for _ in range(100):
+        if os.path.exists(sock):
+            break
+        time.sleep(0.1)
+    with helix_vramd.HelixVramClient(sock) as c:
+        assert c.ping()
+    t0 = time.time()
+    p.send_signal(_sig.SIGTERM)
+    try:
+        out, _ = p.communicate(timeout=10)
+    except subprocess.TimeoutExpired:
+        p.kill(); raise AssertionError("still alive 10 s after SIGTERM (deadlock)")
+    assert p.returncode == 0, (p.returncode, out[-300:])
+    assert time.time() - t0 < 8, "took too long to stop"
+    assert not os.path.exists(sock), "socket left behind"
+    assert "stopped" in out, out[-300:]
+
+
+t("real SIGTERM in a subprocess stops it (no deadlock)", real_sigterm_in_a_subprocess)
+
+print(f"\n{11 - failures} passing, {failures} failing")
 sys.exit(failures)

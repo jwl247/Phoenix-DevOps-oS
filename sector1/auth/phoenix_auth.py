@@ -23,6 +23,13 @@ from pathlib import Path
 
 CATALOG_DB    = os.path.expanduser("~/.catalog/catalog.db")
 AUTH_DB       = os.path.expanduser("~/.catalog/phoenix_auth.db")
+
+
+def _auth_connect():
+    """sqlite3 will not create ~/.catalog/ itself: on a fresh HOME every
+    connect raised "unable to open database file" (round-3 S1-F24)."""
+    os.makedirs(os.path.dirname(AUTH_DB), exist_ok=True)
+    return sqlite3.connect(AUTH_DB)
 LOG_DIR       = os.path.expanduser("~/.unitedsys/logs")
 VERSION       = "0.1.0"
 MAX_ATTEMPTS  = 3
@@ -115,7 +122,7 @@ def fingerprint(signals):
 
 # ── Auth DB ──────────────────────────────────────────────────
 def auth_db_init():
-    conn = sqlite3.connect(AUTH_DB)
+    conn = _auth_connect()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS authorized_machines (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,7 +139,7 @@ def auth_db_init():
 
 def is_authorized(fp):
     auth_db_init()
-    conn = sqlite3.connect(AUTH_DB)
+    conn = _auth_connect()
     row = conn.execute(
         "SELECT locked_until, attempt_count FROM authorized_machines WHERE fingerprint=?",
         (fp,)
@@ -153,7 +160,7 @@ def is_authorized(fp):
 def authorize_machine(fp):
     """One-time machine authorization"""
     auth_db_init()
-    conn = sqlite3.connect(AUTH_DB)
+    conn = _auth_connect()
     now  = datetime.utcnow().isoformat()
     try:
         conn.execute("""
@@ -173,7 +180,7 @@ def authorize_machine(fp):
 
 def record_failed_attempt(fp):
     auth_db_init()
-    conn = sqlite3.connect(AUTH_DB)
+    conn = _auth_connect()
     row = conn.execute(
         "SELECT attempt_count FROM authorized_machines WHERE fingerprint=?",
         (fp,)
@@ -236,7 +243,7 @@ if __name__ == "__main__":
 
     if args.status:
         auth_db_init()
-        conn = sqlite3.connect(AUTH_DB)
+        conn = _auth_connect()
         rows = conn.execute(
             "SELECT hostname, authorized_at, last_seen, attempt_count FROM authorized_machines"
         ).fetchall()

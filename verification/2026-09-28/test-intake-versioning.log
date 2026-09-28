@@ -1,5 +1,5 @@
 # test-intake-versioning
-# host=claude-cloud commit=d148904 dirty=true utc=2026-09-28T20:30:53Z
+# host=claude-cloud commit=ba5f834 dirty=true utc=2026-09-28T20:57:01Z
 # $ bash sector2/package-handler/tests/test_intake_versioning.sh
 
 == to_hex without xxd matches python
@@ -34,8 +34,23 @@
   ok   re-intake after rotation: v3 in T1, T2 bucket gone
 == clone-out restores a specific version
   ok   intake clone alpha.txt v1 -> 'one'
+== pull: a directory suite comes back from D1+R2 onto an empty pool, verified
+  ok   directory manifest uploaded to R2 at the dir hex
+  ok   manifest entries carry hash_sha3
+  ok   intake pull pullme exits 0
+  ok   files + .suite.json restored under clonepool/pullme/
+  ok   restored bytes identical
+  ok   fetched by immutable version key
+  ok   pull says it is runnable
+== pull: tampered R2 bytes are refused and nothing is written
+  ok   pull exits non-zero on a hash mismatch
+  ok   no suite directory left behind
+  ok   reason is stated
+== pull: single file comes back verified
+  ok   single-file pull restores clonepool/alpha.txt/alpha.txt
+  ok   stub manifest: runtime by extension, version v3 -> 3.0.0
 == wrong token is refused before any file is touched
   ok   nothing written with a rejected token
 
-passed 24, failed 0
+passed 36, failed 0
 # exit=0
