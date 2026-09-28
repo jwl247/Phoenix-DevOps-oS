@@ -1,20 +1,30 @@
 """
 Helix Translator Layer
-Mini version that translates between app requests and Helix storage
+Translates between app requests and the real Helix memory manager
+(HelixMemoryManager in helix_vram.py — Strand A/RAM + Strand B/disk relief,
+the same one paging.py and the kernel share).
 
-INGRESS: App request → Helix language
-EGRESS:  Helix data → App format
+INGRESS: App request  -> Helix key
+EGRESS:  Helix data   -> App format
 
 Think of it like a bilingual interpreter sitting between two people
-who don't speak the same language.
+who don't speak the same language. Wired to her real backend, not a mock:
+malloc/read/write/free below call HelixMemoryManager.allocate/read/write/free
+directly, so data really lives in RAM until she relieves it to Strand B under
+pressure, same as everything else that goes through her.
 """
 
+import os
+import sys
 import time
-import ctypes
-import struct
-from typing import Any, Optional, Dict, Tuple
+from typing import Any, Optional, Dict
 from dataclasses import dataclass
-from collections import defaultdict
+
+_here = os.path.dirname(os.path.abspath(__file__))
+if _here not in sys.path:
+    sys.path.insert(0, _here)
+
+from helix_vram import HelixMemoryManager, HelixFullError
 
 # ============================================================================
 # TRANSLATOR DATA STRUCTURES
@@ -52,11 +62,14 @@ class HelixTranslator:
     This is the HANDSHAKE layer.
     """
     
-    def __init__(self, helix_backend):
+    def __init__(self, helix_backend: Optional[HelixMemoryManager] = None):
         """
-        helix_backend: The actual HelixSystem instance
+        helix_backend: a real HelixMemoryManager. Pass the shared instance the
+        rest of the process already uses (paging.py, etc.) when one exists --
+        a fresh one here starts her own Dandelion ticker thread. Only left
+        default-constructible for standalone use/testing.
         """
-        self.helix = helix_backend
+        self.helix = helix_backend if helix_backend is not None else HelixMemoryManager()
         
         # Translation tables (the handshake maps)
         self.ptr_to_key: Dict[int, TranslationEntry] = {}
@@ -102,15 +115,15 @@ class HelixTranslator:
         
         # Step 1: Generate unique Helix key
         helix_key = f"mem_{self.next_fake_pointer:016x}_{size}"
-        
+
         # Step 2: Allocate in Helix
         # (App data starts as empty, filled later with writes)
         data = bytearray(size)  # Initialize with zeros
-        success = self.helix.memory.malloc(helix_key, bytes(data))
-        
-        if not success:
-            return 0  # NULL pointer (allocation failed)
-        
+        try:
+            self.helix.allocate(helix_key, bytes(data))
+        except HelixFullError:
+            return 0  # NULL pointer -- Strand A and Strand B both full
+
         # Step 3: Generate fake pointer for app
         fake_ptr = self.next_fake_pointer
         self.next_fake_pointer += 0x1000  # Increment by page size
@@ -154,8 +167,8 @@ class HelixTranslator:
         helix_key = entry.helix_key
         
         # Step 2: Free from Helix
-        self.helix.memory.free(helix_key)
-        
+        self.helix.free(helix_key)
+
         # Step 3: Remove translation
         del self.ptr_to_key[pointer]
         del self.key_to_ptr[helix_key]
@@ -185,11 +198,11 @@ class HelixTranslator:
         entry.access()
         
         # Step 2: Read from Helix
-        data = self.helix.memory.read(entry.helix_key)
-        
+        data = self.helix.read(entry.helix_key)
+
         if data is None:
             return None
-        
+
         # Step 3: Return requested slice
         self.stats['egress_calls'] += 1
         
@@ -221,23 +234,23 @@ class HelixTranslator:
         entry.access()
         
         # Step 2: Read existing data
-        existing = self.helix.memory.read(entry.helix_key)
-        
+        existing = self.helix.read(entry.helix_key)
+
         if existing is None:
             # First write, create buffer
             buffer = bytearray(entry.size)
         else:
             buffer = bytearray(existing)
-        
+
         # Step 3: Modify at offset
         end = offset + len(data)
         buffer[offset:end] = data
-        
+
         # Step 4: Write back
-        success = self.helix.memory.write(entry.helix_key, bytes(buffer))
-        
+        success = self.helix.write(entry.helix_key, bytes(buffer))
+
         self.stats['egress_calls'] += 1
-        
+
         return success
     
     # ========================================================================
@@ -248,24 +261,20 @@ class HelixTranslator:
         """
         INGRESS: App opens file
         EGRESS:  Return fake file descriptor
-        
+
         Translation:
         1. Generate fake FD
-        2. Check if file in Helix cache
-        3. If not, read from disk into cache
-        4. Map FD → filepath
-        5. Return FD
+        2. Map FD -> filepath (the filepath itself is her key; lazily
+           allocated on first write, read() answers None until then)
+        3. Return FD
         """
         self.stats['ingress_calls'] += 1
-        
+
         # Step 1: Generate fake FD
         fake_fd = self.next_fake_fd
         self.next_fake_fd += 1
-        
-        # Step 2-3: Helix FS handles caching
-        # (Happens automatically when we read)
-        
-        # Step 4: Map FD → path
+
+        # Step 2: Map FD → path
         self.fd_to_path[fake_fd] = filepath
         self.path_to_fd[filepath] = fake_fd
         
@@ -290,12 +299,12 @@ class HelixTranslator:
         
         # Step 1: Translate FD
         filepath = self.fd_to_path[fd]
-        
-        # Step 2: Read from Helix FS
-        data = self.helix.fs.read_file(filepath)
-        
+
+        # Step 2: Read from Helix (filepath is the key)
+        data = self.helix.read(filepath)
+
         self.stats['egress_calls'] += 1
-        
+
         # Step 3: Return requested size
         if data:
             return data[:size]
@@ -317,12 +326,13 @@ class HelixTranslator:
         
         # Step 1: Translate FD
         filepath = self.fd_to_path[fd]
-        
-        # Step 2: Write to Helix FS
-        self.helix.fs.write_file(filepath, data)
-        
+
+        # Step 2: Write to Helix (filepath is the key; write() allocates
+        # on first use, same as a real HelixMemoryManager.write() call)
+        self.helix.write(filepath, data)
+
         self.stats['egress_calls'] += 1
-        
+
         return True
     
     def translate_close(self, fd: int) -> bool:
@@ -397,151 +407,51 @@ class HelixTranslator:
         print()
 
 # ============================================================================
-# DEMO
+# SELF-TEST -- exercises the real HelixMemoryManager, not a mock
 # ============================================================================
 
-def demo():
-    """Demonstrate the translator layer"""
-    print("=" * 70)
-    print("🔄 HELIX TRANSLATOR LAYER DEMO")
-    print("=" * 70)
-    print()
-    print("This mini translator sits between apps and Helix")
-    print("INGRESS: App request → Helix storage")
-    print("EGRESS:  Helix data → App format")
-    print()
-    
-    # Import the Helix backend (from previous artifact)
-    # For this demo, we'll use a mock
-    class MockHelix:
-        def __init__(self):
-            self.memory_store = {}
-            self.file_store = {}
-            
-            class MockMemory:
-                def __init__(self, store):
-                    self.store = store
-                
-                def malloc(self, key, data):
-                    self.store[key] = data
-                    return True
-                
-                def free(self, key):
-                    self.store.pop(key, None)
-                    return True
-                
-                def read(self, key):
-                    return self.store.get(key)
-                
-                def write(self, key, data):
-                    self.store[key] = data
-                    return True
-            
-            class MockFS:
-                def __init__(self, store):
-                    self.store = store
-                
-                def read_file(self, path):
-                    return self.store.get(path)
-                
-                def write_file(self, path, data):
-                    self.store[path] = data
-            
-            self.memory = MockMemory(self.memory_store)
-            self.fs = MockFS(self.file_store)
-    
-    # Initialize
-    helix = MockHelix()
+def _selftest():
+    """Round-trips real data through the real backend and asserts the
+    results, instead of narrating a scripted demo. Non-zero exit on failure."""
+    helix = HelixMemoryManager(use_kernel=False)  # standalone: no kernel needed
     translator = HelixTranslator(helix)
-    
-    print("TEST 1: Memory Translation (malloc/write/read/free)")
-    print("-" * 70)
-    
-    # App thinks it's calling malloc
-    ptr1 = translator.translate_malloc(1024)
-    print(f"✓ malloc(1024) → pointer {hex(ptr1)}")
-    
-    # App writes data
-    data = b"Hello from the app!"
-    success = translator.translate_write(ptr1, data)
-    print(f"✓ write({hex(ptr1)}, data) → {success}")
-    
-    # App reads data back
-    read_data = translator.translate_read(ptr1, len(data))
-    print(f"✓ read({hex(ptr1)}, {len(data)}) → {read_data}")
-    
-    # Inspect what's happening behind the scenes
-    info = translator.inspect_pointer(ptr1)
-    print(f"\n  Behind the scenes:")
-    print(f"  App pointer:  {info['app_pointer']}")
-    print(f"  Helix key:    {info['helix_key']}")
-    print(f"  Access count: {info['access_count']}")
-    
-    # App frees memory
-    success = translator.translate_free(ptr1)
-    print(f"\n✓ free({hex(ptr1)}) → {success}")
-    print()
-    
-    print("TEST 2: File Translation (open/write/read/close)")
-    print("-" * 70)
-    
-    # App opens file
+
+    # Memory: malloc/write/read/free
+    ptr = translator.translate_malloc(1024)
+    assert ptr != 0, "malloc returned NULL"
+    payload = b"Hello from the app!"
+    assert translator.translate_write(ptr, payload), "write failed"
+    assert translator.translate_read(ptr, len(payload)) == payload, "read mismatch"
+    info = translator.inspect_pointer(ptr)
+    assert info is not None and info["helix_key"].startswith("mem_"), "inspect_pointer wrong"
+    assert info["access_count"] >= 1, "touch() should have counted the read"
+    assert translator.translate_free(ptr), "free failed"
+    assert translator.translate_read(ptr, len(payload)) is None, "read after free should miss"
+
+    # Files: open/write/read/close, filepath is the key
     fd = translator.translate_open("/tmp/test.txt", "w")
-    print(f"✓ open('/tmp/test.txt') → fd {fd}")
-    
-    # App writes to file
     file_data = b"File contents from app"
-    success = translator.translate_write_file(fd, file_data)
-    print(f"✓ write(fd {fd}, data) → {success}")
-    
-    # App reads from file
-    read_data = translator.translate_read_file(fd, 100)
-    print(f"✓ read(fd {fd}, 100) → {read_data}")
-    
-    # App closes file
-    success = translator.translate_close(fd)
-    print(f"✓ close(fd {fd}) → {success}")
-    print()
-    
-    print("TEST 3: Multiple Allocations (stress test)")
-    print("-" * 70)
-    
-    pointers = []
-    for i in range(100):
-        ptr = translator.translate_malloc(512)
-        data = f"Block {i}".encode()
-        translator.translate_write(ptr, data)
-        pointers.append(ptr)
-    
-    print(f"✓ Allocated 100 blocks")
-    
-    # Read some back
-    for i in [0, 50, 99]:
-        data = translator.translate_read(pointers[i], 20)
-        print(f"  Block {i}: {data}")
-    
-    # Free all
-    for ptr in pointers:
-        translator.translate_free(ptr)
-    
-    print(f"✓ Freed 100 blocks")
-    print()
-    
-    # Final stats
-    translator.print_stats()
-    
-    print("=" * 70)
-    print("✓ TRANSLATOR DEMO COMPLETE")
-    print("=" * 70)
-    print()
-    print("The translator successfully:")
-    print("  ✓ Translated app pointers ↔ Helix keys")
-    print("  ✓ Translated file descriptors ↔ Helix cache")
-    print("  ✓ Handled ingress/egress transparently")
-    print("  ✓ Apps never knew Helix existed")
-    print()
-    print("Next step: Build LD_PRELOAD wrapper around this!")
-    print()
+    assert translator.translate_write_file(fd, file_data)
+    assert translator.translate_read_file(fd, len(file_data)) == file_data
+    assert translator.translate_close(fd)
+
+    # Volume: 100 real allocations through Strand A, read back, freed
+    pointers = [translator.translate_malloc(512) for _ in range(100)]
+    for i, p in enumerate(pointers):
+        translator.translate_write(p, f"Block {i}".encode())
+    for i in (0, 50, 99):
+        expected = f"Block {i}".encode()
+        # malloc'd 512 bytes; write() only overwrote the first len(expected) of
+        # them, so read() back exactly that many, not the full 512-byte slot.
+        assert translator.translate_read(pointers[i], len(expected)) == expected
+    for p in pointers:
+        translator.translate_free(p)
+
+    print("helix_translator self-test: PASS")
+    print("translator stats:", translator.get_stats())
+    print("backend stats:   ", helix.get_stats())
+    helix.close()
+
 
 if __name__ == "__main__":
-    demo()
+    _selftest()

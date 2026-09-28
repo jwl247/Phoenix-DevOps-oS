@@ -859,6 +859,62 @@ intake_file() {
   return 0
 }
 
+# ── R2 fallback — pull bytes down when there's no local copy at all ────
+# The local tiered pool is a fast-path cache, not source of truth (CLAUDE.md:
+# clone pool = R2 primary + D1 custody + local trimmed cache). A machine that
+# never intaked a file locally — a fresh box, a second machine, a client
+# pulling from Phoenix over the network — still needs `intake clone` to work
+# by fetching straight from R2 through packages-worker. Mirrors the same
+# auth/meta pattern verify_clonepool_copy already uses above.
+fetch_r2_fallback() {
+  local name="$1" hex="$2" req_version="$3"
+  [[ -z "${PHOENIX_AUTH}" ]] && return 1
+
+  local meta
+  meta=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
+  [[ -z "${meta}" ]] && return 1
+
+  local remote_version
+  remote_version=$(echo "${meta}" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+  [[ -z "${remote_version}" ]] && return 1
+  # D1's clonepool row only tracks the current tier's version per hex — an
+  # older version asked by number isn't recoverable from R2 this way (R2
+  # objects are keyed by hex_id alone, not by version/tier).
+  if [[ "${req_version}" != "latest" && "${req_version}" != "${remote_version}" ]]; then
+    return 1
+  fi
+
+  local baseline_sha3
+  baseline_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+
+  local pool_dir="${CLONEPOOL_DIR}/T1/${hex}"
+  mkdir -p "${pool_dir}"
+  local tmp; tmp="${pool_dir}/.r2-fetch-${remote_version}_${name}.tmp"
+
+  local http_code
+  http_code=$(curl -s -o "${tmp}" -w "%{http_code}" -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${hex}" 2>/dev/null)
+  if [[ "${http_code}" != "200" ]]; then
+    rm -f "${tmp}"
+    return 1
+  fi
+
+  if [[ -n "${baseline_sha3}" ]]; then
+    local actual_sha3; actual_sha3=$(openssl dgst -sha3-512 -r "${tmp}" 2>/dev/null | awk '{print $1}')
+    if [[ "${actual_sha3}" != "${baseline_sha3}" ]]; then
+      rm -f "${tmp}"
+      log "WARN" "R2 fallback BLOCKED (hash mismatch): ${name} ${remote_version}"
+      return 1
+    fi
+  fi
+
+  mv "${tmp}" "${pool_dir}/${remote_version}_${name}"
+  log "INFO" "R2 fallback: pulled ${name} ${remote_version} from R2 (no local copy) → ${pool_dir}"
+  custody_log_local "${hex}" "${name}" "clone_in_from_r2" "${remote_version}" \
+    "${WORKER_URL}/clonepool/${hex}" "${pool_dir}/${remote_version}_${name}" "white" "user"
+  report_custody "${hex}" "${name}" "clone_in_from_r2" "white" "user"
+  return 0
+}
+
 # ══════════════════════════════════════════════════════════════
 # OUT — clone latest version to current working directory
 # ══════════════════════════════════════════════════════════════
@@ -879,9 +935,13 @@ intake_clone() {
   local pool_dir; pool_dir=$(resolve_pool_dir "${hex}")
 
   if [[ ! -d "${pool_dir}" ]]; then
-    echo "[intake:MISS] '${name}' not found in clonepool"
-    echo "              Have you intaked it yet? Run: intake ${name}"
-    return 1
+    if fetch_r2_fallback "${name}" "${hex}" "${req_version}"; then
+      pool_dir=$(resolve_pool_dir "${hex}")
+    else
+      echo "[intake:MISS] '${name}' not found in clonepool (checked local + R2)"
+      echo "              Have you intaked it yet? Run: intake ${name}"
+      return 1
+    fi
   fi
 
   # Resolve the target file — latest or specific version

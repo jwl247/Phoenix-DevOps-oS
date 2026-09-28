@@ -1,6 +1,6 @@
 {
   "name": "qemu-system",
-  "version": "9.0.0",
+  "version": "11.1.0",
   "description": "QEMU full-system emulator. Single binary. No install. Phoenix brings the machine.",
   "author": "QEMU project / Phoenix intake by jwl247",
   "type": "binary",

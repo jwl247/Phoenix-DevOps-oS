@@ -46,9 +46,30 @@ class SystemConfig:
     
     monitoring_interval_seconds: int = 15
     web_dashboard_port: int = 8888
-    
+
     control_file: str = "C:\\ProgramData\\ai-paging-control.json"
     pagefile_drive: str = "C:"
+
+    # Doppelganger self-replication (recovered from the original
+    # 1universal_desktop.py Linux design — mkswap/swapon per doppelganger;
+    # ported here as a secondary pagefile per doppelganger via WMI, since
+    # Windows has no per-process swapon equivalent).
+    clone_threshold_load: float = 70.0       # clone when combined load % exceeds this
+    kill_threshold_load: float = 30.0        # terminate a doppelganger when load % drops below this
+    max_doppelgangers: int = 8
+    doppelganger_lifespan_minutes: int = 30
+    doppelganger_size_gb: float = 2.0
+    doppelganger_drive: str = "C:"           # drive the secondary pagefiles land on
+    min_free_disk_gb: float = 10.0           # never clone if this would eat into free space
+
+@dataclass
+class Doppelganger:
+    id: str
+    created_at: datetime
+    pagefile_path: str
+    size_gb: float
+    expires_at: datetime
+    parent_id: str
 
 ################################################################################
 # WINDOWS SYSTEM MONITOR
@@ -208,13 +229,65 @@ if ($pagefileset) {{
             return self.set_pagefile_size(new_size)
         return False
     
+    def create_secondary_pagefile(self, drive: str, size_gb: float, swap_id: str) -> Optional[str]:
+        """Create a Doppelganger's own pagefile — the Windows equivalent of the
+        original Linux design's per-doppelganger mkswap/swapon swap file.
+        Custom-named (not the system's managed pagefile.sys), created and
+        removed independently via WMI Win32_PageFileSetting."""
+        size_mb = int(size_gb * 1024)
+        pagefile_name = f"{drive}\\doppelganger_{swap_id}.sys"
+
+        ps_script = f"""
+$pagefileset = ([WMIClass]"Win32_PageFileSetting").CreateInstance()
+$pagefileset.Name = "{pagefile_name}"
+$pagefileset.InitialSize = {size_mb}
+$pagefileset.MaximumSize = {size_mb}
+$pagefileset.Put()
+"""
+        try:
+            result = subprocess.run(
+                ['powershell', '-Command', ps_script],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0:
+                logging.info(f"✅ Doppelganger pagefile created: {pagefile_name} ({size_gb:.1f}GB)")
+                logging.warning("⚠️  Restart required for the new pagefile to actually activate")
+                return pagefile_name
+            logging.error(f"Failed to create doppelganger pagefile: {result.stderr}")
+            return None
+        except Exception as e:
+            logging.error(f"Error creating doppelganger pagefile: {e}")
+            return None
+
+    def remove_secondary_pagefile(self, pagefile_name: str) -> bool:
+        """Remove a Doppelganger's pagefile setting (WMI object only — the
+        underlying .sys file, if it was ever activated, is cleaned up on
+        next reboot, same as any Windows pagefile removal)."""
+        ps_script = f"""
+$pagefileset = Get-WmiObject Win32_PageFileSetting -Filter "SettingID='pagefile.sys @ {pagefile_name.split(chr(92))[0]}'"
+Get-WmiObject Win32_PageFileSetting | Where-Object {{ $_.Name -eq "{pagefile_name}" }} | ForEach-Object {{ $_.Delete() }}
+"""
+        try:
+            result = subprocess.run(
+                ['powershell', '-Command', ps_script],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0:
+                logging.info(f"✅ Doppelganger pagefile removed: {pagefile_name}")
+                return True
+            logging.error(f"Failed to remove doppelganger pagefile: {result.stderr}")
+            return False
+        except Exception as e:
+            logging.error(f"Error removing doppelganger pagefile: {e}")
+            return False
+
     def get_available_disk_space_gb(self) -> float:
         try:
             free_bytes = ctypes.c_ulonglong(0)
             ctypes.windll.kernel32.GetDiskFreeSpaceExW(
-                ctypes.c_wchar_p(self.config.pagefile_drive + "\\"), 
-                None, 
-                None, 
+                ctypes.c_wchar_p(self.config.pagefile_drive + "\\"),
+                None,
+                None,
                 ctypes.pointer(free_bytes)
             )
             return free_bytes.value / (1024**3)
@@ -378,14 +451,22 @@ class AIPagingManagerWindows:
         self.monitor = WindowsSystemMonitor()
         self.pagefile_manager = WindowsPagefileManager(config)
         self.control = ControlSystem(config.control_file)
-        
+
+        self.manager_id = hashlib.md5(f"{os.getpid()}{time.time()}".encode()).hexdigest()[:16]
+
+        # Doppelganger self-replication state (see Doppelganger dataclass)
+        self.doppelgangers: Dict[str, Doppelganger] = {}
+        self.doppelganger_lock = threading.Lock()
+
         self.running = False
         self.start_time = datetime.now()
         self.stats = {
             'pagefile_expansions': 0,
             'pagefile_shrinks': 0,
             'thermal_throttle_events': 0,
-            'emergency_stops': 0
+            'emergency_stops': 0,
+            'doppelgangers_created': 0,
+            'doppelgangers_terminated': 0
         }
         
         log_file = Path("C:\\ProgramData\\ai-paging-manager.log")
@@ -437,7 +518,76 @@ class AIPagingManagerWindows:
             'cpu_percent': cpu,
             'combined_load': (memory.percent + swap.percent) / 2
         }
-    
+
+    def should_clone(self, load: Dict[str, float]) -> bool:
+        """Determine if we should create a doppelganger — ported from the
+        recovered original's should_clone()."""
+        with self.doppelganger_lock:
+            active = len([d for d in self.doppelgangers.values() if datetime.now() < d.expires_at])
+
+        if active >= self.config.max_doppelgangers:
+            return False
+        if load['combined_load'] <= self.config.clone_threshold_load:
+            return False
+
+        free_gb = self.pagefile_manager.get_available_disk_space_gb()
+        return (free_gb - self.config.doppelganger_size_gb) > self.config.min_free_disk_gb
+
+    def should_terminate_doppelgangers(self, load: Dict[str, float]) -> bool:
+        """Ported from the recovered original's should_terminate_doppelgangers()."""
+        return load['combined_load'] < self.config.kill_threshold_load
+
+    def create_doppelganger(self) -> Optional[str]:
+        """Clone the manager — create a doppelganger with its own pagefile,
+        matching the original's create_doppelganger() (there: a dedicated
+        swapon'd swap file; here: a dedicated Win32_PageFileSetting)."""
+        doppelganger_id = hashlib.md5(f"doppel{time.time()}".encode()).hexdigest()[:16]
+
+        pagefile_path = self.pagefile_manager.create_secondary_pagefile(
+            self.config.doppelganger_drive, self.config.doppelganger_size_gb, doppelganger_id
+        )
+        if not pagefile_path:
+            logging.warning("Cannot allocate a pagefile for the doppelganger")
+            return None
+
+        doppelganger = Doppelganger(
+            id=doppelganger_id,
+            created_at=datetime.now(),
+            pagefile_path=pagefile_path,
+            size_gb=self.config.doppelganger_size_gb,
+            expires_at=datetime.now() + timedelta(minutes=self.config.doppelganger_lifespan_minutes),
+            parent_id=self.manager_id
+        )
+
+        with self.doppelganger_lock:
+            self.doppelgangers[doppelganger_id] = doppelganger
+        self.stats['doppelgangers_created'] += 1
+
+        logging.info(f"🧬 Created doppelganger {doppelganger_id} ({self.config.doppelganger_size_gb:.1f}GB, "
+                     f"expires {doppelganger.expires_at.strftime('%H:%M:%S')})")
+        return doppelganger_id
+
+    def terminate_doppelganger(self, doppelganger_id: str):
+        """Ported from the recovered original's terminate_doppelganger()."""
+        with self.doppelganger_lock:
+            doppelganger = self.doppelgangers.pop(doppelganger_id, None)
+        if not doppelganger:
+            return
+
+        self.pagefile_manager.remove_secondary_pagefile(doppelganger.pagefile_path)
+        self.stats['doppelgangers_terminated'] += 1
+        logging.info(f"🪦 Terminated doppelganger {doppelganger_id}")
+
+    def cleanup_expired_doppelgangers(self):
+        """Ported from the recovered original's cleanup_expired_doppelgangers()."""
+        now = datetime.now()
+        with self.doppelganger_lock:
+            expired = [d_id for d_id, d in self.doppelgangers.items() if now >= d.expires_at]
+
+        for d_id in expired:
+            logging.info(f"Doppelganger {d_id} expired (lifespan reached)")
+            self.terminate_doppelganger(d_id)
+
     def get_status_dict(self):
         load = self.get_system_load()
         thermal = self.check_thermal_status()
@@ -447,7 +597,13 @@ class AIPagingManagerWindows:
         
         uptime = datetime.now() - self.start_time
         uptime_str = f"{uptime.days}d {uptime.seconds//3600}h {(uptime.seconds%3600)//60}m"
-        
+
+        with self.doppelganger_lock:
+            active_doppelgangers = [
+                {'id': d.id, 'size_gb': d.size_gb, 'expires_at': d.expires_at.isoformat()}
+                for d in self.doppelgangers.values()
+            ]
+
         return {
             'control': control,
             'load': load,
@@ -458,22 +614,29 @@ class AIPagingManagerWindows:
                 'disk_free_gb': disk_free,
                 'location': f"{self.config.pagefile_drive}\\pagefile.sys"
             },
+            'doppelgangers': {
+                'active': active_doppelgangers,
+                'active_count': len(active_doppelgangers),
+                'max': self.config.max_doppelgangers,
+                'created_total': self.stats['doppelgangers_created'],
+                'terminated_total': self.stats['doppelgangers_terminated']
+            },
             'stats': self.stats,
             'uptime': uptime_str
         }
-    
+
     def monitor_and_adapt(self):
         logging.info("🚀 Starting monitoring")
-        
+
         while self.running:
             try:
                 if not self.control.is_enabled():
                     logging.info("⏸️  Disabled")
                     time.sleep(30)
                     continue
-                
+
                 load = self.get_system_load()
-                
+
                 # Expand if needed
                 if load['swap_percent'] > self.config.expand_threshold_percent:
                     current = self.pagefile_manager.get_current_pagefile_size()
@@ -481,7 +644,7 @@ class AIPagingManagerWindows:
                         logging.info(f"📈 High usage ({load['swap_percent']:.1f}%) - expanding")
                         if self.pagefile_manager.expand_pagefile(4.0):
                             self.stats['pagefile_expansions'] += 1
-                
+
                 # Shrink if possible
                 elif load['swap_percent'] < self.config.shrink_threshold_percent:
                     current = self.pagefile_manager.get_current_pagefile_size()
@@ -489,7 +652,22 @@ class AIPagingManagerWindows:
                         logging.info(f"📉 Low usage ({load['swap_percent']:.1f}%) - shrinking")
                         if self.pagefile_manager.shrink_pagefile(2.0):
                             self.stats['pagefile_shrinks'] += 1
-                
+
+                # Doppelganger lifecycle — cleanup expired first, then decide
+                # clone vs. terminate for this tick (mirrors the recovered
+                # original's monitor_and_adapt() ordering)
+                self.cleanup_expired_doppelgangers()
+
+                if self.should_clone(load):
+                    logging.info(f"🧬 High load ({load['combined_load']:.1f}%) - creating doppelganger")
+                    self.create_doppelganger()
+                elif self.should_terminate_doppelgangers(load):
+                    with self.doppelganger_lock:
+                        oldest_id = next(iter(self.doppelgangers), None)
+                    if oldest_id:
+                        logging.info(f"Low load ({load['combined_load']:.1f}%) - terminating a doppelganger")
+                        self.terminate_doppelganger(oldest_id)
+
                 self.log_status(load)
                 time.sleep(self.config.monitoring_interval_seconds)
                 
@@ -502,7 +680,9 @@ class AIPagingManagerWindows:
     
     def log_status(self, load):
         pagefile_size = self.pagefile_manager.get_current_pagefile_size()
-        
+        with self.doppelganger_lock:
+            active_doppelgangers = len(self.doppelgangers)
+
         status = f"""
         ═══════════════════════════════════════
         AI PAGING - {datetime.now().strftime('%H:%M:%S')}
@@ -510,10 +690,13 @@ class AIPagingManagerWindows:
         RAM: {load['ram_percent']:.1f}% ({load['ram_available_gb']:.2f}GB free)
         Pagefile: {load['swap_percent']:.1f}% ({load['swap_used_gb']:.2f}GB used)
         CPU: {load['cpu_percent']:.1f}%
-        
+
         Pagefile Size: {pagefile_size:.2f}GB
         Expansions: {self.stats['pagefile_expansions']}
         Shrinks: {self.stats['pagefile_shrinks']}
+
+        Doppelgangers: {active_doppelgangers}/{self.config.max_doppelgangers} active
+        Created: {self.stats['doppelgangers_created']}  Terminated: {self.stats['doppelgangers_terminated']}
         ═══════════════════════════════════════
         """
         logging.info(status)

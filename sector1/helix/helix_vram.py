@@ -87,6 +87,14 @@ class Temp(Enum):
 
 COOL_STATES = ("cold", "warm", "hot", "surging", "cooling")
 
+# Heat severity, low to high, for deciding whose state wins in tick() below.
+# COOL_STATES is libhelix's raw name-lookup order (matches the kernel struct's
+# integer codes) -- NOT a heat ordering. Reusing it with .index() put "cooling"
+# (index 4) above "surging" (index 3), so a genuinely surging instance could
+# get overwritten by a kernel that was merely relaxing from a past spike. This
+# is the real ordering: cold < cooling < warm < hot < surging.
+_HEAT_RANK = {"cold": 0, "cooling": 1, "warm": 2, "hot": 3, "surging": 4}
+
 
 class HelixFullError(MemoryError):
     """Strand A and Strand B are both full. Raised instead of losing data."""
@@ -534,8 +542,7 @@ class HelixMemoryManager:
         if kernel:   # one Helix underneath: follow her kernel center when it's hotter
             self.heat = max(self.heat, kernel["heat"])
             self.compression = min(self.compression, kernel["compression"])
-            if COOL_STATES.index(kernel["state"]) > COOL_STATES.index(self.state) \
-                    if kernel["state"] in COOL_STATES else False:
+            if _HEAT_RANK.get(kernel["state"], -1) > _HEAT_RANK.get(self.state, -1):
                 self.state = kernel["state"]
 
         freed = self._relieve() if self.compression < 1.0 else 0

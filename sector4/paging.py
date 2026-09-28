@@ -25,7 +25,8 @@ import subprocess
 import json
 import ctypes
 import math
-from datetime import datetime
+import hashlib
+from datetime import datetime, timedelta
 from pathlib import Path
 from dataclasses import dataclass, field, fields
 from typing import Dict, Optional, List, Tuple
@@ -84,6 +85,18 @@ class SystemConfig:
     control_file:             str   = "/var/lib/ai-paging/control.json"
     log_file:                 str   = "/var/log/ai-paging-manager.log"
 
+    # Doppelganger self-replication (recovered from the original
+    # 1universal_desktop.py design — real mkswap/swapon per doppelganger,
+    # which Linux already gives us natively, unlike the Windows port's WMI
+    # workaround). Clone trigger here is real Dandelion heat when she's
+    # attached, not just the original's plain combined RAM+swap % — the
+    # paging manager already serves her tier data, so use it.
+    clone_threshold_load:       float = 70.0   # fallback combined load % when no Dandelion attached
+    kill_threshold_load:        float = 30.0
+    max_doppelgangers:          int   = 8
+    doppelganger_lifespan_minutes: int = 30
+    doppelganger_swap_gb:        float = 2.0
+
     def __post_init__(self):
         """
         Override any field via PHOENIX_PAGING_<FIELD_NAME> (uppercase),
@@ -136,6 +149,19 @@ class TierSnapshot:
     def pressure(self) -> float:
         total = self.hot_mb + self.warm_mb + self.cold_mb + self.frozen_mb
         return (self.hot_mb + self.warm_mb) / total if total > 0 else 0
+
+
+@dataclass
+class Doppelganger:
+    """A temporary, self-expiring swap clone — see LinuxSwapManager's
+    add_doppelganger()/remove_doppelganger() for the real mkswap/swapon
+    this tracks."""
+    id:         str
+    created_at: datetime
+    swap_path:  str
+    size_gb:    float
+    expires_at: datetime
+    parent_id:  str
 
 
 # ============================================================================
@@ -569,6 +595,47 @@ class LinuxSwapManager:
         logging.info(f"[SWAP] - {entry['path']} ({entry['size'] / 1e9:.1f}GB) off")
         return True
 
+    # -- doppelganger swapfiles (named, individually tracked) ------------
+    # Distinct from the anonymous `.0/.1/.2...` pool above: a doppelganger
+    # needs its own identity so the caller can remove *that one* on
+    # expiry/kill, not just "shrink the pool by N GB". Real swapon/swapoff,
+    # same as everything else here — this is what the Windows port had to
+    # fake with a secondary Win32_PageFileSetting; Linux just does it.
+    def add_doppelganger(self, size_gb: float, doppelganger_id: str) -> Optional[str]:
+        path = Path(f"{self.swapfile}.doppel_{doppelganger_id}")
+        size_bytes = int(size_gb * 1024 ** 3)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with self.lock:
+            try:
+                try:
+                    self._run(['fallocate', '-l', str(size_bytes), str(path)])
+                except Exception:
+                    self._run(['dd', 'if=/dev/zero', f'of={path}', 'bs=1M',
+                               f'count={max(1, size_bytes // (1024 * 1024))}', 'status=none'])
+                os.chmod(path, 0o600)
+                self._run(['mkswap', str(path)])
+                self._run(['swapon', str(path)])
+            except Exception as e:
+                logging.error(f"[SWAP] doppelganger {doppelganger_id} failed: {e}")
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+                return None
+        logging.info(f"[SWAP] + doppelganger {doppelganger_id} ({size_gb:.1f}GB) on")
+        return str(path)
+
+    def remove_doppelganger(self, swap_path: str) -> bool:
+        with self.lock:
+            try:
+                self._run(['swapoff', swap_path])
+                Path(swap_path).unlink()
+            except Exception as e:
+                logging.error(f"[SWAP] remove doppelganger {swap_path} failed: {e}")
+                return False
+        logging.info(f"[SWAP] - doppelganger {swap_path} off")
+        return True
+
     # -- public ---------------------------------------------------------
     def initialize(self) -> bool:
         """Keep whatever swap exists; create a first Phoenix file only if the
@@ -877,6 +944,10 @@ class AIPagingManager:
         self._last_helix    = {}
         self._snapshot_path = None
 
+        self.manager_id = hashlib.md5(f"{os.getpid()}{time.time()}".encode()).hexdigest()[:16]
+        self.doppelgangers: Dict[str, Doppelganger] = {}
+        self.doppelganger_lock = threading.Lock()
+
         self.running    = False
         self.start_time = datetime.now()
         self.stats      = {
@@ -886,6 +957,8 @@ class AIPagingManager:
             'threshold_decisions': 0,
             'holds':               0,
             'helix_snapshots':     0,
+            'doppelgangers_created':    0,
+            'doppelgangers_terminated': 0,
         }
 
         self._setup_logging()
@@ -1049,6 +1122,12 @@ class AIPagingManager:
             'proc-meminfo-fallback'
         )
 
+        with self.doppelganger_lock:
+            active_doppelgangers = [
+                {'id': d.id, 'size_gb': d.size_gb, 'expires_at': d.expires_at.isoformat()}
+                for d in self.doppelgangers.values()
+            ]
+
         return {
             'control': self.control.get_state(),
             'load': {
@@ -1063,6 +1142,13 @@ class AIPagingManager:
                 'path':       self.config.swapfile_path,
                 'current_gb': sw_gb,
                 'max_gb':     self.config.max_swap_gb,
+            },
+            'doppelgangers': {
+                'active':         active_doppelgangers,
+                'active_count':   len(active_doppelgangers),
+                'max':            self.config.max_doppelgangers,
+                'created_total':  self.stats['doppelgangers_created'],
+                'terminated_total': self.stats['doppelgangers_terminated'],
             },
             'nvme':             nvme,
             'engine':           self.engine.get_stats(),
@@ -1091,6 +1177,72 @@ class AIPagingManager:
             f"{snap.cold_mb:.0f}/{snap.frozen_mb:.0f} MB  "
             f"hit={snap.hit_rate:.1f}%"
         )
+
+    def should_clone(self, combined_load: float, dandelion_state: Optional[str]) -> bool:
+        """Ported from the recovered original's should_clone() — clone trigger
+        is real Dandelion heat when she's attached (a 'surging' state is a
+        better signal than a plain load average), falling back to the
+        original's combined-load threshold when there's no live Dandelion."""
+        with self.doppelganger_lock:
+            active = len([d for d in self.doppelgangers.values() if datetime.now() < d.expires_at])
+        if active >= self.config.max_doppelgangers:
+            return False
+
+        triggered = (dandelion_state == 'surging') if dandelion_state is not None \
+            else (combined_load > self.config.clone_threshold_load)
+        if not triggered:
+            return False
+
+        free_gb = self.swap_manager.get_free_disk_gb()
+        return free_gb > (self.config.doppelganger_swap_gb * 2)  # leave headroom, don't just scrape by
+
+    def should_terminate_doppelgangers(self, combined_load: float, dandelion_state: Optional[str]) -> bool:
+        """Ported from the recovered original's should_terminate_doppelgangers()."""
+        if dandelion_state is not None:
+            return dandelion_state == 'cooling' or dandelion_state == 'cold'
+        return combined_load < self.config.kill_threshold_load
+
+    def create_doppelganger(self) -> Optional[str]:
+        """Clone the manager — ported from the recovered original's
+        create_doppelganger(), using real swapon this time, not a workaround."""
+        doppelganger_id = hashlib.md5(f"doppel{time.time()}".encode()).hexdigest()[:16]
+        swap_path = self.swap_manager.add_doppelganger(self.config.doppelganger_swap_gb, doppelganger_id)
+        if not swap_path:
+            return None
+
+        doppelganger = Doppelganger(
+            id=doppelganger_id,
+            created_at=datetime.now(),
+            swap_path=swap_path,
+            size_gb=self.config.doppelganger_swap_gb,
+            expires_at=datetime.now() + timedelta(minutes=self.config.doppelganger_lifespan_minutes),
+            parent_id=self.manager_id,
+        )
+        with self.doppelganger_lock:
+            self.doppelgangers[doppelganger_id] = doppelganger
+        self.stats['doppelgangers_created'] += 1
+        logging.info(f"[DOPPEL] created {doppelganger_id} ({doppelganger.size_gb:.1f}GB, "
+                     f"expires {doppelganger.expires_at.strftime('%H:%M:%S')})")
+        return doppelganger_id
+
+    def terminate_doppelganger(self, doppelganger_id: str):
+        """Ported from the recovered original's terminate_doppelganger()."""
+        with self.doppelganger_lock:
+            doppelganger = self.doppelgangers.pop(doppelganger_id, None)
+        if not doppelganger:
+            return
+        self.swap_manager.remove_doppelganger(doppelganger.swap_path)
+        self.stats['doppelgangers_terminated'] += 1
+        logging.info(f"[DOPPEL] terminated {doppelganger_id}")
+
+    def cleanup_expired_doppelgangers(self):
+        """Ported from the recovered original's cleanup_expired_doppelgangers()."""
+        now = datetime.now()
+        with self.doppelganger_lock:
+            expired = [d_id for d_id, d in self.doppelgangers.items() if now >= d.expires_at]
+        for d_id in expired:
+            logging.info(f"[DOPPEL] {d_id} expired (lifespan reached)")
+            self.terminate_doppelganger(d_id)
 
     def monitor_and_adapt(self):
         helix_source = (
@@ -1170,6 +1322,23 @@ class AIPagingManager:
                 else:
                     self.stats['holds'] += 1
                     self._log_cycle(mem, swap, 'hold', 0, reason)
+
+                # Doppelganger lifecycle — cleanup expired first, then decide
+                # clone vs. terminate for this tick (same ordering as the
+                # recovered original's monitor_and_adapt())
+                combined_load = (mem['percent'] + swap['percent']) / 2
+                self.cleanup_expired_doppelgangers()
+                if self.should_clone(combined_load, dandelion):
+                    logging.info(f"[DOPPEL] high load (dandelion={dandelion}, "
+                                 f"combined={combined_load:.1f}%) - cloning")
+                    self.create_doppelganger()
+                elif self.should_terminate_doppelgangers(combined_load, dandelion):
+                    with self.doppelganger_lock:
+                        oldest_id = next(iter(self.doppelgangers), None)
+                    if oldest_id:
+                        logging.info(f"[DOPPEL] low load (dandelion={dandelion}, "
+                                     f"combined={combined_load:.1f}%) - terminating one")
+                        self.terminate_doppelganger(oldest_id)
 
                 time.sleep(self.config.monitoring_interval)
 
