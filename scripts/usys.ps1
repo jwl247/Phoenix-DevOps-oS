@@ -900,6 +900,29 @@ function Invoke-UsysDelegate {
 }
 
 # =============================================================================
+# Map any version label to something [version] can parse:
+#   '1.2.3' -> '1.2.3' | 'v7' -> '7.0.0' | '7' -> '7.0.0' | anything else -> '0.0.0'
+function ConvertTo-UsysSuiteVersion {
+    param([string]$Label)
+    $l = ([string]$Label).Trim()
+    if ($l -match '^\d+(\.\d+){1,3}$') { return $l }
+    if ($l -match '^v?(\d+)$')          { return "$($Matches[1]).0.0" }
+    return '0.0.0'
+}
+
+# Runtime for a pulled entry, by extension (the runtimes Invoke-UsysRun knows).
+function Get-UsysRuntimeForEntry {
+    param([string]$Entry)
+    switch -Regex ([string]$Entry) {
+        '\.py$'          { return 'python' }
+        '\.(sh|bash)$'   { return 'bash' }
+        '\.ps1$'         { return 'powershell' }
+        '\.(js|mjs|cjs)$' { return 'node' }
+        '\.(qcow2|img)$' { return 'qemu' }
+        default           { return 'binary' }
+    }
+}
+
 # COMMAND: pull — fetch a suite from D1/clonepool by name and stage it locally
 # =============================================================================
 function Invoke-UsysPull {
@@ -992,14 +1015,20 @@ function Invoke-UsysPull {
     $suiteDir = Join-Path (Get-UsysClonepoolDir) $safeSuite
     New-Item -ItemType Directory -Path $suiteDir -Force | Out-Null
 
-    # Write a stub .suite.json so the suite is runnable if the binary is already present
+    # Write a stub .suite.json so the suite is runnable if the binary is already present.
+    # version: usys run sorts suites with [version], so the label must parse as one.
+    # The pool's own label is 'vN' (intake.sh); D1 may also hold a real semver.
+    # runtime: from the entry's extension, so a pulled .py/.sh/.ps1/.js runs
+    # under the right host instead of being exec'd as a binary (round-2 S34OPS-F17).
+    $suiteVersion = ConvertTo-UsysSuiteVersion ([string]$resp.version)
+    $suiteRuntime = Get-UsysRuntimeForEntry $safeSuite
     $manifest = @{
         name        = $resp.name
-        version     = 'v1'
+        version     = $suiteVersion
         description = "Pulled from Phoenix D1 — hex $hexDisplay"
         type        = 'script'
         entry       = $resp.name
-        runtime     = 'binary'
+        runtime     = $suiteRuntime
         metadata    = @{
             hex_id     = $resp.hex_id
             b58        = $resp.b58

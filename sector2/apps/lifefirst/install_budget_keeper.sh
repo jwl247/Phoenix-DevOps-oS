@@ -1,4 +1,13 @@
 #!/bin/bash
+# RETIRED (2026-09-28). This installs the old PHP/MariaDB Life First module tree
+# with a hardcoded database password. Life First's real backend is the
+# lifefirst-mcp Cloudflare Worker (CLAUDE.md: "never run its setup/deploy
+# scripts"). Kept for reference only; it refuses to run. Set
+# LIFEFIRST_FOSSIL_I_KNOW=1 to bypass on a throwaway machine.
+if [[ "${LIFEFIRST_FOSSIL_I_KNOW:-0}" != "1" ]]; then
+  echo "install_budget_keeper.sh is retired and does nothing. See sector2/apps/lifefirst/README and CLAUDE.md." >&2
+  exit 1
+fi
 
 #######################################################
 # BUDGET KEEPER AI (MODULE 8) - AUTOMATED INSTALLER
@@ -974,30 +983,3 @@ main() {
 
 # Run main function
 main
-PHPEOF
-
-    chmod +x "$INSTALL_DIR/install_budget_keeper.sh"
-    
-    print_success "Installation script created"
-}
-
-#######################################################
-# MAIN
-#######################################################
-
-print_header
-print_step "Creating Budget Keeper installation package..."
-
-# Run the script creation
-create_installer
-
-echo ""
-echo -e "${GREEN}╔════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║     BUDGET KEEPER INSTALLER CREATED! ✓            ║${NC}"
-echo -e "${GREEN}╚════════════════════════════════════════════════════╝${NC}"
-echo ""
-echo "To install on your server:"
-echo "1. Upload install_budget_keeper.sh to your server"
-echo "2. chmod +x install_budget_keeper.sh"
-echo "3. sudo ./install_budget_keeper.sh"
-echo ""

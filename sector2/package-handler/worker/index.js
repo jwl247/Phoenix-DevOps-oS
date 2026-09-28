@@ -708,7 +708,13 @@ export default {
             body.hash_sha3,
             body.hash_blake2 || null,
             body.size || 0,
-            body.notes || '',
+            // Two version clocks exist on purpose: `versions.version` counts
+            // distinct contents ever seen for this name (the ledger's own
+            // ordinal, never reused), while `clonepool.version`/body.version
+            // is the pool's local vN file label (can differ per machine and
+            // after eviction). Keep the pool label in the note so a row can
+            // be matched to the file it came from.
+            [body.version ? `pool:${body.version}` : '', body.notes || ''].filter(Boolean).join(' '),
             body.actor || null,
           ).run();
           versionLogged = { version: versionLabel, store_path: storePath };

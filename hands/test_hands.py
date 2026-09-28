@@ -48,7 +48,12 @@ def only_declared_tools():
     code, out = hands.run("format_drive", {}, True, "test")
     assert code == 404 and not out["ok"]
     names = {x["name"] for x in hands.public_tools()}
-    assert names == {"status", "open_app", "screenshot", "restart_pc", "cancel_restart"}, names
+    # hands.py declares a different tool set per platform (Windows: apps and
+    # screenshots; Linux: Phoenix services). The test must expect the set of
+    # the machine it runs on, or it only ever passes on Windows.
+    expected = ({"status", "open_app", "screenshot", "restart_pc", "cancel_restart"} if hands.IS_WIN
+                else {"status", "services", "restart_service", "restart_pc", "cancel_restart"})
+    assert names == expected, names
     assert all(x["tier"] in ("base", "ask") for x in hands.public_tools()), "no tool may be tier never"
 
 

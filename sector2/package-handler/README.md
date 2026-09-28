@@ -62,7 +62,7 @@ Universal intake script (lives directly in this directory — there is no
 - Auto-detects companion files (.service, .conf, .env, .yaml travel with parent)
 - Generates hex identity from filename
 - Writes sidecar.json with full metadata
-- Versions files in clonepool (v1, v2, v3…)
+- Versions files in clonepool (v1, v2, v3…) — see [Versioning](#versioning) for exactly what is kept where
 - Writes local custody log (sqlite3)
 - Reports to D1 via packages-worker (clonepool + custody + glossary)
 
@@ -426,6 +426,33 @@ Every file in the clonepool carries two QR codes:
   - T1/T2/T3/T4 — max 4 folders deep
 
 ---
+
+## Versioning
+
+Three records exist for every intake, and they mean different things:
+
+| Where | What | Who writes it |
+|---|---|---|
+| `clonepool/T1/<hex>/vN_<name>` | the pool's local copies, `MAX_VERSIONS` (7) kept, latest never evicted; `vN` is the pool's own label and can differ per machine | `intake.sh` |
+| D1 `clonepool` row | the **current** state only (latest hash, tier, pool_path) | `POST /clonepool` |
+| D1 `versions` rows + R2 `<hex>/versions/<sha3[0:16]>` | append-only ledger: one row per distinct content ever seen for the name, with the bytes at that R2 key | worker logs the row on a new hash; `intake.sh` uploads the bytes (since 1.8.0) |
+
+Rules the code enforces (each one is a test in `tests/test_intake_versioning.sh`):
+- identical bytes never make a new version, locally or in the ledger;
+- a re-intake of a hex whose bucket rotated to T2–T4 continues that bucket's history and moves it back to T1 (it does not start a second bucket at v1);
+- a directory snapshot `vN_<dir>/` always holds every file, even files the per-file pool already had;
+- `intake clone <name> vN` verifies an older version against the `versions` ledger, not only the current hash;
+- a directory with a top-level `.suite.json` (or `<x>.suite.json`) lands in `clonepool/<name>/` with its files, so `usys run <name>` works.
+
+Not built: time-windowed eviction of ledger rows (nothing in the ledger is ever deleted), and multipart upload for files over 100 MB (they are skipped with a warning).
+
+### Tests
+
+```bash
+bash sector2/package-handler/tests/test_intake_versioning.sh   # 24 assertions, real intake.sh, temp pool, fake worker
+```
+
+`tests/fake_worker.py` stands in for packages-worker (same routes and response shapes, records every request), so the suite runs anywhere with bash, python3, curl and openssl — no Cloudflare needed.
 
 ## Integrity Verification
 

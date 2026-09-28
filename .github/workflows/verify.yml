@@ -1,0 +1,54 @@
+# The independent witness: the same scripts/verify.sh that runs on Jerry's
+# boxes runs here on a clean runner on every push and pull request, and the
+# verification/<date>/ ledger it writes is kept as a build artifact. It can
+# not reach the Compaq, load helix.ko, or talk to Cloudflare (dry-runs only);
+# the summary's "host" field says so for every line.
+name: verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Toolchain on the runner
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xxd build-essential libcurl4-openssl-dev >/dev/null
+          # PowerShell for the usys tests (Microsoft's apt repo)
+          wget -q https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O /tmp/msprod.deb \
+            && sudo dpkg -i /tmp/msprod.deb >/dev/null && sudo apt-get update -qq && sudo apt-get install -y -qq powershell >/dev/null || echo "pwsh unavailable: PowerShell checks will be recorded as skipped"
+          for d in pbm-consulting-website/radar-worker pbm-consulting-website/worker phoenix-office/worker sector2/apps/lifefirst/meds-worker sector3/phoenix-net/mesh-worker; do
+            if [ -f "$d/package-lock.json" ]; then (cd "$d" && npm ci --ignore-scripts --no-audit --no-fund >/dev/null 2>&1 || true); fi
+          done
+
+      - name: Run every check, write the ledger
+        env:
+          VERIFY_HOST: github-actions
+        run: bash scripts/verify.sh
+
+      - name: Keep the ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-${{ github.sha }}
+          path: verification/
+          if-no-files-found: error
+          retention-days: 90
