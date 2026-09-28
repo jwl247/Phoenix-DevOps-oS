@@ -1,20 +1,11 @@
 # crew-muster
-# host=vm commit=a065751 dirty=true utc=2026-09-28T23:53:28Z
+# host=vm commit=41d46e3 dirty=false utc=2026-09-28T23:53:46Z
 # $ python3 sector4/guardian/sailor.py muster
 
-# muster  host=vm commit=a065751 utc=2026-09-28T23:53:28Z
+# muster  host=vm commit=41d46e3 utc=2026-09-28T23:53:46Z
 sector1  clear          Boot, GRUB, kernel: frank3, Helix kernel + memory manager, phoenix_auth, CoPES, concierge
 sector2  clear          Intake authority, package handler + worker, clone pool, Frank, apps (Life First, Office, ScriptForge)
-sector3  1 finding(s)   Comms + networking: Romeo/Juliet, quadengine, translator boundary, Phoenix Net + Mesh, service units
-    drift                  ?? sector3/services/phoenix-sailor@.service    differs from the committed tree
-sector4  8 finding(s)   Core engine: Frank, Helix engine, paging, ring guardian, vault + intake, the crew itself, the verification ledger
-    drift                  M scripts/verify.sh    differs from the committed tree
-    drift                  M tools/helix-team/install-team.sh    differs from the committed tree
-    drift                  M tools/helix-team/verify-team.sh    differs from the committed tree
-    drift                  ?? sector4/guardian/crew.json    differs from the committed tree
-    drift                  ?? sector4/guardian/gangway.py    differs from the committed tree
-    drift                  ?? sector4/guardian/sailor.py    differs from the committed tree
-    drift                  ?? sector4/guardian/test_sailor.py    differs from the committed tree
-    drift                  ?? tools/crew/    differs from the committed tree
-# 9 finding(s) across 4 decks -> /home/user/Phoenix-DevOps-oS/verification
-# exit=9
+sector3  clear          Comms + networking: Romeo/Juliet, quadengine, translator boundary, Phoenix Net + Mesh, service units
+sector4  clear          Core engine: Frank, Helix engine, paging, ring guardian, vault + intake, the crew itself, the verification ledger
+# 0 finding(s) across 4 decks -> /home/user/Phoenix-DevOps-oS/verification
+# exit=0

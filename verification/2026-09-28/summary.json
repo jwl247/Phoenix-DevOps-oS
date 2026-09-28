@@ -23,58 +23,58 @@
  },
  {
   "check": "crew-muster",
-  "result": "9",
-  "seconds": 0.593,
+  "result": "0",
+  "seconds": 0.555,
   "command": "python3 sector4/guardian/sailor.py muster",
   "reason": "",
-  "commit": "a065751",
-  "dirty": true,
+  "commit": "41d46e3",
+  "dirty": false,
   "host": "vm",
-  "utc": "2026-09-28T23:53:29Z"
+  "utc": "2026-09-28T23:53:46Z"
  },
  {
   "check": "crew-sector1",
   "result": "0",
-  "seconds": 0.1,
+  "seconds": 0.103,
   "command": "sector4/guardian/sailor.py sector1 watch",
   "reason": "",
-  "commit": "a065751",
+  "commit": "41d46e3",
   "dirty": false,
   "host": "vm",
-  "utc": "2026-09-28T23:53:28Z"
+  "utc": "2026-09-28T23:53:46Z"
  },
  {
   "check": "crew-sector2",
   "result": "0",
-  "seconds": 0.373,
+  "seconds": 0.327,
   "command": "sector4/guardian/sailor.py sector2 watch",
   "reason": "",
-  "commit": "a065751",
+  "commit": "41d46e3",
   "dirty": false,
   "host": "vm",
-  "utc": "2026-09-28T23:53:29Z"
+  "utc": "2026-09-28T23:53:46Z"
  },
  {
   "check": "crew-sector3",
-  "result": "1",
-  "seconds": 0.032,
+  "result": "0",
+  "seconds": 0.039,
   "command": "sector4/guardian/sailor.py sector3 watch",
   "reason": "",
-  "commit": "a065751",
+  "commit": "41d46e3",
   "dirty": false,
   "host": "vm",
-  "utc": "2026-09-28T23:53:29Z"
+  "utc": "2026-09-28T23:53:46Z"
  },
  {
   "check": "crew-sector4",
-  "result": "8",
-  "seconds": 0.032,
+  "result": "0",
+  "seconds": 0.03,
   "command": "sector4/guardian/sailor.py sector4 watch",
   "reason": "",
-  "commit": "a065751",
+  "commit": "41d46e3",
   "dirty": false,
   "host": "vm",
-  "utc": "2026-09-28T23:53:29Z"
+  "utc": "2026-09-28T23:53:46Z"
  },
  {
   "check": "game-gate-pull-run",
