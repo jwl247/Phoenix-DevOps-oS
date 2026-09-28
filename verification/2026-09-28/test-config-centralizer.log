@@ -1,13 +1,13 @@
 # test-config-centralizer
-# host=claude-cloud commit=3552b08 dirty=true utc=2026-09-28T21:06:09Z
+# host=claude-cloud commit=abe45f2 dirty=true utc=2026-09-28T21:14:06Z
 # $ cd dashboard && node --test config-centralizer.test.js
 
 TAP version 13
 # Scan found 4 items
-#  - secret [sensitive] /home/user/Phoenix-DevOps-oS/dashboard/cc-test-4JuBya/.phoenix/api_secret_key.json
-#  - ssh [sensitive] /home/user/Phoenix-DevOps-oS/dashboard/cc-test-4JuBya/.ssh/config
-#  - environment [sensitive] /home/user/Phoenix-DevOps-oS/dashboard/cc-test-4JuBya/.phoenix/phoenix.env
-#  - config  /home/user/Phoenix-DevOps-oS/dashboard/cc-test-4JuBya/AppData/Roaming/SomeApp/settings.json
+#  - secret [sensitive] /home/user/Phoenix-DevOps-oS/dashboard/cc-test-GXcAWu/.phoenix/api_secret_key.json
+#  - ssh [sensitive] /home/user/Phoenix-DevOps-oS/dashboard/cc-test-GXcAWu/.ssh/config
+#  - environment [sensitive] /home/user/Phoenix-DevOps-oS/dashboard/cc-test-GXcAWu/.phoenix/phoenix.env
+#  - config  /home/user/Phoenix-DevOps-oS/dashboard/cc-test-GXcAWu/AppData/Roaming/SomeApp/settings.json
 # Summary: {
 #   total: 4,
 #   categories: { secret: 1, ssh: 1, environment: 1, config: 1 },
@@ -19,7 +19,7 @@ TAP version 13
 # Subtest: config-centralizer.test.js
 ok 1 - config-centralizer.test.js
   ---
-  duration_ms: 74.389195
+  duration_ms: 86.077824
   type: 'test'
   ...
 1..1
@@ -30,5 +30,5 @@ ok 1 - config-centralizer.test.js
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 83.937883
+# duration_ms 95.602269
 # exit=0

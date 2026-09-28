@@ -8,13 +8,13 @@ and the security (guardian/honeypot) layer. Contains several genuinely distinct
 sub-projects, not duplicates of each other:
 - `auth/phoenix_auth.py` — hardware-fingerprint auth (replaces Google auth).
 - `concierge/` — `concierge.c`, `bridge.py`, `linux_concierge.py`.
-- `helix/` — a Python Helix stack variant (`helix_complete_package.py`, `helix_slim.py`, etc).
+- `helix/` — the userspace Helix: `helix_vram.py` (the double Helix / memory manager, mirrors dm_helix.c), **`helix_vramd.py` (its service over `/run/phoenix/helix-vram.sock`, 2026-09-28) + `test_helix_vramd.py`**, `helix_translator.py` (`HelixTranslator`, backend = the daemon via `helix_backend_from_daemon()`), plus the older `helix_complete_package.py`, `helix_slim.py`, `helix_fuse.py`, `conf/helix_mesh.conf` (`[peers]` by mesh name).
 - `helix-lightning/` — the **Ball permission system** project: `franken5.py` (Frank5 core
   conductor), `frank_ring.py`, `frank_spawn.py`, `main_kernel.py`, `process_library.py`,
   `test_ball_permissions.py`. Distinct from `kernel/` below — not a duplicate.
 - `kernel/` — the canonical boot loader: `main_kernel.py:boot()`, `llm_engine.py`,
   `phoenix_core.py`, `phoenix_status_server.py`, `file_tree_service.py`.
-- `kernels/` — C kernel slots: `frank3_slot_a.c`, `frank3_slot_b.c`, `Makefile`.
+- `kernels/` — **the kernel Helix**: `dm_helix.c` + `helix_kmod.c` → `helix.ko` (dm-helix double strand, the Dandelion, `/dev/helix_intent`, `/proc/helix`), Frank3 slots `frank3_slot_a.c`/`_b.c`, `libhelix/` (C bridge + `helix.py` `KernelHelixFeed`), `helix_boot.sh` (+ `HELIX_B_DEV`/`HELIX_MOUNT=none`), `install_helix_boot.sh` (`HELIX_PROFILE=drive`), `dm_helix_test.sh`, `helix_verdict_lean.sh`, `helix_phoronix.sh`, `helix_freedrive.sh`, `Makefile`. Deployed by `tools/helix-team/`. (Updated 2026-09-28; was stale.)
 - `security/` — the CoPES guardian/honeypot moving-target-defense system.
 - `grub/` — a second, own-rooted USys-like implementation (`usys.sh`, `phoenix_dev_db.sql`,
   `README_usys.md`). **Unconfirmed whether this is live or legacy** — ask Jerry before

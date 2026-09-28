@@ -4,10 +4,10 @@ Written 2026-09-12. Verify against current code before trusting a specific line 
 
 ## What it is
 - `quadengine/quadengine.py` — the quadralingual comms engine.
-- `romeo_juliet/` — `romeo.py` (ingress), `juliet.py`/`dbl_juliet.py` (egress).
+- `romeo_juliet/` — `romeo.py` (ingress, PULL 5580 → PUSH to `PHOENIX_RJ_PEER`, HMAC-signs with `PHOENIX_RJ_SECRET`), `juliet.py` (egress, 5581 in / 5582 out, verifies + replay-guards, translator fires here on output only), `dbl_juliet.py` (barrels 5581/5582 + 5583/5584, monitor pulls). Run as the two halves of the Helix team suite (`tools/helix-team/run-team.sh`); tests `tools/helix-team/test_peer_chain.py`. (2026-09-28)
 - `translator/translator.sh` — fires on OUTPUT only, never on intake (Critical Rule #2 in
   root CLAUDE.md — do not call this from an intake path).
-- `services/` — 17 systemd `.service`/`.target` files + `install-units.sh`, plus the
+- `services/` — 19 systemd `.service`/`.target` files (+ `helix-vram.service`, `helix-guardian.service` 2026-09-28; `helix.service`/`phoenix-paging.service` are the live Helix units) + `install-units.sh` (now skips units whose program is not on the box), plus the
   Windows/Ubuntu dashboard deploy scripts (`deploy-dashboard.sh`, `push-dashboard.sh/.ps1`,
   `install-dashboard-windows.ps1`, `scout-ubuntu.sh`).
 - `workers/packages-worker/` — **a stale, dead duplicate**, see Known issues.

@@ -8,7 +8,15 @@
 #   STRIPE_SECRET_KEY=sk_test_... tools/stripe/setup-radar.sh
 #   STRIPE_SECRET_KEY=sk_live_... tools/stripe/setup-radar.sh     (after the bank account + LLC)
 set -euo pipefail
-: "${STRIPE_SECRET_KEY:?set STRIPE_SECRET_KEY (sk_test_… or sk_live_…) in the environment, never on the command line}"
+# The keys live at the bottom of the vault's phoenix-secrets.env (Jerry,
+# 2026-09-28) — the one spot every tool reads. Source it when the key is
+# not already in the environment (Git Bash path first, then the drive letter).
+if [[ -z "${STRIPE_SECRET_KEY:-}" ]]; then
+  for f in "${PHOENIX_SECRETS_ENV:-}" /f/Phoenix/Vault/secrets/phoenix-secrets.env F:/Phoenix/Vault/secrets/phoenix-secrets.env; do
+    [[ -n "$f" && -f "$f" ]] && { set -a; . "$f"; set +a; break; }
+  done
+fi
+: "${STRIPE_SECRET_KEY:?STRIPE_SECRET_KEY not set and not found in the vault env file (F:\\Phoenix\\Vault\\secrets\\phoenix-secrets.env)}"
 API=https://api.stripe.com/v1
 WORKER="${WORKER_PUBLIC_URL:-https://pbm-radar-worker.phoenix-jwl.workers.dev}"
 MODE=test; [[ "$STRIPE_SECRET_KEY" == sk_live_* ]] && MODE=live
@@ -56,7 +64,7 @@ echo "   printf '%s' \"\$STRIPE_SECRET_KEY\" | npx wrangler secret put STRIPE_SE
 echo "   add to wrangler.jsonc vars:  \"STRIPE_PRICE_ID\": \"$PRICE_ID\"      (a price id is not a secret)"
 echo "   optional: \"BILLING_ENFORCE\": \"1\" once the beta ends (canceled/past_due stops the digests)"
 echo "   then: npx wrangler d1 execute pbm_radar_db --remote --file=migrations/2026-09-28-billing.sql && npx wrangler deploy"
-echo "   vault: F:\\Phoenix\\Vault\\secrets\\phoenix-secrets.env  += STRIPE_SECRET_KEY_${MODE^^}, STRIPE_WEBHOOK_SECRET_${MODE^^}, STRIPE_PRICE_ID"
+echo "   vault (bottom of F:\\Phoenix\\Vault\\secrets\\phoenix-secrets.env): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_ID (test now; swap to the live values there when live)"
 echo
 echo "== first real checkout (test mode): "
 echo "   curl -X POST -H \"Authorization: Bearer \$PHOENIX_AUTH\" \"$WORKER/billing/checkout?subscriber=<id>\"  -> emails the link; pay with 4242 4242 4242 4242"

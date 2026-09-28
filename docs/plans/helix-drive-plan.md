@@ -1,5 +1,6 @@
 # Helix as a drive on the Precision (userspace VM, i7) — plan
 
+> **STATUS (2026-09-28): shelved behind the Helix-team / game-gate work (Jerry's order of 2026-09-28). What it needs from the code already exists: `helix_boot.sh` HELIX_B_DEV / HELIX_B_MB=auto / HELIX_MOUNT=none and `install_helix_boot.sh HELIX_PROFILE=drive`. Still open: manifest-driven hostfwd/drives in usys.ps1, LIO unit, Windows iSCSI scripts. Note from the 9/28 exploration: `-snapshot` applies to every QEMU drive unless `-Persist`, and slirp caps iSCSI throughput at ~100–300 MB/s.**
 > **STATUS (Jerry, 2026-09-27): KEEP THIS PLAN FOR LATER.** Next instead: "put Helix in front as a memory manager and see how it goes" (scope to be confirmed with Jerry). Immediate small task: format the wrong-package external drive G: ("SSD 3.0", vendor replacing it), NTFS, empty drive. Save this plan to `docs/plans/helix-drive-plan.md` when out of plan mode.
 
 ## Context

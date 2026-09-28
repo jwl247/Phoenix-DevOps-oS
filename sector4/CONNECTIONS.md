@@ -7,8 +7,10 @@ Much thinner on disk than the architecture doc in root `CLAUDE.md` implies (that
 describes `helix/` and `frank/` subdirectories here that don't currently exist — likely
 relocated; a fossil copy lives under `archive/fossil-consolidation-20260819-210541/SECTOR4/`).
 Actual current contents: `intake/intake.sh` (separate, currently-broken vault intake
-pipeline — see Known issues), `paging.py`, `paging_windows.py`, `pcs.py`,
-`vault/download.sh`, `vault/phoenix-push.sh`.
+pipeline — see Known issues), `paging.py` (the paging manager; `phoenix-paging.service`), `paging_windows.py`, `pcs.py`,
+`vault/download.sh`, `vault/phoenix-push.sh`, and **`guardian/`** (2026-09-28: the ring guardian
+`integrated_guardian.py` restored from the archive as a daemon, `helix-guardian.service`, state in
+`/var/lib/phoenix/guardian`, `test_guardian.py`).
 
 ## Dependencies
 None found (no package.json/requirements.txt/wrangler config in this directory).

@@ -31,6 +31,8 @@
 - [x] R2 upload wired into the bash intake.sh pipeline (was documented as canonical, never actually bound/uploaded to before 2026-08-22 — confirmed via byte-identical fetch-back)
 - [x] Content-hash integrity system — SHA3-512 + BLAKE2b baseline set at intake (`clonepool.hash_sha3`/`hash_blake2`), re-checked at `intake clone` time via `POST /clonepool/:hex/validate`, gates clone-to-workdir/hot-swap on mismatch (see sector2/package-handler/README.md § Integrity Verification) — **was silently broken since introduction**, fixed 2026-09-20 (see SESSION LOG)
 - [x] Real per-file version history — `versions` table + immutable per-content R2 keys (`/clonepool/:hex/versions/:hashPrefix`), auto-logged on every genuine content change via `POST /clonepool`. **Corrected 2026-09-28 (Jerry: "demoted to pentest 1"):** until intake.sh 1.8.0 no client ever uploaded bytes to those keys, so the history rows pointed at R2 objects that did not exist; directory snapshots never advanced past v1; older versions could not be restored while D1 was on. All four fixed and proven by `sector2/package-handler/tests/test_intake_versioning.sh` (24 assertions against a fake worker). NOT time-windowed/auto-evicting yet — see `project_versioning_true_state` memory for the honest scope line
+- [x] **Verified pull (2026-09-28):** `intake pull <name>` / `usys pull <name>` — directory manifest (per-file SHA3-512) is its own R2 object hashed into the D1 row; every file fetched by its immutable content key and verified; nothing unverified written. Game-gate test `tools/cloudflare/pull-run-test.sh` PASS locally; desk runs owed (`docs/plans/game-gate-r2-test.md`).
+- [x] `sector2/package-handler/worker/schema.sql` (2026-09-28) reconstructed from index.js; `wrangler d1 export` diff owed. `tools/cloudflare/new-account-bootstrap.sh` for the jerry.leftwich1 account.
 - [x] Tier placement + 4-day rotation/eviction — `T1`(newest)→T2→T3→T4→evicted, `rotate_clonepool_tiers()` wired into `intake prune`, R2 untouched by moves (hex-keyed, tier-agnostic)
 - [x] Dependency graph — `deps` table + `GET/POST /deps`, `translator.sh`'s new `deps` verb across all 9 backends, wired into `intake_from_backend()`
 - [x] Location-aware QR — header/footer QR strings now carry a hex-encoded relative path segment, self-describing without a D1 round trip
@@ -131,3 +133,10 @@
 - [ ] Vault recovery pointer in GRUB
 - [ ] External drive boots clean as Phoenix
 
+
+## 2026-09-28 additions
+- [x] **Verification to disk:** `scripts/verify.sh` → `verification/<date>/` ledger; `.github/workflows/verify.yml`; `tools/helix-team/verify-team.sh` box-side, same format.
+- [x] **Helix team services:** `helix-vram.service` (`sector1/helix/helix_vramd.py`, translator on a real Helix), `helix-guardian.service` (`sector4/guardian/integrated_guardian.py`); `tools/helix-team/deploy-compaq.sh` / `install-team.sh`; `docs/helix/HELIX_TEAM.md`. [ ] deployed on the Compaq (desk).
+- [x] **Ingress/egress clones:** `run-team.sh` suite entry, `stage.sh`, signed replay-proof Romeo→Juliet hop, `peer_check.py`; 9 chain tests. [ ] cross-box run Compaq↔pbm3 (desk).
+- [x] **Radar billing (Stripe):** checkout/status/webhook routes, `billing_events`, migration, 43 tests, `tools/stripe/setup-radar.sh`. [ ] product/price/webhook created, secrets set, one test-mode checkout (desk).
+- [x] Round 3 filed: `docs/compliance/pentest/2026-09-28-round3-*.md` + addendum 1 (every touched file). [ ] addendum 2: live probe + kernel test (desk).

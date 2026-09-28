@@ -8,6 +8,9 @@ Written 2026-09-12. Verify against current code before trusting a specific line 
 - `backup_user_guide.md` — a parked restic/PyQt6 whole-system backup design; backend
   (`RotatingMasterImage`, `BackupScheduler`) is real, GUI/installer pieces are deliberately
   incomplete (mock wiring) — parked, not broken.
+- **`helix-team/`** (2026-09-28) — the Helix team as one deployable/runnable unit: `deploy-compaq.sh` (git archive HEAD → `/opt/phoenix`, install, verify, ledger back), `install-team.sh`, `verify-team.sh` (16 checks), `run-team.sh` (suite entry; role ingress/egress/plain), `stage.sh` (the two clone directories), `peer_check.py`, `test_peer_chain.py`.
+- **`cloudflare/`** (2026-09-28) — `pull-run-test.sh`/`.ps1` (the game-gate test), `new-account-bootstrap.sh` (D1 + R2 + worker in another account).
+- **`stripe/`** (2026-09-28) — `setup-radar.sh` (product, price, webhook endpoint; key from the vault env).
 - `notation/phoenix-notation.html` — music notation transcriber (v3).
 - `phoenix-tray.py`/`.spec`/`.suite.json` — system tray app + PyInstaller packaging.
 - `poc/` — the distro-boot sandbox: `debian-seed/`, `ubuntu-seed/` (cloud-init seeds),

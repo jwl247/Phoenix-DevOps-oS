@@ -1,5 +1,5 @@
 # wrangler-dry-run-phoenix-net-mesh-worker
-# host=claude-cloud commit=3552b08 dirty=true utc=2026-09-28T21:06:26Z
+# host=claude-cloud commit=abe45f2 dirty=true utc=2026-09-28T21:14:23Z
 # $ cd sector3/phoenix-net/mesh-worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5
 
 Your Worker has access to the following bindings:

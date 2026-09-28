@@ -1,6 +1,8 @@
 # Phoenix NEXT SESSION backlog (full)
 # Moved out of CLAUDE.md 2026-09-27. CLAUDE.md keeps only the top items; the full detail lives here.
 
+- **2026-09-28 desk run-sheet first:** `docs/plans/2026-09-28-desk-runsheet.md` (live probe → Compaq deploy → clones peered → game gate on the real worker + jerry.leftwich1 → Stripe). Round-3 reports' "needs Jerry" rows after that. Round 3 open items by section are in `docs/compliance/pentest/2026-09-28-round3-*.md`.
+
 - **FIRST: open `docs/plans/day-by-day-2026-09.md` and do today's row** (money first, then Laurie, then the build). Day 1's site is already LIVE; finish its leftovers: Resend key -> pbm-leads-worker (Jerry pastes a new key into the vault file, says 'key's in'), www redirect, stamp logo on the site. Jerry still to create the YouTube channel (steps + art in E:/Phoenix/video/brand). Then day 2 (Life First page off the VM). Open Jerry calls: broad python.exe firewall rule? lighter daily pentest?
 - **Helix verdict, lean restart, when Jerry is off the computer** ("let her eat"): drop fs-mark, `FORCE_TIMES_TO_RUN=3`, raw dbench/postmark/sqlite then the full set through Helix (plain-disk fio results already in PTS file `helix-compaq`). Details in memory `project_two_dedicated_servers_pending`.
 - **Phoenix Portal Phase 1 (the shared brain)** is next in the approved plan: `shared/Phoenix.Shared` from `hud/`.
