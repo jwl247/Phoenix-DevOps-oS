@@ -1,8 +1,8 @@
 # test-helix-vramd
-# host=claude-cloud commit=abe45f2 dirty=true utc=2026-09-28T21:12:35Z
+# host=claude-cloud commit=db988d3 dirty=true utc=2026-09-28T21:23:30Z
 # $ HELIX_VRAM_NO_KERNEL=1 python3 sector1/helix/test_helix_vramd.py
 
-helix_vramd: listening on /tmp/vramd-test-5ju328ko/helix-vram.sock (kernel standalone)
+helix_vramd: listening on /tmp/vramd-test-w93zs0my/helix-vram.sock (kernel standalone)
   ok  socket is 0660
   ok  ping + stat
   ok  alloc/read/write/free

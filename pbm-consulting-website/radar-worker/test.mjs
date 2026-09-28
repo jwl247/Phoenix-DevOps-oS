@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { createHmac } from 'node:crypto';
 import worker, {
-  verifyStripeSignature,
+  verifyStripeSignature, runGrants, grantMatches, normalizeGrant, grantsDate,
   normalize, matches, stateFromText, realCity, isOpen, normSub, eligibleSetAsides, ptypeOf, toSamDate, redact,
   fetchPosted, runRadar, validateSubscriber,
 } from './index.js';
@@ -310,7 +310,7 @@ await t('scheduled() runs the radar via waitUntil', async () => {
   const pending = [];
   await worker.scheduled({}, env, { waitUntil: p => pending.push(p) });
   await Promise.all(pending);
-  eq(env.DB.raw.prepare('SELECT COUNT(*) n FROM runs').get().n, 1);
+  eq(env.DB.raw.prepare('SELECT kind FROM runs ORDER BY kind').all().map(r => r.kind), ['grants', 'radar'], 'radar + grants both ran');
 });
 await t('/health reports what is wired, no secrets', async () => {
   const h = await (await worker.fetch(new Request('https://radar.test/health'), freshEnv())).json();
@@ -563,6 +563,142 @@ await t('billing: an event for an unknown customer is recorded and ignored; /hea
   const h = await (await worker.fetch(new Request('https://radar.test/health'), env)).json();
   eq(h.billing, 'stripe'); eq(h.billing_enforce, false);
   eq((await (await worker.fetch(new Request('https://radar.test/health'), freshEnv())).json()).billing, 'UNSET');
+});
+
+// ---------------------------------------------------------------- grants add-on (Grants.gov)
+const GHIT = (o) => ({ id: o.id, number: o.number || `NUM-${o.id}`, title: o.title, agencyCode: 'SBA', agency: o.agency || 'Small Business Administration',
+  openDate: o.open || '09/28/2026', closeDate: o.close === undefined ? '12/31/2026' : o.close, oppStatus: 'posted', docType: 'synopsis' });
+const GDETAIL = (o) => ({ id: o.id, synopsis: { applicantTypes: (o.elig || ['23']).map(id => ({ id, description: id })),
+  fundingActivityCategories: (o.cats || ['BC']).map(id => ({ id, description: id })), awardCeiling: o.ceiling === undefined ? 50000 : o.ceiling,
+  responseDate: o.close === undefined ? '12/31/2026' : o.close } });
+let GRANTS = [], grantCalls = [], grantsFail = false;
+const _origFetch = globalThis.fetch;
+globalThis.fetch = async (url, opts = {}) => {
+  const u = new URL(String(url));
+  if (u.hostname === 'api.grants.gov') {
+    grantCalls.push(u.pathname);
+    if (grantsFail) return { ok: false, status: 503, text: async () => 'grants down' };
+    const body = JSON.parse(opts.body || '{}');
+    if (u.pathname.endsWith('/search2')) {
+      const rows = GRANTS.map(GHIT).sort((a, b) => b.openDate.localeCompare(a.openDate));
+      return { ok: true, status: 200, json: async () => ({ errorcode: 0, data: { hitCount: rows.length, oppHits: rows.slice(body.startRecordNum, body.startRecordNum + body.rows) } }) };
+    }
+    if (u.pathname.endsWith('/fetchOpportunity')) {
+      const o = GRANTS.find(g => g.id === body.opportunityId);
+      return { ok: true, status: 200, json: async () => GDETAIL(o) };
+    }
+  }
+  return _origFetch(url, opts);
+};
+const grantsEnv = (extra = {}) => { grantCalls = []; grantsFail = false; return freshEnv(extra); };
+const GSUB = { ...PBM, grants: true, grant_eligibility: ['23'], grant_categories: ['BC', 'ELT'], grant_keywords: ['steel', 'apprentice'], grant_min_award: 20000 };
+GRANTS = [
+  { id: 1, title: 'Steel fabrication equipment for small manufacturers' },                       // match
+  { id: 2, title: 'Apprenticeship expansion', cats: ['ELT'], ceiling: 250000 },                   // match
+  { id: 3, title: 'Steel bridge research', elig: ['06'] },                                        // wrong applicant type
+  { id: 4, title: 'Steel workforce microgrant', ceiling: 5000 },                                  // ceiling below need
+  { id: 5, title: 'Rural steel co-op', close: '01/01/2026' },                                     // closed
+  { id: 6, title: 'Steel arts residency', cats: ['ACA'] },                                        // wrong category
+  { id: 7, title: 'Apprentice housing', cats: [], elig: [] , ceiling: null },                     // unknown elig/cat/ceiling -> let through
+  { id: 8, title: 'Anything else', open: '09/20/2026' },                                          // too old for the since window
+  { id: 9, title: 'Concrete forms', cats: ['BC'] },                                               // no keyword hit
+];
+
+await t('grants: normalize + date handling', async () => {
+  eq(grantsDate('09/28/2026'), '2026-09-28'); eq(grantsDate('2026-09-28T00:00:00'), '2026-09-28'); eq(grantsDate(''), null);
+  const g = normalizeGrant(GHIT(GRANTS[0]), GDETAIL(GRANTS[0]));
+  eq([g.opp_id, g.open_date, g.close_date, g.eligibilities, g.categories, g.award_ceiling], ['1', '2026-09-28', '2026-12-31', ['23'], ['BC'], 50000]);
+  ok(g.ui_link.endsWith('/1'));
+  eq(normalizeGrant({ id: 'x', title: 't' }, null), null, 'no open date -> dropped');
+});
+await t('grants: run fetches, stores, matches the survey, one digest, never twice', async () => {
+  const env = grantsEnv();
+  const id = await addSub(env, GSUB);
+  emails = [];
+  const s = await runGrants(env, { now: TUE });
+  eq(s.kind, 'grants'); eq(s.since, '2026-09-28'); eq(s.seen, 8, 'the 09/20 one is outside the window'); eq(s.kept, 8);
+  ok(s.requests_used >= 9 && s.requests_used <= 10, `1 search page + 8 details = ${s.requests_used}`);
+  eq(emails.length, 1);
+  const m = emails[0].body;
+  eq(m.to, ['pbm@example.com']);
+  eq(m.subject, 'Grants · 3 new grants for PBM · Tue Sep 29');
+  ok(m.text.includes('Steel fabrication equipment') && m.text.includes('Apprenticeship expansion') && m.text.includes('Apprentice housing'), m.text);
+  ok(!m.text.includes('bridge research') && !m.text.includes('microgrant') && !m.text.includes('co-op') && !m.text.includes('arts residency') && !m.text.includes('Concrete'), m.text);
+  ok(m.text.includes('up to $250,000') && m.text.includes('Closes Thu Dec 31'), m.text);
+  ok(m.text.includes('application, not a bid'), 'the honest line');
+  eq(env.DB.raw.prepare('SELECT COUNT(*) n FROM grant_matches WHERE subscriber_id=?').get(id).n, 3);
+  eq(env.DB.raw.prepare("SELECT kind, notices_seen, requests_used FROM runs").get().kind, 'grants');
+  emails = [];
+  const s2 = await runGrants(env, { now: TUE, fetch: false });
+  eq(emails.length, 0, 'nothing sent twice'); eq(s2.subscribers[0].matched, 0);
+});
+await t('grants: subscribers without the add-on get nothing; a plain radar update does not reset the add-on', async () => {
+  const env = grantsEnv();
+  await addSub(env);                                    // no grants
+  emails = [];
+  await runGrants(env, { now: TUE });
+  eq(emails.length, 0);
+  const id = await addSub(env, GSUB);
+  await admin(env, '/subscribers', 'POST', PBM);        // radar-only update of the same email
+  eq(env.DB.raw.prepare('SELECT grants, grant_min_award FROM subscribers WHERE id=?').get(id).grants, 1, 'add-on kept');
+});
+await t('grants: validation of the profile fields', async () => {
+  const env = grantsEnv();
+  for (const bad of [{ grants: 'yes' }, { grant_eligibility: ['42'] }, { grant_categories: ['XX'] }, { grant_keywords: ['a'] }, { grant_min_award: -1 }, { grant_min_award: 1.5 }]) {
+    const r = await admin(env, '/subscribers', 'POST', { ...PBM, ...bad });
+    eq(r.status, 400, JSON.stringify(bad));
+  }
+});
+await t('grants: dry run previews, preview route, run route auth, grants.gov failure recorded', async () => {
+  const env = grantsEnv();
+  const id = await addSub(env, GSUB);
+  const d = await runGrants(env, { now: TUE, dry: true });
+  eq(d.subscribers[0].sent, 'dry'); ok(d.subscribers[0].preview.subject.startsWith('Grants ·'));
+  eq(emails.length, 0);
+  const p = await (await admin(env, `/grants/preview?subscriber=${id}&since=2026-09-28`)).json();
+  eq([p.grants_add_on, p.stored, p.matched], [true, 8, 3]);
+  eq((await worker.fetch(new Request('https://radar.test/grants/run', { method: 'POST' }), env)).status, 401);
+  grantsFail = true;
+  const r = await (await admin(env, '/grants/run?dry=1', 'POST')).json();
+  ok(!r.ok && /grants.gov: grants.gov 503/.test(r.error), r.error);
+});
+await t('grants: the public form survey lands on the application and on the approved subscriber', async () => {
+  const env = appEnv();
+  const app = { ...APP, grants: 'on', grant_who: 'small', grant_categories: ['BC', 'ELT'], grant_keywords: 'steel, apprenticeship', grant_min_award: '$25,000' };
+  const r = await (await post(env, '/apply', app)).json();
+  ok(r.ok, JSON.stringify(r));
+  const row = env.DB.raw.prepare('SELECT grants, grant_eligibility, grant_categories, grant_keywords, grant_min_award FROM applications').get();
+  eq([row.grants, JSON.parse(row.grant_eligibility), JSON.parse(row.grant_categories), JSON.parse(row.grant_keywords), row.grant_min_award], [1, ['23'], ['BC', 'ELT'], ['steel', 'apprenticeship'], 25000]);
+  const bad = await (await post(env, '/apply', { ...app, grant_who: 'martian', grant_min_award: 'lots' })).json();
+  ok(!bad.ok && bad.errors.some(e => e.includes('who would apply')) && bad.errors.some(e => e.includes('Whole dollars')), JSON.stringify(bad));
+  // verify + approve -> subscriber carries the profile
+  await post(env, '/apply/verify', { email: APP.email, code: codeFrom() });
+  const tok = reviewLink();
+  await worker.fetch(new Request(`https://radar.test/review/${tok}`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'action=approve' }), env);
+  const sub = env.DB.raw.prepare('SELECT grants, grant_keywords, grant_min_award FROM subscribers').get();
+  eq([sub.grants, JSON.parse(sub.grant_keywords), sub.grant_min_award], [1, ['steel', 'apprenticeship'], 25000]);
+  const notice = emails.find(e => e.body.subject.startsWith('New Radar application'));
+  ok(notice.body.text.includes('Grants:   YES') && notice.body.text.includes('$25,000'), 'reviewers see the survey');
+});
+await t('grants: Stripe add-on line item on checkout; subscription items set the flag', async () => {
+  const env = billEnv({ STRIPE_GRANTS_PRICE_ID: 'price_grants' });
+  const id = await addSub(env);
+  eq((await admin(env, `/billing/checkout?subscriber=${id}&addon=nope`, 'POST')).status, 400);
+  const r = await (await admin(env, `/billing/checkout?subscriber=${id}&addon=grants`, 'POST')).json();
+  ok(r.ok && r.addon === 'grants');
+  const sess = stripeCalls.find(c => c.path === '/v1/checkout/sessions').body;
+  eq([sess['line_items[0][price]'], sess['line_items[1][price]']], ['price_fake', 'price_grants']);
+  const noAddon = billEnv(); const id2 = await addSub(noAddon);
+  eq((await admin(noAddon, `/billing/checkout?subscriber=${id2}&addon=grants`, 'POST')).status, 503, 'no add-on price configured');
+  env.DB.raw.prepare("UPDATE subscribers SET stripe_customer_id='cus_fake1' WHERE id=?").run(id);
+  const ev = { id: 'evt_items', type: 'customer.subscription.updated', data: { object: { object: 'subscription', id: 'sub_1', status: 'active', customer: 'cus_fake1', items: { data: [{ price: { id: 'price_fake' } }, { price: { id: 'price_grants' } }] } } } };
+  let body = JSON.stringify(ev);
+  eq((await webhook(env, body, signed('whsec_fake', body))).status, 200);
+  eq(env.DB.raw.prepare('SELECT grants FROM subscribers WHERE id=?').get(id).grants, 1, 'add-on on from the subscription');
+  const ev2 = { ...ev, id: 'evt_items2', data: { object: { ...ev.data.object, items: { data: [{ price: { id: 'price_fake' } }] } } } };
+  body = JSON.stringify(ev2);
+  await webhook(env, body, signed('whsec_fake', body));
+  eq(env.DB.raw.prepare('SELECT grants FROM subscribers WHERE id=?').get(id).grants, 0, 'add-on off when the item is removed');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

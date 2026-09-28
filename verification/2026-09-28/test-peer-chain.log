@@ -1,5 +1,5 @@
 # test-peer-chain
-# host=claude-cloud commit=abe45f2 dirty=true utc=2026-09-28T21:12:40Z
+# host=claude-cloud commit=db988d3 dirty=true utc=2026-09-28T21:23:35Z
 # $ python3 -c "import zmq" 2>/dev/null && python3 tools/helix-team/test_peer_chain.py || { echo SKIP-REASON: pyzmq not installed; exit 0; }
 
   ok  juliet refuses to bind off-loopback without a secret
@@ -18,7 +18,7 @@ Traceback (most recent call last):
   File "zmq/backend/cython/_zmq.py", line 1009, in zmq.backend.cython._zmq.Socket.bind
   File "zmq/backend/cython/_zmq.py", line 190, in zmq.backend.cython._zmq._check_rc
 zmq.error.ZMQError: Address already in use (addr='tcp://127.0.0.1:5580')
-[2026-09-28 21:12:43,196] [ROMEO] worker thread died; exiting 1
+[2026-09-28 21:23:37,891] [ROMEO] worker thread died; exiting 1
 
 FAIL  a signed message crosses untranslated (non-package)
       AssertionError: None
@@ -41,7 +41,7 @@ Traceback (most recent call last):
   File "zmq/backend/cython/_zmq.py", line 1009, in zmq.backend.cython._zmq.Socket.bind
   File "zmq/backend/cython/_zmq.py", line 190, in zmq.backend.cython._zmq._check_rc
 zmq.error.ZMQError: Address already in use (addr='tcp://127.0.0.1:5580')
-[2026-09-28 21:12:43,196] [ROMEO] worker thread died; exiting 1
+[2026-09-28 21:23:37,891] [ROMEO] worker thread died; exiting 1
 
   ok  barrel 2 gets 5583/5584 (no collision with barrel 1)
 FAIL  SIGTERM stops both cleanly

@@ -38,7 +38,16 @@ CREATE TABLE IF NOT EXISTS subscribers (
   stripe_subscription_id TEXT,
   billing_status         TEXT NOT NULL DEFAULT 'beta'
                          CHECK (billing_status IN ('beta','checkout_sent','trialing','active','past_due','canceled')),
-  billing_updated_at     TEXT
+  billing_updated_at     TEXT,
+  -- Grants add-on (2026-09-28): paid add-on, admin-set during the beta, set by
+  -- the Stripe subscription item afterwards. Eligibility = Grants.gov applicant
+  -- type codes (23 small business, 22 for-profit, 21 individuals, 12/13
+  -- nonprofits, 07/11 tribal, 99 unrestricted). Empty categories/keywords = all.
+  grants            INTEGER NOT NULL DEFAULT 0,
+  grant_eligibility TEXT NOT NULL DEFAULT '["23"]',
+  grant_categories  TEXT NOT NULL DEFAULT '[]',
+  grant_keywords    TEXT NOT NULL DEFAULT '[]',
+  grant_min_award   INTEGER NOT NULL DEFAULT 0      -- "about how much do you need" (USD); grants with a smaller ceiling are dropped, unknown ceilings pass
 );
 
 CREATE TABLE IF NOT EXISTS sent_matches (
@@ -61,7 +70,8 @@ CREATE TABLE IF NOT EXISTS runs (
   capped          INTEGER NOT NULL DEFAULT 0,
   matches_json    TEXT,
   error           TEXT,
-  created_at      TEXT NOT NULL
+  created_at      TEXT NOT NULL,
+  kind            TEXT NOT NULL DEFAULT 'radar'   -- radar | grants
 );
 CREATE INDEX IF NOT EXISTS idx_runs_date ON runs(run_date);
 
@@ -86,7 +96,12 @@ CREATE TABLE IF NOT EXISTS applications (
   subscriber_id   INTEGER REFERENCES subscribers(id),
   created_at      TEXT NOT NULL,
   verified_at     TEXT,
-  reviewed_at     TEXT
+  reviewed_at     TEXT,
+  grants            INTEGER NOT NULL DEFAULT 0,      -- Grants add-on survey (2026-09-28)
+  grant_eligibility TEXT NOT NULL DEFAULT '[]',
+  grant_categories  TEXT NOT NULL DEFAULT '[]',
+  grant_keywords    TEXT NOT NULL DEFAULT '[]',
+  grant_min_award   INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_app_email ON applications(email);
 CREATE INDEX IF NOT EXISTS idx_app_status ON applications(status);
@@ -99,4 +114,31 @@ CREATE TABLE IF NOT EXISTS billing_events (
   subscriber_id INTEGER REFERENCES subscribers(id),
   received_at   TEXT NOT NULL,
   summary       TEXT
+);
+
+-- Grants.gov opportunities (the Grants add-on). One row per opportunity id;
+-- eligibilities/categories are JSON lists of Grants.gov codes ([] = unknown,
+-- let through like an unknown SAM notice type).
+CREATE TABLE IF NOT EXISTS grants (
+  opp_id         TEXT PRIMARY KEY,
+  number         TEXT,
+  title          TEXT NOT NULL,
+  agency         TEXT,
+  agency_code    TEXT,
+  open_date      TEXT NOT NULL,          -- YYYY-MM-DD
+  close_date     TEXT,                   -- YYYY-MM-DD or NULL (rolling)
+  status         TEXT,
+  eligibilities  TEXT NOT NULL DEFAULT '[]',
+  categories     TEXT NOT NULL DEFAULT '[]',
+  award_ceiling  INTEGER,
+  ui_link        TEXT,
+  fetched_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_grants_open ON grants(open_date);
+
+CREATE TABLE IF NOT EXISTS grant_matches (
+  subscriber_id INTEGER NOT NULL REFERENCES subscribers(id),
+  opp_id        TEXT NOT NULL,
+  sent_at       TEXT NOT NULL,
+  PRIMARY KEY (subscriber_id, opp_id)
 );

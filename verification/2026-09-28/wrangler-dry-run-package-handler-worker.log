@@ -1,5 +1,5 @@
 # wrangler-dry-run-package-handler-worker
-# host=claude-cloud commit=abe45f2 dirty=true utc=2026-09-28T21:14:06Z
+# host=claude-cloud commit=db988d3 dirty=true utc=2026-09-28T21:25:00Z
 # $ cd sector2/package-handler/worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5
 
 Binding                                       Resource         

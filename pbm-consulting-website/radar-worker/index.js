@@ -519,6 +519,11 @@ function validateSubscriber(b) {
   if (b.states != null && (!Array.isArray(b.states) || !b.states.every(s => /^[A-Za-z]{2}$/.test(s)))) errs.push('states: list of 2-letter codes (empty = nationwide)');
   if (b.ptypes != null && (!Array.isArray(b.ptypes) || !b.ptypes.every(p => ALL_PTYPES.includes(p)))) errs.push(`ptypes: list from ${ALL_PTYPES.join(', ')}`);
   if (b.mode != null && !['certified', 'planning'].includes(b.mode)) errs.push('mode: certified | planning');
+  if (b.grants != null && typeof b.grants !== 'boolean') errs.push('grants: true | false');
+  if (b.grant_eligibility != null && (!Array.isArray(b.grant_eligibility) || !b.grant_eligibility.length || !b.grant_eligibility.every(c => GRANT_ELIGIBILITY[String(c)]))) errs.push(`grant_eligibility: list from ${Object.keys(GRANT_ELIGIBILITY).join(', ')}`);
+  if (b.grant_categories != null && (!Array.isArray(b.grant_categories) || !b.grant_categories.every(c => GRANT_CATEGORIES[String(c)]))) errs.push(`grant_categories: list from ${Object.keys(GRANT_CATEGORIES).join(', ')} (empty = all)`);
+  if (b.grant_min_award != null && !(Number.isInteger(b.grant_min_award) && b.grant_min_award >= 0 && b.grant_min_award <= 100000000)) errs.push('grant_min_award: whole dollars, 0 (any) to 100,000,000');
+  if (b.grant_keywords != null && (!Array.isArray(b.grant_keywords) || b.grant_keywords.length > 20 || !b.grant_keywords.every(k => typeof k === 'string' && k.length >= 2 && k.length <= 40))) errs.push('grant_keywords: up to 20 words, 2-40 chars each (empty = all)');
   return errs;
 }
 
@@ -535,14 +540,25 @@ async function saveSubscriber(env, b) {
     b.active === false ? 0 : 1,
   ];
   const existing = await env.DB.prepare('SELECT id, unsub_token FROM subscribers WHERE email = ?').bind(email).first();
+  // Grants add-on fields are only written when the caller sent them, so a
+  // plain radar update never resets a paid add-on.
+  const gset = [], gvals = [];
+  if (b.grants != null) { gset.push('grants=?'); gvals.push(b.grants ? 1 : 0); }
+  if (b.grant_eligibility != null) { gset.push('grant_eligibility=?'); gvals.push(JSON.stringify(b.grant_eligibility.map(String))); }
+  if (b.grant_categories != null) { gset.push('grant_categories=?'); gvals.push(JSON.stringify(b.grant_categories.map(String))); }
+  if (b.grant_keywords != null) { gset.push('grant_keywords=?'); gvals.push(JSON.stringify(b.grant_keywords.map(k => k.trim()).filter(Boolean))); }
+  if (b.grant_min_award != null) { gset.push('grant_min_award=?'); gvals.push(Number(b.grant_min_award)); }
   if (existing) {
-    await env.DB.prepare('UPDATE subscribers SET name=?, naics=?, certs=?, states=?, ptypes=?, mode=?, active=? WHERE id=?').bind(...fields, existing.id).run();
+    await env.DB.prepare(`UPDATE subscribers SET name=?, naics=?, certs=?, states=?, ptypes=?, mode=?, active=?${gset.length ? ', ' + gset.join(', ') : ''} WHERE id=?`)
+      .bind(...fields, ...gvals, existing.id).run();
     return { id: existing.id, created: false, unsub_token: existing.unsub_token };
   }
   const token = genToken();
   const r = await env.DB.prepare('INSERT INTO subscribers (email, name, naics, certs, states, ptypes, mode, active, unsub_token, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
     .bind(email, ...fields, token, new Date().toISOString()).run();
-  return { id: r.meta && r.meta.last_row_id, created: true, unsub_token: token };
+  const newId = r.meta && r.meta.last_row_id;
+  if (gset.length) await env.DB.prepare(`UPDATE subscribers SET ${gset.join(', ')} WHERE id=?`).bind(...gvals, newId).run();
+  return { id: newId, created: true, unsub_token: token };
 }
 
 async function upsertSubscriber(req, env) {
@@ -670,7 +686,26 @@ function parseApplication(b) {
   if (!nationwide && !states.length) errors.push('List the states you work in, or check "Anywhere in the U.S."');
   if (states.length > 60 || !states.every(s => STATE_CODES.has(s))) errors.push('Use 2-letter state codes, like OK, TX.');
   const mode = b.mode === 'certified' ? 'certified' : 'planning';
-  return { app: { email, business_name: business, name, work_desc: work, naics, certs, states, mode }, errors };
+  // Grants add-on survey (optional). "Who are you" -> one Grants.gov applicant
+  // type; "what for" -> categories; "in a few words" -> keywords; "about how
+  // much" -> whole dollars. Only validated when the add-on box is ticked.
+  const grants = b.grants === true || b.grants === 'on' || b.grants === 'true';
+  let grant_eligibility = [], grant_categories = [], grant_keywords = [], grant_min_award = 0;
+  if (grants) {
+    const who = String(b.grant_who || '').trim();
+    const WHO = { small: ['23'], forprofit: ['22'], nonprofit: ['12', '13'], individual: ['21'], tribal: ['07', '11'] };
+    if (!WHO[who]) errors.push('For grants, tell us who would apply: small business, other for-profit, nonprofit, individual, or tribal.');
+    else grant_eligibility = WHO[who];
+    grant_categories = splitList(b.grant_categories).map(c => c.toUpperCase());
+    if (grant_categories.length > 12 || !grant_categories.every(c => GRANT_CATEGORIES[c])) errors.push('Pick grant areas from the list.');
+    grant_keywords = String(b.grant_keywords || '').split(/[,\n]/).map(k => k.trim()).filter(Boolean).slice(0, 20);
+    if (grant_keywords.some(k => k.length < 2 || k.length > 40)) errors.push('Grant keywords: 2 to 40 characters each, separated by commas.');
+    const amt = String(b.grant_min_award || '').replace(/[$,\s]/g, '');
+    if (amt && !/^\d{1,9}$/.test(amt)) errors.push('About how much do you need? Whole dollars, like 25000.');
+    grant_min_award = amt ? Number(amt) : 0;
+  }
+  return { app: { email, business_name: business, name, work_desc: work, naics, certs, states, mode,
+    grants, grant_eligibility, grant_categories, grant_keywords, grant_min_award }, errors };
 }
 
 function appSummaryText(a) {
@@ -683,6 +718,7 @@ function appSummaryText(a) {
     `Work:     ${a.work_desc || '(not given)'}`,
     `Certs:    ${certs} (${a.mode === 'certified' ? 'holds them now' : 'pursuing'})`,
     `States:   ${states.length ? states.join(', ') : 'Anywhere in the U.S.'}`,
+    a.grants ? `Grants:   YES — ${parseList(a.grant_eligibility).map(c => GRANT_ELIGIBILITY[c] || c).join('/')}; areas ${parseList(a.grant_categories).map(c => GRANT_CATEGORIES[c] || c).join(', ') || 'all'}; words ${parseList(a.grant_keywords).join(', ') || '(none)'}; needs ~$${Number(a.grant_min_award || 0).toLocaleString('en-US')}` : 'Grants:   no',
   ].join('\n');
 }
 
@@ -707,8 +743,9 @@ async function handleApply(req, env) {
     await env.DB.prepare('UPDATE applications SET name=?, business_name=?, naics=?, work_desc=?, certs=?, states=?, mode=?, code_hash=?, code_expires_at=?, attempt_count=0 WHERE id=?')
       .bind(...cols, codeHash, expires, pending.id).run();
   } else {
-    await env.DB.prepare('INSERT INTO applications (email, name, business_name, naics, work_desc, certs, states, mode, code_hash, code_expires_at, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
-      .bind(app.email, ...cols, codeHash, expires, new Date().toISOString()).run();
+    await env.DB.prepare('INSERT INTO applications (email, name, business_name, naics, work_desc, certs, states, mode, code_hash, code_expires_at, created_at, grants, grant_eligibility, grant_categories, grant_keywords, grant_min_award) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .bind(app.email, ...cols, codeHash, expires, new Date().toISOString(),
+        app.grants ? 1 : 0, JSON.stringify(app.grant_eligibility), JSON.stringify(app.grant_categories), JSON.stringify(app.grant_keywords), app.grant_min_award || 0).run();
   }
 
   const sent = await sendEmail(env, {
@@ -762,6 +799,13 @@ async function approveApplication(env, a, overrides = {}) {
     states: overrides.states || parseList(a.states),
     mode: overrides.mode || a.mode,
   };
+  if (a.grants) {   // the survey answers become the subscriber's grant profile (beta: add-on on at approval)
+    sub.grants = true;
+    sub.grant_eligibility = parseList(a.grant_eligibility).map(String);
+    sub.grant_categories = parseList(a.grant_categories).map(String);
+    sub.grant_keywords = parseList(a.grant_keywords).map(String);
+    sub.grant_min_award = Number(a.grant_min_award || 0);
+  }
   const errs = validateSubscriber(sub);
   if (errs.length) return { ok: false, errors: errs };
   const r = await saveSubscriber(env, { ...sub, active: true });
@@ -811,6 +855,243 @@ async function handleReview(req, env, token) {
     return html(reviewPage(a, null, 'Declined. Nothing was sent to them.'));
   }
   return html(reviewPage(a, token, 'Pick Approve or Decline.'), 400);
+}
+
+
+// ---------------------------------------------------------------- Grants add-on (Grants.gov)
+// Paid add-on to Set-Aside Radar (Jerry, 2026-09-28). Same shape as the SAM
+// pull: every morning, the opportunities Grants.gov POSTED since the last
+// run (search2, public, no key), one detail call per new opportunity for its
+// applicant types / categories / ceiling / close date (fetchOpportunity),
+// matched per subscriber with the add-on, never sent twice (grant_matches),
+// one short digest, an honest `runs` row (kind='grants').
+// Field names follow api.grants.gov's public documentation; ONE live call
+// from a box with egress confirms them (the build container had none).
+const GRANTS_SEARCH_URL = 'https://api.grants.gov/v1/api/search2';
+const GRANTS_DETAIL_URL = 'https://api.grants.gov/v1/api/fetchOpportunity';
+const GRANTS_PAGE = 100;
+const GRANTS_MAX_REQUESTS = 250;        // per run: pages + detail calls, so a burst day cannot run away
+const GRANTS_KEEP_DAYS = 120;
+// Grants.gov applicant-type codes we let subscribers pick, with plain names.
+const GRANT_ELIGIBILITY = {
+  '23': 'Small businesses', '22': 'For-profit organizations (other than small businesses)', '21': 'Individuals',
+  '12': 'Nonprofits with 501(c)(3)', '13': 'Nonprofits without 501(c)(3)', '07': 'Native American tribal governments',
+  '11': 'Native American tribal organizations', '99': 'Unrestricted',
+};
+const GRANT_CATEGORIES = {
+  BC: 'Business and Commerce', CD: 'Community Development', ED: 'Education', EN: 'Energy', ENV: 'Environment',
+  HL: 'Health', HO: 'Housing', ST: 'Science and Technology', T: 'Transportation', RD: 'Regional Development',
+  IS: 'Information and Statistics', DPR: 'Disaster Prevention and Relief', ELT: 'Employment, Labor and Training',
+  FN: 'Food and Nutrition', NR: 'Natural Resources', AG: 'Agriculture', ACA: 'Arts', LJL: 'Law, Justice and Legal Services', O: 'Other',
+};
+
+function grantsDate(s) {            // Grants.gov gives MM/DD/YYYY (sometimes ISO); normalize to YYYY-MM-DD
+  if (!s) return null;
+  const m = String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m) return `${m[3]}-${m[1]}-${m[2]}`;
+  const iso = String(s).match(/^(\d{4}-\d{2}-\d{2})/);
+  return iso ? iso[1] : null;
+}
+
+function normalizeGrant(hit, detail) {
+  const syn = (detail && (detail.synopsis || (detail.data && detail.data.synopsis))) || {};
+  const codes = (list) => (Array.isArray(list) ? list : []).map(x => String((x && (x.id || x.code)) || x)).filter(Boolean);
+  const oppId = String(hit.id || (detail && detail.id) || '');
+  const openDate = grantsDate(hit.openDate || syn.postingDate);
+  if (!oppId || !openDate || !hit.title) return null;
+  return {
+    opp_id: oppId,
+    number: hit.number || null,
+    title: String(hit.title).slice(0, 300),
+    agency: hit.agency || syn.agencyName || null,
+    agency_code: hit.agencyCode || syn.agencyCode || null,
+    open_date: openDate,
+    close_date: grantsDate(hit.closeDate || syn.responseDate),
+    status: hit.oppStatus || null,
+    eligibilities: codes(syn.applicantTypes),
+    categories: codes(syn.fundingActivityCategories),
+    award_ceiling: syn.awardCeiling != null && !isNaN(Number(syn.awardCeiling)) ? Math.round(Number(syn.awardCeiling)) : null,
+    ui_link: `https://www.grants.gov/search-results-detail/${oppId}`,
+  };
+}
+
+async function grantsPost(url, body) {
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
+  if (!res.ok) throw new Error(`grants.gov ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  return res.json();
+}
+
+// Everything posted on or after `sinceIso`, newest first, stopping at the
+// first page that is entirely older. One detail call per opportunity not
+// already stored. Never more than GRANTS_MAX_REQUESTS calls.
+async function fetchGrants(env, sinceIso) {
+  const out = { requests: 0, seen: 0, kept: [], capped: false, error: null };
+  let start = 0;
+  try {
+    while (true) {
+      if (out.requests >= GRANTS_MAX_REQUESTS) { out.capped = true; break; }
+      out.requests++;
+      const body = await grantsPost(GRANTS_SEARCH_URL, { keyword: '', oppStatuses: 'posted', rows: GRANTS_PAGE, startRecordNum: start, sortBy: 'openDate|desc' });
+      const hits = (body.data && Array.isArray(body.data.oppHits)) ? body.data.oppHits : [];
+      if (!hits.length) break;
+      let olderSeen = false;
+      for (const h of hits) {
+        const od = grantsDate(h.openDate);
+        if (!od) continue;
+        if (od < sinceIso) { olderSeen = true; continue; }
+        out.seen++;
+        const known = await env.DB.prepare('SELECT opp_id FROM grants WHERE opp_id = ?').bind(String(h.id)).first();
+        if (known) continue;
+        let detail = null;
+        if (out.requests < GRANTS_MAX_REQUESTS) {
+          out.requests++;
+          try { detail = await grantsPost(GRANTS_DETAIL_URL, { opportunityId: h.id }); } catch (e) { detail = null; }
+        } else { out.capped = true; }
+        const row = normalizeGrant(h, detail);
+        if (row) out.kept.push(row);
+      }
+      if (olderSeen) break;
+      start += hits.length;
+      const total = Number(body.data && body.data.hitCount || 0);
+      if (total && start >= total) break;
+    }
+  } catch (e) {
+    out.error = redact(`grants.gov: ${e.message}`, env).slice(0, 300);
+  }
+  return out;
+}
+
+async function storeGrants(env, rows) {
+  if (!rows.length) return;
+  const now = new Date().toISOString();
+  const stmts = rows.map(r => env.DB.prepare(
+    `INSERT OR REPLACE INTO grants (opp_id, number, title, agency, agency_code, open_date, close_date, status, eligibilities, categories, award_ceiling, ui_link, fetched_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(r.opp_id, r.number, r.title, r.agency, r.agency_code, r.open_date, r.close_date, r.status,
+    JSON.stringify(r.eligibilities), JSON.stringify(r.categories), r.award_ceiling, r.ui_link, now));
+  for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
+}
+
+function normGrantRow(g) {
+  return { ...g, eligibilities: parseList(g.eligibilities).map(String), categories: parseList(g.categories).map(String) };
+}
+
+// Eligibility overlap (unknown = let through), category overlap (subscriber
+// empty = all; grant unknown = let through), any keyword in the title
+// (subscriber empty = all), and not closed.
+function grantMatches(sub, g, now = new Date()) {
+  const elig = parseList(sub.grant_eligibility).map(String);
+  const cats = parseList(sub.grant_categories).map(String);
+  const kws = parseList(sub.grant_keywords).map(k => String(k).toLowerCase()).filter(Boolean);
+  if (g.eligibilities.length && elig.length && !g.eligibilities.some(e => elig.includes(e))) return false;
+  if (cats.length && g.categories.length && !g.categories.some(c => cats.includes(c))) return false;
+  if (kws.length && !kws.some(k => g.title.toLowerCase().includes(k))) return false;
+  if (g.close_date && g.close_date < chicagoDate(now)) return false;
+  const need = Number(sub.grant_min_award || 0);
+  if (need > 0 && g.award_ceiling != null && g.award_ceiling < need) return false;   // too small for what they need; unknown ceilings pass
+  return true;
+}
+
+function grantDue(g) {
+  return g.close_date ? `Closes ${prettyDate(g.close_date)}` : 'Rolling / no close date listed';
+}
+
+function grantsDigestText(sub, items, stats, unsubUrl) {
+  const lines = ['GRANTS RADAR — PBM Consulting Service', ''];
+  items.slice(0, EMAIL_ITEM_CAP).forEach((g, i) => {
+    lines.push(`${i + 1}. ${g.title}`);
+    lines.push(`   ${g.agency || 'Federal'}${g.number ? ' · ' + g.number : ''}`);
+    lines.push(`   ${grantDue(g)}${g.award_ceiling ? ' · up to $' + g.award_ceiling.toLocaleString('en-US') : ''}${g.categories.length ? ' · ' + g.categories.map(c => GRANT_CATEGORIES[c] || c).join(', ') : ''}`);
+    lines.push(`   ${g.ui_link}`, '');
+  });
+  if (items.length > EMAIL_ITEM_CAP) lines.push(`+ ${items.length - EMAIL_ITEM_CAP} more — reply and we'll send the full list.`, '');
+  lines.push(`Checked ${stats.seen.toLocaleString('en-US')} grants posted since ${prettyDate(stats.since)} · ${stats.matched} matched you.`, '',
+    `A grant is an application, not a bid: read the eligibility on Grants.gov before you spend a day on it.`, '', `Unsubscribe: ${unsubUrl}`);
+  return lines.join('\n');
+}
+
+function grantsDigestHtml(sub, items, stats, unsubUrl) {
+  const rows = items.slice(0, EMAIL_ITEM_CAP).map(g => `<tr><td style="padding:14px 0;border-bottom:1px solid #CFC6A8;">
+      <span style="display:inline-block;font:bold 11px Arial,sans-serif;letter-spacing:1px;color:#fff;background:#8C2F1B;padding:3px 7px;">GRANT</span>
+      <div style="font-size:16px;font-weight:bold;margin:6px 0 2px;"><a href="${escapeHtml(g.ui_link)}" style="color:#2B2620;text-decoration:none;">${escapeHtml(g.title)}</a></div>
+      <div style="font-size:13px;color:#5a5346;">${escapeHtml(g.agency || 'Federal')}${g.number ? ' · ' + escapeHtml(g.number) : ''}</div>
+      <div style="font-size:13px;margin-top:4px;"><b>${escapeHtml(grantDue(g))}</b>${g.award_ceiling ? ' · up to $' + g.award_ceiling.toLocaleString('en-US') : ''}${g.categories.length ? ' · ' + escapeHtml(g.categories.map(c => GRANT_CATEGORIES[c] || c).join(', ')) : ''}</div>
+      <div style="margin-top:6px;"><a href="${escapeHtml(g.ui_link)}" style="font-size:13px;color:#8C2F1B;">View on Grants.gov →</a></div>
+    </td></tr>`).join('');
+  const more = items.length > EMAIL_ITEM_CAP ? `<p style="font-size:13px;">+ ${items.length - EMAIL_ITEM_CAP} more — reply and we'll send the full list.</p>` : '';
+  return `<!doctype html><html><body style="margin:0;background:#EFEAD9;font-family:Georgia,serif;color:#2B2620;">
+  <div style="max-width:600px;margin:24px auto;padding:28px;background:#fff;border:1px solid #CFC6A8;">
+    <div style="border-bottom:2px solid #8C2F1B;padding-bottom:12px;margin-bottom:14px;">
+      <div style="font-size:12px;letter-spacing:2px;color:#8C2F1B;font-family:Arial,sans-serif;">GRANTS RADAR</div>
+      <div style="font-size:20px;font-weight:bold;color:#1F3D2B;">${items.length} new grant${items.length === 1 ? '' : 's'} for ${escapeHtml(sub.name || 'you')}</div>
+    </div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">${rows}</table>
+    ${more}
+    <p style="font-size:12px;color:#5a5346;margin-top:20px;">Checked ${stats.seen.toLocaleString('en-US')} grants posted since ${escapeHtml(prettyDate(stats.since))} · ${stats.matched} matched you. A grant is an application, not a bid: read the eligibility on Grants.gov first.</p>
+    <p style="font-size:12px;color:#5a5346;">PBM Consulting Service · 6814 Chris Madsen Rd, Guthrie, OK 73044 ·
+      <a href="${escapeHtml(unsubUrl)}" style="color:#5a5346;">Unsubscribe</a></p>
+  </div></body></html>`;
+}
+
+// opts: { dry, fetch (default true), since (YYYY-MM-DD, default yesterday Chicago), now }
+async function runGrants(env, opts = {}) {
+  const now = opts.now || new Date();
+  const runIso = chicagoDate(now);
+  const since = opts.since || addDays(runIso, -1);
+  const dry = !!opts.dry;
+  const summary = { kind: 'grants', run_date: runIso, since, dry, requests_used: 0, seen: 0, kept: 0, capped: false, error: null, subscribers: [] };
+  if (opts.fetch !== false) {
+    const f = await fetchGrants(env, since);
+    summary.requests_used = f.requests; summary.seen = f.seen; summary.kept = f.kept.length; summary.capped = f.capped; summary.error = f.error;
+    await storeGrants(env, f.kept);
+  }
+  const grants = ((await env.DB.prepare('SELECT * FROM grants WHERE open_date >= ?').bind(since).all()).results || []).map(normGrantRow);
+  if (opts.fetch === false) summary.kept = grants.length;
+  const subs = ((await env.DB.prepare('SELECT * FROM subscribers WHERE active = 1 AND grants = 1').all()).results || []).map(normSub);
+  for (const sub of subs) {
+    const matched = grants.filter(g => grantMatches(sub, g, now)).sort((a, b) => String(a.close_date || '9999').localeCompare(String(b.close_date || '9999')));
+    const already = new Set(((await env.DB.prepare('SELECT opp_id FROM grant_matches WHERE subscriber_id = ?').bind(sub.id).all()).results || []).map(r => r.opp_id));
+    const fresh = matched.filter(g => !already.has(g.opp_id));
+    const unsubUrl = `${baseUrl(env)}/unsub/${sub.unsub_token}`;
+    const stats = { seen: summary.seen, matched: fresh.length, since };
+    const entry = { id: sub.id, email: sub.email, matched: fresh.length, sent: 'none' };
+    if (fresh.length) {
+      const mail = { to: sub.email, subject: `Grants · ${fresh.length} new grant${fresh.length === 1 ? '' : 's'} for ${sub.name || 'you'} · ${prettyDate(runIso)}`,
+        text: grantsDigestText(sub, fresh, stats, unsubUrl), htmlBody: grantsDigestHtml(sub, fresh, stats, unsubUrl), unsubUrl };
+      if (dry) { entry.sent = 'dry'; entry.preview = { subject: mail.subject, text: mail.text }; }
+      else {
+        entry.sent = await sendEmail(env, mail);
+        if (entry.sent === 'ok') {
+          const ts = now.toISOString();
+          await env.DB.batch(fresh.map(g => env.DB.prepare('INSERT OR IGNORE INTO grant_matches (subscriber_id, opp_id, sent_at) VALUES (?,?,?)').bind(sub.id, g.opp_id, ts)));
+        }
+      }
+    }
+    summary.subscribers.push(entry);
+  }
+  if (!dry || summary.requests_used) {
+    await env.DB.prepare(
+      `INSERT INTO runs (run_date, posted_date, dry, requests_used, notices_seen, set_asides_kept, capped, matches_json, error, created_at, kind)
+       VALUES (?,?,?,?,?,?,?,?,?,?,'grants')`
+    ).bind(runIso, since, dry ? 1 : 0, summary.requests_used, summary.seen, summary.kept, summary.capped ? 1 : 0,
+      JSON.stringify(summary.subscribers.map(x => ({ id: x.id, matched: x.matched, sent: x.sent }))), summary.error, now.toISOString()).run();
+  }
+  if (!dry) await env.DB.prepare('DELETE FROM grants WHERE open_date < ?').bind(addDays(runIso, -GRANTS_KEEP_DAYS)).run();
+  return summary;
+}
+
+async function grantsPreview(url, env) {
+  const id = Number(url.searchParams.get('subscriber'));
+  const since = url.searchParams.get('since') || addDays(chicagoDate(), -7);
+  if (!id || !isIsoDate(since)) return json({ ok: false, error: 'need ?subscriber=<id>&since=YYYY-MM-DD' }, 400);
+  const row = await env.DB.prepare('SELECT * FROM subscribers WHERE id = ?').bind(id).first();
+  if (!row) return json({ ok: false, error: 'no such subscriber' }, 404);
+  const sub = normSub(row);
+  const grants = ((await env.DB.prepare('SELECT * FROM grants WHERE open_date >= ?').bind(since).all()).results || []).map(normGrantRow);
+  const matched = grants.filter(g => grantMatches(sub, g));
+  return json({ ok: true, subscriber: id, since, grants_add_on: !!row.grants, stored: grants.length, matched: matched.length,
+    items: matched.slice(0, 50).map(g => ({ opp_id: g.opp_id, title: g.title, agency: g.agency, close_date: g.close_date, award_ceiling: g.award_ceiling, categories: g.categories, ui_link: g.ui_link })) });
 }
 
 // ---------------------------------------------------------------- billing (Stripe)
@@ -882,11 +1163,16 @@ async function billingCheckout(url, env) {
     customer = c.id;
     await setBilling(env, sub.id, { stripe_customer_id: customer });
   }
+  const addon = url.searchParams.get('addon') || '';
+  if (addon && addon !== 'grants') return json({ ok: false, error: 'addon: grants' }, 400);
+  if (addon === 'grants' && !env.STRIPE_GRANTS_PRICE_ID) return json({ ok: false, error: 'grants add-on price not configured (STRIPE_GRANTS_PRICE_ID)' }, 503);
+  const lineItems = { 0: { price: env.STRIPE_PRICE_ID, quantity: 1 } };
+  if (addon === 'grants') lineItems[1] = { price: env.STRIPE_GRANTS_PRICE_ID, quantity: 1 };
   const session = await stripe(env, 'POST', '/checkout/sessions', {
     mode: 'subscription',
     customer,
     client_reference_id: String(sub.id),
-    line_items: { 0: { price: env.STRIPE_PRICE_ID, quantity: 1 } },
+    line_items: lineItems,
     success_url: `${SITE_ORIGIN}/radar?checkout=done`,
     cancel_url: `${SITE_ORIGIN}/radar?checkout=cancel`,
     allow_promotion_codes: 'true',
@@ -901,7 +1187,7 @@ async function billingCheckout(url, env) {
     text: `Hi${sub.name ? ' ' + sub.name : ''},\n\nWe said we would ask before ever charging you. The Radar beta is ending for your account; if you want to keep the morning digests, this is the link to start the $9.99/month subscription:\n\n${session.url}\n\nNothing happens unless you use it. Cards are handled by Stripe; we never see them. To stop the digests instead: ${unsubUrl}\n\nPBM Consulting Service · 6814 Chris Madsen Rd, Guthrie, OK 73044`,
     unsubUrl,
   });
-  return json({ ok: true, subscriber_id: sub.id, customer, session_id: session.id, url: session.url });
+  return json({ ok: true, subscriber_id: sub.id, customer, session_id: session.id, url: session.url, addon: addon || null });
 }
 
 // GET /billing?subscriber=<id>  (admin)
@@ -973,6 +1259,11 @@ async function billingWebhook(req, env) {
   } else if (ev.type === 'customer.subscription.created' || ev.type === 'customer.subscription.updated') {
     const st = SUB_STATUS[obj.status] || sub.billing_status;
     const fields = { stripe_subscription_id: String(obj.id), billing_status: st };
+    // the Grants add-on follows the subscription items once billing is live
+    const items = (obj.items && Array.isArray(obj.items.data)) ? obj.items.data : [];
+    if (env.STRIPE_GRANTS_PRICE_ID && items.length) {
+      fields.grants = items.some(it => it && it.price && it.price.id === env.STRIPE_GRANTS_PRICE_ID && (st === 'active' || st === 'trialing')) ? 1 : 0;
+    }
     if (env.BILLING_ENFORCE === '1' && (st === 'canceled' || st === 'past_due')) fields.active = 0;
     if (env.BILLING_ENFORCE === '1' && (st === 'active' || st === 'trialing') && !sub.active) fields.active = 1;
     await setBilling(env, sub.id, fields);
@@ -1012,7 +1303,7 @@ async function adminApplications(req, url, env, path) {
 
 // ---------------------------------------------------------------- entry
 
-export { verifyStripeSignature, formEncode,
+export { verifyStripeSignature, formEncode, runGrants, grantMatches, normalizeGrant, grantsDate, GRANT_ELIGIBILITY, GRANT_CATEGORIES,
   CERT_SETASIDES, normalize, matches, stateFromText, realCity, isOpen, normSub, eligibleSetAsides, ptypeOf, chicagoDate, addDays, toSamDate,
   redact, isAuthorized, fetchPosted, runRadar, subjectFor, footerLine, validateSubscriber, digestText, parseApplication,
 };
@@ -1034,6 +1325,7 @@ export default {
         admin_notify: env.ADMIN_NOTIFY_EMAIL ? 'set' : 'UNSET',
         billing: billingConfigured(env) ? (env.STRIPE_WEBHOOK_SECRET ? 'stripe' : 'stripe (no webhook secret)') : 'UNSET',
         billing_enforce: env.BILLING_ENFORCE === '1',
+        grants_add_on: !!env.STRIPE_GRANTS_PRICE_ID || 'beta (admin-set)',
         last_run: last || null,
       });
     }
@@ -1063,17 +1355,24 @@ export default {
       return handleUnsub(req, env, token);
     }
 
-    const admin = ['/whoami', '/subscribers', '/preview', '/run', '/runs', '/applications', '/applications/approve', '/applications/reject', '/billing', '/billing/checkout'];
+    const admin = ['/whoami', '/subscribers', '/preview', '/run', '/runs', '/applications', '/applications/approve', '/applications/reject', '/billing', '/billing/checkout', '/grants/run', '/grants/preview'];
     if (admin.includes(path)) {
       if (!(await isAuthorized(req, env))) return json({ ok: false, error: 'unauthorized' }, 401);
       // rotate-phoenix-auth.sh verifies each leg here.
       if (path === '/whoami') return json({ ok: true, worker: 'pbm-radar-worker' });
       if (path.startsWith('/applications')) return adminApplications(req, url, env, path);
+      if (path === '/grants/preview' && req.method === 'GET') return grantsPreview(url, env);
+      if (path === '/grants/run' && req.method === 'POST') {
+        const since = url.searchParams.get('since');
+        if (since && !isIsoDate(since)) return json({ ok: false, error: 'since must be YYYY-MM-DD' }, 400);
+        const g = await runGrants(env, { dry: url.searchParams.get('dry') === '1', fetch: url.searchParams.get('fetch') !== '0', since: since || undefined });
+        return json({ ok: !g.error, ...g });
+      }
       if (path === '/billing/checkout' && req.method === 'POST') return billingCheckout(url, env);
       if (path === '/billing' && req.method === 'GET') return billingStatus(url, env);
       if (path === '/subscribers' && req.method === 'POST') return upsertSubscriber(req, env);
       if (path === '/subscribers' && req.method === 'GET') {
-        const r = await env.DB.prepare('SELECT id, email, name, naics, certs, states, ptypes, mode, active, billing_status, created_at FROM subscribers ORDER BY id').all();
+        const r = await env.DB.prepare('SELECT id, email, name, naics, certs, states, ptypes, mode, active, billing_status, grants, grant_eligibility, grant_categories, grant_keywords, grant_min_award, created_at FROM subscribers ORDER BY id').all();
         return json({ ok: true, subscribers: r.results || [] });
       }
       if (path === '/preview' && req.method === 'GET') return preview(url, env);
@@ -1097,6 +1396,12 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
+    ctx.waitUntil(runGrants(env).catch(async e => {
+      try {
+        await env.DB.prepare("INSERT INTO runs (run_date, posted_date, dry, requests_used, notices_seen, set_asides_kept, capped, matches_json, error, created_at, kind) VALUES (?,?,0,0,0,0,0,?,?,?,'grants')")
+          .bind(chicagoDate(), addDays(chicagoDate(), -1), '[]', redact(`crash: ${e.message}`, env).slice(0, 300), new Date().toISOString()).run();
+      } catch { /* nothing left to record into */ }
+    }));
     ctx.waitUntil(runRadar(env).catch(async e => {
       try {
         await env.DB.prepare('INSERT INTO runs (run_date, posted_date, dry, requests_used, notices_seen, set_asides_kept, capped, matches_json, error, created_at) VALUES (?,?,0,0,0,0,0,?,?,?)')

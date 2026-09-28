@@ -8,6 +8,9 @@ const nationwide = document.getElementById('ap-nationwide');
 const statesInput = document.getElementById('ap-states');
 let pendingEmail = '';
 
+const grantsBox = document.getElementById('ap-grants');
+const grantsSurvey = document.getElementById('grants-survey');
+grantsBox.addEventListener('change', () => { grantsSurvey.hidden = !grantsBox.checked; });
 nationwide.addEventListener('change', () => {
   statesInput.disabled = nationwide.checked;
 });
@@ -30,6 +33,11 @@ applyForm.addEventListener('submit', async (e) => {
     mode: fd.get('mode'),
     states: nationwide.checked ? '' : fd.get('states'),
     nationwide: nationwide.checked,
+    grants: grantsBox.checked,
+    grant_who: fd.get('grant_who'),
+    grant_categories: fd.getAll('grant_categories'),
+    grant_keywords: fd.get('grant_keywords'),
+    grant_min_award: fd.get('grant_min_award'),
     turnstile_token: fd.get('cf-turnstile-response') || '',
   };
   if (!payload.turnstile_token) { applyStatus.textContent = 'Please wait for the security check to finish, then try again.'; return; }

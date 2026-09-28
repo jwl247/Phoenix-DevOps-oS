@@ -1,5 +1,5 @@
 # build-phoenix-core
-# host=claude-cloud commit=abe45f2 dirty=true utc=2026-09-28T21:14:26Z
+# host=claude-cloud commit=db988d3 dirty=true utc=2026-09-28T21:25:20Z
 # $ cd phoenix-core && make -n >/dev/null && make -s clean >/dev/null 2>&1; make -s 2>&1 | tail -20
 
 

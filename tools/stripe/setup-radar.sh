@@ -43,6 +43,21 @@ else
   echo "   exists  $PRICE_ID"
 fi
 
+echo "== add-on price: Grants, \$9.99 / month"
+GRANTS_PRODUCT_ID=$(s "$API/products/search" --get --data-urlencode "query=metadata['phoenix']:'radar-grants'" | jq_ "d['data'][0]['id'] if d['data'] else ''")
+if [[ -z "$GRANTS_PRODUCT_ID" ]]; then
+  GRANTS_PRODUCT_ID=$(s "$API/products" -d name="Set-Aside Radar: Grants add-on" -d "description=Every morning: the Grants.gov opportunities a small business, nonprofit, individual or tribal applicant could actually apply for, matched to a four-answer profile." \
+    -d "metadata[phoenix]=radar-grants" -H "Idempotency-Key: radar-grants-product-v1" | jq_ "d['id']")
+fi
+GRANTS_PRICE_ID=$(s "$API/prices" --get -d product="$GRANTS_PRODUCT_ID" -d active=true -d limit=10 | jq_ "next((p['id'] for p in d['data'] if p.get('unit_amount')==999 and p.get('recurring',{}).get('interval')=='month'), '')")
+if [[ -z "$GRANTS_PRICE_ID" ]]; then
+  GRANTS_PRICE_ID=$(s "$API/prices" -d product="$GRANTS_PRODUCT_ID" -d unit_amount=999 -d currency=usd -d "recurring[interval]=month" \
+    -d "nickname=Grants add-on monthly" -H "Idempotency-Key: radar-grants-price-999-v1" | jq_ "d['id']")
+  echo "   created $GRANTS_PRICE_ID"
+else
+  echo "   exists  $GRANTS_PRICE_ID"
+fi
+
 echo "== webhook endpoint -> $WORKER/billing/webhook"
 EP=$(s "$API/webhook_endpoints" --get -d limit=100 | jq_ "next((e for e in d['data'] if e['url']=='$WORKER/billing/webhook'), {})")
 if [[ "$EP" == "{}" ]]; then
@@ -62,6 +77,8 @@ echo "== set on pbm-radar-worker (from pbm-consulting-website/radar-worker):"
 echo "   printf '%s' \"\$STRIPE_SECRET_KEY\" | npx wrangler secret put STRIPE_SECRET_KEY"
 [[ -n "$WEBHOOK_SECRET" ]] && echo "   printf '%s' '$WEBHOOK_SECRET' | npx wrangler secret put STRIPE_WEBHOOK_SECRET"
 echo "   add to wrangler.jsonc vars:  \"STRIPE_PRICE_ID\": \"$PRICE_ID\"      (a price id is not a secret)"
+echo "   add to wrangler.jsonc vars:  \"STRIPE_GRANTS_PRICE_ID\": \"$GRANTS_PRICE_ID\""
+echo "   then: npx wrangler d1 execute pbm_radar_db --remote --file=migrations/2026-09-28-grants.sql"
 echo "   optional: \"BILLING_ENFORCE\": \"1\" once the beta ends (canceled/past_due stops the digests)"
 echo "   then: npx wrangler d1 execute pbm_radar_db --remote --file=migrations/2026-09-28-billing.sql && npx wrangler deploy"
 echo "   vault (bottom of F:\\Phoenix\\Vault\\secrets\\phoenix-secrets.env): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_ID (test now; swap to the live values there when live)"

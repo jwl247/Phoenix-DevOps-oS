@@ -2,24 +2,24 @@
  {
   "check": "build-libhelix",
   "result": "0",
-  "seconds": 0.104,
+  "seconds": 0.16,
   "command": "cd sector1/kernels/libhelix && gcc -O2 -shared -fPIC -o /tmp/libhelix-verify.so libhelix.c && echo built",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:26Z"
+  "utc": "2026-09-28T21:25:20Z"
  },
  {
   "check": "build-phoenix-core",
   "result": "0",
-  "seconds": 0.221,
+  "seconds": 0.304,
   "command": "cd phoenix-core && make -n >/dev/null && make -s clean >/dev/null 2>&1; make -s 2>&1 | tail -20",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:26Z"
+  "utc": "2026-09-28T21:25:21Z"
  },
  {
   "check": "game-gate-pull-run",
@@ -35,24 +35,24 @@
  {
   "check": "syntax-bash",
   "result": "0",
-  "seconds": 0.4,
+  "seconds": 0.414,
   "command": "rc=0; n=0; while IFS= read -r -d \"\" f; do case \"$f\" in *.sh) ;; *) head -c 64 \"$f\" 2>/dev/null | head -1 | grep -qE \"^#!.*(bash|/sh)\\b\" || continue ;; esac; n=$((n+1)); if grep -q $'\\r' \"$f\"; then echo \"FAIL $f (CRLF line endings)\"; rc=1; fi; bash -n \"$f\" || { echo \"FAIL $f\"; rc=1; }; done < <(find . -path ./archive -prune -o -path \"*/node_modules\" -prune -o -path ./verification -prune -o -path ./.git -prune -o -type f \\( -name \"*.sh\" -o ! -name \"*.*\" \\) -print0); echo \"checked $n scripts\"; exit $rc",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:12:20Z"
+  "utc": "2026-09-28T21:23:15Z"
  },
  {
   "check": "syntax-node",
   "result": "0",
-  "seconds": 3.358,
+  "seconds": 3.178,
   "command": "rc=0; while IFS= read -r -d \"\" f; do node --check \"$f\" 2>/dev/null || { echo \"FAIL $f\"; rc=1; }; done < <(find . -path ./archive -prune -o -path \"*/node_modules\" -prune -o \\( -name \"*.js\" -o -name \"*.mjs\" -o -name \"*.cjs\" \\) -print0); exit $rc",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:12:23Z"
+  "utc": "2026-09-28T21:23:19Z"
  },
  {
   "check": "syntax-powershell",
@@ -60,197 +60,197 @@
   "seconds": 0.0,
   "command": "pwsh -NoProfile -Command \"\\$e=0; Get-ChildItem -Recurse -Filter *.ps1 | Where-Object FullName -notmatch \\\"\\\\\\\\archive\\\\\\\\|/archive/\\\" | ForEach-Object { \\$t=\\$null; \\$err=\\$null; [System.Management.Automation.Language.Parser]::ParseFile(\\$_.FullName,[ref]\\$t,[ref]\\$err) | Out-Null; if (\\$err) { \\$e++; Write-Output (\\\"FAIL \\\" + \\$_.FullName); \\$err | ForEach-Object { Write-Output (\\\"  \\\" + \\$_.Message) } } }; exit \\$e\"",
   "reason": "pwsh not present",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:12:23Z"
+  "utc": "2026-09-28T21:23:19Z"
  },
  {
   "check": "syntax-python",
   "result": "0",
-  "seconds": 0.064,
+  "seconds": 0.073,
   "command": "python3 -m compileall -q $(find . -path ./archive -prune -o -path \"*/node_modules\" -prune -o -path \"*/.venv\" -prune -o -name \"*.py\" -print) && echo compiled",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:12:20Z"
+  "utc": "2026-09-28T21:23:16Z"
  },
  {
   "check": "test-ball-permissions",
   "result": "0",
-  "seconds": 0.086,
+  "seconds": 0.066,
   "command": "python3 sector1/helix-lightning/test_ball_permissions.py",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:04Z"
+  "utc": "2026-09-28T21:24:59Z"
  },
  {
   "check": "test-config-centralizer",
   "result": "0",
-  "seconds": 0.171,
+  "seconds": 0.149,
   "command": "cd dashboard && node --test config-centralizer.test.js",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:06Z"
+  "utc": "2026-09-28T21:25:00Z"
  },
  {
   "check": "test-copes-guardians",
   "result": "0",
-  "seconds": 0.067,
+  "seconds": 0.055,
   "command": "python3 sector1/security/test_guardians.py",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:04Z"
+  "utc": "2026-09-28T21:24:59Z"
  },
  {
   "check": "test-guardian",
   "result": "0",
-  "seconds": 3.189,
+  "seconds": 3.183,
   "command": "python3 sector4/guardian/test_guardian.py",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:12:40Z"
+  "utc": "2026-09-28T21:23:35Z"
  },
  {
   "check": "test-hands",
   "result": "0",
-  "seconds": 0.586,
+  "seconds": 0.626,
   "command": "python3 hands/test_hands.py",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:12:30Z"
+  "utc": "2026-09-28T21:23:25Z"
  },
  {
   "check": "test-helix-vram",
   "result": "0",
-  "seconds": 4.386,
+  "seconds": 3.717,
   "command": "HELIX_VRAM_NO_KERNEL=1 python3 sector1/helix/test_helix_vram.py",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:12:35Z"
+  "utc": "2026-09-28T21:23:30Z"
  },
  {
   "check": "test-helix-vramd",
   "result": "0",
-  "seconds": 1.917,
+  "seconds": 1.886,
   "command": "HELIX_VRAM_NO_KERNEL=1 python3 sector1/helix/test_helix_vramd.py",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:12:37Z"
+  "utc": "2026-09-28T21:23:32Z"
  },
  {
   "check": "test-intake-versioning",
   "result": "0",
-  "seconds": 5.996,
+  "seconds": 5.969,
   "command": "bash sector2/package-handler/tests/test_intake_versioning.sh",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:12:29Z"
+  "utc": "2026-09-28T21:23:25Z"
  },
  {
   "check": "test-leads-worker",
   "result": "0",
-  "seconds": 0.244,
+  "seconds": 0.214,
   "command": "cd pbm-consulting-website/worker && node --test test.mjs",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:05Z"
+  "utc": "2026-09-28T21:24:59Z"
  },
  {
   "check": "test-meds-worker",
   "result": "0",
-  "seconds": 0.2,
+  "seconds": 0.196,
   "command": "cd sector2/apps/lifefirst/meds-worker && node --test test.mjs",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:05Z"
+  "utc": "2026-09-28T21:25:00Z"
  },
  {
   "check": "test-mesh-worker",
   "result": "0",
-  "seconds": 0.223,
+  "seconds": 0.227,
   "command": "cd sector3/phoenix-net/mesh-worker && node --test test.mjs",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:05Z"
+  "utc": "2026-09-28T21:25:00Z"
  },
  {
   "check": "test-meshd",
   "result": "0",
-  "seconds": 0.074,
+  "seconds": 0.077,
   "command": "python3 sector3/phoenix-net/meshd/test_meshd.py",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:12:31Z"
+  "utc": "2026-09-28T21:23:26Z"
  },
  {
   "check": "test-office-worker",
   "result": "0",
-  "seconds": 0.239,
+  "seconds": 0.221,
   "command": "cd phoenix-office/worker && node --test test.mjs",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:05Z"
+  "utc": "2026-09-28T21:25:00Z"
  },
  {
   "check": "test-peer-chain",
   "result": "0",
-  "seconds": 83.379,
+  "seconds": 83.286,
   "command": "python3 -c \"import zmq\" 2>/dev/null && python3 tools/helix-team/test_peer_chain.py || { echo SKIP-REASON: pyzmq not installed; exit 0; }",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:04Z"
+  "utc": "2026-09-28T21:24:58Z"
  },
  {
   "check": "test-portal",
   "result": "0",
-  "seconds": 0.608,
+  "seconds": 0.59,
   "command": "python3 portal/test_server.py",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:12:31Z"
+  "utc": "2026-09-28T21:23:26Z"
  },
  {
   "check": "test-radar-worker",
   "result": "0",
-  "seconds": 0.364,
+  "seconds": 0.402,
   "command": "cd pbm-consulting-website/radar-worker && node --test test.mjs",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:04Z"
+  "utc": "2026-09-28T21:24:59Z"
  },
  {
   "check": "test-usys-suite-gate",
@@ -258,10 +258,10 @@
   "seconds": 0.0,
   "command": "pwsh -NoProfile -File scripts/usys-suite-gate.Tests.ps1",
   "reason": "pwsh not present",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:06Z"
+  "utc": "2026-09-28T21:25:00Z"
  },
  {
   "check": "test-usys-vm-args",
@@ -277,78 +277,78 @@
  {
   "check": "wrangler-dry-run-lifefirst-meds-worker",
   "result": "0",
-  "seconds": 2.791,
+  "seconds": 2.647,
   "command": "cd sector2/apps/lifefirst/meds-worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:23Z"
+  "utc": "2026-09-28T21:25:17Z"
  },
  {
   "check": "wrangler-dry-run-office-notify-worker",
   "result": "0",
-  "seconds": 2.678,
+  "seconds": 2.831,
   "command": "cd sector2/apps/office/notify-worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:20Z"
+  "utc": "2026-09-28T21:25:15Z"
  },
  {
   "check": "wrangler-dry-run-package-handler-worker",
   "result": "0",
-  "seconds": 2.725,
+  "seconds": 3.176,
   "command": "cd sector2/package-handler/worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:09Z"
+  "utc": "2026-09-28T21:25:04Z"
  },
  {
   "check": "wrangler-dry-run-pbm-consulting-website-radar-worker",
   "result": "0",
-  "seconds": 3.079,
+  "seconds": 2.724,
   "command": "cd pbm-consulting-website/radar-worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:12Z"
+  "utc": "2026-09-28T21:25:06Z"
  },
  {
   "check": "wrangler-dry-run-pbm-consulting-website-worker",
   "result": "0",
-  "seconds": 2.81,
+  "seconds": 2.612,
   "command": "cd pbm-consulting-website/worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:14Z"
+  "utc": "2026-09-28T21:25:09Z"
  },
  {
   "check": "wrangler-dry-run-phoenix-net-mesh-worker",
   "result": "0",
-  "seconds": 2.754,
+  "seconds": 2.641,
   "command": "cd sector3/phoenix-net/mesh-worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:26Z"
+  "utc": "2026-09-28T21:25:20Z"
  },
  {
   "check": "wrangler-dry-run-phoenix-office-worker",
   "result": "0",
-  "seconds": 2.838,
+  "seconds": 2.7,
   "command": "cd phoenix-office/worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5",
   "reason": "",
-  "commit": "abe45f2",
+  "commit": "db988d3",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T21:14:17Z"
+  "utc": "2026-09-28T21:25:12Z"
  }
 ]

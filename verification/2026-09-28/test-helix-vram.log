@@ -1,17 +1,17 @@
 # test-helix-vram
-# host=claude-cloud commit=abe45f2 dirty=true utc=2026-09-28T21:12:31Z
+# host=claude-cloud commit=db988d3 dirty=true utc=2026-09-28T21:23:26Z
 # $ HELIX_VRAM_NO_KERNEL=1 python3 sector1/helix/test_helix_vram.py
 
-  ok   test_concurrent_lanes  (964.8 ms)
-  ok   test_dandelion_heats_under_load_and_cools  (0.8 ms)
+  ok   test_concurrent_lanes  (1113.5 ms)
+  ok   test_dandelion_heats_under_load_and_cools  (0.9 ms)
   ok   test_free_removes_strand_b_copy  (0.5 ms)
-  ok   test_full_refuses_loudly_and_keeps_old_data  (1831.9 ms)
-  ok   test_her_format_is_zlib5  (0.7 ms)
-  ok   test_no_silent_loss_under_spill  (1445.2 ms)
-  ok   test_paging_feed_shape  (0.6 ms)
-  ok   test_prediction_protects_blocks_due_back  (0.4 ms)
-  ok   test_rung_zero_copy_and_write_invalidates  (1.0 ms)
-  ok   test_she_cools_herself_with_data  (87.5 ms)
-  ok   test_temperatures_follow_access  (0.6 ms)
+  ok   test_full_refuses_loudly_and_keeps_old_data  (1538.8 ms)
+  ok   test_her_format_is_zlib5  (0.6 ms)
+  ok   test_no_silent_loss_under_spill  (969.7 ms)
+  ok   test_paging_feed_shape  (0.4 ms)
+  ok   test_prediction_protects_blocks_due_back  (0.2 ms)
+  ok   test_rung_zero_copy_and_write_invalidates  (0.5 ms)
+  ok   test_she_cools_herself_with_data  (42.8 ms)
+  ok   test_temperatures_follow_access  (0.4 ms)
 == 0 failure(s)
 # exit=0

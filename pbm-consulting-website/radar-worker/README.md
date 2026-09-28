@@ -58,12 +58,27 @@ It's Laurie's product, and PBM is customer zero.
 | `POST /billing/checkout?subscriber=` | Bearer | **asks first, never charges**: creates/reuses the Stripe customer, a subscription Checkout Session for `STRIPE_PRICE_ID` ($9.99/mo), emails the subscriber the link (cards go to Stripe, never here). 409 if unsubscribed or already active; 503 without Stripe keys |
 | `GET /billing?subscriber=` | Bearer | billing_status, Stripe ids, last 10 webhook events |
 | `POST /billing/webhook` | Stripe signature | `Stripe-Signature` (t + v1 HMAC-SHA256 over `t.body`, 5-min tolerance, constant-time) is the auth; each event id acted on once (`billing_events`); `checkout.session.completed` → active, `customer.subscription.*` → status map, `invoice.payment_failed` → past_due. With `BILLING_ENFORCE=1` (off during the beta) canceled/past_due also stops the digests (`active=0`) |
+| `POST /grants/run?dry=1&fetch=0&since=` | Bearer | **Grants add-on** run: Grants.gov `search2` (public, no key) for everything posted since `since` (default yesterday), one `fetchOpportunity` per new opportunity (applicant types, categories, ceiling, close date), match per subscriber with `grants=1`, never twice (`grant_matches`), `runs` row with `kind='grants'`. Capped at 250 calls per run |
+| `GET /grants/preview?subscriber=&since=` | Bearer | matches from stored grants, no calls |
 | `GET /whoami` | Bearer `PHOENIX_AUTH` | rotation check |
 | `POST /subscribers` | Bearer | create/update by email: `{email,name,naics[],certs[],states[],ptypes[],mode}` |
 | `GET /subscribers` | Bearer | list |
 | `GET /preview?subscriber=&date=YYYY-MM-DD` | Bearer | matches from stored bids (costs no SAM request) |
 | `POST /run?dry=1&fetch=0&date=` | Bearer | manual run. `dry=1` builds the email but doesn't send; `fetch=0` reuses stored bids |
 | `GET /runs` | Bearer | last 30 runs |
+
+## Grants add-on (2026-09-28)
+
+Paid add-on to Radar ($9.99/month extra, free during the beta; `STRIPE_GRANTS_PRICE_ID` as a second Checkout line item with `?addon=grants`, and the flag then follows the Stripe subscription items). The subscriber's **grant profile is a four-answer survey** (on the public form under "Grants add-on", or via `POST /subscribers`):
+
+| Field | Meaning | Match rule |
+|---|---|---|
+| `grant_eligibility` | who would apply — Grants.gov applicant-type codes: `23` small business, `22` other for-profit, `21` individual, `12`/`13` nonprofit, `07`/`11` tribal, `99` unrestricted | overlap with the grant's applicant types; a grant with no types listed passes |
+| `grant_categories` | what for — Grants.gov funding categories (`BC`, `CD`, `ELT`, `EN`, `ENV`, `HO`, `ST`, `T`, `RD`, `AG`, `DPR`, `ED`, …) | overlap; empty = all; a grant with no category passes |
+| `grant_keywords` | a few words about the work (up to 20) | any keyword in the title; empty = all |
+| `grant_min_award` | about how much they need (whole dollars) | grants whose maximum award is below it are dropped; unknown ceilings pass |
+
+Runs in the same daily cron, after the SAM pull. Every digest says "a grant is an application, not a bid". Field names follow api.grants.gov's public documentation; the first live run from a box with egress confirms them (the build container had none) — check the `runs` row's `error` after the first cron. Existing database: `migrations/2026-09-28-grants.sql` once.
 
 ## Secrets
 - `SAM_API_KEY`: sam.gov → Account Details → request public API key. **Expires every 90 days.**
@@ -76,7 +91,7 @@ It's Laurie's product, and PBM is customer zero.
 
 ## Run / test / deploy
 ```bash
-npm test                                  # 43 tests, real SQLite via node:sqlite, SAM + Resend + Stripe faked
+npm test                                  # 50 tests, real SQLite via node:sqlite, SAM + Grants.gov + Resend + Stripe faked
 npx wrangler deploy
 npx wrangler d1 execute pbm_radar_db --remote --file=schema.sql   # schema (idempotent)
 curl -X POST -H "Authorization: Bearer $PHOENIX_AUTH" "https://pbm-radar-worker.phoenix-jwl.workers.dev/run?dry=1"

@@ -1,5 +1,5 @@
 # test-radar-worker
-# host=claude-cloud commit=abe45f2 dirty=true utc=2026-09-28T21:14:04Z
+# host=claude-cloud commit=db988d3 dirty=true utc=2026-09-28T21:24:59Z
 # $ cd pbm-consulting-website/radar-worker && node --test test.mjs
 
 TAP version 13
@@ -14,7 +14,7 @@ TAP version 13
 #   ok  fetchPosted pages to totalRecords (2,510 notices = 3 requests), keeps 9 set-asides
 #   ok  fetchPosted stops at the request budget and says so
 #   ok  SAM error text never carries the key
-# (node:26815) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (node:1047) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 # (Use `node --trace-warnings ...` to show where the warning was created)
 #   ok  run: fetch, store, match, one digest email with the right content
 #   ok  same bid is never sent twice; budget counts across runs
@@ -48,11 +48,18 @@ TAP version 13
 #   ok  billing: checkout.session.completed activates the subscriber; redelivery is a no-op
 #   ok  billing: cancellation and failed payment only change status during the beta; BILLING_ENFORCE=1 stops the digests
 #   ok  billing: an event for an unknown customer is recorded and ignored; /health shows billing wiring
-# 43 passed, 0 failed
+#   ok  grants: normalize + date handling
+#   ok  grants: run fetches, stores, matches the survey, one digest, never twice
+#   ok  grants: subscribers without the add-on get nothing; a plain radar update does not reset the add-on
+#   ok  grants: validation of the profile fields
+#   ok  grants: dry run previews, preview route, run route auth, grants.gov failure recorded
+#   ok  grants: the public form survey lands on the application and on the approved subscriber
+#   ok  grants: Stripe add-on line item on checkout; subscription items set the flag
+# 50 passed, 0 failed
 # Subtest: test.mjs
 ok 1 - test.mjs
   ---
-  duration_ms: 282.573489
+  duration_ms: 324.425799
   type: 'test'
   ...
 1..1
@@ -63,5 +70,5 @@ ok 1 - test.mjs
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 292.38151
+# duration_ms 334.383051
 # exit=0

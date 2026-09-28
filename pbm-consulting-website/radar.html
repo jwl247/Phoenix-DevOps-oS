@@ -127,6 +127,43 @@
           <input id="ap-states" name="states" type="text" placeholder="e.g. OK, TX, KS" maxlength="200">
           <label class="inline-check"><input type="checkbox" id="ap-nationwide" name="nationwide"> Anywhere in the U.S.</label></div>
 
+        <fieldset class="field" id="grants-block">
+          <legend>Grants add-on <span class="hint">(optional, $9.99/month extra, free during the beta)</span></legend>
+          <label class="inline-check"><input type="checkbox" id="ap-grants" name="grants"> Also watch Grants.gov for me</label>
+          <div id="grants-survey" hidden>
+            <p class="hint">A grant is an application, not a bid. Four quick answers and we only send the ones you could actually apply for.</p>
+            <div class="field"><label for="ap-grant-who">Who would apply?</label>
+              <select id="ap-grant-who" name="grant_who">
+                <option value="small">Small business</option>
+                <option value="forprofit">Other for-profit company</option>
+                <option value="nonprofit">Nonprofit</option>
+                <option value="individual">Individual</option>
+                <option value="tribal">Tribal government or organization</option>
+              </select></div>
+            <div class="field"><span class="label">What for? (pick any; none = everything)</span>
+              <div class="checks">
+                <label><input type="checkbox" name="grant_categories" value="BC"> Business and commerce</label>
+                <label><input type="checkbox" name="grant_categories" value="CD"> Community development</label>
+                <label><input type="checkbox" name="grant_categories" value="ELT"> Employment and training</label>
+                <label><input type="checkbox" name="grant_categories" value="EN"> Energy</label>
+                <label><input type="checkbox" name="grant_categories" value="ENV"> Environment</label>
+                <label><input type="checkbox" name="grant_categories" value="HO"> Housing</label>
+                <label><input type="checkbox" name="grant_categories" value="ST"> Science and technology</label>
+                <label><input type="checkbox" name="grant_categories" value="T"> Transportation</label>
+                <label><input type="checkbox" name="grant_categories" value="RD"> Regional development</label>
+                <label><input type="checkbox" name="grant_categories" value="AG"> Agriculture</label>
+                <label><input type="checkbox" name="grant_categories" value="DPR"> Disaster prevention and relief</label>
+                <label><input type="checkbox" name="grant_categories" value="ED"> Education</label>
+              </div></div>
+            <div class="field"><label for="ap-grant-keywords">In a few words, what would you use it for?</label>
+              <input id="ap-grant-keywords" name="grant_keywords" type="text" maxlength="300" placeholder="e.g. equipment, apprenticeship, steel fabrication, rural">
+              <p class="hint">Separate with commas. Leave blank to see everything in your areas.</p></div>
+            <div class="field"><label for="ap-grant-amount">About how much do you need?</label>
+              <input id="ap-grant-amount" name="grant_min_award" type="text" inputmode="numeric" maxlength="12" placeholder="e.g. 25000">
+              <p class="hint">Whole dollars. We skip grants whose maximum award is below this. Leave blank for any size.</p></div>
+          </div>
+        </fieldset>
+
         <div class="cf-turnstile" data-sitekey="0x4AAAAAAFFZlAsR3JQ08oA0" data-action="radar_apply"></div>
 
         <button type="submit" class="cta">Email me my code</button>
