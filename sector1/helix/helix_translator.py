@@ -39,6 +39,14 @@ class TranslationEntry:
 # HELIX TRANSLATOR
 # ============================================================================
 
+def helix_backend_from_daemon(sock_path=None):
+    """The real backend: the Helix memory manager service (helix_vramd.py) over
+    its Unix socket. Returns a HelixVramClient whose .memory/.fs faces are what
+    HelixTranslator expects. Raises OSError when the daemon is not running."""
+    from helix_vramd import HelixVramClient  # same directory
+    return HelixVramClient(sock_path)
+
+
 class HelixTranslator:
     """
     Lightweight translator between app world and Helix world

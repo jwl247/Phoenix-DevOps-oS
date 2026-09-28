@@ -12,7 +12,7 @@ Type=simple
 Environment=PHOENIX_PAGING_HELIX=kernel
 Environment=PHOENIX_PAGING_NVME_MOUNT=/var/lib/phoenix-swap
 Environment=PHOENIX_PAGING_SWAPFILE_PATH=/var/lib/phoenix-swap/swapfile
-Environment=PHOENIX_PAGING_TOTAL_RAM_GB=15
+# total RAM is read live from /proc/meminfo (SystemMonitor); no per-machine figure here
 Environment=PHOENIX_PAGING_MAX_SWAP_GB=96
 Environment=PHOENIX_PAGING_MIN_SWAP_GB=4
 EnvironmentFile=-/etc/default/phoenix-paging

@@ -37,8 +37,14 @@ from datetime import datetime
 CATALOG_DB       = os.path.expanduser("~/.catalog/catalog.db")
 LOG_DIR          = os.path.expanduser("~/.unitedsys/logs")
 LOG_FILE         = os.path.join(LOG_DIR, "juliet.log")
-TRANSLATOR_SH    = "/etc/systemd/system/translator.sh"
-TRANSLATOR_FALLBACK = os.path.expanduser("~/projects/phoenix/translator/translator.sh")
+# The boundary translator (sector3/translator/translator.sh) as deployed:
+# TRANSLATOR_SH env first, then the repo at /opt/phoenix (Compaq/pbm3), then
+# the repo this file sits in, then the two legacy locations.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+TRANSLATOR_SH    = os.environ.get("TRANSLATOR_SH") or "/opt/phoenix/sector3/translator/translator.sh"
+TRANSLATOR_FALLBACK = os.path.join(_HERE, "..", "translator", "translator.sh")
+TRANSLATOR_LEGACY = ["/etc/systemd/system/translator.sh",
+                     os.path.expanduser("~/projects/phoenix/translator/translator.sh")]
 VERSION          = "2.0.0"
 
 # Ports
@@ -103,10 +109,9 @@ def call_translator(verb, package=""):
     Call translator.sh at platform boundary.
     This is the ONLY place translation fires — output only.
     """
-    translator = TRANSLATOR_SH
-    if not os.path.exists(translator):
-        translator = TRANSLATOR_FALLBACK
-    if not os.path.exists(translator):
+    translator = next((c for c in [TRANSLATOR_SH, TRANSLATOR_FALLBACK, *TRANSLATOR_LEGACY]
+                       if os.path.exists(c)), None)
+    if translator is None:
         log.warning("translator.sh not found — passthrough mode")
         return f"{verb} {package}".strip(), False
 

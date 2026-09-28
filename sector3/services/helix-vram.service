@@ -1,0 +1,30 @@
+# helix-vram.service — the Helix memory manager (userspace double Helix,
+# sector1/helix/helix_vram.py) hosted as a service by helix_vramd.py, linked
+# to the kernel Helix through libhelix. Local processes use her over
+# /run/phoenix/helix-vram.sock (group phoenix). Settings: /etc/default/helix-vram.
+# Install: tools/helix-team/install-team.sh
+[Unit]
+Description=Helix memory manager (userspace double Helix over a Unix socket)
+After=helix.service
+Requires=helix.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/helix-vram
+Environment=HELIX_LIBHELIX_DIR=/opt/phoenix/sector1/kernels/libhelix
+Environment=PYTHONUNBUFFERED=1
+RuntimeDirectory=phoenix
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/python3 /opt/phoenix/sector1/helix/helix_vramd.py serve
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectSystem=full
+ReadWritePaths=/var/lib/helix /run/phoenix
+# /dev/helix_intent needs root; the socket is opened to group phoenix by the daemon (0660)
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,30 @@
+# helix-guardian.service — the ring guardian (sector4/guardian/
+# integrated_guardian.py) as a daemon: every 5 minutes it scans the Phoenix
+# unit and config directories for port/path conflicts between services,
+# keeps the team's friendship registry, and writes a heartbeat.
+# State lives in /var/lib/phoenix/guardian (PHOENIX_GUARDIAN_HOME), never in
+# the repo tree. Install: tools/helix-team/install-team.sh
+[Unit]
+Description=Helix ring guardian (config/port conflict watch + heartbeat)
+After=helix.service
+Wants=helix.service
+
+[Service]
+Type=simple
+Environment=PHOENIX_GUARDIAN_HOME=/var/lib/phoenix/guardian
+Environment=PHOENIX_GUARDIAN_SCAN_DIRS=/opt/phoenix/sector3/services:/etc/systemd/system:/etc/default
+Environment=PHOENIX_GUARDIAN_INTERVAL=300
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/default/helix-guardian
+StateDirectory=phoenix/guardian
+ExecStart=/usr/bin/python3 /opt/phoenix/sector4/guardian/integrated_guardian.py guardian_1 daemon
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/phoenix/guardian
+
+[Install]
+WantedBy=multi-user.target
