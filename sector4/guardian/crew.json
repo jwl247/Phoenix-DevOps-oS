@@ -1,0 +1,35 @@
+{
+  "_": "The crew roster. One sailor per sector: verifies and tends its own deck, reports to the captain (Jerry), never touches the helm. Read by sector4/guardian/sailor.py. Paths are repo-relative (PHOENIX_ROOT / /opt/phoenix on a box).",
+  "exclude_dirs": [".git", "node_modules", "__pycache__", ".venv", "archive", "verification"],
+  "rule_exempt": ["sector4/guardian/sailor.py", "sector4/guardian/gangway.py", "sector4/guardian/test_sailor.py", "sector4/guardian/crew.json", "docs/helix/CREW.md"],
+  "sectors": {
+    "sector1": {
+      "deck": "Boot, GRUB, kernel: frank3, Helix kernel + memory manager, phoenix_auth, CoPES, concierge",
+      "watch": ["sector1"],
+      "services": ["helix.service", "helix-vram.service"],
+      "heartbeats": [{"path": "/run/phoenix/helix-vram.sock", "max_age": 0}],
+      "checks": ["test-helix-vram", "test-helix-vramd", "test-copes-guardians", "test-ball-permissions", "build-libhelix"]
+    },
+    "sector2": {
+      "deck": "Intake authority, package handler + worker, clone pool, Frank, apps (Life First, Office, ScriptForge)",
+      "watch": ["sector2", "scripts/usys.ps1", "scripts/hsf-intake.sh"],
+      "services": [],
+      "heartbeats": [],
+      "checks": ["test-intake-versioning", "test-meds-worker", "test-office-worker", "wrangler-dry-run-package-handler-worker"]
+    },
+    "sector3": {
+      "deck": "Comms + networking: Romeo/Juliet, quadengine, translator boundary, Phoenix Net + Mesh, service units",
+      "watch": ["sector3"],
+      "services": [],
+      "heartbeats": [],
+      "checks": ["test-meshd", "test-mesh-worker", "test-peer-chain", "wrangler-dry-run-phoenix-net-mesh-worker"]
+    },
+    "sector4": {
+      "deck": "Core engine: Frank, Helix engine, paging, ring guardian, vault + intake, the crew itself, the verification ledger",
+      "watch": ["sector4", "tools/helix-team", "tools/crew", "scripts/verify.sh", ".github/workflows/verify.yml"],
+      "services": ["helix-guardian.service", "phoenix-paging.service"],
+      "heartbeats": [{"path": "/var/lib/phoenix/guardian/heartbeat.json", "max_age": 900}],
+      "checks": ["test-guardian", "test-sailor", "test-peer-chain", "build-phoenix-core"]
+    }
+  }
+}

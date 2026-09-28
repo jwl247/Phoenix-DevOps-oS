@@ -1,0 +1,10 @@
+# test-sailor
+# host=vm commit=a065751 dirty=true utc=2026-09-28T23:53:25Z
+# $ python3 sector4/guardian/test_sailor.py
+
+..........
+----------------------------------------------------------------------
+Ran 10 tests in 3.166s
+
+OK
+# exit=0

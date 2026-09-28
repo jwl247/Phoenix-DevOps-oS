@@ -22,8 +22,9 @@ Precision (the HUD's CLAUDE CODE pane, or the terminal) can run it.
 ## 1. Helix team on the Compaq (Phase 1)
 - **C** Check the verdict run is finished before deploying: `ssh pbm-compaq 'tail -3 ~/verdict-lean-20260927-1315.log; pgrep -fa phoronix'`. If still running, do step 2 first and come back.
 - **C** `tools/helix-team/deploy-compaq.sh pbm-compaq` — ships HEAD to `/opt/phoenix`, installs `helix`, `phoenix-paging`, `helix-vram`, `helix-guardian`, runs `verify-team.sh` (16 checks), pulls the ledger back into `verification/2026-09-28/pbm-compaq-*`.
-  Done = `team on pbm-compaq: 16 passed, 0 failed`. If `vram-round-trip` fails on `kernel_linked`, `helix.ko` is not loaded: `sudo systemctl status helix`.
-- **C** Reboot the Compaq, run `ssh pbm-compaq 'sudo /opt/phoenix/tools/helix-team/verify-team.sh'` again. Done = same 16/16 after reboot.
+  Done = `team on pbm-compaq: 18 passed, 0 failed`. If `vram-round-trip` fails on `kernel_linked`, `helix.ko` is not loaded: `sudo systemctl status helix`.
+- **C** The crew comes up with the team: `ssh pbm-compaq 'systemctl is-active phoenix-sailor@sector1 phoenix-sailor@sector2 phoenix-sailor@sector3 phoenix-sailor@sector4'` → four `active`; `verify-team.sh` now has 18 checks (`crew-on-watch`, `crew-muster`). A `drift` finding right after deploy means the baseline was not commissioned: re-run `install-team.sh`.
+- **C** Reboot the Compaq, run `ssh pbm-compaq 'sudo /opt/phoenix/tools/helix-team/verify-team.sh'` again. Done = same 18/18 after reboot.
 - **C** Kernel load test for round 3 (S1-F32): `ssh pbm-compaq 'cd /opt/phoenix/sector1/kernels && sudo bash dm_helix_test.sh'` — exit 0, dmesg clean.
 - **C** Commit the returned ledger files, push.
 

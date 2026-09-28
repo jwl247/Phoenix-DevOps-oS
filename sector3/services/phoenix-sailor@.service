@@ -1,0 +1,32 @@
+# phoenix-sailor@.service — one sailor per sector, on watch.
+#   systemctl enable --now phoenix-sailor@sector1 phoenix-sailor@sector2 phoenix-sailor@sector3 phoenix-sailor@sector4
+# Read-only by the kernel, not by promise: ProtectSystem=strict + ReadWritePaths
+# = the sailor can write its home and the verification ledger, nothing else.
+# Baseline: after every approved deploy run
+#   sudo -E PHOENIX_CREW_HOME=/var/lib/phoenix/crew python3 /opt/phoenix/sector4/guardian/sailor.py <sector> commission
+# (install-team.sh does it for all four). Install: tools/helix-team/install-team.sh
+[Unit]
+Description=Phoenix sailor on watch: %i
+After=helix.service
+Wants=helix.service
+
+[Service]
+Type=simple
+Environment=PHOENIX_ROOT=/opt/phoenix
+Environment=PHOENIX_CREW_HOME=/var/lib/phoenix/crew
+Environment=VERIFY_DIR=/opt/phoenix/verification
+Environment=PHOENIX_SAILOR_INTERVAL=600
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/default/phoenix-sailor
+StateDirectory=phoenix/crew
+ExecStart=/usr/bin/python3 /opt/phoenix/sector4/guardian/sailor.py %i daemon
+Restart=on-failure
+RestartSec=15
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/phoenix/crew /opt/phoenix/verification
+
+[Install]
+WantedBy=multi-user.target

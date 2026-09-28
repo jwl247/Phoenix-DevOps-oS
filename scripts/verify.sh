@@ -99,6 +99,7 @@ check test-meshd python3 'python3 sector3/phoenix-net/meshd/test_meshd.py'
 check test-helix-vram python3 'HELIX_VRAM_NO_KERNEL=1 python3 sector1/helix/test_helix_vram.py'
 check test-helix-vramd python3 'HELIX_VRAM_NO_KERNEL=1 python3 sector1/helix/test_helix_vramd.py'
 check test-guardian python3 'python3 sector4/guardian/test_guardian.py'
+check test-sailor python3 'python3 sector4/guardian/test_sailor.py'
 check test-peer-chain python3 'python3 -c "import zmq" 2>/dev/null && python3 tools/helix-team/test_peer_chain.py || { echo SKIP-REASON: pyzmq not installed; exit 0; }'
 check test-copes-guardians python3 'python3 sector1/security/test_guardians.py'
 check test-ball-permissions python3 'python3 sector1/helix-lightning/test_ball_permissions.py'
@@ -115,6 +116,9 @@ for w in sector2/package-handler/worker pbm-consulting-website/radar-worker pbm-
   n="wrangler-dry-run-$(basename "$(dirname "$w")")-$(basename "$w")"
   check "${n}" npx "cd ${w} && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-\$\$ 2>&1 | tail -5"
 done
+
+# ── The crew: one sailor per sector, drift + never-list on every deck (services/heartbeats on a box) ──
+check crew-muster python3 'python3 sector4/guardian/sailor.py muster'
 
 # ── C: userspace pieces compile (kernel modules need a kernel tree: box-side) ──
 check build-libhelix gcc 'cd sector1/kernels/libhelix && gcc -O2 -shared -fPIC -o /tmp/libhelix-verify.so libhelix.c && echo built'

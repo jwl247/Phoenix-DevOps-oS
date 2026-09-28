@@ -1,0 +1,11 @@
+# crew-sector1
+# host=vm commit=a065751 utc=2026-09-28T23:53:28Z
+# deck: Boot, GRUB, kernel: frank3, Helix kernel + memory manager, phoenix_auth, CoPES, concierge
+
+  drift: git tree, 0 changed path(s)
+  rules: 82 text files scanned against 9 never-list patterns
+  services: skipped, vm is not a systemd box
+  heartbeat: /run/phoenix/helix-vram.sock not checked (vm is not a systemd box)
+
+
+# findings=0  exit=0

@@ -1,0 +1,19 @@
+# crew-sector4
+# host=vm commit=a065751 utc=2026-09-28T23:53:29Z
+# deck: Core engine: Frank, Helix engine, paging, ring guardian, vault + intake, the crew itself, the verification ledger
+
+  drift: git tree, 8 changed path(s)
+  rules: 20 text files scanned against 9 never-list patterns
+  services: skipped, vm is not a systemd box
+  heartbeat: /var/lib/phoenix/guardian/heartbeat.json not checked (vm is not a systemd box)
+
+  FINDING drift                  M scripts/verify.sh    differs from the committed tree
+  FINDING drift                  M tools/helix-team/install-team.sh    differs from the committed tree
+  FINDING drift                  M tools/helix-team/verify-team.sh    differs from the committed tree
+  FINDING drift                  ?? sector4/guardian/crew.json    differs from the committed tree
+  FINDING drift                  ?? sector4/guardian/gangway.py    differs from the committed tree
+  FINDING drift                  ?? sector4/guardian/sailor.py    differs from the committed tree
+  FINDING drift                  ?? sector4/guardian/test_sailor.py    differs from the committed tree
+  FINDING drift                  ?? tools/crew/    differs from the committed tree
+
+# findings=8  exit=8

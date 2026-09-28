@@ -22,6 +22,61 @@
   "utc": "2026-09-28T21:25:21Z"
  },
  {
+  "check": "crew-muster",
+  "result": "9",
+  "seconds": 0.593,
+  "command": "python3 sector4/guardian/sailor.py muster",
+  "reason": "",
+  "commit": "a065751",
+  "dirty": true,
+  "host": "vm",
+  "utc": "2026-09-28T23:53:29Z"
+ },
+ {
+  "check": "crew-sector1",
+  "result": "0",
+  "seconds": 0.1,
+  "command": "sector4/guardian/sailor.py sector1 watch",
+  "reason": "",
+  "commit": "a065751",
+  "dirty": false,
+  "host": "vm",
+  "utc": "2026-09-28T23:53:28Z"
+ },
+ {
+  "check": "crew-sector2",
+  "result": "0",
+  "seconds": 0.373,
+  "command": "sector4/guardian/sailor.py sector2 watch",
+  "reason": "",
+  "commit": "a065751",
+  "dirty": false,
+  "host": "vm",
+  "utc": "2026-09-28T23:53:29Z"
+ },
+ {
+  "check": "crew-sector3",
+  "result": "1",
+  "seconds": 0.032,
+  "command": "sector4/guardian/sailor.py sector3 watch",
+  "reason": "",
+  "commit": "a065751",
+  "dirty": false,
+  "host": "vm",
+  "utc": "2026-09-28T23:53:29Z"
+ },
+ {
+  "check": "crew-sector4",
+  "result": "8",
+  "seconds": 0.032,
+  "command": "sector4/guardian/sailor.py sector4 watch",
+  "reason": "",
+  "commit": "a065751",
+  "dirty": false,
+  "host": "vm",
+  "utc": "2026-09-28T23:53:29Z"
+ },
+ {
   "check": "game-gate-pull-run",
   "result": "0",
   "seconds": 0,
@@ -35,13 +90,13 @@
  {
   "check": "syntax-bash",
   "result": "0",
-  "seconds": 0.414,
+  "seconds": 0.645,
   "command": "rc=0; n=0; while IFS= read -r -d \"\" f; do case \"$f\" in *.sh) ;; *) head -c 64 \"$f\" 2>/dev/null | head -1 | grep -qE \"^#!.*(bash|/sh)\\b\" || continue ;; esac; n=$((n+1)); if grep -q $'\\r' \"$f\"; then echo \"FAIL $f (CRLF line endings)\"; rc=1; fi; bash -n \"$f\" || { echo \"FAIL $f\"; rc=1; }; done < <(find . -path ./archive -prune -o -path \"*/node_modules\" -prune -o -path ./verification -prune -o -path ./.git -prune -o -type f \\( -name \"*.sh\" -o ! -name \"*.*\" \\) -print0); echo \"checked $n scripts\"; exit $rc",
   "reason": "",
-  "commit": "db988d3",
+  "commit": "a065751",
   "dirty": true,
-  "host": "claude-cloud",
-  "utc": "2026-09-28T21:23:15Z"
+  "host": "vm",
+  "utc": "2026-09-28T23:53:30Z"
  },
  {
   "check": "syntax-node",
@@ -68,13 +123,13 @@
  {
   "check": "syntax-python",
   "result": "0",
-  "seconds": 0.073,
+  "seconds": 0.574,
   "command": "python3 -m compileall -q $(find . -path ./archive -prune -o -path \"*/node_modules\" -prune -o -path \"*/.venv\" -prune -o -name \"*.py\" -print) && echo compiled",
   "reason": "",
-  "commit": "db988d3",
+  "commit": "a065751",
   "dirty": true,
-  "host": "claude-cloud",
-  "utc": "2026-09-28T21:23:16Z"
+  "host": "vm",
+  "utc": "2026-09-28T23:53:30Z"
  },
  {
   "check": "test-ball-permissions",
@@ -251,6 +306,17 @@
   "dirty": true,
   "host": "claude-cloud",
   "utc": "2026-09-28T21:24:59Z"
+ },
+ {
+  "check": "test-sailor",
+  "result": "0",
+  "seconds": 3.231,
+  "command": "python3 sector4/guardian/test_sailor.py",
+  "reason": "",
+  "commit": "a065751",
+  "dirty": true,
+  "host": "vm",
+  "utc": "2026-09-28T23:53:28Z"
  },
  {
   "check": "test-usys-suite-gate",

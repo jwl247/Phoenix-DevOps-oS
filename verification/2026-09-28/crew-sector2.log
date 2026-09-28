@@ -1,0 +1,9 @@
+# crew-sector2
+# host=vm commit=a065751 utc=2026-09-28T23:53:29Z
+# deck: Intake authority, package handler + worker, clone pool, Frank, apps (Life First, Office, ScriptForge)
+
+  drift: git tree, 0 changed path(s)
+  rules: 299 text files scanned against 9 never-list patterns
+
+
+# findings=0  exit=0

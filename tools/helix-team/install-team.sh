@@ -33,14 +33,19 @@ fi
 # 4. units
 install -m 644 "$R/sector3/services/helix-vram.service" /etc/systemd/system/helix-vram.service
 install -m 644 "$R/sector3/services/helix-guardian.service" /etc/systemd/system/helix-guardian.service
+install -m 644 "$R/sector3/services/phoenix-sailor@.service" /etc/systemd/system/phoenix-sailor@.service
 chmod 755 "$R/sector1/helix/helix_vramd.py" "$R/sector4/guardian/integrated_guardian.py" "$R/sector3/translator/translator.sh"
 systemctl daemon-reload
 systemctl enable helix-vram.service helix-guardian.service
+# the crew: commission each deck against what was just deployed, then put the sailors on watch
+mkdir -p /var/lib/phoenix/crew
+for sec in sector1 sector2 sector3 sector4; do PHOENIX_ROOT="$R" PHOENIX_CREW_HOME=/var/lib/phoenix/crew VERIFY_DIR="$R/verification" python3 "$R/sector4/guardian/sailor.py" "$sec" commission; done
+systemctl enable phoenix-sailor@sector1 phoenix-sailor@sector2 phoenix-sailor@sector3 phoenix-sailor@sector4
 
 # 5. start what is not running (helix first; the rest follow their After=)
-for u in helix phoenix-paging helix-vram helix-guardian; do
+for u in helix phoenix-paging helix-vram helix-guardian phoenix-sailor@sector1 phoenix-sailor@sector2 phoenix-sailor@sector3 phoenix-sailor@sector4; do
   if [ "${HELIX_PROFILE:-}" = drive ] && [ "$u" = phoenix-paging ]; then continue; fi
   systemctl is-active --quiet "$u" || systemctl start "$u" || echo "WARN: $u did not start (journalctl -u $u)"
 done
-echo "team installed + enabled: helix, phoenix-paging, helix-vram, helix-guardian"
+echo "team installed + enabled: helix, phoenix-paging, helix-vram, helix-guardian, phoenix-sailor@sector1-4 (crew commissioned in /var/lib/phoenix/crew)"
 echo "verify: $R/tools/helix-team/verify-team.sh"

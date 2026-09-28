@@ -1,5 +1,5 @@
 # syntax-python
-# host=claude-cloud commit=db988d3 dirty=true utc=2026-09-28T21:23:15Z
+# host=vm commit=a065751 dirty=true utc=2026-09-28T23:53:30Z
 # $ python3 -m compileall -q $(find . -path ./archive -prune -o -path "*/node_modules" -prune -o -path "*/.venv" -prune -o -name "*.py" -print) && echo compiled
 
 compiled

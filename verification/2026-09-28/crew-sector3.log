@@ -1,0 +1,10 @@
+# crew-sector3
+# host=vm commit=a065751 utc=2026-09-28T23:53:29Z
+# deck: Comms + networking: Romeo/Juliet, quadengine, translator boundary, Phoenix Net + Mesh, service units
+
+  drift: git tree, 1 changed path(s)
+  rules: 44 text files scanned against 9 never-list patterns
+
+  FINDING drift                  ?? sector3/services/phoenix-sailor@.service    differs from the committed tree
+
+# findings=1  exit=1

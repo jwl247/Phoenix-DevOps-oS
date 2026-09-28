@@ -49,6 +49,8 @@ check paging-kernel-fed     'journalctl -u phoenix-paging -b --no-pager | grep -
 check paging-dash-loopback  'ss -ltn | grep ":8888 " | grep -q "127.0.0.1:8888" && echo "8888 on loopback only"'
 check vram-active           'systemctl is-active helix-vram.service'
 check vram-socket-perms     'stat -c "%a %U:%G %n" /run/phoenix/helix-vram.sock | grep -q "^660 " && stat -c "%a %n" /run/phoenix/helix-vram.sock'
+check crew-on-watch         'for s in 1 2 3 4; do systemctl is-active phoenix-sailor@sector$s >/dev/null || exit 1; done && echo "4 sailors on watch"'
+check crew-muster           'PHOENIX_ROOT=$R PHOENIX_CREW_HOME=/var/lib/phoenix/crew VERIFY_DIR=$VERIFY_DIR python3 $R/sector4/guardian/sailor.py muster'
 check vram-round-trip       'HELIX_LIBHELIX_DIR=$R/sector1/kernels/libhelix python3 - <<EOF
 import sys, os, time
 sys.path.insert(0, "$R/sector1/helix")
