@@ -27,10 +27,10 @@
   "seconds": 0,
   "command": "tools/cloudflare/pull-run-test.sh --fake",
   "reason": "fake worker",
-  "commit": "ba5f834",
+  "commit": "7271aca",
   "dirty": false,
   "host": "vm",
-  "utc": "2026-09-28T20:53:19Z"
+  "utc": "2026-09-28T21:29:56Z"
  },
  {
   "check": "syntax-bash",

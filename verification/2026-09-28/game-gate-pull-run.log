@@ -1,22 +1,20 @@
-# game-gate pull-run test  commit=ba5f834  worker=http://127.0.0.1:29034  fake=1  utc=2026-09-28T20:53:05Z  host=vm
+# game-gate pull-run test  commit=7271aca  worker=http://127.0.0.1:22480  fake=1  utc=2026-09-28T21:29:40Z  host=vm
 ## 1. stage from HEAD
-staged /tmp/tmp.OMegzUK0J4/stage/helix-team-ingress (44 files, commit ba5f834)
-staged /tmp/tmp.OMegzUK0J4/stage/helix-team-egress (44 files, commit ba5f834)
+staged /tmp/tmp.Lhu0C9pyLj/stage/helix-team-ingress (44 files, commit 7271aca)
+staged /tmp/tmp.Lhu0C9pyLj/stage/helix-team-egress (44 files, commit 7271aca)
 ## 2. intake into the worker
-intake rc=0  files=44  R2 PUTs=86  D1 posts=88  9.6s
+intake rc=0  files=44  R2 PUTs=90  D1 posts=92  9.4s
 ## 3. wipe the local pool (this box now has nothing)
 pool entries: 0
 ## 4. intake pull helix-team-ingress
-pull rc=0  files=40 (staged 44)  bytes=410396  1.1s
+pull rc=0  files=42 (staged 44)  bytes=415414  1.2s
 [intake:OK] Self registered: intake → clonepool
-[intake:OK] helix-team-ingress (directory) pulled and verified → /tmp/tmp.OMegzUK0J4/pool/helix-team-ingress
-[intake:OK] runnable: usys run helix-team-ingress   (Linux: cd /tmp/tmp.OMegzUK0J4/pool/helix-team-ingress && bash <entry from .suite.json>)
-note: differ or absent (extension not intaked by design?): ./sector1/helix/kernel/Makefile
-./sector1/helix/run/helix_run
+[intake:OK] helix-team-ingress (directory) pulled and verified → /tmp/tmp.Lhu0C9pyLj/pool/helix-team-ingress
+[intake:OK] runnable: usys run helix-team-ingress   (Linux: cd /tmp/tmp.Lhu0C9pyLj/pool/helix-team-ingress && bash <entry from .suite.json>)
 every .py/.sh staged is present and verified in the pulled suite
 ## 5. run the pulled suite
 team up=1  members started=4  (helix-vram helix-guardian helix-i romeo)
 vram ping=pong  romeo active=1
-run-team stopped rc=143
+run-team stopped rc=0  leftover processes=0
 ## 6. verdict
-PASS: Phoenix (helix-team-ingress, 40 files, commit ba5f834) was intaked to http://127.0.0.1:29034, pulled onto an empty pool with every hash verified, and ran.
+PASS: Phoenix (helix-team-ingress, 42 files, commit 7271aca) was intaked to http://127.0.0.1:22480, pulled onto an empty pool with every hash verified, and ran.

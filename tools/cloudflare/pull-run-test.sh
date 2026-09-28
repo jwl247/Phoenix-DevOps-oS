@@ -79,7 +79,8 @@ say "every .py/.sh staged is present and verified in the pulled suite"
 
 say "## 5. run the pulled suite"
 export PHOENIX_TEAM_HOME="$WORK/teamhome" PHOENIX_TEAM_ROOT="$DEST" PHOENIX_HELIX_ROLE=ingress PHOENIX_RJ_SECRET="gate-$RANDOM"
-( cd "$DEST" && bash tools/helix-team/run-team.sh > "$WORK/run.out" 2>&1 ) & RPID=$!
+# exec so $RPID IS run-team.sh (a plain subshell would take the TERM and leave the team running)
+( cd "$DEST" && exec bash tools/helix-team/run-team.sh ) > "$WORK/run.out" 2>&1 & RPID=$!
 UP=0; for _ in $(seq 1 60); do [ -f "$PHOENIX_TEAM_HOME/ready" ] && { UP=1; break; }; kill -0 $RPID 2>/dev/null || break; sleep 0.5; done
 sleep 3
 ALIVE=$(grep -c "pid" "$WORK/run.out")
@@ -90,7 +91,10 @@ PING=$(HELIX_VRAM_SOCK="$SOCK" python3 -c "import sys; sys.path.insert(0,'$DEST/
 ROMEO=$(grep -c "ingress active" "$PHOENIX_TEAM_HOME/romeo.log" 2>/dev/null || echo 0)
 say "vram ping=$PING  romeo active=$ROMEO"
 kill -TERM $RPID 2>/dev/null; wait $RPID 2>/dev/null; RRC=$?
-say "run-team stopped rc=$RRC"
+sleep 1
+LEFT=$(ps -eo pid,args | grep -F "$DEST/" | grep -v grep | wc -l)
+say "run-team stopped rc=$RRC  leftover processes=$LEFT"
+if [[ "$LEFT" -ne 0 ]]; then ps -eo pid,args | grep -F "$DEST/" | grep -v grep | awk '{print $1}' | xargs -r kill -TERM; say "FAIL: team members outlived run-team (killed)"; exit 1; fi
 
 say "## 6. verdict"
 if [[ $UP -eq 1 && "$PING" == pong && "$ROMEO" -ge 1 ]]; then
