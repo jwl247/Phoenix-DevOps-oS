@@ -1,0 +1,19 @@
+# syntax-python
+# host=claude-cloud commit=2ddcd24 dirty=true utc=2026-09-28T20:20:19Z
+# $ python3 -m compileall -q $(find . -path ./archive -prune -o -path "*/node_modules" -prune -o -path "*/.venv" -prune -o -name "*.py" -print) && echo compiled
+
+Can't list './[2026-09-28'
+Can't list '20:12:44]'
+Can't list '[intake:INFO]'
+Can't list 're-intake:'
+Can't list '7465616d646972'
+Can't list 'bucket'
+Can't list 'moved'
+Can't list 'back'
+Can't list 'to'
+Can't list 'T1'
+Can't list '(was'
+Can't list '/tmp/tmp.0MqaVW3hpA/pool/T2/7465616d646972)'
+Can't list '/tmp/tmp.0MqaVW3hpA/pool/T1/7465616d646972/v1_teamdir/a.py'
+compiled
+# exit=0

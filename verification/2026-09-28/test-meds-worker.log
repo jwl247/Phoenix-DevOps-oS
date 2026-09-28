@@ -1,0 +1,45 @@
+# test-meds-worker
+# host=claude-cloud commit=d148904 dirty=true utc=2026-09-28T20:31:07Z
+# $ cd sector2/apps/lifefirst/meds-worker && node --test test.mjs
+
+TAP version 13
+#   ok  configure creates guardrail
+#   ok  guardrail active
+#   ok  status: ask+due true before first dose
+#   ok  cron opened exactly one alert
+#   ok  alert sent once
+#   ok  pushover fired
+#   ok  no duplicate alert on next tick
+#   ok  no premature re-send
+#   ok  escalated to level 2 when stale
+#   ok  re-sent on escalation
+#   ok  caregiver_notified_at stamped past threshold
+#   ok  pushover sent to Jerry
+#   ok  ack confirm page 200
+#   ok  GET alone does not log a dose
+#   ok  ack page 200
+#   ok  dose logged via link-ack
+#   ok  alert cycle closed
+#   ok  next_check_at advanced ~24h
+#   ok  malformed ack token -> 400, not a thrown 500
+#   ok  status: ask false after dose
+#   ok  no new alert while covered
+#   ok  status requires auth
+#   ok  record-dose never touches active flag
+# 23 passed, 0 failed
+# Subtest: test.mjs
+ok 1 - test.mjs
+  ---
+  duration_ms: 126.534175
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 135.900398
+# exit=0

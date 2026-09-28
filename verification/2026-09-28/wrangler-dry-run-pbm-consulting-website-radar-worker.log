@@ -1,0 +1,10 @@
+# wrangler-dry-run-pbm-consulting-website-radar-worker
+# host=claude-cloud commit=2ddcd24 dirty=true utc=2026-09-28T20:20:38Z
+# $ cd pbm-consulting-website/radar-worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5
+
+env.DB (pbm_radar_db)                                                     D1 Database               
+env.WORKER_PUBLIC_URL ("https://pbm-radar-worker.phoenix-jwl....")        Environment Variable      
+env.TURNSTILE_HOSTNAMES ("pbmconsultingservice.com")                      Environment Variable      
+
+--dry-run: exiting now.
+# exit=0

@@ -14,3 +14,8 @@ Makefile    text eol=lf
 *.timer     text eol=lf
 *.conf      text eol=lf
 hands/** text eol=lf
+# the extensionless Linux wrappers in bin/ (usys, run, clone, intake, status, align_dirs,
+# get_distros) are bash; their .cmd twins are Windows batch and stay CRLF (round-3 S34OPS-F19)
+bin/*       text eol=lf
+bin/*.cmd   text eol=crlf
+bin/*.md    text

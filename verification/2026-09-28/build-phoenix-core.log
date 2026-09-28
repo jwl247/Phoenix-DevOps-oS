@@ -1,0 +1,9 @@
+# build-phoenix-core
+# host=claude-cloud commit=2ddcd24 dirty=true utc=2026-09-28T20:21:20Z
+# $ cd phoenix-core && make -n >/dev/null && make -s clean >/dev/null 2>&1; make -s 2>&1 | tail -20
+
+
+  Built libhelix.a
+  Next: make test
+
+# exit=0

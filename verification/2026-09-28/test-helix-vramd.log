@@ -1,0 +1,19 @@
+# test-helix-vramd
+# host=claude-cloud commit=d148904 dirty=true utc=2026-09-28T20:31:02Z
+# $ HELIX_VRAM_NO_KERNEL=1 python3 sector1/helix/test_helix_vramd.py
+
+helix_vramd: listening on /tmp/vramd-test-fm8vf8qi/helix-vram.sock (kernel standalone)
+  ok  socket is 0660
+  ok  ping + stat
+  ok  alloc/read/write/free
+  ok  raw bytes round trip (70 KB)
+  ok  bad requests are rejected, daemon survives
+  ok  full Helix refuses instead of dropping data
+  ok  HelixTranslator runs on the real Helix
+  ok  8 clients at once
+  ok  status CLI
+helix_vramd: stopped
+  ok  stops cleanly, socket removed
+
+10 passing, 0 failing
+# exit=0

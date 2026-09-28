@@ -17,6 +17,8 @@ build/
 
 # Logs
 *.log
+# the verification ledger IS the point: every check's log is committed
+!verification/**/*.log
 
 # Phoenix runtime data - live on the machine, not in the repo
 clonepool/

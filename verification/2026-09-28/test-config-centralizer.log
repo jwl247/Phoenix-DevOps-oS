@@ -1,0 +1,34 @@
+# test-config-centralizer
+# host=claude-cloud commit=d148904 dirty=true utc=2026-09-28T20:31:08Z
+# $ cd dashboard && node --test config-centralizer.test.js
+
+TAP version 13
+# Scan found 4 items
+#  - secret [sensitive] /home/user/Phoenix-DevOps-oS/dashboard/cc-test-BdSSRb/.phoenix/api_secret_key.json
+#  - ssh [sensitive] /home/user/Phoenix-DevOps-oS/dashboard/cc-test-BdSSRb/.ssh/config
+#  - environment [sensitive] /home/user/Phoenix-DevOps-oS/dashboard/cc-test-BdSSRb/.phoenix/phoenix.env
+#  - config  /home/user/Phoenix-DevOps-oS/dashboard/cc-test-BdSSRb/AppData/Roaming/SomeApp/settings.json
+# Summary: {
+#   total: 4,
+#   categories: { secret: 1, ssh: 1, environment: 1, config: 1 },
+#   total_size_mb: 0.00005435943603515625,
+#   recommended: 4,
+#   sensitive: 3
+# }
+# ALL CONFIG-CENTRALIZER TESTS PASSED
+# Subtest: config-centralizer.test.js
+ok 1 - config-centralizer.test.js
+  ---
+  duration_ms: 79.029094
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 88.806263
+# exit=0

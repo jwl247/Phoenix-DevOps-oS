@@ -1,0 +1,59 @@
+# test-radar-worker
+# host=claude-cloud commit=d148904 dirty=true utc=2026-09-28T20:31:07Z
+# $ cd pbm-consulting-website/radar-worker && node --test test.mjs
+
+TAP version 13
+#   ok  normalize drops notices with no set-aside and inactive ones
+#   ok  notice type text -> ptype code, unknown -> ?
+#   ok  cert mapping: edwosb also qualifies for WOSB; small -> SBA/SBP
+#   ok  matching: NAICS prefix, state, nationwide, no place, ptype
+#   ok  real SAM quirks: state from address text, "0" city, closed bids (seen live 2026-09-27)
+#   ok  SAM date format MM/dd/yyyy
+#   ok  validateSubscriber rejects bad input
+#   ok  redact strips the key everywhere
+#   ok  fetchPosted pages to totalRecords (2,510 notices = 3 requests), keeps 9 set-asides
+#   ok  fetchPosted stops at the request budget and says so
+#   ok  SAM error text never carries the key
+# (node:4376) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+#   ok  run: fetch, store, match, one digest email with the right content
+#   ok  same bid is never sent twice; budget counts across runs
+#   ok  dry run: builds the digest, sends nothing, marks nothing
+#   ok  fetch=0 re-uses stored bids and costs no SAM request
+#   ok  zero matches on a weekday: no email
+#   ok  zero matches on a Monday: short weekly check-in
+#   ok  no Resend key: run still logged, send = skip, nothing marked sent
+#   ok  the SAM key never lands in runs, /runs, or /health
+#   ok  admin routes refuse without / with the wrong token
+#   ok  subscriber upsert by email, bad input 400
+#   ok  preview returns matches for a stored day without spending SAM requests
+#   ok  unsubscribe: GET only asks, POST acts, bad token 404
+#   ok  scheduled() runs the radar via waitUntil
+#   ok  /health reports what is wired, no secrets
+#   ok  apply: bot check + code email, then verify -> review + notices to reviewers and applicant
+#   ok  apply: bot check fails closed (bad token, wrong action, wrong host, no secret)
+#   ok  apply: validation messages a real person can act on
+#   ok  verify: wrong code 401, 5 tries then 429, expired 410
+#   ok  review link: GET only shows, POST approve -> subscriber + welcome email, link then dead
+#   ok  review link: decline sends the applicant nothing
+#   ok  work description only: no Approve button until a reviewer supplies NAICS via the admin API
+#   ok  admin applications API needs the token; list works
+#   ok  applying again while in review does not create a second application
+#   ok  CORS preflight allows only the PBM site
+# 35 passed, 0 failed
+# Subtest: test.mjs
+ok 1 - test.mjs
+  ---
+  duration_ms: 244.62237
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 255.20498
+# exit=0

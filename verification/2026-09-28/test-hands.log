@@ -1,0 +1,14 @@
+# test-hands
+# host=claude-cloud commit=d148904 dirty=true utc=2026-09-28T20:30:57Z
+# $ python3 hands/test_hands.py
+
+  ok  base tier runs without asking
+  ok  import from the pool: fingerprint + compile checked, atomic swap
+  ok  ask tier runs only after a real yes (JSON true)
+  ok  only the declared tools exist; none is tier never
+  ok  bad arguments are refused
+  ok  every call lands in the audit log
+  ok  open_app only opens apps on its list
+
+7 passing, 0 failing
+# exit=0

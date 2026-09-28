@@ -1,0 +1,46 @@
+# test-leads-worker
+# host=claude-cloud commit=d148904 dirty=true utc=2026-09-28T20:31:07Z
+# $ cd pbm-consulting-website/worker && node --test test.mjs
+
+TAP version 13
+#   ok  isValidEmail rejects garbage, accepts a real address
+#   ok  referenceNumber is stable and year-prefixed
+#   ok  POST /lead rejects a missing business_name
+# [pbm-leads] TURNSTILE_SECRET not set — bot check is NOT enforced yet
+#   ok  POST /lead HTML-escapes the visitor name in the verification email (audit 2026-09-25)
+#   ok  POST /lead rejects oversized fields
+#   ok  POST /lead rejects an invalid email
+# [pbm-leads] TURNSTILE_SECRET not set — bot check is NOT enforced yet
+#   ok  POST /lead succeeds, reports send failure honestly with no RESEND_API_KEY
+# [pbm-leads] TURNSTILE_SECRET not set — bot check is NOT enforced yet
+# [pbm-leads] TURNSTILE_SECRET not set — bot check is NOT enforced yet
+#   ok  a resubmission before verifying reuses the same row, not a duplicate
+# [pbm-leads] TURNSTILE_SECRET not set — bot check is NOT enforced yet
+#   ok  full flow: /lead then /verify with the real code succeeds
+# [pbm-leads] TURNSTILE_SECRET not set — bot check is NOT enforced yet
+#   ok  /verify rejects a wrong code without revealing the real one
+# [pbm-leads] TURNSTILE_SECRET not set — bot check is NOT enforced yet
+#   ok  /verify locks out after 5 wrong attempts
+# [pbm-leads] TURNSTILE_SECRET not set — bot check is NOT enforced yet
+#   ok  /verify rejects an expired code
+#   ok  /verify with no pending lead for that email reports not found
+#   ok  /health reports transport and enforcement state honestly
+# [pbm-leads] TURNSTILE_SECRET not set — bot check is NOT enforced yet
+#   ok  verified lead syncs to HubSpot when a token is configured
+# 15 passed, 0 failed
+# Subtest: test.mjs
+ok 1 - test.mjs
+  ---
+  duration_ms: 144.310673
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 154.504075
+# exit=0

@@ -1,0 +1,10 @@
+# wrangler-dry-run-phoenix-net-mesh-worker
+# host=claude-cloud commit=2ddcd24 dirty=true utc=2026-09-28T20:20:53Z
+# $ cd sector3/phoenix-net/mesh-worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5
+
+Your Worker has access to the following bindings:
+Binding                         Resource         
+env.MESH_DB (phoenix_mesh)      D1 Database      
+
+--dry-run: exiting now.
+# exit=0

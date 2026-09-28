@@ -1,0 +1,41 @@
+# test-intake-versioning
+# host=claude-cloud commit=d148904 dirty=true utc=2026-09-28T20:30:53Z
+# $ bash sector2/package-handler/tests/test_intake_versioning.sh
+
+== to_hex without xxd matches python
+  ok   to_hex(alpha.txt) = 616c7068612e747874 (od fallback)
+== single file: v1, current bytes + version bytes reach R2
+  ok   v1_alpha.txt stored in T1
+  ok   PUT current bytes once
+  ok   PUT version bytes at 616c7068612e747874/versions/a1829f7910329c19
+  ok   version object bytes == file bytes
+== changed content: v2, second version object, first one untouched
+  ok   v2_alpha.txt stored
+  ok   PUT version bytes for v2
+  ok   v1 object still holds 'one'
+  ok   two versions rows for alpha.txt
+== identical re-intake, choice 1: no new version, no new upload
+  ok   no v3 on identical bytes
+  ok   no extra current-bytes PUT
+== rotated bucket (T3) continues history back in T1 (S2CORE-F07)
+  ok   v3 written to the T1 bucket
+  ok   one bucket: history v1..v3 together, T3 copy gone
+== directory: second identical intake keeps every file in the snapshot
+  ok   v1 snapshot complete
+  ok   v2 snapshot complete (dup-skip no longer drops files)
+  ok   unchanged a.py did not get a per-file v2
+  ok   v2 sidecar lists sub/b.sh
+== directory with a suite manifest becomes runnable in clonepool/<name>/
+  ok   clonepool/team-x/ has .suite.json + entry
+  ok   intake announces the runnable suite
+== tier rotation moves an aged bucket and PATCHes D1
+  ok   2-day-old bucket rotated T1 -> T2
+  ok   PATCH /clonepool/<hex>/tier sent
+  ok   re-intake after rotation: v3 in T1, T2 bucket gone
+== clone-out restores a specific version
+  ok   intake clone alpha.txt v1 -> 'one'
+== wrong token is refused before any file is touched
+  ok   nothing written with a rejected token
+
+passed 24, failed 0
+# exit=0

@@ -1,0 +1,10 @@
+# wrangler-dry-run-package-handler-worker
+# host=claude-cloud commit=2ddcd24 dirty=true utc=2026-09-28T20:20:34Z
+# $ cd sector2/package-handler/worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5
+
+Binding                                       Resource         
+env.PHOENIX_DB (phoenix_dev_db)               D1 Database      
+env.CLONEPOOL_BUCKET (phoenix-clonepool)      R2 Bucket        
+
+--dry-run: exiting now.
+# exit=0

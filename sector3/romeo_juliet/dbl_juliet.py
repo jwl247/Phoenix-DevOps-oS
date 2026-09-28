@@ -67,15 +67,14 @@ class BoundaryMonitor:
         self.in_flight   = {}   # id → ingress timestamp
 
     def run(self):
-        # Watch barrel 1 output (post-Romeo, pre-translate)
-        in_sock  = self.context.socket(zmq.SUB)
-        # Watch barrel 2 output (post-translate, egress)
-        out_sock = self.context.socket(zmq.SUB)
+        # Juliet emits on PUSH sockets; a SUB socket can never pair with PUSH
+        # (ZMQ refuses the pattern), so the monitor pulls. Barrel 1 emits on
+        # 5582, barrel 2 on 5584 (juliet.barrel_ports).
+        in_sock  = self.context.socket(zmq.PULL)   # barrel 1 output (post-Romeo)
+        out_sock = self.context.socket(zmq.PULL)   # barrel 2 output (post-translate, egress)
 
         in_sock.connect("tcp://localhost:5582")
-        out_sock.connect("tcp://localhost:5583")
-        in_sock.setsockopt_string(zmq.SUBSCRIBE, "")
-        out_sock.setsockopt_string(zmq.SUBSCRIBE, "")
+        out_sock.connect("tcp://localhost:5584")
         in_sock.setsockopt(zmq.RCVTIMEO, 500)
         out_sock.setsockopt(zmq.RCVTIMEO, 500)
 

@@ -40,6 +40,23 @@ ROMEO_SEND_PORT = 5581   # outbound to Juliet
 # (romeo->juliet, dbl_juliet, quadengine) connects via localhost. Widen only
 # deliberately, e.g. PHOENIX_RJ_BIND=0.0.0.0, and only behind real auth.
 BIND_ADDR = os.environ.get("PHOENIX_RJ_BIND", "127.0.0.1")
+# Where Juliet is. Same box: localhost:5581 (default). Peered across the
+# Phoenix Mesh: PHOENIX_RJ_PEER=pbm3.phx:5581 (meshd keeps <name>.phx in
+# /etc/hosts). Every message on that hop is signed with PHOENIX_RJ_SECRET
+# (HMAC-SHA256 over the canonical JSON); Juliet refuses unsigned or badly
+# signed messages when she has the secret, and refuses to bind off-loopback
+# without it. Same secret on both boxes, from the vault, never in the repo.
+PEER = os.environ.get("PHOENIX_RJ_PEER", f"localhost:{ROMEO_SEND_PORT}")
+RJ_SECRET = os.environ.get("PHOENIX_RJ_SECRET", "")
+
+
+def sign_message(msg, secret):
+    """HMAC-SHA256 over the message without its `sig`, keys sorted, compact
+    separators, so both ends hash exactly the same bytes."""
+    import hmac, hashlib
+    body = {k: v for k, v in msg.items() if k != "sig"}
+    canon = json.dumps(body, sort_keys=True, separators=(",", ":"), default=str).encode()
+    return hmac.new(secret.encode(), canon, hashlib.sha256).hexdigest()
 
 # opt2 mount structure
 OPT2_BASE       = "/opt2"
@@ -60,6 +77,7 @@ log = logging.getLogger("romeo")
 
 # ── Catalog ──────────────────────────────────────────────────
 def catalog_init():
+    os.makedirs(os.path.dirname(CATALOG_DB), exist_ok=True)
     conn = sqlite3.connect(CATALOG_DB)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS romeo_ingress (
@@ -146,15 +164,16 @@ class Romeo:
         send_sock = self.context.socket(zmq.PUSH)
 
         recv_sock.bind(f"tcp://{BIND_ADDR}:{ROMEO_RECV_PORT}")
-        send_sock.connect(f"tcp://localhost:{ROMEO_SEND_PORT}")
+        send_sock.connect(f"tcp://{PEER}")
         recv_sock.setsockopt(zmq.RCVTIMEO, 1000)
+        send_sock.setsockopt(zmq.LINGER, 2000)
 
         catalog_init()
         self.opt2_status = check_opt2()
 
         log.info(f"Romeo v{VERSION} — ingress active")
         log.info(f"  Listening : :{ROMEO_RECV_PORT}")
-        log.info(f"  → Juliet  : :{ROMEO_SEND_PORT}")
+        log.info(f"  → Juliet  : {PEER} ({'signed' if RJ_SECRET else 'unsigned, loopback only'})")
         log.info(f"  opt2      : {self.opt2_status}")
 
         while not self.stop_event.is_set():
@@ -191,7 +210,9 @@ class Romeo:
                     str(self.opt2_status)
                 )
 
-                # Hand to Juliet
+                # Hand to Juliet (signed when the hop leaves this box)
+                if RJ_SECRET:
+                    msg["sig"] = sign_message(msg, RJ_SECRET)
                 send_sock.send_json(msg)
                 log.info(f"→ Juliet: {msg['id']}")
 
@@ -231,13 +252,19 @@ def main():
     t = threading.Thread(target=romeo.run, daemon=True)
     t.start()
 
+    import signal, time
+    signal.signal(signal.SIGTERM, lambda *_: stop_event.set())   # systemd / run-team.sh stop
     try:
-        import time
-        while True:
+        while not stop_event.is_set() and t.is_alive():
             time.sleep(1)
     except KeyboardInterrupt:
         stop_event.set()
-        t.join(timeout=5)
+    t.join(timeout=5)
+    if not stop_event.is_set():
+        # the worker died on its own (exception in run()): the process must not
+        # sit here looking alive while nothing is listening
+        log.error("worker thread died; exiting 1")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

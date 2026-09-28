@@ -1,0 +1,10 @@
+# wrangler-dry-run-office-notify-worker
+# host=claude-cloud commit=2ddcd24 dirty=true utc=2026-09-28T20:20:47Z
+# $ cd sector2/apps/office/notify-worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5
+
+Binding                                                                 Resource                  
+env.PHOENIX_DB (phoenix_dev_db)                                         D1 Database               
+env.WORKER_PUBLIC_URL ("https://office-notify-worker.phoenix-...")      Environment Variable      
+
+--dry-run: exiting now.
+# exit=0

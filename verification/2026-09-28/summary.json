@@ -24,13 +24,13 @@
  {
   "check": "syntax-bash",
   "result": "0",
-  "seconds": 0.16,
-  "command": "rc=0; while IFS= read -r -d \"\" f; do bash -n \"$f\" || { echo \"FAIL $f\"; rc=1; }; done < <(find . -path ./archive -prune -o -path \"*/node_modules\" -prune -o -path ./verification -prune -o -name \"*.sh\" -print0); exit $rc",
+  "seconds": 0.328,
+  "command": "rc=0; n=0; while IFS= read -r -d \"\" f; do case \"$f\" in *.sh) ;; *) head -c 64 \"$f\" 2>/dev/null | head -1 | grep -qE \"^#!.*(bash|/sh)\\b\" || continue ;; esac; n=$((n+1)); if grep -q $'\\r' \"$f\"; then echo \"FAIL $f (CRLF line endings)\"; rc=1; fi; bash -n \"$f\" || { echo \"FAIL $f\"; rc=1; }; done < <(find . -path ./archive -prune -o -path \"*/node_modules\" -prune -o -path ./verification -prune -o -path ./.git -prune -o -type f \\( -name \"*.sh\" -o ! -name \"*.*\" \\) -print0); echo \"checked $n scripts\"; exit $rc",
   "reason": "",
-  "commit": "2ddcd24",
+  "commit": "76e10cc",
   "dirty": true,
   "host": "claude-cloud",
-  "utc": "2026-09-28T20:20:18Z"
+  "utc": "2026-09-28T20:44:42Z"
  },
  {
   "check": "syntax-node",

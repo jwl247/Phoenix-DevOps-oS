@@ -1,0 +1,19 @@
+# test-guardian
+# host=claude-cloud commit=d148904 dirty=true utc=2026-09-28T20:31:03Z
+# $ python3 sector4/guardian/test_guardian.py
+
+  ok  state files live in PHOENIX_GUARDIAN_HOME, not the repo
+  ok  clock times and dates are not ports
+[2026-09-28T20:31:03Z] guardian: phoenix-paging and stranger are now friends
+  ok  a real port conflict is found; friends suppress it
+  ok  the team are friends by default
+  ok  rescanning does not stack claims
+[2026-09-28T20:31:03Z] guardian: [guardian_1] daemon: scanning /tmp/guardian-test-sok1m2xc/units every 1s; state /tmp/guardian-test-sok1m2xc/state
+[2026-09-28T20:31:03Z] guardian: no conflicts (2 shared by friends)
+[2026-09-28T20:31:03Z] guardian: cycle: 4 configs, 1 ports, 0 conflicts
+[2026-09-28T20:31:03Z] guardian: [guardian_1] down
+  ok  daemon --once writes the heartbeat
+  ok  status CLI + daemon stops on SIGTERM
+
+7 passing, 0 failing
+# exit=0

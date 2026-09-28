@@ -1,0 +1,10 @@
+# wrangler-dry-run-lifefirst-meds-worker
+# host=claude-cloud commit=2ddcd24 dirty=true utc=2026-09-28T20:20:50Z
+# $ cd sector2/apps/lifefirst/meds-worker && npx --yes wrangler@latest deploy --dry-run --outdir /tmp/wrangler-dry-$$ 2>&1 | tail -5
+
+Binding                                                                 Resource                  
+env.DB (lifefirst-db)                                                   D1 Database               
+env.WORKER_PUBLIC_URL ("https://meds-worker.phoenix-jwl.worke...")      Environment Variable      
+
+--dry-run: exiting now.
+# exit=0

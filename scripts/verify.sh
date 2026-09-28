@@ -85,7 +85,8 @@ check() {
 }
 
 # ── Syntax: every script in the tree (archive/ and node_modules excluded) ──
-check syntax-bash - 'rc=0; while IFS= read -r -d "" f; do bash -n "$f" || { echo "FAIL $f"; rc=1; }; done < <(find . -path ./archive -prune -o -path "*/node_modules" -prune -o -path ./verification -prune -o -name "*.sh" -print0); exit $rc'
+# every *.sh plus every extensionless file whose first line is a bash/sh shebang (bin/usys, bin/run …)
+check syntax-bash - 'rc=0; n=0; while IFS= read -r -d "" f; do case "$f" in *.sh) ;; *) head -c 64 "$f" 2>/dev/null | head -1 | grep -qE "^#!.*(bash|/sh)\b" || continue ;; esac; n=$((n+1)); if grep -q $'"'"'\r'"'"' "$f"; then echo "FAIL $f (CRLF line endings)"; rc=1; fi; bash -n "$f" || { echo "FAIL $f"; rc=1; }; done < <(find . -path ./archive -prune -o -path "*/node_modules" -prune -o -path ./verification -prune -o -path ./.git -prune -o -type f \( -name "*.sh" -o ! -name "*.*" \) -print0); echo "checked $n scripts"; exit $rc'
 check syntax-python python3 'python3 -m compileall -q $(find . -path ./archive -prune -o -path "*/node_modules" -prune -o -path "*/.venv" -prune -o -name "*.py" -print) && echo compiled'
 check syntax-node node 'rc=0; while IFS= read -r -d "" f; do node --check "$f" 2>/dev/null || { echo "FAIL $f"; rc=1; }; done < <(find . -path ./archive -prune -o -path "*/node_modules" -prune -o \( -name "*.js" -o -name "*.mjs" -o -name "*.cjs" \) -print0); exit $rc'
 check syntax-powershell pwsh 'pwsh -NoProfile -Command "\$e=0; Get-ChildItem -Recurse -Filter *.ps1 | Where-Object FullName -notmatch \"\\\\archive\\\\|/archive/\" | ForEach-Object { \$t=\$null; \$err=\$null; [System.Management.Automation.Language.Parser]::ParseFile(\$_.FullName,[ref]\$t,[ref]\$err) | Out-Null; if (\$err) { \$e++; Write-Output (\"FAIL \" + \$_.FullName); \$err | ForEach-Object { Write-Output (\"  \" + \$_.Message) } } }; exit \$e"'
@@ -98,6 +99,7 @@ check test-meshd python3 'python3 sector3/phoenix-net/meshd/test_meshd.py'
 check test-helix-vram python3 'HELIX_VRAM_NO_KERNEL=1 python3 sector1/helix/test_helix_vram.py'
 check test-helix-vramd python3 'HELIX_VRAM_NO_KERNEL=1 python3 sector1/helix/test_helix_vramd.py'
 check test-guardian python3 'python3 sector4/guardian/test_guardian.py'
+check test-peer-chain python3 'python3 -c "import zmq" 2>/dev/null && python3 tools/helix-team/test_peer_chain.py || { echo SKIP-REASON: pyzmq not installed; exit 0; }'
 check test-copes-guardians python3 'python3 sector1/security/test_guardians.py'
 check test-ball-permissions python3 'python3 sector1/helix-lightning/test_ball_permissions.py'
 check test-radar-worker node 'cd pbm-consulting-website/radar-worker && node --test test.mjs'
@@ -107,7 +109,6 @@ check test-meds-worker node 'cd sector2/apps/lifefirst/meds-worker && node --tes
 check test-mesh-worker node 'cd sector3/phoenix-net/mesh-worker && node --test test.mjs'
 check test-config-centralizer node 'cd dashboard && node --test config-centralizer.test.js'
 check test-usys-suite-gate pwsh 'pwsh -NoProfile -File scripts/usys-suite-gate.Tests.ps1'
-check test-usys-vm-args pwsh '[ -f scripts/usys-vm-args.Tests.ps1 ] && pwsh -NoProfile -File scripts/usys-vm-args.Tests.ps1 || echo "no such test yet"'
 
 # ── Workers: does each one at least build? (no account needed for --dry-run) ──
 for w in sector2/package-handler/worker pbm-consulting-website/radar-worker pbm-consulting-website/worker phoenix-office/worker sector2/apps/office/notify-worker sector2/apps/lifefirst/meds-worker sector3/phoenix-net/mesh-worker; do

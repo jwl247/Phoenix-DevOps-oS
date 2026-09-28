@@ -1,0 +1,38 @@
+# test-copes-guardians
+# host=claude-cloud commit=d148904 dirty=true utc=2026-09-28T20:31:06Z
+# $ python3 sector1/security/test_guardians.py
+
+  ok   dispatch before boot() -> disarmed, no raise
+  ok   status() reports disarmed
+  ok   boot() -> armed
+  ok   an active guardian is set
+  ok   rotation thread running
+  ok   second boot() is a no-op, returns same rotator
+  ok   unknown event type -> unrouted
+  ok   dispatch(None) does not raise
+[ALPHA] Auth failure #1 from 10.0.0.9
+[ALPHA] Auth failure #2 from 10.0.0.9
+  ok   first two auth failures: ok
+  ok   no escalation before threshold
+[ALPHA] Auth failure #3 from 10.0.0.9
+[ALPHA] Threshold reached — escalating
+GUARDIAN ESCALATION: {'type': 'active_detection', 'guardian': 'alpha', 'event_type': 'auth_failure', 'detail': {'status': 'escalate', 'guardian': 'alpha', 'reason': 'repeated_auth_failure', 'data': {'type': 'auth_failure', 'source': '10.0.0.9'}}, 'timestamp': '2026-09-28T20:31:06.865521+00:00'}
+  ok   3rd auth failure -> escalate
+  ok   escalation sink fired for active-guardian threshold
+  ok   escalation attributed to alpha
+[ALPHA] Auth failure #1 from x
+[ALPHA] Auth failure #2 from x
+  ok   counter reset by auth_success (no escalation at 2)
+🍯 delta honeypot contact! Reporting to rotator.
+🍯 HONEYPOT TRIGGERED: delta — Attacker fingerprinted. Escalating.
+⚡ FORCED ROTATION: honeypot_delta
+GUARDIAN ESCALATION: {'type': 'honeypot_triggered', 'guardian': 'delta', 'data': {'type': 'integrity_check', 'path': '/mnt/g/vault/x', 'hash': 'deadbeef', 'source': 'probe-42'}, 'timestamp': '2026-09-28T20:31:06.866457'}
+  ok   probing a honeypot guardian returns the honeypot marker
+  ok   honeypot contact forced a rotation
+  ok   escalation sink fired for the honeypot probe
+  ok   incident log file created
+  ok   incident log has the escalations (2 rows)
+  ok   every incident row is timestamped
+
+20 passed, 0 failed
+# exit=0

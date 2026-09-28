@@ -16,8 +16,9 @@ Platform edge. `translator.sh` fires on output only. Everything upstream stays q
 | File | Role |
 |------|------|
 | `translator.sh` | Output-only translator. Fires at sector boundary. Quadralingual kept clean upstream. |
-| `romeo.py` | Ingress handler. ZMQ PULL port 5560. |
-| `juliet.py` | Egress handler. ZMQ PUSH port 5561. |
+| `romeo.py` | Ingress handler. ZMQ PULL on 5580 (loopback), pushes to Juliet at `PHOENIX_RJ_PEER` (default localhost:5581), signs the hop with `PHOENIX_RJ_SECRET`. |
+| `juliet.py` | Egress handler. ZMQ PULL on 5581 in, PUSH on 5582 out (barrel N: 5581+2(N-1) / 5582+2(N-1)). Refuses unsigned/replayed messages when the secret is set; refuses to bind off-loopback without it. `translator.sh` fires here, on output only. |
+| `dbl_juliet.py` | Two barrels + a boundary monitor (PULL on 5582 and 5584). |
 
 ## Critical Rule
 
@@ -27,6 +28,6 @@ Translator fires on **output only**. Never on ingress. Everything stays quad-nat
 
 ```
 phoenix-translator.service    after sector2.target
-phoenix-romeo.service         after translator, ingress port 5560
-phoenix-juliet.service        after translator, egress port 5561
+(no romeo/juliet units exist yet — they run inside the helix-team suite,
+ tools/helix-team/run-team.sh, as the ingress and egress halves)
 ```
