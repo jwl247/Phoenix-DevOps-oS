@@ -12,14 +12,28 @@ namespace Hud;
 
 /// <summary>
 /// Continuous desktop capture — the "see what I'm doing" half of the HUD's
-/// purpose. The Electron dashboard's Live Monitor panel captures on demand
-/// (button click); this runs on a timer so it's actually continuous, per
-/// the explicit requirement.
+/// purpose. Runs on a timer so it is actually continuous, per the explicit
+/// requirement.
+///
+/// 2026-09-28: the frame now comes from DXGI Desktop Duplication
+/// (DesktopDuplicationCapture) — the GPU's composed frame, no flicker — and
+/// GDI CopyFromScreen is only the fallback when duplication is unavailable
+/// (a locked/RDP session, a display change mid-run). The GDI path is the one
+/// that flashed the HUD on every grab (Jerry: "it flashes on my screen every
+/// time"). Which path is live is reported through <see cref="Mode"/>.
 /// </summary>
 public class ScreenCaptureService : IDisposable
 {
     private readonly DispatcherTimer _timer;
+    private DesktopDuplicationCapture? _dup;
+    private int _dupFailures;
+    private DateTime _nextDupRetry = DateTime.MinValue;
+    private BitmapSource? _last;
+
     public event Action<BitmapSource>? FrameCaptured;
+    /// <summary>"duplication" | "gdi" | "none" — for the H.L.K-10 status line.</summary>
+    public string Mode { get; private set; } = "none";
+    public event Action<string>? ModeChanged;
 
     public ScreenCaptureService(TimeSpan? interval = null)
     {
@@ -30,7 +44,50 @@ public class ScreenCaptureService : IDisposable
     public void Start() => _timer.Start();
     public void Stop() => _timer.Stop();
 
+    private void SetMode(string m)
+    {
+        if (m == Mode) return;
+        Mode = m;
+        ModeChanged?.Invoke(m);
+    }
+
     private void CaptureOnce()
+    {
+        var frame = CaptureViaDuplication() ?? CaptureViaGdi();
+        if (frame is null) return;
+        _last = frame;
+        FrameCaptured?.Invoke(frame);
+    }
+
+    // Duplication reports only changes: a null from CaptureFrame() means
+    // "nothing moved", so the last frame is re-published. A thrown error
+    // (access lost, device removed) tears the duplication down; it is retried
+    // after a short back-off, GDI carries the picture meanwhile.
+    private BitmapSource? CaptureViaDuplication()
+    {
+        try
+        {
+            if (_dup is null)
+            {
+                if (DateTime.UtcNow < _nextDupRetry) return null;
+                _dup = new DesktopDuplicationCapture();
+                _dupFailures = 0;
+                SetMode("duplication");
+            }
+            var frame = _dup.CaptureFrame();
+            return frame ?? _last;
+        }
+        catch
+        {
+            _dup?.Dispose();
+            _dup = null;
+            _dupFailures++;
+            _nextDupRetry = DateTime.UtcNow + TimeSpan.FromSeconds(Math.Min(60, 5 * _dupFailures));
+            return null;
+        }
+    }
+
+    private BitmapSource? CaptureViaGdi()
     {
         try
         {
@@ -43,15 +100,16 @@ public class ScreenCaptureService : IDisposable
             {
                 g.CopyFromScreen(left, top, 0, 0, new DrawingSize(width, height), CopyPixelOperation.SourceCopy);
             }
-
             var bitmapSource = ToBitmapSource(bmp);
             bitmapSource.Freeze();
-            FrameCaptured?.Invoke(bitmapSource);
+            SetMode("gdi");
+            return bitmapSource;
         }
         catch
         {
             // A transient capture failure (e.g. display mode changing) shouldn't
             // kill the loop — just skip this tick, the next one will retry.
+            return null;
         }
     }
 
@@ -71,5 +129,10 @@ public class ScreenCaptureService : IDisposable
         }
     }
 
-    public void Dispose() => _timer.Stop();
+    public void Dispose()
+    {
+        _timer.Stop();
+        _dup?.Dispose();
+        _dup = null;
+    }
 }

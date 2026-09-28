@@ -50,6 +50,10 @@ Precision (the HUD's CLAUDE CODE pane, or the terminal) can run it.
 - **J** One real test-mode checkout end to end: `curl -X POST -H "Authorization: Bearer $PHOENIX_AUTH" "https://pbm-radar-worker.phoenix-jwl.workers.dev/billing/checkout?subscriber=<your id>"`, open the emailed link, card `4242 4242 4242 4242`, then `GET /billing?subscriber=<id>` shows `active` and one `checkout.session.completed` event. Nobody else gets a link until you send it.
 - Live mode waits for the LLC + EIN + bank account + the benefits-counselor call (Laurie's SSDI), as planned.
 
+## 4b. HUD flash fix (build check)
+- **C** `dotnet build hud/Hud.csproj -c Release` on the Precision (restores Vortice.Direct3D11/Vortice.DXGI). Done = build succeeds. If it fails: `git revert <the "hud: no-flicker capture" commit>` and tell me the first error line; the old capture path comes back untouched.
+- **J** Open the HUD: the H.L.K-10 pane's first lines must say `live monitor: desktop duplication (GPU frame, no flicker)`, the screen must not flash, and `E:\Phoenix\hud-live-monitor\current.png` must NOT contain the HUD itself. If the line says `GDI fallback`, duplication is unavailable in that session (RDP/locked): report it.
+
 ## 5. File the round, intake everything
 - **C** After step 0, write `2026-09-28-round3-addendum-2.md` (probe results + kernel test + team verify); update the pentest README's daily log row for round 3; `scripts/hsf-intake.sh docs/compliance/pentest/2026-09-28-round3-security.md` and the other three new files; `scripts/hsf-intake.sh verification/2026-09-28/`.
 - **J** The "needs Jerry" decisions in the round-3 reports (each is one line): the five unguarded fossil Life First installers, the dashboard's default AI provider and Laurie's Guide target, the old `Phoenix-Package_handler` repo's live `install.ps1`, portal viewer auth on the mesh, the compliance scorecard rewrite (XCUT-F15), sign-off on S1-S19/S1-F16.

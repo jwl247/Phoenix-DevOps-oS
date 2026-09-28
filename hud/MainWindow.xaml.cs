@@ -9,14 +9,14 @@ namespace Hud;
 public partial class MainWindow : Window
 {
     private readonly AiChatService _ai = new();
-    private readonly ScreenCaptureService _capture = new(TimeSpan.FromMilliseconds(1000));
+    // 3 s: the on-disk frame was already written every 3rd tick; grabbing at 1 s was wasted work.
+    private readonly ScreenCaptureService _capture = new(TimeSpan.FromMilliseconds(3000));
     private readonly List<string> _lines = new();
     private ClaudeCodeSession? _claudeCode;
     private readonly List<string> _codeLines = new();
     private System.Windows.Threading.DispatcherTimer? _codeTimer;
     private DateTime _codeStarted;
     private VoiceController? _voice;
-    private int _frameSaveCounter;
 
     // Live Monitor previously only ever painted this into the on-screen Image
     // control — nothing else could see it. Saved to disk here too so ANY
@@ -55,8 +55,24 @@ public partial class MainWindow : Window
             // Throttled to every 3rd tick (~3s) — a full-desktop PNG
             // encode+write on every 1s capture tick is wasted work for
             // something a Read call only ever needs fresh to a few seconds.
-            if (++_frameSaveCounter % 3 == 0) SaveFrameToDisk(frame);
+            SaveFrameToDisk(frame);   // every tick is now 3 s
         });
+        _capture.ModeChanged += mode => Dispatcher.Invoke(() =>
+        {
+            _lines.Add(mode == "duplication"
+                ? "[SYS] live monitor: desktop duplication (GPU frame, no flicker)"
+                : "[SYS] live monitor: GDI fallback (this is the path that flashes; duplication unavailable in this session)");
+            RefreshChatLog();
+        });
+        // Keep the HUD out of its own picture. WDA_EXCLUDEFROMCAPTURE (Windows
+        // 10 2004+) hides this window from every screen capture — duplication,
+        // GDI, screen recorders — without ever hiding it from Jerry.
+        SourceInitialized += (_, _) =>
+        {
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero && !SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE))
+                SetWindowDisplayAffinity(hwnd, WDA_NONE);   // older Windows: leave it visible rather than fail
+        };
         _capture.Start();
 
         // Milestone 3: voice. Built as its own controller rather than inline
@@ -126,6 +142,11 @@ public partial class MainWindow : Window
             _claudeCode?.Stop();
         };
     }
+
+    private const uint WDA_NONE = 0x0;
+    private const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {

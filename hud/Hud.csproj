@@ -13,6 +13,9 @@
   <ItemGroup>
     <PackageReference Include="NAudio" Version="3.1.0" />
     <PackageReference Include="System.Drawing.Common" Version="9.0.0" />
+    <!-- DXGI Desktop Duplication for the live monitor (no-flicker capture, 2026-09-28) -->
+    <PackageReference Include="Vortice.Direct3D11" Version="3.*" />
+    <PackageReference Include="Vortice.DXGI" Version="3.*" />
     <PackageReference Include="Whisper.net" Version="1.9.1" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
   </ItemGroup>
