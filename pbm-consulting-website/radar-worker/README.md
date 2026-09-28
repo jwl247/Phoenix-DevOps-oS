@@ -55,6 +55,9 @@ It's Laurie's product, and PBM is customer zero.
 | `POST /applications/reject?id=` | Bearer | decline |
 | `GET /unsub/:token` | token | confirm page (a GET alone never acts; mail scanners follow links) |
 | `POST /unsub/:token` | token | unsubscribe (RFC 8058 one-click lands here) |
+| `POST /billing/checkout?subscriber=` | Bearer | **asks first, never charges**: creates/reuses the Stripe customer, a subscription Checkout Session for `STRIPE_PRICE_ID` ($9.99/mo), emails the subscriber the link (cards go to Stripe, never here). 409 if unsubscribed or already active; 503 without Stripe keys |
+| `GET /billing?subscriber=` | Bearer | billing_status, Stripe ids, last 10 webhook events |
+| `POST /billing/webhook` | Stripe signature | `Stripe-Signature` (t + v1 HMAC-SHA256 over `t.body`, 5-min tolerance, constant-time) is the auth; each event id acted on once (`billing_events`); `checkout.session.completed` → active, `customer.subscription.*` → status map, `invoice.payment_failed` → past_due. With `BILLING_ENFORCE=1` (off during the beta) canceled/past_due also stops the digests (`active=0`) |
 | `GET /whoami` | Bearer `PHOENIX_AUTH` | rotation check |
 | `POST /subscribers` | Bearer | create/update by email: `{email,name,naics[],certs[],states[],ptypes[],mode}` |
 | `GET /subscribers` | Bearer | list |
@@ -69,10 +72,11 @@ It's Laurie's product, and PBM is customer zero.
 - `TURNSTILE_SECRET`: application-form bot check, widget `pbm-radar-application` (sitekey `0x4AAAAAAFFZlAsR3JQ08oA0`). Vault copy: `RADAR_TURNSTILE_SECRET`. `TURNSTILE_HOSTNAMES` var = `pbmconsultingservice.com` (no localhost in production). Fails closed.
 - `ADMIN_NOTIFY_EMAIL`: comma list of reviewers who get "new application" notices (a secret so emails stay out of the public repo).
 - `PHOENIX_AUTH`: a leg in `sector2/package-handler/rotate-phoenix-auth.sh`. Never hand-set it.
+- `STRIPE_SECRET_KEY` (secret), `STRIPE_WEBHOOK_SECRET` (secret), `STRIPE_PRICE_ID` (var, not a secret), `BILLING_ENFORCE` (var, `1` after the beta). One-time setup, test or live: `tools/stripe/setup-radar.sh` (creates product + $9.99/month price + webhook endpoint, prints the exact `wrangler secret put` lines). Existing database: `npx wrangler d1 execute pbm_radar_db --remote --file=migrations/2026-09-28-billing.sql` once. Values live in the vault (`phoenix-secrets.env`) like every other worker secret.
 
 ## Run / test / deploy
 ```bash
-npm test                                  # 35 tests, real SQLite via node:sqlite, SAM + Resend faked
+npm test                                  # 43 tests, real SQLite via node:sqlite, SAM + Resend + Stripe faked
 npx wrangler deploy
 npx wrangler d1 execute pbm_radar_db --remote --file=schema.sql   # schema (idempotent)
 curl -X POST -H "Authorization: Bearer $PHOENIX_AUTH" "https://pbm-radar-worker.phoenix-jwl.workers.dev/run?dry=1"

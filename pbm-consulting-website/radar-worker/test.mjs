@@ -3,7 +3,9 @@
 // real — no hand-written SQL shim. SAM.gov and Resend are faked via fetch.
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { createHmac } from 'node:crypto';
 import worker, {
+  verifyStripeSignature,
   normalize, matches, stateFromText, realCity, isOpen, normSub, eligibleSetAsides, ptypeOf, toSamDate, redact,
   fetchPosted, runRadar, validateSubscriber,
 } from './index.js';
@@ -31,6 +33,8 @@ let SAM_NOTICES = [];
 let samCalls = [];
 let samFail = null;
 let emails = [];
+let stripeCalls = [];
+let stripeFail = false;
 
 function notice(o) {
   return {
@@ -60,6 +64,13 @@ globalThis.fetch = async (url, opts = {}) => {
       'wrong-host': { success: true, action: 'radar_apply', hostname: 'evil.example' } }[tok] || { success: false };
     return { ok: true, status: 200, json: async () => v };
   }
+  if (u.hostname === 'api.stripe.com') {
+    stripeCalls.push({ path: u.pathname, body: Object.fromEntries(new URLSearchParams(String(opts.body || ''))), headers: opts.headers });
+    if (stripeFail) return { ok: false, status: 402, text: async () => JSON.stringify({ error: { message: 'card declined (fake)' } }) };
+    if (u.pathname === '/v1/customers') return { ok: true, status: 200, text: async () => JSON.stringify({ id: 'cus_fake1', object: 'customer' }) };
+    if (u.pathname === '/v1/checkout/sessions') return { ok: true, status: 200, text: async () => JSON.stringify({ id: 'cs_fake1', object: 'checkout.session', url: 'https://checkout.stripe.com/c/pay/cs_fake1' }) };
+    return { ok: false, status: 404, text: async () => '{}' };
+  }
   if (u.hostname === 'api.resend.com') {
     emails.push({ headers: opts.headers, body: JSON.parse(opts.body) });
     return { ok: true, status: 200, text: async () => '{"id":"x"}' };
@@ -68,7 +79,7 @@ globalThis.fetch = async (url, opts = {}) => {
 };
 
 function freshEnv(extra = {}) {
-  samCalls = []; emails = []; samFail = null;
+  samCalls = []; emails = []; samFail = null; stripeCalls = []; stripeFail = false;
   return { DB: makeD1(), SAM_API_KEY: KEY, RESEND_API_KEY: 're_test', PHOENIX_AUTH: 'admintok', WORKER_PUBLIC_URL: 'https://radar.test', ...extra };
 }
 
@@ -445,6 +456,113 @@ await t('CORS preflight allows only the PBM site', async () => {
   const r = await worker.fetch(new Request('https://radar.test/apply', { method: 'OPTIONS', headers: { Origin: 'https://evil.example' } }), appEnv());
   eq(r.headers.get('Access-Control-Allow-Origin'), SITE);
   eq(r.headers.get('Access-Control-Allow-Methods'), 'POST, OPTIONS');
+});
+
+// ---------------------------------------------------------------- billing (Stripe)
+const billEnv = (extra = {}) => freshEnv({ STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_PRICE_ID: 'price_fake', STRIPE_WEBHOOK_SECRET: 'whsec_fake', ...extra });
+function signed(secret, payload, t = Math.floor(Date.now() / 1000)) {
+  const v1 = createHmac('sha256', secret).update(`${t}.${payload}`).digest('hex');
+  return `t=${t},v1=${v1}`;
+}
+const webhook = (env, event, header) => worker.fetch(new Request('https://radar.test/billing/webhook', {
+  method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': header }, body: typeof event === 'string' ? event : JSON.stringify(event),
+}), env);
+
+await t('billing: checkout is admin-only and needs Stripe configured', async () => {
+  const env = freshEnv();
+  const id = await addSub(env);
+  eq((await worker.fetch(new Request(`https://radar.test/billing/checkout?subscriber=${id}`, { method: 'POST' }), env)).status, 401);
+  eq((await admin(env, `/billing/checkout?subscriber=${id}`, 'POST')).status, 503, 'no keys -> 503');
+  eq((await admin(billEnv(), '/billing/checkout?subscriber=999', 'POST')).status, 404);
+});
+await t('billing: checkout creates the customer + session once and emails the link, never charges', async () => {
+  const env = billEnv();
+  const id = await addSub(env);
+  emails = [];
+  const r = await (await admin(env, `/billing/checkout?subscriber=${id}`, 'POST')).json();
+  ok(r.ok && r.url === 'https://checkout.stripe.com/c/pay/cs_fake1', JSON.stringify(r));
+  eq(stripeCalls.map(c => c.path), ['/v1/customers', '/v1/checkout/sessions']);
+  const sess = stripeCalls[1].body;
+  eq([sess.mode, sess['line_items[0][price]'], sess.customer, sess.client_reference_id], ['subscription', 'price_fake', 'cus_fake1', String(id)]);
+  ok(stripeCalls[1].headers['Idempotency-Key'].startsWith('radar-checkout-'), 'idempotency key set');
+  ok(!('card' in sess) && !('payment_method' in sess), 'no card data ever touches the worker');
+  eq(emails.length, 1); ok(emails[0].body.text.includes(r.url) && emails[0].body.text.includes('Nothing happens unless you use it'));
+  const row = env.DB.raw.prepare('SELECT stripe_customer_id, billing_status FROM subscribers WHERE id=?').get(id);
+  eq([row.stripe_customer_id, row.billing_status], ['cus_fake1', 'checkout_sent']);
+  // second link reuses the customer
+  await admin(env, `/billing/checkout?subscriber=${id}`, 'POST');
+  eq(stripeCalls.filter(c => c.path === '/v1/customers').length, 1, 'customer created once');
+});
+await t('billing: unsubscribed or already-active subscribers get no link', async () => {
+  const env = billEnv();
+  const id = await addSub(env);
+  env.DB.raw.prepare("UPDATE subscribers SET billing_status='active' WHERE id=?").run(id);
+  eq((await admin(env, `/billing/checkout?subscriber=${id}`, 'POST')).status, 409);
+  env.DB.raw.prepare("UPDATE subscribers SET billing_status='beta', active=0 WHERE id=?").run(id);
+  eq((await admin(env, `/billing/checkout?subscriber=${id}`, 'POST')).status, 409);
+  eq(stripeCalls.length, 0);
+});
+await t('billing: a Stripe error is reported, not swallowed', async () => {
+  const env = billEnv();
+  const id = await addSub(env);
+  stripeFail = true;
+  let threw = false;
+  try { await admin(env, `/billing/checkout?subscriber=${id}`, 'POST'); } catch (e) { threw = /card declined/.test(e.message); }
+  ok(threw, 'error surfaced');
+});
+await t('billing: webhook signature (v1 HMAC over t.body, 5-minute tolerance, constant-time)', async () => {
+  const body = '{"id":"evt_1","type":"ping"}';
+  ok(await verifyStripeSignature(signed('whsec_fake', body), body, 'whsec_fake'));
+  ok(!(await verifyStripeSignature(signed('whsec_other', body), body, 'whsec_fake')), 'wrong secret');
+  ok(!(await verifyStripeSignature(signed('whsec_fake', body, Math.floor(Date.now() / 1000) - 600), body, 'whsec_fake')), 'stale');
+  ok(!(await verifyStripeSignature(signed('whsec_fake', body), body + ' ', 'whsec_fake')), 'body changed');
+  ok(!(await verifyStripeSignature('garbage', body, 'whsec_fake')));
+  const env = billEnv();
+  eq((await webhook(env, body, 'garbage')).status, 400);
+  eq((await webhook(freshEnv(), body, signed('whsec_fake', body))).status, 503, 'no secret configured -> 503');
+});
+await t('billing: checkout.session.completed activates the subscriber; redelivery is a no-op', async () => {
+  const env = billEnv();
+  const id = await addSub(env);
+  const ev = { id: 'evt_done_1', type: 'checkout.session.completed', data: { object: { object: 'checkout.session', status: 'complete', payment_status: 'paid', customer: 'cus_fake1', subscription: 'sub_fake1', client_reference_id: String(id), metadata: { subscriber_id: String(id) } } } };
+  const body = JSON.stringify(ev);
+  const r = await (await webhook(env, body, signed('whsec_fake', body))).json();
+  ok(r.ok && r.subscriber_id === id, JSON.stringify(r));
+  const row = env.DB.raw.prepare('SELECT stripe_customer_id, stripe_subscription_id, billing_status FROM subscribers WHERE id=?').get(id);
+  eq([row.stripe_customer_id, row.stripe_subscription_id, row.billing_status], ['cus_fake1', 'sub_fake1', 'active']);
+  env.DB.raw.prepare("UPDATE subscribers SET billing_status='beta' WHERE id=?").run(id);   // if the same event were applied twice this would flip back
+  const again = await (await webhook(env, body, signed('whsec_fake', body))).json();
+  ok(again.duplicate, 'second delivery ignored');
+  eq(env.DB.raw.prepare('SELECT billing_status FROM subscribers WHERE id=?').get(id).billing_status, 'beta');
+  eq(env.DB.raw.prepare('SELECT COUNT(*) n FROM billing_events').get().n, 1);
+  const st = await (await admin(env, `/billing?subscriber=${id}`)).json();
+  eq(st.events.length, 1); eq(st.events[0].type, 'checkout.session.completed');
+});
+await t('billing: cancellation and failed payment only change status during the beta; BILLING_ENFORCE=1 stops the digests', async () => {
+  for (const enforce of ['0', '1']) {
+    const env = billEnv({ BILLING_ENFORCE: enforce });
+    const id = await addSub(env);
+    env.DB.raw.prepare("UPDATE subscribers SET stripe_customer_id='cus_fake1', billing_status='active' WHERE id=?").run(id);
+    const ev = { id: `evt_del_${enforce}`, type: 'customer.subscription.deleted', data: { object: { object: 'subscription', id: 'sub_fake1', status: 'canceled', customer: 'cus_fake1' } } };
+    const body = JSON.stringify(ev);
+    eq((await webhook(env, body, signed('whsec_fake', body))).status, 200);
+    const row = env.DB.raw.prepare('SELECT active, billing_status FROM subscribers WHERE id=?').get(id);
+    eq([row.billing_status, row.active], ['canceled', enforce === '1' ? 0 : 1], `enforce=${enforce}`);
+    const ev2 = { id: `evt_pf_${enforce}`, type: 'invoice.payment_failed', data: { object: { object: 'invoice', customer: 'cus_fake1' } } };
+    const b2 = JSON.stringify(ev2);
+    eq((await webhook(env, b2, signed('whsec_fake', b2))).status, 200);
+    eq(env.DB.raw.prepare('SELECT billing_status FROM subscribers WHERE id=?').get(id).billing_status, 'past_due');
+  }
+});
+await t('billing: an event for an unknown customer is recorded and ignored; /health shows billing wiring', async () => {
+  const env = billEnv();
+  const ev = { id: 'evt_x', type: 'customer.subscription.updated', data: { object: { object: 'subscription', id: 'sub_zz', status: 'active', customer: 'cus_nobody' } } };
+  const body = JSON.stringify(ev);
+  const r = await (await webhook(env, body, signed('whsec_fake', body))).json();
+  ok(r.ok && r.ignored);
+  const h = await (await worker.fetch(new Request('https://radar.test/health'), env)).json();
+  eq(h.billing, 'stripe'); eq(h.billing_enforce, false);
+  eq((await (await worker.fetch(new Request('https://radar.test/health'), freshEnv())).json()).billing, 'UNSET');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

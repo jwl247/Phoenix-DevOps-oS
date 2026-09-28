@@ -1,5 +1,5 @@
 # test-hands
-# host=claude-cloud commit=ba5f834 dirty=true utc=2026-09-28T20:57:06Z
+# host=claude-cloud commit=3552b08 dirty=true utc=2026-09-28T21:04:35Z
 # $ python3 hands/test_hands.py
 
   ok  base tier runs without asking

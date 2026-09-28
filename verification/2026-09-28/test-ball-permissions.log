@@ -1,5 +1,5 @@
 # test-ball-permissions
-# host=claude-cloud commit=ba5f834 dirty=true utc=2026-09-28T20:58:40Z
+# host=claude-cloud commit=3552b08 dirty=true utc=2026-09-28T21:06:08Z
 # $ python3 sector1/helix-lightning/test_ball_permissions.py
 
   ok   SYSTEM ball can read
@@ -17,11 +17,11 @@
   ok   explicit permissions override grants translate
   ok   override is exact — nothing it didn't list
   ok   authorize() returns a bool
-2026-09-28 20:58:40,476 [FRANK5] WARNING BALL DENY: 'unknown' attempted 'write' (family=system sector=4) — not in ['clone', 'delete', 'kernel', 'read', 'translate', 'write']
+2026-09-28 21:06:08,227 [FRANK5] WARNING BALL DENY: 'unknown' attempted 'write' (family=system sector=4) — not in ['clone', 'delete', 'kernel', 'read', 'translate', 'write']
   ok   assert_authorized raises PermissionError on a denied action
   ok   assert_authorized passes silently on a granted action
   ok   definitive ring with clone permission -> snap-clone fires
-2026-09-28 20:58:40,476 [FRANK5] WARNING Ring 1 (p) hit definitive but ball denies 'clone' — snap-clone suppressed
+2026-09-28 21:06:08,227 [FRANK5] WARNING Ring 1 (p) hit definitive but ball denies 'clone' — snap-clone suppressed
   ok   definitive ring WITHOUT clone permission -> snap-clone suppressed
   ok   custody hand-off to D1 recorded regardless
 

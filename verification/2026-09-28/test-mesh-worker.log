@@ -1,11 +1,11 @@
 # test-mesh-worker
-# host=claude-cloud commit=ba5f834 dirty=true utc=2026-09-28T20:58:41Z
+# host=claude-cloud commit=3552b08 dirty=true utc=2026-09-28T21:06:09Z
 # $ cd sector3/phoenix-net/mesh-worker && node --test test.mjs
 
 TAP version 13
 #   ok  health needs no auth
 #   ok  enroll requires the admin secret
-# (node:14441) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (node:20729) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 # (Use `node --trace-warnings ...` to show where the warning was created)
 #   ok  enroll hands out sequential mesh IPs and a one-time token
 #   ok  token is stored hashed, never in the clear
@@ -21,7 +21,7 @@ TAP version 13
 # Subtest: test.mjs
 ok 1 - test.mjs
   ---
-  duration_ms: 133.435421
+  duration_ms: 138.223277
   type: 'test'
   ...
 1..1
@@ -32,5 +32,5 @@ ok 1 - test.mjs
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 146.929262
+# duration_ms 148.052211
 # exit=0

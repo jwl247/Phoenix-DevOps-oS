@@ -1,6 +1,6 @@
 # syntax-bash
-# host=claude-cloud commit=ba5f834 dirty=true utc=2026-09-28T20:56:57Z
+# host=claude-cloud commit=3552b08 dirty=true utc=2026-09-28T21:04:26Z
 # $ rc=0; n=0; while IFS= read -r -d "" f; do case "$f" in *.sh) ;; *) head -c 64 "$f" 2>/dev/null | head -1 | grep -qE "^#!.*(bash|/sh)\b" || continue ;; esac; n=$((n+1)); if grep -q $'\r' "$f"; then echo "FAIL $f (CRLF line endings)"; rc=1; fi; bash -n "$f" || { echo "FAIL $f"; rc=1; }; done < <(find . -path ./archive -prune -o -path "*/node_modules" -prune -o -path ./verification -prune -o -path ./.git -prune -o -type f \( -name "*.sh" -o ! -name "*.*" \) -print0); echo "checked $n scripts"; exit $rc
 
-checked 70 scripts
+checked 71 scripts
 # exit=0

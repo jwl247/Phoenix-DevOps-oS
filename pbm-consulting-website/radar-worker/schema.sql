@@ -30,7 +30,15 @@ CREATE TABLE IF NOT EXISTS subscribers (
   mode        TEXT NOT NULL DEFAULT 'certified' CHECK (mode IN ('certified','planning')),
   active      INTEGER NOT NULL DEFAULT 1,
   unsub_token TEXT NOT NULL UNIQUE,
-  created_at  TEXT NOT NULL
+  created_at  TEXT NOT NULL,
+  -- billing (Stripe, 2026-09-28). $9.99/month, free during the beta; nobody is
+  -- charged without being asked: a checkout link is only ever sent by hand
+  -- (POST /billing/checkout). Existing databases: migrations/2026-09-28-billing.sql
+  stripe_customer_id     TEXT,
+  stripe_subscription_id TEXT,
+  billing_status         TEXT NOT NULL DEFAULT 'beta'
+                         CHECK (billing_status IN ('beta','checkout_sent','trialing','active','past_due','canceled')),
+  billing_updated_at     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sent_matches (
@@ -82,3 +90,13 @@ CREATE TABLE IF NOT EXISTS applications (
 );
 CREATE INDEX IF NOT EXISTS idx_app_email ON applications(email);
 CREATE INDEX IF NOT EXISTS idx_app_status ON applications(status);
+
+-- Every Stripe webhook event we have acted on, once. The UNIQUE event id is
+-- what makes a redelivered webhook a no-op.
+CREATE TABLE IF NOT EXISTS billing_events (
+  event_id      TEXT PRIMARY KEY,
+  type          TEXT NOT NULL,
+  subscriber_id INTEGER REFERENCES subscribers(id),
+  received_at   TEXT NOT NULL,
+  summary       TEXT
+);

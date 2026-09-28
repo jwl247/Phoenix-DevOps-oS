@@ -1,5 +1,5 @@
 # test-meds-worker
-# host=claude-cloud commit=ba5f834 dirty=true utc=2026-09-28T20:58:41Z
+# host=claude-cloud commit=3552b08 dirty=true utc=2026-09-28T21:06:09Z
 # $ cd sector2/apps/lifefirst/meds-worker && node --test test.mjs
 
 TAP version 13
@@ -30,7 +30,7 @@ TAP version 13
 # Subtest: test.mjs
 ok 1 - test.mjs
   ---
-  duration_ms: 148.203932
+  duration_ms: 118.545228
   type: 'test'
   ...
 1..1
@@ -41,5 +41,5 @@ ok 1 - test.mjs
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 159.214983
+# duration_ms 128.920937
 # exit=0
