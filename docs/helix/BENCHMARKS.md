@@ -95,7 +95,7 @@ ran first: 0 failures.
 speed. Linux's page cache was dropped between passes to measure her alone; on
 this machine Linux's own cache could also hold 1.1 GB. Her edge over Linux
 must be shown with working sets larger than RAM and under memory pressure
-(planned: the Compaq, Phoronix, throttle open).
+(the Compaq run is §5b).
 
 **vs Linux, page cache LEFT ON (2026-09-25, same work, same machine):**
 raw 0.6-0.8 s search / 2.9-3.1 s checksum per pass; Helix identical within
@@ -114,6 +114,34 @@ beyond one kernel's cache.
 The headless Python stack as a FUSE filesystem was **slower than plain Linux**
 (warm random reads 10.9 vs 13.6 MiB/s). That is the evidence for moving Helix
 into the kernel and restoring her Dandelion.
+
+## 5b. Kernel Helix (dm-helix) on pbm-compaq, Phoronix raw vs Helix — 2026-09-27
+
+**Run:** `sector1/kernels/helix_verdict_lean.sh` on pbm-compaq, 2026-09-27 13:15–17:32 CDT, detached, with Jerry off the machine.
+**Box:** i5-2400 (4 cores), 15 GB RAM, Debian 13 (kernel 6.12.107).
+**Origin:** Seagate ST1000LM035, 1 TB at 5400 rpm (serial WQ992JYZ).
+**Helix setup:** double strand, Strand A `auto` (half the RAM), Strand B a 64 GB image on the Samsung SSD. Table: `0 1953521664 helix 8:17 7943 7:0 65536`.
+**Method:** same filesystem, no reformat; 3 passes per test (`FORCE_TIMES_TO_RUN=3`). The raw fio figures come from the 2026-09-26 fresh run. fs-mark was dropped: it is uninformative for a write-through cache and never finished. PTS result file `helix-compaq`, identifiers `raw` and `helix`. Filed 2026-09-29; the run had finished but was never written up here.
+
+| Test | Unit | Raw disk | Helix | Helix vs raw |
+|---|---|---|---|---|
+| fio sequential read, 1 MB, 2 jobs | MB/s | 127 | **4,716** | **37.1× faster** |
+| fio random read, 4 KB, 2 jobs | MB/s | 1.052 | 1.039 | 0.99× (same) |
+| fio sequential write, 1 MB | MB/s | 119 | 123 | 1.03× (same) |
+| fio random write, 4 KB | MB/s | 1.335 | 1.290 | 0.97× (same) |
+| postmark (small-file transactions) | TPS | 3,457 | 3,947 | 1.14× faster |
+| sqlite-speedtest, size 1,000 | s (lower is better) | 110.99 | 112.77 | 0.98× (same) |
+| dbench, 6 clients | MB/s | 9.95 | 9.29 | 0.93× |
+| dbench, 12 clients | MB/s | 18.57 | 15.25 | **0.82× slower** |
+| dbench, 48 clients | MB/s | 32.51 | 8.61 | **0.26× slower (about 4× worse)** |
+
+**What it says:**
+- **Repeat big reads are her strength: 37× on sequential read.** This is the ingress shape: pulling assets and model weights that get read again.
+- **Writes tie the raw disk,** as designed: she is write-through, so the origin always holds the data.
+- **4 KB random reads over fio's cold, spread-out working set gain nothing.** Nothing was hot yet.
+- **Heavy concurrent mixed load is a real regression.** dbench at 48 clients runs at 26% of the raw disk. That is the shape of many game clients or workers hitting one box at once, and it has to be solved or routed around before Helix fronts a multi-client server. It is not yet diagnosed. Candidates: per-I/O Dandelion and lane locking, compression on the write path, or Strand B relief I/O competing with origin I/O on the same controller.
+
+**Consequence for the Compaq road test** (`docs/plans/compaq-road-test-plan.md`), which Jerry set 2026-09-29: "if it's slow as shit we change helix's strands to unmanaged the ingress and egress." These numbers argue for ingress on Helix (bulk repeat reads) and for measuring egress (writes, concurrent pushes) both Helix-managed and unmanaged from the first run.
 
 ## 6. Why older numbers understate her
 
@@ -143,3 +171,5 @@ in section 4 use fio's nanosecond latencies.
   hit rate (Round 2 functionality S1-F17). "100% hit rate" holds only when the
   working set fits her tiers; say so wherever it's quoted.
 - An end-to-end repeat of §1 and §3 with the kernel Helix at her real size.
+- **dbench concurrency regression (§5b): 48 clients at 0.26× raw.** Diagnose before Helix fronts any multi-client server.
+- The working-set-bigger-than-RAM run on the Compaq (15 GB RAM) is still owed.
