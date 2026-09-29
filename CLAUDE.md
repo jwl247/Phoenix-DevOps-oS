@@ -185,7 +185,6 @@ sector2/
   frank/             frank_helix.py, frank_save.py, frank_http.py, frank_client.js
   ring0/             frankenhelix.py
   propagator/        propagator.py, dispatch.json, propcoms.sh
-  clone-pool/        one big JSON, nothing moves until output
   apps/              Entourage apps — lifefirst/, scriptforge/
 
 sector3/
@@ -197,14 +196,14 @@ sector3/
 sector4/
   intake/            intake.sh
   vault/             phoenix-push.sh, download.sh
-  helix/             Helix engine (double strand, 300k+ ops/sec, 100% hit rate)
-  frank/             Frank (environment orchestrator, audit logger, never moves)
+  paging.py          Doppelganger paging (Linux); paging_windows.py, pcs.py alongside
+  (Helix lives in sector1/helix/ + sector1/kernels/; Frank in sector2/frank/)
 ```
 
 ## CORE COMPONENTS
 
 ### Helix — double strand memory engine
-- 300k+ ops/sec (benchmarked at 700k), 100% hit rate
+- 600–687k ops/s governed Phoronix run (pre-2026-03-03); dm-helix 177,699 IOPS warm on pbm3 — 100% hit rate only when the working set fits her tiers (41.7% under forced pressure); see docs/helix/BENCHMARKS.md
 - Quadralingual — speaks 4 languages simultaneously
 - Twin single-pass, peer-optimized
 - zlib level 5 compression, 4GB of 8GB RAM (thermal limited)
@@ -232,7 +231,7 @@ sector4/
 
 ### D1 — custody database
 - Chain of evidence for everything
-- 41 tables
+- 52 tables (live /health 2026-09-28)
 - phoenix_dev_db
 - Worker: packages-worker.phoenix-jwl.workers.dev
 
@@ -279,7 +278,7 @@ Footer QR (after hash):   USYS:<b58>:FOOTER:<sha3>  tier color T1/T2/T3/T4
 2. translator.sh fires on OUTPUT ONLY — never on intake or clone
 3. Romeo handles ingress / Juliet handles egress at sector3
 4. breach_coms drives hold quadralingual vault — never translate inside them
-5. All scripts: #!/usr/bin/env bash (external Ubuntu) or zsh (Debian VM dev — no WSL, not planned; a zsh script invoked via Windows Git Bash, as `usys.ps1` does, is a real syntax-error trap — see `sector4/intake/intake.sh`'s 2026-09-21 fix)
+5. All scripts: #!/usr/bin/env bash (external Ubuntu) or zsh (Debian VM dev — no WSL, not planned; a zsh script invoked via Windows Git Bash, as `usys.ps1` does, is a real syntax-error trap — `sector4/intake/intake.sh` hit it, fixed 2026-09-21, bash since 2026-09-29)
 6. GPU drivers blacklisted — never suggest GPU-dependent solutions
 7. Header QR BEFORE hashing / Footer QR AFTER hashing — never swap
 8. Never delete from breach_coms4 (master vault)
@@ -330,7 +329,7 @@ Import sequence:
 - **Phase 1 — External Ubuntu base:** not started (Ubuntu minimal + HWE, Prometheus, Nextcloud, PowerShell, SSH from PS7).
 - **Phase 2 — Sector 1:** placement checklist open. Kernel Helix (`helix.ko`, dm-helix, Frank3 slots, libhelix) built + benchmarked on pbm3/pbm-compaq — see `docs/helix/BENCHMARKS.md`.
 - **Phase 3 — Sector 4:** Frank/Helix/breach_coms/D1-sync placement checklist open.
-- **Phase 4 — Sector 2 (mostly DONE):** packages-worker live; import method end-to-end (D1 + R2 + sidecar); R2 upload + pull-down integrated into packages-worker (`phoenix-clonepool-r2` retired); SHA3-512/BLAKE2b integrity gate; real per-file version history; T1→T4 tier rotation; deps graph (all 9 translator backends); location-aware QR; `usys`/`.lol`/`.phx` in every terminal; Security Gap 1 fixed, Gap 2 closed by posture. **Open:** Package_handler migration, intake.sh on external, propagator rebuild.
+- **Phase 4 — Sector 2 (mostly DONE):** packages-worker live; import method end-to-end (D1 + R2 + sidecar); R2 upload + pull-down integrated into packages-worker (`phoenix-clonepool-r2` retired); SHA3-512/BLAKE2b integrity gate; per-file version ledger in D1 (per-version R2 bytes uploaded only from the 2026-09-29 fix on; 408 older rows have none); T1→T4 tier rotation wired into `intake prune` but manual-only, never scheduled; deps graph (all 9 translator backends); location-aware QR; `usys`/`.lol`/`.phx` in every terminal; Security Gap 1 fixed, Gap 2 closed by posture. **Open:** Package_handler migration, intake.sh on external, propagator rebuild.
 - **Phase 5 — Sector 3:** phoenix-dashboard.service written; romeo/juliet/quadengine/translator placement + unit deploy open. Phoenix Net (Cloudflare tunnel) + Phoenix Mesh (own mesh, `phoenix-mesh-worker`) LIVE.
 - **Phase 6 — Apps:** DONE — Electron dashboard (stays as-is, not the HUD); real HUD `hud/` WPF M1–M3 (live monitor, CLI pane, voice) live-verified; three-tier AI (subscription/API/Ollama); Helix memory both ends; Glossary; Atlas (`.claude/skills/atlas/`); SHELL + CLAUDE PTY panes; Laurie's Guide; ScriptForge; Config Centralizer; Office (internal, M4 left); `phoenix-office/` standalone sister (Secretariat, Legal Hold, Project Assist); Phoenix Console + H.L.K hands (`portal/`, `hands/`). **Open:** MapTiler, Desktop shade UI, Sketchpad, Music Notation, Review Platform.
 - **Phase 7 — GRUB + polish:** not started.
@@ -382,4 +381,4 @@ Real `.claude/settings.local.json` corruption found and fixed (missing comma had
 - **Google sign-in on Sign** — one real signed document end to end before the campaign demo.
 - **Phoenix Mesh leftovers:** switchboard to its own Cloudflare account (Jerry deletes the exposed token first); block-direct fallback test; token audit on jerry.leftwich1.
 - **Pentest Round 2 carryovers:** re-house `lifefirst-mustanswer` + move to PHOENIX_AUTH; orphaned D1 `workorder-kernel-db`/`phoenix-archive`; gitleaks/trufflehog over full history; Round 1 for office-notify / phoenix-office / pbm-leads / lifefirst-mcp workers.
-- **Known live bugs:** `hex_id = to_hex(basename)` filename collision in intake.sh; intake.sh sidecar JSON not escaping backslash paths; >100 MB R2 blobs need multipart.
+- **Known live bugs:** `hex_id = to_hex(basename)` filename collision in intake.sh; >100 MB R2 blobs need multipart.

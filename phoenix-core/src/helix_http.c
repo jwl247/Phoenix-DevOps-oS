@@ -285,13 +285,27 @@ helix_result_t helix_http_put_content(const char* worker_url,
         return HELIX_ERROR_INTERNAL;
     }
 
-    /* Override Content-Type to octet-stream for binary upload */
+    /* Override Content-Type to octet-stream for binary upload.
+     * The rebuilt list must carry the same CF-Access headers _curl_init()
+     * added — dropping them left this PUT as the one call that still got the
+     * Access 302 login page under the 2026-09-21 gate (audit S1-F22). */
     curl_slist_free_all(hdrs);
     hdrs = NULL;
     char auth_hdr[512];
     snprintf(auth_hdr, sizeof(auth_hdr), "Authorization: Bearer %s", auth_token);
     hdrs = curl_slist_append(hdrs, "Content-Type: application/octet-stream");
     hdrs = curl_slist_append(hdrs, auth_hdr);
+    {
+        const char* cf_id  = getenv("CF_ACCESS_CLIENT_ID");
+        const char* cf_sec = getenv("CF_ACCESS_CLIENT_SECRET");
+        if (cf_id && *cf_id && cf_sec && *cf_sec) {
+            char cf_hdr[512];
+            snprintf(cf_hdr, sizeof(cf_hdr), "CF-Access-Client-Id: %s", cf_id);
+            hdrs = curl_slist_append(hdrs, cf_hdr);
+            snprintf(cf_hdr, sizeof(cf_hdr), "CF-Access-Client-Secret: %s", cf_sec);
+            hdrs = curl_slist_append(hdrs, cf_hdr);
+        }
+    }
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hdrs);
 
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST,    "PUT");

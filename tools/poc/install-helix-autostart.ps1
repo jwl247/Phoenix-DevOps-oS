@@ -49,8 +49,11 @@ if (-not $PwshPath) {
     exit 1
 }
 
-# -- Register via schtasks (no elevation needed for user-scope tasks) ---------
-# /sc ONLOGON + /ri 5 (repeat every 5 min) + /du 9999:00 (run indefinitely)
+# -- Register via schtasks ----------------------------------------------------
+# /sc ONLOGON, 10 s delay, /rl HIGHEST — creating a HIGHEST task needs an
+# elevated shell; without it we fall back to the Startup folder below. No
+# repeat/restart trigger is registered (S34OPS-F29c: the old comment said
+# /ri 5 + /du 9999:00, which were never passed).
 $Arg = "-NonInteractive -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$Script`""
 
 # Delete old task silently if it exists

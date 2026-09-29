@@ -40,6 +40,8 @@ A custom GRUB bootloader that lives on the USB, loads itself into RAM on boot, a
 **What it does:**
 - Auto-detects every OS on every drive — Linux, Windows, LVM, btrfs — no hardcoded paths
 - Loads fully to RAM on boot so the USB can be removed after the menu appears
+  (**not working as built** — `build_phoenix_usb.sh` never embeds the memdisk; see audit S1-F25)
+- **Status:** the key check (F01) and no-key menu (F02) are known-broken; test only in a disposable QEMU VM, never on a machine with breach_coms attached
 - Validates the `.phoenix_key` file on boot — key present unlocks the full ops menu
 - Without the key: boot-only access to detected systems
 - With the key: full recovery and ops menu
@@ -55,7 +57,7 @@ A custom GRUB bootloader that lives on the USB, loads itself into RAM on boot, a
 
 **Build the USB:**
 ```bash
-sudo ./scripts/build_now.sh          # non-interactive, targets /dev/sdg
+sudo ./scripts/build_now.sh /dev/sdX # quick path: device argument + typed YES required
 # or
 sudo ./scripts/build_phoenix_usb.sh /dev/sdX   # interactive, any device
 ```
@@ -95,7 +97,12 @@ PAM auth stack (sudo / login / sshd):
 
 **Services protected:** `sudo`, `login`, `sshd`
 
-**SSH hardening applied:**
+**SSH hardening (design intent — NOT applied by any script in this repo):**
+The key-only-via-PAM sshd policy below would have to be set by hand in
+`/etc/ssh/sshd_config`. Note that the one sshd hardening script the repo
+does ship, `sector1/security/harden_debian_box.sh`, applies the opposite
+policy (`KbdInteractiveAuthentication no`, public-key only) — pick one per
+box, do not mix them.
 - `KbdInteractiveAuthentication yes` — PAM fires for SSH auth
 - `PasswordAuthentication no` — no password bypass
 - `PubkeyAuthentication no` — no SSH key bypass
@@ -111,7 +118,7 @@ PAM auth stack (sudo / login / sshd):
 
 **Install PAM auth:**
 ```bash
-# Already wired in if you cloned this repo and ran the build
+# Not wired by any script (the build does not touch /etc/pam.d).
 # Manual: add to top of auth section in /etc/pam.d/sudo|login|sshd:
 auth [success=done default=die] pam_exec.so quiet /path/to/scripts/pam_phoenix_key.sh
 ```
@@ -172,7 +179,7 @@ phoenix/
 │   └── key.id                    # MD5 key identifier
 ├── scripts/
 │   ├── build_phoenix_usb.sh      # Build bootable USB (interactive)
-│   ├── build_now.sh              # Build USB non-interactive (/dev/sdg)
+│   ├── build_now.sh              # Build USB quick path (/dev/sdX + typed YES)
 │   ├── gen_key.sh                # Generate and write key to USB
 │   ├── install_phoenix_grub.sh   # Install GRUB permanently to disk
 │   ├── pam_phoenix_key.sh        # PAM auth module

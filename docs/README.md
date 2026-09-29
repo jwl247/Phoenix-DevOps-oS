@@ -18,7 +18,7 @@ Multi-OS quad-native infrastructure framework. Distro-agnostic operation across 
 
 ## Architecture
 
-Four sector corridor managed by systemd. Everything travels the corridor in order. Nothing touches the OS directly — all traffic routes through `intent_parser.py`.
+Four sector corridor managed by systemd (design intent). Everything travels the corridor in order. The `intent_parser.py` service bus this design routed everything through is not in this repo (neither the live tree nor `archive/`, checked 2026-09-29) — nothing live routes through it.
 
 ```
 S1 → S2 → S3 → S4
@@ -33,33 +33,32 @@ S1 → S2 → S3 → S4
 
 ## Repo Structure
 
+As it is on disk (verified 2026-09-28; each sector's `CONNECTIONS.md` is the authoritative inventory):
+
 ```
-sector1/       Hardware/boot — auto-config, storage engine, RAM daemon
-sector2/       Services — intent parser, propagator, security, Life First
-sector3/       Translator boundary — translator.sh, romeo.py, juliet.py
-sector4/       Vault — intake.sh, rsync clone chain
-systemd/       Full corridor unit files — install with install-units.sh
-config/        dispatch.json and environment configs
-docs/          Architecture docs, pitch deck, licenses
+sector1/            Boot, kernels (frank3 slots, dm-helix), auth, concierge, CoPES security — sector1/CONNECTIONS.md
+sector2/            Package handler (intake.sh, packages-worker), frank/, ring0/, propagator/ (dispatch.json), apps/ — sector2/CONNECTIONS.md
+sector3/            translator/translator.sh, romeo_juliet/, quadengine/, phoenix-net/, services/ (all unit files + install-units.sh) — sector3/CONNECTIONS.md
+sector4/            intake/intake.sh, vault/, paging.py — sector4/CONNECTIONS.md
+docs/               This doc set, compliance/, history/, plans/, helix/BENCHMARKS.md — docs/CONNECTIONS.md
 ```
+
+There is no root `systemd/` or `config/` directory: unit files live in `sector3/services/`, `dispatch.json` in `sector2/propagator/`.
 
 ## Quick Start
 
-```zsh
-sudo zsh systemd/install-units.sh
-sudo systemctl start phoenix-sector4.target
-journalctl -u 'phoenix-*' -f
-```
+No working corridor start command exists today (see the banner). The unit installer that does exist is `sector3/services/install-units.sh`; it still tries to enable a `phoenix-log-setup.service` that does not exist (round-2 S34OPS-F03). The only targets are `phoenix-sector1.target`, `phoenix-sector2.target` and `phoenix-desktop.target` — there is no sector3 or sector4 target. For how Phoenix is actually started today, use root `CLAUDE.md` and `scripts/usys.ps1`.
 
 ## Key Components
 
-- `frankenhelix.py` — ZZZring0, COM1-4 daisy-chain, 11/11 self-tests
-- `frank_helix.py` — RAM daemon, L1/L2/L3 tiers, ZMQ router port 5557
-- `intent_parser.py` — Universal OS-agnostic service bus
-- `propagator.py` — dispatch.json router to SQLite/D1/Frank3/vault
-- `mega_system_manager.py` — Paging + port guardian + threat detection
-- `translator.sh` — Output-only, Sector 3 boundary
-- `intake.sh` — TAV SQL versioning chain, master vault
+Where the pieces named in this design actually live (verified 2026-09-28):
+
+- `sector2/ring0/frankenhelix.py` — ring0 (see `sector2/CONNECTIONS.md`)
+- `sector2/frank/frank_helix.py` — Frank RAM daemon (see `sector2/CONNECTIONS.md`)
+- `sector2/propagator/propagator.py` + `dispatch.json` — dispatch router
+- `sector3/translator/translator.sh` — output-only, Sector 3 boundary (Critical Rule #2)
+- `sector4/intake/intake.sh` — vault intake; the live, canonical intake pipeline is `sector2/package-handler/intake.sh` (`usys clone`)
+- `intent_parser.py`, `mega_system_manager.py` — not in this repo (neither the live tree nor `archive/`)
 
 ## Security
 
@@ -67,7 +66,7 @@ Persistent adversarial threat model. GPU drivers blacklisted. SurfShark VPN, clo
 
 ## License
 
-See `license`. Life First — `sector2/apps/lifefirst/README.md` (the old `sector2/lifefirst/docs/` path no longer exists). REALsure — Polyform Noncommercial 1.0.0.
+See `LICENSE` (GPL-3.0). Life First — `sector2/apps/lifefirst/README.md` (the old `sector2/lifefirst/docs/` path no longer exists). REALsure — Polyform Noncommercial 1.0.0.
 
 ## Acknowledgment
 

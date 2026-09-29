@@ -57,57 +57,75 @@ file / package / config / api def
 Universal intake script (lives directly in this directory — there is no
 `intake/` subdirectory). Runs on Linux, macOS, and Windows (Git Bash).
 
-- Self-registers on first run
+- Self-registers on first run (as `intake.sh`, hex `696e74616b652e7368`, in `T1/`)
 - Accepts any file type (scripts, configs, binaries, yaml, json, service units)
 - Auto-detects companion files (.service, .conf, .env, .yaml travel with parent)
 - Generates hex identity from filename
 - Writes sidecar.json with full metadata
-- Versions files in clonepool (v1, v2, v3…)
-- Writes local custody log (sqlite3)
-- Reports to D1 via packages-worker (clonepool + custody + glossary)
+- Versions files in the local pool (`T1/<hex>/v1_<name>`, `v2_…`; keeps 7)
+- Writes local custody log (sqlite3 CLI, optional)
+- Reports to D1 via packages-worker (clonepool + custody + glossary, and a
+  `versions` row whenever the content hash changes)
+- Uploads bytes to R2 twice: the overwritten "current" key `<hex>` and the
+  immutable per-version key `<hex>/versions/<sha3[0:16]>` (the second since
+  2026-09-29; versions logged before that have no bytes in R2)
+- `INTAKE_YES=1` for unattended runs (no prompts; a closed stdin picks the safe
+  answer: skip a sensitive file, keep an identical existing version)
 
 ### `worker/index.js`
 
 Cloudflare Worker — **packages-worker**. The catalog API. Serves and receives data from `phoenix_dev_db` (D1).
 
-**Endpoints:**
+**Endpoints** (regenerated 2026-09-29 from the route table in `worker/index.js`, v3.5.0):
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | /health | — | Worker health check — returns version, DB table count. **The only unauthenticated route on this worker.** |
-| GET | /clonepool | ✓ | List all files in clonepool. Filter by `?state=` (white/grey/black) or `?sensitive=1`. Paginate with `?limit=` |
-| GET | /clonepool/:id | ✓ | Fetch single clonepool entry by hex_id or name |
-| POST | /clonepool | ✓ | Register a new file into the pool (called by intake.sh) |
-| GET | /custody | ✓ | View custody ledger. Filter by `?hex=`. Paginate with `?limit=` |
-| POST | /custody | ✓ | Append a custody receipt (called by intake.sh, append-only) |
-| GET | /glossary | ✓ | Browse the package glossary. Search with `?q=`, filter with `?category=` |
-| GET | /glossary/:id | ✓ | Fetch single glossary entry by hex or name |
-| POST | /glossary | ✓ | Add or upsert a glossary entry |
-| PUT | /glossary/:id | ✓ | Update description, category, state, or notes on an existing entry |
-| DELETE | /glossary/:id | ✓ | Remove a glossary entry by hex or name |
-| GET | /categories | ✓ | List all glossary categories |
-| GET | /packages | ✓ | List all registered packages |
-| GET | /packages/:id | ✓ | Fetch a single package by name or ID |
-| GET | /toc | ✓ | Live table of contents — TOC tree + clonepool pool summary |
-| GET | /connections | ✓ | The Atlas — every component/feature documented in a `CONNECTIONS.md`. Search with `?q=`, filter with `?area=`. See `docs/ATLAS.md` |
-| GET | /connections/:id | ✓ | Fetch one Atlas entry (fuzzy — falls back to a LIKE match if there's no exact hex/name/path hit) |
-| GET | /connections/:id/related | ✓ | The "snow globe" — the entry plus exactly 8 related entries |
-| POST | /connections | ✓ | Add or upsert an Atlas entry (used by `parse-connections.js`) |
+| GET | `/health`, `/` | — | Health: worker version + D1 table count. No app-layer auth (Access still fronts it). |
+| GET | `/platform` (or `/` with `Accept: text/html`) | — | The only HTML page: tabs Glossary / Review Queue / Submit / Opt-In Feed / Verify. The page itself has no app-layer auth; its API calls send the token typed into its "Auth Token" box. |
+| GET | `/whoami` | ✓ | Auth round-trip check (used by `intake.sh` preflight/status and `rotate-phoenix-auth.sh`). |
+| GET | `/stats` | ✓ | Counts for the dashboard: `glossary_total`, `custody_total`, `clonepool_total`, `versions_total`, `r2_objects` (+ `r2_objects_capped`). |
+| GET | `/clonepool` | ✓ | List pool rows. `?state=`, `?sensitive=1`, `?limit=` (default 100). |
+| POST | `/clonepool` | ✓ | Upsert a pool row (intake.sh). Logs a `versions` row when `hash_sha3` changed; returns `version_logged`. |
+| PUT | `/clonepool/:hex` | ✓ | Upload the CURRENT bytes for a hex (overwritten on every re-intake). |
+| GET | `/clonepool/:id` | ✓ | Bytes from R2 by default; `?meta=true` (or no R2 object) returns the D1 row (hash baseline, `qr_valid`, …). `:id` = hex_id or name. |
+| DELETE | `/clonepool/:id` | ✓ | Delete one row and its hex-keyed R2 object. A name shared by several rows → 409 with the hex list. |
+| PUT, GET | `/clonepool/:hex/versions/:hash16` | ✓ | Immutable per-version bytes, keyed by the first 16 hex chars of the content's SHA3-512 (the `versions.store_path`). |
+| POST | `/clonepool/:hex/validate` | ✓ | Report a client-side hash check (`hash_sha3` + `hash_blake2`); flips `qr_valid`/`verified_at`. |
+| PATCH | `/clonepool/:hex/tier` | ✓ | Tier move / eviction (`tier`, optional `pool_path`, `state`) — used by `intake prune`. |
+| GET | `/custody` | ✓ | Custody ledger. `?hex=`, `?limit=` (default 50). |
+| POST | `/custody` | ✓ | Append a custody receipt (append-only). |
+| GET | `/glossary` | ✓ | Browse the glossary. `?q=`, `?category=`. |
+| POST | `/glossary` | ✓ | Add or upsert an entry. |
+| GET | `/glossary/:id` | ✓ | One entry by hex or name. |
+| GET | `/glossary/:id/code` | ✓ | The entry's current bytes from R2 (text/plain), 404 if never uploaded. |
+| PUT | `/glossary/:id` | ✓ | Update description, category, state or notes. |
+| DELETE | `/glossary/:id` | ✓ | Remove an entry. |
+| GET | `/categories` | ✓ | Glossary categories. |
+| GET | `/packages`, `/packages/:id` | ✓ | Package rows (mostly stubs created by the versions logger). |
+| GET | `/toc` | ✓ | TOC tree + pool summary by state. |
+| GET | `/versions` | ✓ | Version history. `?package=`, `?limit=` (default 50). Used by `intake clone <name> vN`. |
+| GET | `/deps` | ✓ | Dependency edges. `?package=`, `&reverse=true` for what depends on it. |
+| POST | `/deps` | ✓ | Record an edge (intake.sh `intake backend` via `translator.sh deps`). |
+| GET | `/search` | ✓ | Cross-search clonepool + glossary + packages. `?q=` required. |
+| GET | `/connections` | ✓ | The Atlas (see `docs/ATLAS.md`). `?q=`, `?area=`. Rows carry `file_state`/`file_pool_path` when the node's name was intaked. |
+| POST | `/connections` | ✓ | Upsert an Atlas node (`parse-connections.js`). |
+| POST | `/connections/reconcile` | ✓ | `{keep:[hex…]}` — delete nodes no longer in any CONNECTIONS.md (`parse-connections.js`, after a clean upload). |
+| GET | `/connections/:id` | ✓ | One node: exact hex/name/path, then name/path LIKE, then description LIKE. |
+| GET | `/connections/:id/related` | ✓ | The "snow globe": up to 8 neighbours, each tagged with `via` = `edge`, `area` or `backfill`. |
+| GET, POST | `/review`, `/review/:hex`, `/review/:hex/vote`, `/review/:hex/votes`, `/review/:hex/revoke`, `/verify/:hex`, `/feed` | ✓ | Peer review — see below. |
+
+There is no `/installed/register` route (the installers no longer call it).
 
 `clonepool.sensitive` (boolean) is separate from `state` — `state` is lifecycle
 status (active/deprecated/retired), `sensitive` flags content intake.sh's
 filename heuristic caught (`*auth*`, `*secret*`, `*password*`, `*credential*`,
 `*token*`, `.env`) as needing restricted handling downstream, independent of
 whether it's active. Set automatically by intake.sh when a matching file is
-intaked and the operator confirms; not inferred by the worker.
-| GET | /versions | ✓ | Version history. Filter by `?package=`. Paginate with `?limit=` |
-| GET | /deps | ✓ | Dependency edges. Filter by `?package=`, or `?package=&reverse=true` for reverse lookup (what depends on this) |
-| POST | /deps | ✓ | Record a dependency edge (package, depends_on, version_req, optional) — reported by `intake_from_backend()` via `translator.sh`'s `deps` verb |
-| GET | /search | ✓ | Cross-search clonepool + glossary + packages. Requires `?q=` |
+intaked and the operator confirms (or `INTAKE_YES=1`); not inferred by the worker.
 
 **Auth — two layers, both required (verified against `index.js` and Cloudflare
 Access config, 2026-09-24):**
-1. **App layer:** every route above except `/health` requires
+1. **App layer:** every route above except `/health`, `/` and `/platform` requires
    `Authorization: Bearer <PHOENIX_AUTH>` — this used to be write-only; as of
    the 2026-09-21 security fix, GET routes are gated too. If you're following
    an older example that only hits GET routes without this header, it will
@@ -123,7 +141,7 @@ Access config, 2026-09-24):**
 
 ### `worker/wrangler.jsonc`
 
-Cloudflare Wrangler configuration. Binds worker to `phoenix_dev_db` D1 database via `PHOENIX_DB` binding.
+Cloudflare Wrangler configuration. Binds the worker to the `phoenix_dev_db` D1 database (`PHOENIX_DB`) and the `phoenix-clonepool` R2 bucket (`CLONEPOOL_BUCKET`).
 
 ---
 
@@ -159,9 +177,8 @@ The installer will (verified against `install.sh` directly, not assumed):
 1. Detect platform + package manager
 2. Clone the repo to `~/Phoenix/Phoenix-Package_handler` (not `~/Phoenix/package-handler`)
 3. Create `~/Phoenix/{clonepool,intake,logs,workers}/`
-4. Write `~/.phoenix_env` with `PHOENIX_HOME`/`PHOENIX_INSTALL_DIR`/`PHOENIX_CLONEPOOL`/`PHOENIX_LOG` and hook it into your shell profile
+4. Write `~/.phoenix_env` with `PHOENIX_HOME`/`PHOENIX_INSTALL_DIR`/`CLONEPOOL_DIR`/`PHOENIX_LOG` and hook it into your shell profile (an existing `CLONEPOOL_DIR` is kept)
 5. Install a shim at `/usr/local/bin/phoenix-handler` (falls back to `~/Phoenix/bin/phoenix-handler` if `/usr/local/bin` isn't writable) — **the command is `phoenix-handler`, not `intake`** on this path
-6. Best-effort register this machine with the worker (`POST /installed/register` — non-fatal if it fails)
 
 The installer's own final output tells you to run `phoenix-handler status` —
 that's the real command name this path sets up, confirmed by reading the
@@ -228,17 +245,20 @@ always works regardless of install path:
 # Verify it runs
 bash intake.sh help
 
-# Check worker + D1 connection status
+# Check the auth round trip + local cache
 bash intake.sh status
 
-# Intake a file
+# Intake a file:  intake.sh <file> [backend] [notes]
 bash intake.sh ./myfile.sh
 bash intake.sh ./nginx.conf direct "production config"
-bash intake.sh ./franken.py scripts "Frank v2"
 
 # Register a backend-installed package
 bash intake.sh backend nodejs winget 20.11.0
 bash intake.sh backend python apt 3.13.0
+
+# Pull a file back out (latest, or a specific version)
+bash intake.sh clone nginx.conf
+bash intake.sh clone nginx.conf v2
 ```
 
 ---
@@ -249,26 +269,26 @@ bash intake.sh backend python apt 3.13.0
 > `usys clone` (monorepo), or `phoenix-handler` (standalone installer). See
 > Installation above for which one applies to you.
 
-### `intake <file> [category] [label]`
+### `intake <file> [backend] [notes]`
 
-Intakes a file into the clonepool. Generates a hex identity, writes a sidecar, versions the file, logs custody, and reports to D1.
+Intakes a file into the clonepool. Generates a hex identity, writes a sidecar, versions the file, logs custody, reports to D1 and uploads the bytes to R2. The category is derived from the file extension (there is no category argument). A directory argument runs directory intake (preview + one snapshot version).
 
 ```bash
 intake ./myapp.sh
 intake ./nginx.conf direct "production nginx"
-intake ./deploy.py scripts "deploy v3"
+INTAKE_YES=1 intake ./deploy.py manual "deploy v3"   # unattended
 ```
 
 **Arguments:**
-- `<file>` — path to the file to intake (required)
-- `[category]` — optional category name (e.g. `scripts`, `configs`, `direct`)
-- `[label]` — optional human-readable label or note
+- `<file>` — path to the file (or directory) to intake (required)
+- `[backend]` — how it arrived (default `direct`); stored on the sidecar/custody row
+- `[notes]` — optional free-text note
 
 ---
 
-### `intake backend <name> <manager> <version>`
+### `intake backend <name> <manager> <version> [install_path]`
 
-Registers a backend-installed package (one not physically intaked as a file — e.g. system packages, language runtimes).
+Registers a backend-installed package (one not physically intaked as a file — e.g. system packages, language runtimes). With `install_path` pointing at a file, that file is intaked too. Dependency edges come from `translator.sh deps` when it knows the backend.
 
 ```bash
 intake backend nodejs winget 20.11.0
@@ -280,12 +300,13 @@ intake backend nginx brew 1.25.0
 - `<name>` — package name
 - `<manager>` — package manager used (winget, apt, brew, dnf, pip, npm, etc.)
 - `<version>` — installed version string
+- `[install_path]` — optional installed file to intake as well
 
 ---
 
 ### `intake status`
 
-Checks the live connection to the packages-worker and D1. Prints worker health, version, and DB table count.
+Prints the worker URL and an auth check (`GET /whoami`: `OK`, `MISMATCH`, or `not set`), the pool path, the Python found, and counts of the **local cache** (sidecars on this machine, by state). The pool of record is D1/R2 — local counts are normally much smaller (use `GET /toc` or `GET /stats` for the full numbers).
 
 ```bash
 intake status
@@ -299,10 +320,13 @@ Pulls a file (or, for directory snapshots, a whole restored directory) back out 
 
 Before copying anything, it hashes the local clonepool copy (SHA3-512) and compares it against the baseline recorded in D1 at intake time. A mismatch refuses the clone outright rather than handing back a corrupted or altered file — this is what gates hot-swap and clone-to-workdir. Files intaked before this check existed have no baseline yet and clone through with a warning instead of a hard block.
 
+Older versions are verified too: a non-current version passes only if its SHA3-512 is a recorded `versions` row for the same hex (`GET /versions?package=`). On a machine with no local copy, `intake clone` falls back to R2 — the current key for the latest version, and `/clonepool/<hex>/versions/<hash16>` for an older one (looked up by its D1 version label), hash-checked before it lands.
+
 ```bash
 intake clone nginx.conf
+intake clone nginx.conf v2       # a specific file version
 intake clone myproject           # restores the latest directory snapshot
-intake clone myproject v2        # restores a specific version
+intake clone myproject v2        # restores a specific snapshot
 ```
 
 See [Integrity Verification](#integrity-verification) below for what the pass/fail output means.
@@ -403,7 +427,7 @@ curl "${AUTH_HEADERS[@]}" https://packages-worker.phoenix-jwl.workers.dev/catego
 Every file gets a deterministic hex identity derived from its name:
 
 ```
-"intake.sh" → 737363726970747332f696e74616b65
+"intake.sh" → 696e74616b652e7368      (raw hex of the file name: to_hex in intake.sh)
 ```
 
 This hex is:
@@ -411,6 +435,9 @@ This hex is:
 - The sidecar filename
 - The D1 primary key
 - Permanent and reproducible
+
+Known limitation: two different files with the same name share one hex (one
+bucket, one D1 row, one R2 key) — see audit S2CORE-F25.
 
 ---
 
@@ -435,6 +462,7 @@ Every file gets a SHA3-512 and BLAKE2b hash computed at intake time and stored o
 
 - **Match** → clone proceeds, and a `POST /clonepool/:hex/validate` call flips `qr_valid`/`verified_at` on the D1 row.
 - **Mismatch** → clone is refused with an `INTEGRITY FAILURE` message. Re-intake the file from a trusted source to clear it.
+- **Older version** (not the current row) → valid only if its hash is a recorded `versions` row for this hex; `qr_valid` is left alone (it describes the current version).
 - **No baseline** (older intakes, from before this check existed) → clone proceeds with a warning; the baseline gets set the next time that file is re-intaked.
 
 Directory snapshots (`intake clone <dir>`) verify every file inside the restored snapshot the same way — one mismatch anywhere in the directory blocks the whole restore.
@@ -458,7 +486,7 @@ nginx.service  ← auto-detected companion
 nginx.conf     ← auto-detected companion
 ```
 
-All versioned as one unit. Edit the `.service` file in the clonepool, it propagates via HelixSync.
+Companions are copied into the same bucket with the parent's version prefix (`v3_nginx.service` next to `v3_nginx.sh`) and listed in the parent's sidecar. They are not synced anywhere on their own.
 
 ---
 
@@ -467,8 +495,10 @@ All versioned as one unit. Edit the `.service` file in the clonepool, it propaga
 | Platform | Shell | Status |
 |----------|-------|--------|
 | Linux | bash | ✅ Native |
-| macOS | bash | ✅ Native |
-| Windows | Git Bash | ✅ Supported |
+| macOS | bash | Supported, not tested on a Mac (tier rotation falls back to BSD `date -j` since 2026-09-29) |
+| Windows | Git Bash | ✅ Supported (the primary dev box) |
+
+Requires `openssl` (SHA3-512/BLAKE2b) and `xxd`; `sqlite3` and `jq` are optional.
 
 > **Windows note:** Git Bash required. Python 3.x required. Both ship with Phoenix installer.
 
@@ -538,26 +568,18 @@ Create → Submit → Review → Approve → Hash → Register → Advertise →
 | GET | /verify/:hex | ✓ | Verify an artifact — returns status + review provenance |
 | GET | /feed | ✓ | Opt-in availability feed of approved artifacts |
 
-> **Note (2026-09-24):** all of these were public GET routes before the
-> 2026-09-21 security fix gated every route except `/health`. That fix was
-> aimed at `clonepool`/`glossary`, but it also caught the peer-review browsing
-> routes — which this same worker serves an anonymous public HTML frontend
-> for (`/review`, `/submit`, `/feed` pages). If that frontend's own JS
-> (`apiFetch()` in `worker/index.js`'s embedded HTML) doesn't attach
-> `Authorization`/`CF-Access-*` headers, public browsing of the review queue
-> is now broken, not just curl examples — this wasn't verified in this pass
-> and is worth checking before relying on the "opt-in distribution" flow
-> described below working for anonymous visitors.
+> **Verified 2026-09-28:** every review / verify / feed route answers 401 without
+> the bearer (and Cloudflare Access fronts the worker), so the "opt-in
+> distribution for anonymous visitors" flow is not available as deployed. The
+> `/platform` page's calls send whatever token is typed into its "Auth Token"
+> box. Live usage so far: 0 submissions, 0 feed rows.
 
 ### Website Pages
 
-| Page | Path | Description |
-|------|------|-------------|
-| Review Queue | `/review` | Active submissions, filterable by category/status/platform |
-| Submit | `/submit` | Submit an artifact for community review |
-| Verified Feed | `/feed` | Approved artifacts available for opt-in pull |
-| Verify | `/verify/:hex` | Verify any artifact by hex hash or QR scan |
-| Revocation Log | `/revoked` | Public log of revoked artifacts and reasons |
+There is one HTML page, `/platform`, with tabs **Glossary**, **Review Queue**,
+**Submit**, **Opt-In Feed** and **Verify**. `/review`, `/feed` and
+`/verify/:hex` are JSON API routes, not pages; there is no `/submit` or
+`/revoked` route (revocations show up in `/verify/:hex` and on the Verify tab).
 
 ### Full Specification
 

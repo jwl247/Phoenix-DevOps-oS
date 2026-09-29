@@ -91,10 +91,9 @@ function Get-IntakeSh {
     $parent = Split-Path $repo -Parent
     $candidates = @(
         $env:PHOENIX_INTAKE,
-        (Join-Path $repo 'sector2\package-handler\intake.sh'),
-        (Join-Path $parent 'package-handler\intake\intake.sh'),
-        (Join-Path $HOME 'Phoenix\package-handler\intake\intake.sh'),
-        (Join-Path $parent 'Phoenix-Package_handler\intake\intake.sh')
+        (Join-Path $repo 'sector2\package-handler\intake.sh')
+        # standalone package-handler candidates removed (archived 2026-09-13,
+        # intake.sh at that repo's root, no CF-Access fix) — S34OPS-F41
     ) | Where-Object { $_ -and (Test-Path $_) }
     return $candidates | Select-Object -First 1
 }

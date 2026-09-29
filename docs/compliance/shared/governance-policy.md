@@ -51,8 +51,11 @@ Enterprises.
    permission system, Cloudflare Access, and hardware-fingerprint
    authentication — not requested case-by-case.
 4. **Every fix gets dated and recorded.** The existing practice of logging
-   security fixes in CLAUDE.md's SESSION LOG and the `project_security_gap_plan`
-   memory, with commit hashes, *is* this policy's audit-trail requirement
+   security fixes in the SESSION LOG (now `docs/history/SESSION-LOG.md`) and the
+   `project_security_gap_plan` memory — dated log entries + git history
+   (rewritten 2026-09-25; commit hashes cited before that date no longer
+   resolve, so the dated entries are the record) — *is* this policy's
+   audit-trail requirement
    — already proven in practice (Gap 1's fix, 2026-09-21), just formally
    named as the record of record here.
 5. **AI-assisted sessions handling credentials require the same care as any

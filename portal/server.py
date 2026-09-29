@@ -439,7 +439,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(421, b"wrong host", "text/plain")
         # A plain form on another site can't set this header or send JSON
         # without a CORS preflight we never answer: blocks cross-site clicks.
-        if self.headers.get("X-Phoenix-Console") != "1" or                 not (self.headers.get("Content-Type") or "").startswith("application/json"):
+        if (self.headers.get("X-Phoenix-Console") != "1"
+                or not (self.headers.get("Content-Type") or "").startswith("application/json")):
             return self._send(403, b'{"ok":false,"error":"console requests only"}', "application/json")
         m = self._hands_path(urllib.parse.urlparse(self.path).path)
         if not m or m[1] != "run":

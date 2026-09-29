@@ -158,7 +158,7 @@ class Ball:
         logged so a denied action leaves a trail even if the caller swallows
         the exception."""
         if not self.authorize(action):
-            who = actor or self.custody[-1]["to"] if self.custody else "unknown"
+            who = actor or (self.custody[-1]["to"] if self.custody else "unknown")
             log.warning(
                 "BALL DENY: '%s' attempted '%s' (family=%s sector=%s) — not in %s",
                 who, action, self.family, self.sector, sorted(self.permissions),
@@ -645,14 +645,17 @@ class Frank5:
         For now writes to audit log — D1 worker wires in here.
         This is the chain of evidence. Immutable forever.
         """
+        # Same platform temp dir as AUDIT/SHM — a literal "/tmp" resolved to
+        # <drive>:\tmp on Windows and every commit failed (audit S1-F27).
         custody_path = Path(os.environ.get(
-            "PHOENIX_CUSTODY", "/tmp/phoenix_custody.jsonl"
+            "PHOENIX_CUSTODY", os.path.join(_TMP, "phoenix_custody.jsonl")
         ))
         try:
             with open(custody_path, "a") as f:
                 f.write(json.dumps(record) + "\n")
         except Exception as e:
-            log.error(f"Custody commit failed: {e}")
+            # The custody chain is the audit trail — a lost record is not routine.
+            log.critical(f"Custody commit failed ({custody_path}): {e}")
 
     def _live_rings(self) -> list[RingRecord]:
         return [r for r in self.rings.values()

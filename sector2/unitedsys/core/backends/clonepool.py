@@ -1,9 +1,50 @@
-import shutil, subprocess
+import os, shutil, subprocess, sys
 from pathlib import Path
 from .base import BackendBase
 from core.verify import sha3_512, blake2b
 
-CLONEPOOL = Path("/mnt/d/clonepool")
+
+def default_clonepool() -> Path:
+    """Same resolution as sector2/package-handler/intake.sh: $CLONEPOOL_DIR,
+    else ~/Phoenix/clonepool. Was hardcoded to /mnt/d/clonepool (a WSL-era
+    path; audit S2CORE-F14)."""
+    env = os.environ.get('CLONEPOOL_DIR')
+    return Path(env.replace('\\', '/')) if env else Path.home() / 'Phoenix' / 'clonepool'
+
+
+def intake_sh() -> Path:
+    """The canonical intake pipeline (PHOENIX_INTAKE_SH overrides)."""
+    env = os.environ.get('PHOENIX_INTAKE_SH')
+    return Path(env) if env else Path(__file__).resolve().parents[3] / 'package-handler' / 'intake.sh'
+
+
+def bash_cmd() -> str:
+    """A real bash for intake.sh. On Windows prefer Git Bash: System32's
+    bash.exe is the WSL launcher, and Phoenix does not use WSL."""
+    env = os.environ.get('PHOENIX_BASH')
+    if env:
+        return env
+    if sys.platform == 'win32':
+        for base in (os.environ.get('ProgramFiles', r'C:\Program Files'),
+                     os.environ.get('ProgramFiles(x86)', r'C:\Program Files (x86)')):
+            cand = Path(base) / 'Git' / 'bin' / 'bash.exe'
+            if cand.exists():
+                return str(cand)
+    return shutil.which('bash') or 'bash'
+
+
+def run_intake(path, pool, notes='', backend='us'):
+    """Intake one file through sector2/package-handler/intake.sh, unattended
+    (INTAKE_YES=1) into `pool`. Replaces the old `usys intake` shell-out,
+    which scripts/usys.ps1 routes to sector4's pipeline instead (F37).
+    Returns the CompletedProcess."""
+    env = dict(os.environ, CLONEPOOL_DIR=str(pool), INTAKE_YES='1')
+    return subprocess.run([bash_cmd(), str(intake_sh()), str(path), backend, notes],
+                          capture_output=True, text=True, env=env,
+                          stdin=subprocess.DEVNULL)
+
+
+CLONEPOOL = default_clonepool()
 
 class ClonepoolBackend(BackendBase):
     name     = "clonepool"
@@ -91,11 +132,9 @@ class ClonepoolBackend(BackendBase):
         if code == 0:
             for deb in Path(".").glob(f"{package}*.deb"):
                 print(f"  [clonepool] running TAV intake: {deb.name}")
-                intake = self._run([
-                    "usys", "intake", str(deb),
-                    str(CLONEPOOL), "white",
-                    f"installed via us"
-                ])
+                intake = run_intake(deb, CLONEPOOL, "installed via us")
+                if intake.returncode != 0:
+                    print(f"  [clonepool] intake FAILED ({intake.returncode}): {intake.stderr.strip()[:120]}")
                 deb.unlink(missing_ok=True)
                 print(f"  [clonepool] TAV intake complete")
                 # auto-register in glossary

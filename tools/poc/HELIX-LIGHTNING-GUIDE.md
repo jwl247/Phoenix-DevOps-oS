@@ -178,19 +178,24 @@ sudo mount -t cifs //10.0.2.2/Phoenix /phoenix \
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools\poc\install-helix-autostart.ps1
 ```
 
-This registers a task `Phoenix\HelixLightningKernel` that:
+This registers a task `Phoenix-HelixLightningKernel` (root task folder) that:
 - Starts 10 seconds after logon (no console window)
-- Restarts automatically every 5 minutes if stopped
-- Runs in user scope — no elevation required
+- Is registered with `/rl HIGHEST`, so `schtasks /create` needs an **elevated** shell
+- Does **not** repeat or restart itself — it runs once per logon
+
+Without elevation the installer falls back to a Startup-folder shortcut
+(`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Phoenix-HelixLightningKernel.cmd`),
+which also runs once per logon and needs no admin rights. (Corrected 2026-09-29,
+S34OPS-F29c — this section used to promise a 5-minute restart and no elevation.)
 
 Verify it is registered:
 ```powershell
-schtasks /query /tn "Phoenix\HelixLightningKernel" /fo LIST
+schtasks /query /tn "Phoenix-HelixLightningKernel" /fo LIST
 ```
 
 Start it immediately without rebooting:
 ```powershell
-schtasks /run /tn "Phoenix\HelixLightningKernel"
+schtasks /run /tn "Phoenix-HelixLightningKernel"
 ```
 
 Verify snapshot is live:
@@ -200,7 +205,7 @@ Get-Content 'F:\Phoenix\helix-pages\windows_snapshot.json'
 
 Remove autostart:
 ```powershell
-schtasks /delete /tn "Phoenix\HelixLightningKernel" /f
+schtasks /delete /tn "Phoenix-HelixLightningKernel" /f
 ```
 
 ### Debian — systemd service (auto-start at boot)
@@ -257,7 +262,7 @@ $age  = (Get-Date).ToUniversalTime().Subtract([datetime]'1970-01-01').TotalSecon
 Write-Host "Snapshot age: $([math]::Round($age,1))s  frozen_mb: $($snap.frozen_mb)"
 
 # Task is running
-schtasks /query /tn "Phoenix\HelixLightningKernel" /fo LIST | Select-String "Status"
+schtasks /query /tn "Phoenix-HelixLightningKernel" /fo LIST | Select-String "Status"
 ```
 
 ### Debian
@@ -278,7 +283,7 @@ curl -s http://localhost:8888/api/status | python3 -m json.tool | grep -A3 helix
 
 | Variable | Windows value | Debian value | Purpose |
 |----------|--------------|--------------|---------|
-| `PHOENIX_SUITS` | `D:\Users\jwlef\Phoenix\Phoenix-DevOps-oS` | (set by service) | Repo root for suit path resolution |
+| `PHOENIX_SUITS` | repo root, e.g. `F:\Phoenix\Phoenix-DevOps-oS` | (set by service) | Repo root for suit path resolution |
 | `PHOENIX_HELIX_PAGE_DIR` | `F:\Phoenix\helix-pages` | `/phoenix/helix-pages` | Where .page files and snapshot JSON live |
 | `PHOENIX_PAGING_SNAPSHOT_PATH` | (not used Windows side) | `/phoenix/helix-pages/windows_snapshot.json` | Snapshot path for paging.py |
 | `PHOENIX_PAGING_NVME_MOUNT` | (not used Windows side) | `/mnt/nvme` | Where paging.py puts the swapfile |
@@ -311,7 +316,8 @@ Already patched in `franken5.py`. If this recurs, check that you are running
 ### `franken5` not found / ImportError
 `PYTHONPATH` is not set. Run via `run-helix-poc.ps1` which sets it, or manually:
 ```powershell
-$env:PYTHONPATH = "D:\Users\jwlef\Phoenix\Phoenix-DevOps-oS\sector1\helix-lightning"
+# (no longer required — true_double_helix.py adds helix-lightning to sys.path itself)
+$env:PYTHONPATH = "<repo root>\sector1\helix-lightning"   # e.g. F:\Phoenix\Phoenix-DevOps-oS
 py -3 tools\poc\true_double_helix.py
 ```
 
@@ -323,9 +329,9 @@ py -3 tools\poc\true_double_helix.py
 ### paging.py: snapshot shows as stale (age > 30s)
 Windows side stopped writing. Check Task Scheduler:
 ```powershell
-schtasks /query /tn "Phoenix\HelixLightningKernel" /fo LIST | Select-String "Status|Last Run"
+schtasks /query /tn "Phoenix-HelixLightningKernel" /fo LIST | Select-String "Status|Last Run"
 ```
-Restart it: `schtasks /run /tn "Phoenix\HelixLightningKernel"`
+Restart it: `schtasks /run /tn "Phoenix-HelixLightningKernel"`
 
 ### paging.py: `/phoenix/` not mounted
 ```bash

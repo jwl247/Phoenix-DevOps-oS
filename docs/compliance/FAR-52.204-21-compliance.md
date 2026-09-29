@@ -31,7 +31,7 @@ Source: [48 CFR § 52.204-21(b)(1)](https://www.law.cornell.edu/cfr/text/48/52.2
 | 9 | Escort visitors, log physical access, manage access devices | **Fixed 2026-09-23** | Covered in the same Physical Access Policy — no separate physical-access-device inventory exists because none is needed under the current single-operator premises model |
 | 10 | Monitor/protect comms at external + internal boundaries | **Above standard** | This is a first-class architectural concept in Phoenix already — `translator.sh` OUTPUT ONLY, sector3 boundary, Cloudflare Access gating every worker |
 | 11 | Segment publicly accessible components from internal network | **Fixed 2026-09-23** | See [Network Segmentation](#network-segmentation) below |
-| 12 | Identify/report/correct flaws in a timely manner | **Above standard** | Dated, git-committed remediation trail — `project_security_gap_plan` memory, CLAUDE.md SESSION LOG entries with commit hashes for every fix |
+| 12 | Identify/report/correct flaws in a timely manner | **Above standard** | Dated remediation trail — `project_security_gap_plan` memory, dated entries in `docs/history/SESSION-LOG.md` + git history (rewritten 2026-09-25 by `git filter-repo`; commit hashes cited before that date no longer resolve, so the dated log entries are the record), and the daily pentest rounds in `pentest/` since 2026-09-25 |
 | 13 | Malicious code protection at appropriate locations | **Verified 2026-09-23** | Windows Defender: `AntivirusEnabled=True`, `RealTimeProtectionEnabled=True`, `BehaviorMonitorEnabled=True` — confirmed live via `Get-MpComputerStatus`, not assumed |
 | 14 | Update malicious code protection mechanisms | **Verified 2026-09-23** | `AntivirusSignatureLastUpdated` / `AntispywareSignatureLastUpdated` both same-day at check time; scheduled signature update task present |
 | 15 | Periodic + real-time scans of downloaded/opened/executed files | **Verified 2026-09-23** | `IoavProtectionEnabled=True` (on-access-via-download scanning), `OnAccessProtectionEnabled=True`, daily scheduled scan task confirmed `Ready` |
@@ -134,11 +134,17 @@ Reality, written down rather than assumed:
 
 ## Network Segmentation
 
-**What's actually publicly accessible:** only the Cloudflare Workers —
-`packages-worker`, `office-notify-worker`, `phoenix-office-worker`,
-`pbm-leads-worker`, `lifefirst-mcp`, and `phoenix-clonepool-r2`'s retired
-successor now folded into `packages-worker`. Each is gated by Cloudflare
-Access (per Gap 1's fix) or its own bearer-token auth.
+**What's actually publicly accessible (inventory re-verified 2026-09-28, round-2
+audit XCUT-F20c):** only Cloudflare Workers — `packages-worker` (also on
+`get.authenticcoder.com`, bearer-only there), `office-notify-worker`,
+`phoenix-office-worker`, `pbm-leads-worker`, `pbm-radar-worker`, the
+`pbm-consulting-website` static-assets worker (pbmconsultingservice.com),
+`lifefirst-mcp`, `lifefirst-mustanswer`, `phoenix-mesh-worker` (the Phoenix Mesh
+switchboard), and — when the tunnel is up — the `lifefirst` Cloudflare tunnel
+publishing the Debian VM's Apache (down, 530, on 2026-09-28). `phoenix-clonepool-r2`
+was deleted 2026-09-25 (404). Each worker is gated by Cloudflare Access (per Gap 1's
+fix) or its own bearer-token auth; the static site and its `/radar` form are public by
+design (Turnstile on the forms).
 
 **What's never publicly accessible:** D1 databases and R2 buckets have no
 public endpoint of their own — every read or write goes through a Worker,
@@ -218,5 +224,6 @@ covered only implicitly by the general scorecard above.
    workers — `office-notify-worker` and `phoenix-office-worker` `/health`
    both report `"transport":"resend"` (re-verified 2026-09-25), so tamper
    notifications actually deliver. (Previously a real functional gap in
-   control #12's "timely" requirement.) `pbm-leads-worker` still reports
-   `"transport":"NONE"`, but it carries no FCI.
+   control #12's "timely" requirement.) `pbm-leads-worker` reported
+   `"transport":"NONE"` until its Resend key was set 2026-09-27; live `/health`
+   → `"transport":"resend"` (re-verified 2026-09-28). It carries no FCI.

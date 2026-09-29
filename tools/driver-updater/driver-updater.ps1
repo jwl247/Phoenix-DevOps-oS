@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Clean driver updater — Windows Update's signed catalog, plus honest vendor pointers
     for hardware WU doesn't cover.

@@ -198,7 +198,8 @@ class HelixI:
     def _pack_stage(self, channel: int, data: bytes, meta: dict) -> bytes:
         """
         Stage format:
-        [4b magic][2b channel][2b strand][4b data_len][4b seq][data]
+        [4b magic][1b channel][1b strand][2b data_len][4b seq][data][meta json <=256b]
+        (struct "!4sBBHI" — helixe.py / frank_spawn.py unpack the same)
         """
         import json
         strand    = ord('A') if channel in STRAND_A_CHANNELS else ord('B')

@@ -1,8 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
+# Build: pyinstaller tools/phoenix-tray.spec (from anywhere) — the script path
+# is resolved next to this spec via PyInstaller's SPECPATH (S34OPS-F25; it used
+# to assume a build from the repo's parent directory).
+import os
 
 
 a = Analysis(
-    ['Phoenix-DevOps-oS/tools/phoenix-tray.py'],
+    [os.path.join(SPECPATH, 'phoenix-tray.py')],
     pathex=[],
     binaries=[],
     datas=[],

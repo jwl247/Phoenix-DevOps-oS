@@ -10,6 +10,16 @@ Dependencies: pystray, pillow, plyer
 Usage:
   python tools/phoenix-tray.py
   python tools/phoenix-tray.py --auto-intake   # no prompts, intake everything
+
+Intake goes through the canonical Sector 2 pipeline
+(sector2/package-handler/intake.sh, via scripts/hsf-intake.sh, which resolves
+PHOENIX_AUTH / PHOENIX_WORKER_URL / CLONEPOOL_DIR / CF-Access from the User
+environment) — not the deprecated phoenix-core/tools/intake.py (S34OPS-F25).
+Needs Git for Windows' bash.
+
+As a suite (tools/phoenix-tray.suite.json: runtime python + network) the
+execution gate refuses `usys run phoenix-tray` until it is trust-stamped with
+`usys suite-trust phoenix-tray` (or run with --unverified).
 """
 
 import os
@@ -35,7 +45,8 @@ except ImportError as e:
 # ---------------------------------------------------------------------------
 
 REPO_ROOT    = Path(__file__).resolve().parents[1]   # Phoenix-DevOps-oS/
-INTAKE_PY    = REPO_ROOT / "phoenix-core" / "tools" / "intake.py"
+HSF_INTAKE   = REPO_ROOT / "scripts" / "hsf-intake.sh"   # -> sector2/package-handler/intake.sh
+INTAKE_SH    = REPO_ROOT / "sector2" / "package-handler" / "intake.sh"
 USYS_PS1     = REPO_ROOT / "scripts" / "usys.ps1"
 WATCH_DIR    = Path.home() / "Downloads"
 SKIP_EXTS    = {".crdownload", ".tmp", ".part", ".download", ".partial"}
@@ -50,30 +61,63 @@ _pending: queue.Queue = queue.Queue()   # files waiting for user decision
 # Intake helpers
 # ---------------------------------------------------------------------------
 
+def _user_env(var: str):
+    """Current process env first, then the Windows User environment."""
+    if os.environ.get(var):
+        return os.environ[var]
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_READ)
+        val, _ = winreg.QueryValueEx(key, var)
+        winreg.CloseKey(key)
+        return val
+    except Exception:
+        return None
+
+
+def find_git_bash():
+    """Git for Windows bash — never System32's WSL bash.exe."""
+    cands = [os.environ.get("PHOENIX_BASH", "")]
+    for base in (os.environ.get("ProgramFiles", r"C:\Program Files"),
+                 os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+                 os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs")):
+        cands.append(os.path.join(base, "Git", "bin", "bash.exe"))
+    for c in cands:
+        if c and os.path.isfile(c):
+            return c
+    import shutil
+    found = shutil.which("bash")
+    if found and "system32" not in found.lower():
+        return found
+    return None
+
+
 def intake_file(path: Path) -> bool:
-    """Run intake.py on a file. Returns True on success."""
-    # Forward auth env vars so intake.py can sync to D1
+    """Intake one file via scripts/hsf-intake.sh -> sector2/package-handler/intake.sh.
+    Returns True on success."""
+    bash = find_git_bash()
+    if not bash or not HSF_INTAKE.exists():
+        return False
     env = os.environ.copy()
-    for var in ("PHOENIX_AUTH", "PHOENIX_WORKER_URL", "CLONEPOOL_DIR"):
-        stored = None
-        try:
-            import winreg
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                                 r"Environment", 0, winreg.KEY_READ)
-            stored, _ = winreg.QueryValueEx(key, var)
-            winreg.CloseKey(key)
-        except Exception:
-            pass
-        if stored and var not in env:
-            env[var] = stored
+    for var in ("PHOENIX_AUTH", "PHOENIX_WORKER_URL", "CLONEPOOL_DIR",
+                "CF_ACCESS_CLIENT_ID", "CF_ACCESS_CLIENT_SECRET"):
+        val = _user_env(var)
+        if val and not env.get(var):
+            env[var] = val
     try:
         result = subprocess.run(
-            [PYTHON, str(INTAKE_PY), str(path)],
-            capture_output=True, text=True, timeout=120, env=env
+            [bash, HSF_INTAKE.as_posix(), path.as_posix()],
+            capture_output=True, text=True, timeout=300, env=env
         )
         return result.returncode == 0
     except Exception:
         return False
+
+
+def clonepool_dir() -> Path:
+    """CLONEPOOL_DIR (process, then User env), else ~/Phoenix/clonepool."""
+    val = _user_env("CLONEPOOL_DIR")
+    return Path(val) if val else Path.home() / "Phoenix" / "clonepool"
 
 
 def notify(title: str, message: str) -> None:
@@ -85,16 +129,33 @@ def notify(title: str, message: str) -> None:
 
 
 def run_suite(name: str) -> None:
-    """Launch a usys suite in a new terminal window."""
-    cmd = (
-        f'pwsh -NoProfile -ExecutionPolicy Bypass -Command '
-        f'". \'{USYS_PS1}\'; usys run {name}"'
-    )
+    """Launch a usys suite in a new terminal window.
+    -File, not -Command: the name is passed as an argument, never spliced
+    into PowerShell source (S34OPS-F20 class)."""
     subprocess.Popen(
         ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass",
-         "-Command", f". '{USYS_PS1}'; usys run {name}"],
+         "-File", str(USYS_PS1), "run", name],
         creationflags=subprocess.CREATE_NEW_CONSOLE
     )
+
+
+# Static prompt script for the pending-files window. File paths (which come
+# from download names — attacker-influenced) and tool paths reach it through
+# environment variables as JSON/strings, never interpolated into the source.
+PENDING_PS = r"""
+$files = @($env:PHX_PENDING_JSON | ConvertFrom-Json)
+foreach ($p in $files) {
+    Write-Host ''
+    Write-Host "New file: $p" -ForegroundColor Yellow
+    $c = Read-Host 'Intake into Phoenix? [Y/n]'
+    if ($c -eq '' -or $c -match '^[Yy]') {
+        & $env:PHX_BASH $env:PHX_HSF_INTAKE ($p -replace '\\', '/')
+    }
+}
+Write-Host ''
+Write-Host 'Done.' -ForegroundColor Green
+Start-Sleep 2
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -247,19 +308,21 @@ class PhoenixTray:
             notify("Phoenix", "No pending files.")
             return
 
-        # Open a small PowerShell prompt window for Y/N on each file
-        lines = []
-        for p in pending:
-            lines.append(
-                f"Write-Host \"`nNew file: {p}\" -ForegroundColor Yellow; "
-                f"$c = Read-Host 'Intake into Phoenix? [Y/n]'; "
-                f"if ($c -eq '' -or $c -match '^[Yy]') "
-                f"{{ & '{PYTHON}' '{INTAKE_PY}' '{p}' }}"
-            )
-        script = "; ".join(lines) + "; Write-Host ''; Write-Host 'Done.' -ForegroundColor Green; Start-Sleep 2"
+        bash = find_git_bash()
+        if not bash:
+            notify("Phoenix ✗", "Git Bash not found — cannot intake.")
+            return
+        # Open a small PowerShell prompt window for Y/N on each file. Paths go
+        # in via env (JSON), not spliced into the script: a download named
+        # x'; <code>; '.txt used to execute here.
+        import json
+        env = os.environ.copy()
+        env["PHX_PENDING_JSON"] = json.dumps([str(p) for p in pending])
+        env["PHX_BASH"] = bash
+        env["PHX_HSF_INTAKE"] = HSF_INTAKE.as_posix()
         subprocess.Popen(
-            ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
-            creationflags=subprocess.CREATE_NEW_CONSOLE
+            ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", PENDING_PS],
+            creationflags=subprocess.CREATE_NEW_CONSOLE, env=env
         )
 
     def run_debian(self, icon, item):
@@ -269,7 +332,7 @@ class PhoenixTray:
         run_suite("ubuntu")
 
     def open_clonepool(self, icon, item):
-        clonepool = Path.home() / "Phoenix" / "clonepool"
+        clonepool = clonepool_dir()
         if clonepool.exists():
             subprocess.Popen(["explorer", str(clonepool)])
 
@@ -326,15 +389,18 @@ def main():
                         help="Intake every new download automatically (no prompt)")
     args = parser.parse_args()
 
-    if not INTAKE_PY.exists():
-        print(f"ERROR: intake.py not found at {INTAKE_PY}")
+    if not (HSF_INTAKE.exists() and INTAKE_SH.exists()):
+        print(f"ERROR: intake pipeline not found ({HSF_INTAKE} / {INTAKE_SH})")
         print("Make sure you're running from inside the Phoenix-DevOps-oS repo.")
+        sys.exit(1)
+    if not find_git_bash():
+        print("ERROR: Git Bash not found (Git for Windows) — intake needs it.")
         sys.exit(1)
 
     print("Phoenix tray starting...")
     print(f"  Watching : {WATCH_DIR}")
     print(f"  Mode     : {'auto-intake' if args.auto_intake else 'prompt'}")
-    print(f"  intake.py: {INTAKE_PY}")
+    print(f"  intake   : {HSF_INTAKE} -> {INTAKE_SH}")
 
     app = PhoenixTray(auto_intake=args.auto_intake)
     app.run()

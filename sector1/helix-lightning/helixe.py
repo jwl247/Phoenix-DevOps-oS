@@ -53,6 +53,12 @@ TRANSLATOR_PATH = Path(os.environ.get(
     "TRANSLATOR_SH",
     "/etc/systemd/system/translator/translator.sh"
 ))
+# Deployed path absent (dev checkout, Windows) → the repo's own copy
+# (audit S1-F36). An explicit TRANSLATOR_SH always wins.
+if "TRANSLATOR_SH" not in os.environ and not TRANSLATOR_PATH.exists():
+    _repo_xl = Path(__file__).resolve().parents[2] / "sector3" / "translator" / "translator.sh"
+    if _repo_xl.exists():
+        TRANSLATOR_PATH = _repo_xl
 
 
 class ChannelState(IntEnum):

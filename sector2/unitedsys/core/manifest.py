@@ -12,6 +12,16 @@ def find_manifest(package: str) -> Path | None:
     return None
 
 def parse_toml(path: Path) -> dict:
+    # tomllib (Python 3.11+) handles arrays/inline tables, so a manifest's
+    # `dependencies = [...]` reaches resolver.py as a list (audit S2CORE-F37).
+    # The flat line parser below is the fallback for older interpreters.
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        tomllib = None
+    if tomllib is not None:
+        with open(path, 'rb') as f:
+            return tomllib.load(f)
     data = {}
     section = None
     for line in path.read_text().splitlines():

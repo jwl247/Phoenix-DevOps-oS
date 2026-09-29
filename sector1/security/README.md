@@ -59,12 +59,24 @@ events · an ACTIVE guardian escalates on threshold · a HONEYPOT guardian
 reports the contact → forced rotation + sink fires · every escalation is
 persisted.
 
-## Not yet wired (audit T1 #1 + #3, next)
+## Not live in deployment (audit 2026-09-28 S1-F23)
 
-- `usys.ps1` → a Beta `suite_unrecognized` event when `usys run` executes an
-  unknown or permission-violating suite. Deferred: it's coupled to the
-  suite-permission-enforcement work that doesn't exist yet. The route
-  (`suite_unrecognized` → Beta) is already in `_ROUTE`.
+The runtime is **process-local**: `_RT` lives in the Python process that
+called `boot()` (today only `sector1/kernel/main_kernel.py`). Every feeder
+that exists today dispatches from a *different*, fresh process, so its events
+land in an unarmed runtime and come back `{"status": "disarmed"}`:
+
+- `sector1/auth/phoenix_auth.py` — `_guardian("auth_failure"/"auth_success")`
+  runs in the CLI's own process; nothing calls `authenticate()` inside the
+  kernel process.
+- `scripts/usys.ps1:Send-UsysGuardianEvent` — does call
+  `dispatch({"type": "suite_unrecognized"})`, but via a new
+  `python -c` job. (Also: `GuardianBeta._detect` has no `suite_unrecognized`
+  branch yet, so even an armed Beta would answer `ok`.)
+
+Fix needs a cross-process ingress (loopback socket / named pipe / JSONL
+drop-dir the armed kernel polls) — a design decision, open for Jerry. The
+20/20 tests prove the in-process logic only.
 - Gamma/Delta have no live feeders yet (no file/network watcher, no vault
   write hook). Their detection logic is ready; they need event sources.
 

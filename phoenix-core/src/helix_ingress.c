@@ -12,8 +12,10 @@
  *     ▼  5. Write local meta (sidecar.json in trimmed cache dir)
  *     └─ Return result + diagnostic
  *
- * Steps 3-4 require HELIX_WORKER_URL and HELIX_AUTH env vars.
- * Without them, the function completes steps 1-2 and 5 only (offline mode).
+ * Steps 3-4 require PHOENIX_WORKER_URL and PHOENIX_AUTH env vars (plus
+ * CF_ACCESS_CLIENT_ID / CF_ACCESS_CLIENT_SECRET — the worker sits behind
+ * Cloudflare Access). Without the first two, the function completes steps
+ * 1-2 and 5 only (offline mode).
  */
 
 #include "../include/helix.h"

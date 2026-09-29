@@ -1,7 +1,7 @@
 {
   "name": "steam",
   "version": "1.0.0",
-  "description": "Steam via Phoenix. Launches the Steam client through the dashboard, same as the Google/Chrome suite — no install on the host beyond Steam itself, Phoenix is just the launcher.",
+  "description": "Steam via Phoenix. Launches the Steam client through the dashboard, same as the Google/Chrome suite — no install on the host beyond Steam itself, Phoenix is just the launcher. Dashboard-only: runtime \"external\" is launched by the dashboard; `usys run` has no external runtime and refuses it.",
   "author": "jwl247",
   "type": "app",
   "entry": "steam.exe",

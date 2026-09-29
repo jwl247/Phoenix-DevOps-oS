@@ -115,7 +115,7 @@ When you `usys swap` or `usys rollback`, the symlink in `bin/` is atomically upd
 
 ---
 
-## Currently Registered (17 packages)
+## Currently Registered (17 packages — snapshot of one deployed box, not this repo)
 
 | Name | Type | What it does |
 |---|---|---|
@@ -186,7 +186,7 @@ UNITEDSY (usys)
 
 ## GitHub
 
-**Repo:** `jwl247/phoenix-grub`
+**Repo:** `jwl247/phoenix-grub` (legacy — this subtree now lives in `jwl247/Phoenix-DevOps-oS` under `sector1/grub/`)
 
 All source is there. Push with `gpush` from anywhere.
 

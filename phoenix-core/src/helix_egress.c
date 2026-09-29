@@ -10,8 +10,13 @@
  *     │       Miss ↓
  *     ▼  2. Fetch from R2 via Worker   (GET /clonepool/:hex_id)
  *     ▼  3. Store in local cache       (one-way side effect)
- *     ▼  4. Apply bounded prefetch     (one-way side effect, depth-limited)
+ *     ▼  4. Apply bounded prefetch     (NOT IMPLEMENTED — planned; no prefetch
+ *                                       happens today)
  *     └─ Return data + diagnostic
+ *
+ * Note: ingress writes only sidecar.json into the cache dir, never
+ * <cache>/<id>/content — so the fast path is seeded by step 3 (a prior
+ * egress fetch), not by intake.
  *
  * Requires PHOENIX_WORKER_URL + PHOENIX_AUTH for remote fetch.
  * Falls back to local-only if env vars not set.
@@ -73,7 +78,7 @@ static helix_result_t _read_from_cache(const char* identifier,
         helix_log_event("helix_egress", "cache_read",
                         HELIX_ERROR_NOT_FOUND,
                         "Local content file missing — falling through to R2",
-                        "Run intake again to repopulate the local cache.");
+                        "Normal on first read: the cache is filled by an R2 fetch, not by intake.");
         return HELIX_ERROR_NOT_FOUND;
     }
 

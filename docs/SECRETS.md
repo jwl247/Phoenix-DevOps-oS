@@ -18,15 +18,18 @@ If that folder is gone (new machine, lost drive), rebuild from:
 
 | Secret | Unlocks | Missing? |
 |--------|---------|----------|
-| `PHOENIX_AUTH` | `packages-worker` (D1 custody + R2 clonepool), `office-notify-worker` (Office M3), `pbm-radar-worker` admin routes | no — in Windows User env + 2 live CF worker secrets. `phoenix-clonepool-r2` (retired 2026-09-21) is **still deployed** with an old, out-of-sync value (verified 2026-09-25: current token → `401`) — delete that worker rather than resync it |
+| `PHOENIX_AUTH` | `packages-worker` (D1 custody + R2 clonepool), `office-notify-worker` (Office M3), `pbm-radar-worker` admin routes | no — in Windows User env + live CF worker secrets (`phoenix-clonepool-r2`, retired 2026-09-21, was deleted 2026-09-25 — its hostname now 404s) |
 | `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | The `usys-cli` Cloudflare Access service token — required on top of `PHOENIX_AUTH` for anything calling `packages-worker.phoenix-jwl.workers.dev` (Security Gap 1) | no — Windows User env |
 | `OFFICE_AUTH` (worker secret) / `PHOENIX_OFFICE_AUTH` (client env var, `phoenix-office/main.js`) | `phoenix-office-worker` (standalone Office product — deliberately *not* `PHOENIX_AUTH`) | CF worker secret + Windows User env. **Not in the vault file** as of 2026-09-25 — add it, since worker secrets can't be read back |
-| `RESEND_API_KEY` | Email sending for `office-notify-worker`, `phoenix-office-worker`, `pbm-leads-worker`, `pbm-radar-worker` | no — Office workers since 2026-09-23; leads + radar set 2026-09-27 from the vault key ("newkey" in Resend, sending access, pbmconsultingservice.com). `RESEND_FROM` set per worker |
+| `RESEND_API_KEY` | Email sending for `office-notify-worker`, `phoenix-office-worker`, `pbm-leads-worker`, `pbm-radar-worker` | no — Office workers since 2026-09-23; leads + radar set 2026-09-27 from the vault key ("newkey" in Resend, sending access, pbmconsultingservice.com). From-address var: `NOTIFY_FROM` on the two Office workers (`office-notify-worker`, `phoenix-office-worker`), `RESEND_FROM` on `pbm-leads-worker` / `pbm-radar-worker` |
 | `SAM_API_KEY` | `pbm-radar-worker` (Set-Aside Radar) daily SAM.gov pull — 10 requests/day on a free non-federal key | no — Jerry's personal SAM.gov key, set 2026-09-27 (vault + worker secret). **Expires every 90 days** (~2026-12-26); Google Calendar reminder 2026-12-19. Switch to a key tied to PBM's entity (1,000/day) once PBM is registered |
 | `TURNSTILE_SECRET` | `pbm-leads-worker` bot check (widget `pbm-consulting-lead-form`) | CF worker secret only — **not in the vault** (was never saved; worker secrets can't be read back) |
 | `RADAR_TURNSTILE_SECRET` (worker name `TURNSTILE_SECRET`) | `pbm-radar-worker` application form (widget `pbm-radar-application`) | no — set 2026-09-27, in the vault + worker |
 | `ADMIN_NOTIFY_EMAIL` | who gets "new Radar application" notices (`pbm-radar-worker`) | set 2026-09-27 to Jerry; add Laurie (comma list) |
 | `MUSTANSWER_ACCESS_TOKEN` | `lifefirst-mustanswer` `/register` + `/sweep` (bespoke — not yet migrated to `PHOENIX_AUTH`, see `docs/compliance/pentest/`) | no — rotated 2026-09-25, in the vault |
+| `HUBSPOT_PRIVATE_APP_TOKEN` | `pbm-leads-worker` HubSpot contact sync (`pbm-consulting-website/worker/index.js`) | not set — live `/health` reports `hubspot_wired:false` (2026-09-28); optional, deploy-time |
+| `MESH_ADMIN` | `phoenix-mesh-worker` admin routes (`sector3/phoenix-net/mesh-worker/index.js`, the live Phoenix Mesh switchboard) | no — CF worker secret; name present in the vault env file (checked 2026-09-29, value not read) |
+| `meds-worker` set — `PHOENIX_AUTH`, `RESEND_API_KEY`, `MEDS_FROM`, `PUSHOVER_TOKEN`, `PUSHOVER_USER_JERRY` / `PUSHOVER_USER_LAURIE`, `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM`, `LAURIE_EMAIL` / `LAURIE_SMS`, `CAREGIVER_EMAIL` / `CAREGIVER_SMS`, `WORKER_PUBLIC_URL` | `sector2/apps/lifefirst/meds-worker` (Life First meds reminders + escalation) | deploy-time — not yet set; worker not yet deployed per `docs/history/NEXT-SESSION-BACKLOG.md` (DEPLOY meds-worker item; names read from `meds-worker/index.js`) |
 | `PHOENIX_MAPTILER_KEY` | Dashboard MAP pane | yes — optional |
 | `PHOENIX_OFFICE_GOOGLE_CLIENT_ID` / `_SECRET` | `phoenix-office` "sign in with Google" (device flow — required for Sign / Legal hold) | set as local env vars on this machine (2026-09-23); not needed by the worker |
 | `ANTHROPIC_API_KEY` | nothing — we run on the Claude.ai subscription | n/a by design |
@@ -38,7 +41,7 @@ If that folder is gone (new machine, lost drive), rebuild from:
 Only ever with `sector2/package-handler/rotate-phoenix-auth.sh`. It pushes to every
 live leg (`packages-worker`, `office-notify-worker`, `pbm-radar-worker`), verifies each via `/whoami`,
 and only then updates the registry. Hand-editing one leg = the 2026-08-21 / 08-22 /
-09-21 incidents. (`phoenix-clonepool-r2` was a leg until its 2026-09-21 retirement.)
+09-21 incidents. (`phoenix-clonepool-r2` was a leg until its 2026-09-21 retirement; deleted 2026-09-25.)
 
 ## Health check
 

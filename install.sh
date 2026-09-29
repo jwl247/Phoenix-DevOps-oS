@@ -15,10 +15,11 @@ set -euo pipefail
 # ── Config ────────────────────────────────────────────────────
 WORKER_URL='https://packages-worker.phoenix-jwl.workers.dev'
 OS_REPO_URL='https://github.com/jwl247/Phoenix-DevOps-oS.git'
-PKG_REPO_URL='https://github.com/jwl247/Phoenix-Package_handler.git'
+# The standalone Phoenix-Package_handler repo is no longer cloned: the
+# canonical Sector 2 pipeline is in-repo (sector2/package-handler/intake.sh)
+# and the standalone copy was archived 2026-09-13 (S34OPS-F21).
 INSTALL_ROOT="$HOME/Phoenix"
 OS_DIR="$INSTALL_ROOT/Phoenix-DevOps-oS"
-PKG_DIR="$INSTALL_ROOT/package-handler"
 CLONEPOOL_DIR="$INSTALL_ROOT/clonepool"
 ENV_SH="$HOME/.phoenix_env.sh"
 USYS_DIR="$HOME/.usys"
@@ -49,7 +50,7 @@ fi
 
 # Create directory structure
 phx_info "Creating Phoenix directory structure..."
-mkdir -p "$INSTALL_ROOT" "$OS_DIR" "$PKG_DIR" "$CLONEPOOL_DIR" "$USYS_DIR" "$USYS_BIN" "$HOME/.catalog"
+mkdir -p "$INSTALL_ROOT" "$OS_DIR" "$CLONEPOOL_DIR" "$USYS_DIR" "$USYS_BIN" "$HOME/.catalog"
 phx_ok "Directories ready."
 
 # Clone or update OS repo
@@ -62,15 +63,6 @@ else
     git clone "$OS_REPO_URL" "$OS_DIR"
     [[ -d "$OS_DIR/.git" ]] || phx_error "OS repo clone failed."
     phx_ok "OS repo cloned."
-fi
-
-# Clone or update package-handler
-if [[ -d "$PKG_DIR/.git" ]]; then
-    phx_info "package-handler exists — pulling..."
-    git -C "$PKG_DIR" pull --ff-only 2>/dev/null || phx_warn "Pull failed, continuing..."
-else
-    phx_info "Cloning package-handler to $PKG_DIR ..."
-    git clone "$PKG_REPO_URL" "$PKG_DIR"
 fi
 
 # Canonical Sector 2 intake is the in-repo pipeline (R2 + integrity +
@@ -114,15 +106,19 @@ phx_ok "Environment file written: $ENV_SH"
 source "$ENV_SH"
 
 # Install global commands
-phx_info "Installing global Phoenix commands..."
+# The real wrappers live in bin/ (S34OPS-F21). They were previously generated
+# here as stubs (a 3-command usys, a python-only run), so a Linux install
+# never had usys clone/run/pull/search/open. bin/usys and bin/run delegate to
+# scripts/usys.ps1 and therefore need PowerShell 7 (pwsh) on this box.
+phx_info "Installing global Phoenix commands from $OS_DIR/bin ..."
 
 install_cmd() {
     local name="$1"
-    local src="$2"
+    local src="$OS_DIR/bin/$name"
     local dst="$USYS_BIN/$name"
     if [[ -f "$src" ]]; then
-        cp "$src" "$dst"
-        sed -i 's/\r//' "$dst"
+        # Strip CR in case the repo was copied from a Windows checkout.
+        tr -d '\r' < "$src" > "$dst"
         chmod +x "$dst"
         phx_ok "Installed: $name"
     else
@@ -130,99 +126,14 @@ install_cmd() {
     fi
 }
 
-install_cmd "clone"      "$OS_DIR/tools/clone.sh"
-install_cmd "align_dirs" "$OS_DIR/tools/align_dirs.sh"
-install_cmd "get_distros" "$OS_DIR/tools/get_distros.sh"
-install_cmd "intake"     "$OS_DIR/sector4/intake/intake.sh"
+for cmd in usys run clone intake status align_dirs get_distros; do
+    install_cmd "$cmd"
+done
 
-# Generate usys command
-cat > "$USYS_BIN/usys" << 'USYS'
-#!/usr/bin/env bash
-# Phoenix USys — United Systems global command
-[[ -f "$HOME/.phoenix_env.sh" ]] && source "$HOME/.phoenix_env.sh"
-
-PHX_ROOT="${PHOENIX_ROOT:-$HOME/Phoenix/Phoenix-DevOps-oS}"
-
-case "${1:-help}" in
-    status)
-        echo ""
-        echo "  Phoenix DevOps OS — System Status"
-        echo "  $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-        echo ""
-        for s in sector1 sector2 sector3 sector4; do
-            count=$(find "$PHX_ROOT/$s" -type f 2>/dev/null | wc -l)
-            echo "  $s: $count files"
-        done
-        echo ""
-        echo "  PHOENIX_ROOT: $PHX_ROOT"
-        echo "  PHOENIX_AUTH: ${PHOENIX_AUTH:+set}"
-        echo "  CLONEPOOL:    ${CLONEPOOL_DIR:-not set}"
-        echo ""
-        ;;
-    init)
-        echo "  [usys init] Phoenix already installed at $PHX_ROOT"
-        ;;
-    help|--help|-h|"")
-        echo ""
-        echo "  usys — Phoenix DevOps OS command layer"
-        echo ""
-        echo "  usys status       system health"
-        echo "  usys init         (re)initialize Phoenix"
-        echo "  usys help         this message"
-        echo ""
-        ;;
-    *)
-        echo "  usys: unknown command '$1' — try: usys help"
-        exit 1
-        ;;
-esac
-USYS
-chmod +x "$USYS_BIN/usys"
-sed -i 's/\r//' "$USYS_BIN/usys"
-phx_ok "Installed: usys"
-
-# Generate status command
-cat > "$USYS_BIN/status" << 'STATUSCMD'
-#!/usr/bin/env bash
-# Phoenix status — quick health check
-[[ -f "$HOME/.phoenix_env.sh" ]] && source "$HOME/.phoenix_env.sh"
-PHX_ROOT="${PHOENIX_ROOT:-$HOME/Phoenix/Phoenix-DevOps-oS}"
-echo ""
-echo "  Phoenix Status — $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-echo ""
-[[ -d "$PHX_ROOT" ]] && echo "  [OK] Root: $PHX_ROOT" || echo "  [!!] Root missing: $PHX_ROOT"
-[[ -n "${PHOENIX_AUTH:-}" ]] && echo "  [OK] PHOENIX_AUTH set" || echo "  [--] PHOENIX_AUTH not set"
-[[ -n "${CLONEPOOL_DIR:-}" && -d "${CLONEPOOL_DIR:-}" ]] && echo "  [OK] Clonepool: $CLONEPOOL_DIR" || echo "  [--] Clonepool: ${CLONEPOOL_DIR:-not set}"
-echo ""
-STATUSCMD
-chmod +x "$USYS_BIN/status"
-sed -i 's/\r//' "$USYS_BIN/status"
-phx_ok "Installed: status"
-
-# Generate run command stub
-cat > "$USYS_BIN/run" << 'RUNCMD'
-#!/usr/bin/env bash
-# Phoenix run — execute a suit via franken5
-[[ -f "$HOME/.phoenix_env.sh" ]] && source "$HOME/.phoenix_env.sh"
-PHX_ROOT="${PHOENIX_ROOT:-$HOME/Phoenix/Phoenix-DevOps-oS}"
-
-if [[ $# -eq 0 ]]; then
-    echo "  Usage: run <suit.py> [args...]"
-    echo "  Executes a franken5 suit in Phoenix context."
-    exit 1
+if ! command -v pwsh &>/dev/null; then
+    phx_warn "PowerShell 7 (pwsh) not found — 'usys' and 'run' need it (they delegate to scripts/usys.ps1)."
+    phx_warn "Install: https://aka.ms/install-powershell  (clone/intake/status work without it)"
 fi
-
-SUIT="$1"; shift
-if [[ ! -f "$SUIT" ]]; then
-    echo "  run: suit not found: $SUIT"
-    exit 1
-fi
-
-python3 "$SUIT" "$@"
-RUNCMD
-chmod +x "$USYS_BIN/run"
-sed -i 's/\r//' "$USYS_BIN/run"
-phx_ok "Installed: run"
 
 phx_ok "Global commands installed to $USYS_BIN"
 
@@ -298,10 +209,10 @@ echo "   Phoenix DevOps OS installed."
 echo "  ======================================"
 echo ""
 echo "  Open a NEW terminal, then:"
-echo "    usys status          <- system health"
+echo "    usys status          <- system health (needs pwsh)"
 echo "    clone <file>         <- Sector 2 clonepool intake"
-echo "    intake <file>        <- Sector 4 vault intake"
-echo "    status               <- Phoenix status check"
+echo "    intake <file>        <- Sector 2 clonepool intake (same pipeline as clone)"
+echo "    status               <- Phoenix status check (status.sh)"
 echo ""
 echo "  Repo: $OS_DIR"
 echo ""

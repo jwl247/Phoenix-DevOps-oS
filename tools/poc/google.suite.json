@@ -1,7 +1,7 @@
 {
   "name": "google",
   "version": "1.0.0",
-  "description": "Google Chrome browser via Phoenix. Opens google.com (or any URL) in a real Chrome window. No install on the host — Chrome is the runtime, Phoenix is the launcher.",
+  "description": "Google Chrome browser via Phoenix. Opens google.com (or any URL) in a real Chrome window. No install on the host — Chrome is the runtime, Phoenix is the launcher. Dashboard-only: runtime \"external\" is launched by the dashboard; `usys run` has no external runtime and refuses it.",
   "author": "jwl247",
   "type": "app",
   "entry": "chrome.exe",

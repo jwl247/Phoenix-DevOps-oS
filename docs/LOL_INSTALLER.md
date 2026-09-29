@@ -157,7 +157,7 @@ my-new-package)
 ### Bootstrap Security
 
 - ✅ Downloads from GitHub (HTTPS)
-- ✅ No code execution during bootstrap
+- ⚠️ The bootstrap **is** remote code execution: `irm … | iex` / `curl … | bash` runs the script straight from GitHub `main`, unpinned and unverified (no hash, no signature). Read `bootstrap/lol-bootstrap.ps1` / `.sh` before running it
 - ✅ User scope only (no admin required)
 - ✅ Minimal attack surface (~100 lines)
 
@@ -166,7 +166,7 @@ my-new-package)
 - ✅ Each package installer is responsible for its own security
 - ✅ All installers run in user scope
 - ✅ Source code is public and auditable
-- ✅ No binary downloads (scripts only)
+- ⚠️ `lol install` runs each package installer the same way (`irm <url> | iex` / `curl <url> | bash`), and `install.ps1` downloads and executes binary installers (PowerShell 7 MSI, Git, Python). `install.ps1` checks each downloaded installer's Authenticode signature before running it (see `install.ps1` ~line 93)
 
 ---
 

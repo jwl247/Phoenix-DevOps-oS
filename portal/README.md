@@ -26,8 +26,9 @@ hands offer (`hands/hands.py`):
   restart the mesh agent or Ollama (asks first), restart (asks first).
   Installed with `python hands/install_remote.py NAME --ssh ALIAS`; tokens in
   `~/.phoenix/hands-tokens.json` on this PC (owner-only).
-Every action lands in that machine's own log (Recent actions). One page only:
-no test copies.
+Every action lands in that machine's own log (Recent actions). One live page;
+a test copy can serve `web-next/` via `PHOENIX_CONSOLE_WEB` and run with
+`--local-only` (see `server.py`) without touching the live one.
 
 ## How it runs
 - `server.py`: Python standard library only. Asks the switchboard

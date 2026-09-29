@@ -33,9 +33,11 @@ elif command -v powershell &>/dev/null; then
 fi
 
 if [[ -n "$PWSH" ]]; then
-    # Use PowerShell if available
-    exec "$PWSH" -NoProfile -ExecutionPolicy Bypass -Command \
-        ". '$PHOENIX_ROOT/scripts/usys.ps1'; usys run $*"
+    # Use PowerShell if available.
+    # -File (not -Command): arguments reach usys.ps1's shim verbatim.
+    # Interpolating "$*" into a -Command string let a filename such as
+    # "a$(calc).lol" execute as PowerShell code (S34OPS-F20).
+    exec "$PWSH" -NoProfile -ExecutionPolicy Bypass -File "$PHOENIX_ROOT/scripts/usys.ps1" run "$@"
 else
     echo "[ERROR] PowerShell not found. Suite execution requires PowerShell." >&2
     echo "Install PowerShell: https://aka.ms/install-powershell" >&2

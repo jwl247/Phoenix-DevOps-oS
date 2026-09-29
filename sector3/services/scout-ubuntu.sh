@@ -45,7 +45,7 @@ if [ -n "$PHOENIX_REPO" ]; then
     git -C "$PHOENIX_REPO" log --oneline -5
     echo ""
     echo "  Sector structure:"
-    for s in sector1 sector2 sector3 SECTOR4 phoenix-core dashboard; do
+    for s in sector1 sector2 sector3 sector4 phoenix-core dashboard; do
         if [ -d "$PHOENIX_REPO/$s" ]; then
             count=$(find "$PHOENIX_REPO/$s" -type f 2>/dev/null | wc -l)
             echo "    $s/ — $count files"

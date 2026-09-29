@@ -72,7 +72,10 @@ PROB_HOT        = 0.72   # call2 after accumulation
 PROB_DEFINITIVE = 0.90   # call3 threshold — snap fires above this
 
 # Clonepool root — falls back to /tmp for test if not mounted
-CLONEPOOL = Path(os.environ.get("CLONEPOOL", "/mnt/d/clonepool"))
+# CLONEPOOL, then the Phoenix-wide CLONEPOOL_DIR, then the legacy default.
+# NOTE: /mnt/d is breach_coms1 (T4) under the Debian-VM mount convention;
+# which mount convention wins is open with Jerry (S34OPS-F22).
+CLONEPOOL = Path(os.environ.get("CLONEPOOL") or os.environ.get("CLONEPOOL_DIR") or "/mnt/d/clonepool")
 STAGE_TMP = Path(os.environ.get("PHOENIX_STAGE_TMP", "/tmp/phoenix_snap"))
 
 
@@ -255,7 +258,7 @@ def snap_clone(pcs: PCS, src_path: str) -> bool:
     Never translates — data stays quadralingual.
     Registers clone event in catalog if available.
 
-    In WSL/test mode: clonepool may not be mounted.
+    In test mode: clonepool may not be mounted.
     Falls back to STAGE_TMP so tests pass without drives.
     """
     src = Path(src_path)
@@ -296,7 +299,8 @@ def _register_clone_event(pcs: PCS, dest: str):
     """Best-effort catalog registration — never blocks snap_clone."""
     try:
         import sys
-        sys.path.insert(0, str(Path.home() / "projects" / "unitedsys"))
+        # Repo-relative sector2/unitedsys (was ~/projects/unitedsys — S34OPS-F30).
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sector2" / "unitedsys"))
         from core.catalog import get_conn
         conn = get_conn()
         conn.execute(

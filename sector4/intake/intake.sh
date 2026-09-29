@@ -1,4 +1,6 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env bash
+# (was #!/usr/bin/env zsh — no zsh-only syntax remains, `bash -n` clean;
+#  Ubuntu minimal has no zsh. S34OPS-F22, CLAUDE.md rule 5.)
 # =============================================================================
 # intake.sh -- Phoenix DevOps TAV Intake Shell Wrapper
 # Author:  jwl247 / Phoenix DevOps LLC
@@ -22,10 +24,10 @@ if [[ -n "${PHOENIX_ROOT:-}" && -f "${PHOENIX_ROOT}/phoenix-core/tools/intake.py
     INTAKE_PY="${PHOENIX_ROOT}/phoenix-core/tools/intake.py"
 elif [[ -f "${HOME}/Phoenix/Phoenix-DevOps-oS/phoenix-core/tools/intake.py" ]]; then
     INTAKE_PY="${HOME}/Phoenix/Phoenix-DevOps-oS/phoenix-core/tools/intake.py"
-elif [[ -f "$(dirname "$(dirname "$(realpath "$0")")")/../phoenix-core/tools/intake.py" ]]; then
-    INTAKE_PY="$(dirname "$(dirname "$(realpath "$0")")")/../phoenix-core/tools/intake.py"
 else
-    INTAKE_PY="${HOME}/projects/unitedsys/core/intake.py"   # legacy fallback
+    # Repo-relative (the old ~/projects/unitedsys fallback pointed at a
+    # layout no current box has — S34OPS-F30). check_python reports a miss.
+    INTAKE_PY="$(dirname "$(dirname "$(realpath "$0")")")/../phoenix-core/tools/intake.py"
 fi
 
 mkdir -p "${LOG_DIR}"
@@ -59,9 +61,8 @@ cmd_dir() {
     log "intake-dir: ${target}"
     local count=0
     # find + NUL-delimited read, not a shell glob — the zsh-only **/*(.)
-    # syntax broke under bash (this script's actual invocation path via
-    # usys.ps1's Get-UsysGitBash is always bash, never zsh, despite the
-    # #!/usr/bin/env zsh shebang above). find works identically under both.
+    # syntax broke under bash (this script's invocation path via usys.ps1's
+    # Get-UsysGitBash is always bash; the shebang is now bash too).
     while IFS= read -r -d '' f; do
         python3 "${INTAKE_PY}" "${f}" && (( count++ ))
     done < <(find "${target}" -type f -print0)

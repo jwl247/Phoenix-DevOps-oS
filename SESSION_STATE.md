@@ -1,3 +1,5 @@
+> **Historical snapshot (2026-09-04) — superseded by root `CLAUDE.md` (§ SESSION PROTOCOL: read CLAUDE.md, then `docs/plans/day-by-day-2026-09.md`); kept for the record.** Round-2 audit 2026-09-28 (XCUT-F21): `phoenix-clonepool-r2` below was retired 2026-09-21 and deleted 2026-09-25; commit `5d69d47` no longer resolves after the 2026-09-25 history rewrite; the `192.168.1.133` box and the NEXT STEPS list are stale. Not the start-of-session document.
+
 # Phoenix Session State
 # Updated: 2026-09-04
 # READ THIS AT THE START OF NEXT SESSION

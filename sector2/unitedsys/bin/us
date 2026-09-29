@@ -1,5 +1,7 @@
 #!/usr/bin/env zsh
 SCRIPT_DIR="${0:A:h}"
 ROOT_DIR="${SCRIPT_DIR:h}"
-cd "$ROOT_DIR"
+# PYTHONPATH instead of cd, so relative arguments (us intake-dir ./dir)
+# still resolve against the caller's directory.
+export PYTHONPATH="${ROOT_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
 exec python3 -m core.us "$@"

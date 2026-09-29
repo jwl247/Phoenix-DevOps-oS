@@ -19,12 +19,12 @@ existing sectors, applied to a game domain:
 
 | GDD concept | Phoenix component | Status |
 |---|---|---|
-| Frank — world orchestrator, one instance, never moves | `sector4/frank/` | Exists (environment orchestrator, audit logger) |
-| Helix — traffic layer, routes to Frank | `sector1/helix/`, `sector4/helix/` | Exists (300k+ ops/sec benchmarked) |
+| Frank — world orchestrator, one instance, never moves | `sector2/frank/` (`frank_helix.py`, `frank_save.py`, `frank_http.py`, `frank_client.js`) — the `sector4/frank/` named in CLAUDE.md's sector map does not exist on disk (verified 2026-09-28) | Exists (environment orchestrator, audit logger) |
+| Helix — traffic layer, routes to Frank | `sector1/helix/` (Python stack) + `sector1/kernels/` (dm-helix kernel module) — `sector4/helix/` does not exist on disk (verified 2026-09-28) | Exists (measured figures and their conditions in `docs/helix/BENCHMARKS.md`) |
 | Concierge layer (Windows/Linux → Helix translation) | `sector1/concierge/` (`concierge.c`, `bridge.py`, `linux_concierge.py`) | Exists |
 | Tunnel ingress/egress (DMZ-per-player) | `sector3/romeo_juliet/` (`romeo.py` ingress, `juliet.py` egress) | Named/scaffolded, not built out for game traffic |
 | Master key (cryptographic identity, hardware-bound, no passwords) | `sector1/auth/phoenix_auth.py` | Exists (SHA3-512+BLAKE2b hardware fingerprint) |
-| Draft card / Jacket (permanent, append-only, signed record) | D1 custody database | Exists as a general-purpose pattern (41 tables, custody ledger) — game-specific tables not yet added |
+| Draft card / Jacket (permanent, append-only, signed record) | D1 custody database | Exists as a general-purpose pattern (52 tables live 2026-09-28 per `/health`, custody ledger) — game-specific tables not yet added |
 | TAV address system (content hashing/addressing) | SHA3-512 → base58, `sector2/package-handler/intake.sh` | Exists, general-purpose |
 
 **Working assumption, not yet independently re-confirmed with Jerry beyond the framing

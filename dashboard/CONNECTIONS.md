@@ -28,7 +28,7 @@ project, NOT governed by any repo-root package.json (there isn't one).
 
 ## Connects to / connected from
 - `main.js` → folder-browser slot mapping into `sector1/`, `sector2/`, `sector3/`, and
-  `SECTOR4`/`sector4` (see known casing bug below).
+  `sector4/`.
 - `scriptforge-launcher.js` → `sector2/apps/scriptforge/index.html`.
 - `office-launcher.js` → `sector2/apps/office/index.html` + that app's `preload.js`
   (IPC channel names cross-checked against `office-launcher.js`/`index.html`/`button-generator.js`).
@@ -38,8 +38,6 @@ project, NOT governed by any repo-root package.json (there isn't one).
   surface with `scripts/usys.ps1` but no direct file import.
 
 ## Known issues (verified, not guessed)
-- `main.js` (~line 374) references `'SECTOR4'` uppercase while the real directory is
-  lowercase `sector4/` — only "works" on case-insensitive Windows NTFS.
 - `ps7-shell.js` is dead code — superseded by `terminal-pty.js` (2026-08-30) but still
   present in the tree, not removed.
 - Root-level `dashboardzip1.zip` (187MB, sits outside `dashboard/` at the repo root) is a

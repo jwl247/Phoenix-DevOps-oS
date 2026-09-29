@@ -20,7 +20,7 @@ One command. Every platform. Everything tracked.
 | File | Repo | Purpose |
 |------|------|---------|
 | `tools/clone.ps1` | Phoenix-DevOps-oS | PS7 global function |
-| `tools/clone.sh` | Phoenix-DevOps-oS | Bash shim -- Linux/WSL/macOS |
+| `tools/clone.sh` | Phoenix-DevOps-oS | Bash shim -- Linux (Phoenix's Debian VM / bare metal) / macOS |
 | `sector2/package-handler/intake.sh` | Phoenix-DevOps-oS (git subtree of Phoenix-Package_handler) | Intake engine (what clone wraps) |
 | `sector2/package-handler/worker/index.js` | Phoenix-DevOps-oS (git subtree of Phoenix-Package_handler) | packages-worker -- D1 + R2 sync |
 
@@ -38,7 +38,7 @@ Add one line to your PS7 profile (`$PROFILE`):
 
 Reload: `. $PROFILE` -- then `clone` works from anywhere in PS7.
 
-### Bash -- Linux / WSL / macOS
+### Bash -- Linux (Debian VM / bare metal) / macOS
 
 ```bash
 chmod +x ~/Phoenix/Phoenix-DevOps-oS/tools/clone.sh
@@ -69,7 +69,7 @@ clone ./franken.py -Destination T2
 clone ./myfile.sh -DryRun
 ```
 
-### Bash / WSL / Linux / macOS
+### Bash / Linux (Debian VM / bare metal) / macOS
 
 ```bash
 clone ./franken.py

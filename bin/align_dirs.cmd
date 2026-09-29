@@ -50,7 +50,10 @@ set "ALIGN_SH=%ALIGN_SH:C:=/c%"
 set "ALIGN_SH=%ALIGN_SH:c:=/c%"
 
 REM Execute align_dirs command
-"%BASH_EXE%" -lc "bash '%ALIGN_SH%' %*"
+REM Script path and arguments go to bash as positional parameters ($0, $@),
+REM never interpolated into the -c string: %* inside the string let a
+REM filename such as "a$(whoami).lol" execute as shell code (S34OPS-F20 class).
+"%BASH_EXE%" -lc "exec bash \"$0\" \"$@\"" "%ALIGN_SH%" %*
 
 exit /b !errorlevel!
 

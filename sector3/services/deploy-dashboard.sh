@@ -34,6 +34,9 @@ echo "  Units:     $SERVICE_DIR"
 hdr "Node.js"
 if ! command -v node &>/dev/null; then
     warn "Node.js not found — installing via NodeSource..."
+    # NOTE (S34OPS-F35, open): this pipes an unpinned remote script to root.
+    # Preferred: import Node through the clone pool (import, don't install), or
+    # download setup_20.x first and check its sha256 before running it.
     curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
     sudo apt-get install -y nodejs
 fi

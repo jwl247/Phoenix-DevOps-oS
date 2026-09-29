@@ -90,8 +90,11 @@ get_mount_points() {
     done
     $skip && continue
 
-    # Skip our own output dir
-    [[ "$OUTPUT_DIR" == "$mountpoint"* || "$mountpoint" == "$OUTPUT_DIR"* ]] && continue
+    # Skip our own output dir (or a mount that contains it). Never apply the
+    # "contains it" test to / — every OUTPUT_DIR is under /, so that silently
+    # dropped the root filesystem from the scan (audit S1-F24).
+    [[ "$mountpoint" == "$OUTPUT_DIR" || "$mountpoint" == "$OUTPUT_DIR/"* ]] && continue
+    [[ "$mountpoint" != "/" && "$OUTPUT_DIR" == "$mountpoint/"* ]] && continue
 
     mounts+=("$mountpoint")
   done < /proc/mounts
@@ -121,8 +124,8 @@ scan_path() {
 
   # Extension-based scan
   while IFS= read -r filepath; do
-    [[ -f "$filepath" && -r "$filepath" ]] || { ((skipped++)); continue; }
-    ((found++))
+    [[ -f "$filepath" && -r "$filepath" ]] || { skipped=$((skipped+1)); continue; }
+    found=$((found+1))
 
     local flat dest
     flat=$(flatten_path "$filepath")
@@ -133,18 +136,18 @@ scan_path() {
       src_hash=$(md5sum "$filepath" 2>/dev/null | awk '{print $1}')
       dst_hash=$(md5sum "$dest"     2>/dev/null | awk '{print $1}')
       if [[ "$src_hash" == "$dst_hash" ]]; then
-        ((dupes++)); continue
+        dupes=$((dupes+1)); continue
       else
         dest="$DUP_DIR/${flat}.CONFLICT_$(date +%s%N)"
-        ((dupes++))
+        dupes=$((dupes+1))
       fi
     fi
 
     if cp -p "$filepath" "$dest" 2>/dev/null; then
-      ((copied++))
+      copied=$((copied+1))
       echo "$filepath" >> "$INDEX_FILE"
     else
-      ((skipped++))
+      skipped=$((skipped+1))
     fi
 
   done < <(find "$scanroot" \( "${ext_args[@]}" \) -type f 2>/dev/null | sort)
@@ -161,17 +164,17 @@ scan_path() {
 
     has_script_shebang "$filepath" || continue
 
-    ((found++))
+    found=$((found+1))
     local flat dest
     flat=$(flatten_path "$filepath")
     dest="$OUTPUT_DIR/_shebang__${flat}"
     [[ -e "$dest" ]] && dest="${dest}.$(date +%s%N)"
 
     if cp -p "$filepath" "$dest" 2>/dev/null; then
-      ((copied++))
+      copied=$((copied+1))
       echo "$filepath  [shebang]" >> "$INDEX_FILE"
     else
-      ((skipped++))
+      skipped=$((skipped+1))
     fi
 
   done < <(find "$scanroot" -type f -executable 2>/dev/null | sort)
@@ -314,10 +317,12 @@ main() {
     d=$(awk '{print $3}' <<< "$result")
     s=$(awk '{print $4}' <<< "$result")
 
-    ((total_found   += f))
-    ((total_copied  += c))
-    ((total_dupes   += d))
-    ((total_skipped += s))
+    # x=$((…)) not ((x+=…)): under set -e, (( )) evaluating to 0 exits the
+    # script (audit S1-F24); ${f:-0} guards an empty scan_path result.
+    total_found=$((total_found + ${f:-0}))
+    total_copied=$((total_copied + ${c:-0}))
+    total_dupes=$((total_dupes + ${d:-0}))
+    total_skipped=$((total_skipped + ${s:-0}))
 
     echo -e "    → found=${GREEN}${f}${RESET}  copied=${GREEN}${c}${RESET}  dupes=${YELLOW}${d}${RESET}  skipped=${RED}${s}${RESET}"
     echo

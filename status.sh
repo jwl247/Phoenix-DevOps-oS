@@ -19,7 +19,7 @@ done
 echo ""
 echo "── breach_coms mounts ──"
 for m in g f e d; do
-  [[ -d "/mnt/${m}" ]] && echo "  /mnt/${m} : MOUNTED" || echo "  /mnt/${m} : NOT MOUNTED (WSL/Bare metal)"
+  [[ -d "/mnt/${m}" ]] && echo "  /mnt/${m} : MOUNTED" || echo "  /mnt/${m} : NOT MOUNTED (Debian VM mount convention)"
 done
 echo ""
 echo "── systemd (Linux) ──"

@@ -38,7 +38,9 @@ CATALOG_DB       = os.path.expanduser("~/.catalog/catalog.db")
 LOG_DIR          = os.path.expanduser("~/.unitedsys/logs")
 LOG_FILE         = os.path.join(LOG_DIR, "juliet.log")
 TRANSLATOR_SH    = "/etc/systemd/system/translator.sh"
-TRANSLATOR_FALLBACK = os.path.expanduser("~/projects/phoenix/translator/translator.sh")
+# Repo copy, sector3/translator/translator.sh (was ~/projects/phoenix/... — S34OPS-F30).
+TRANSLATOR_FALLBACK = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                   "translator", "translator.sh")
 VERSION          = "2.0.0"
 
 # Ports

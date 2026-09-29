@@ -1,4 +1,7 @@
 @echo off
+:: RETIRED (2026-09-29, S34OPS-F23): WSL-era concierge build. Phoenix does not
+:: use WSL. concierge.c / bridge.py / linux_concierge.py live in
+:: sector1/concierge/, not in this directory. Kept for history only.
 :: build_windows.bat — build concierge.exe on Windows
 :: Run this from the phoenix-bridge directory
 :: Supports MinGW (gcc) or MSVC (cl)

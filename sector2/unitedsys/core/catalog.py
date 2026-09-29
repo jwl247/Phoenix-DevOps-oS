@@ -3,7 +3,30 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = os.environ.get('UNITEDSYS_DB', str(Path.home() / '.catalog' / 'catalog.db'))
+def _default_db_path() -> str:
+    """~/.catalog/catalog.db is shared with other Phoenix tools (intake.sh's
+    custody ledger, propcoms). If it already holds a `packages` table that is
+    not UnitedSys's (no `name` column), schema.sql's index on packages(name)
+    crashed `us` at startup (audit S2CORE-F05) — so UnitedSys then uses its
+    own ~/.catalog/unitedsys.db. A catalog.db that is absent, or already has
+    UnitedSys's schema, keeps being used exactly as before."""
+    catalog_dir = Path.home() / '.catalog'
+    shared = catalog_dir / 'catalog.db'
+    if shared.exists():
+        try:
+            c = sqlite3.connect(f'file:{shared.as_posix()}?mode=ro', uri=True)
+            try:
+                cols = {r[1] for r in c.execute('PRAGMA table_info(packages)')}
+            finally:
+                c.close()
+            if cols and 'name' not in cols:
+                return str(catalog_dir / 'unitedsys.db')
+        except sqlite3.Error:
+            pass
+    return str(shared)
+
+
+DB_PATH = os.environ.get('UNITEDSYS_DB') or _default_db_path()
 SCHEMA   = Path(__file__).parent.parent / 'db' / 'schema.sql'
 
 def get_conn() -> sqlite3.Connection:

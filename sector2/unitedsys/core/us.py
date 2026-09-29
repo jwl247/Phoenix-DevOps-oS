@@ -7,6 +7,7 @@ from core.transaction import Transaction, TransactionError
 from core.resolver    import Resolver
 from core.catalog     import init_db, list_packages, get_package, last_transaction
 from core.manifest    import list_manifests, load as load_manifest, get_backend_name
+from core.backends.clonepool import default_clonepool, run_intake
 
 def get_backend_instance(force=None):
     name = force or get_backend()
@@ -180,12 +181,15 @@ def cmd_intake_dir(args):
         # Pass values as positional args ($1..$4), never interpolated into
         # the command string — a filename like  $(rm -rf ~).txt  or one
         # containing a double quote would otherwise run as shell code.
-        result = subprocess.run(
-            ['/usr/bin/zsh', '-c', 'usys intake "$1" "$2" "$3" "$4"', 'usys',
-             str(f), str(args.pool), str(args.state), str(desc)],
-            capture_output=True, text=True,
-        )
-        if 'Sidecar' in result.stdout or 'Registering' in result.stdout:
+        # Straight to the canonical pipeline (sector2/package-handler/intake.sh)
+        # with an argv list, never a shell string. The old `/usr/bin/zsh -c
+        # 'usys intake ...'` needed zsh at a fixed path and reached sector4's
+        # pipeline via usys.ps1, and its success test looked for words
+        # intake.sh never prints (audit S2CORE-F37). --state is recorded in
+        # the notes; intake.sh always registers new files white.
+        note = f'{desc} (state requested: {args.state})' if args.state != 'white' else desc
+        result = run_intake(f, args.pool, note)
+        if result.returncode == 0 and '[intake:OK]' in result.stdout:
             ok += 1
             print(f'  [OK] {f.name}')
         else:
@@ -253,10 +257,10 @@ def cmd_gloss(args):
             print(f"  {c['name']:13} {c['hex']:25} {c['description']}")
         print()
 def cmd_seed(args):
-    from core.backends.clonepool import ClonepoolBackend
+    from core.backends.clonepool import ClonepoolBackend, CLONEPOOL as cp_path
     cp = ClonepoolBackend()
     if not cp.available():
-        print('ERROR: Clonepool not available at /mnt/d/clonepool')
+        print(f'ERROR: Clonepool not available at {cp_path} (set CLONEPOOL_DIR)')
         return
     for package in args.packages:
         print(f'Seeding {package} into clonepool...')
@@ -371,7 +375,8 @@ def main():
     # intake-dir
     p_intake_dir = sub.add_parser('intake-dir', help='Intake entire directory into clonepool')
     p_intake_dir.add_argument('directory',         help='Directory to intake')
-    p_intake_dir.add_argument('--pool',  default='/mnt/d/clonepool', help='Pool path')
+    p_intake_dir.add_argument('--pool',  default=str(default_clonepool()),
+                              help='Pool path (default: $CLONEPOOL_DIR or ~/Phoenix/clonepool)')
     p_intake_dir.add_argument('--state', default='white',            help='white/grey/black')
     p_intake_dir.add_argument('--desc',  default='',                 help='Description prefix')
     p_intake_dir.set_defaults(func=cmd_intake_dir)

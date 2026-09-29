@@ -52,7 +52,7 @@ Shared page dir = F:\Phoenix\helix-pages\ (SMB proven live 2026-08-23)
 
 ### Sub-Task 1 — Fix `true_double_helix.py` path resolution
 
-**Status:** [ ] pending
+**Status:** [x] done 2026-09-29 (Round 2 fix pass, S34OPS-F29a) — also honours `PHOENIX_SECTOR1`
 
 **Intent:**
 `true_double_helix.py` is a copy of `helixi.py` (Helix-I ingress). It fails to import

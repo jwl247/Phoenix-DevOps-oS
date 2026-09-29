@@ -28,7 +28,7 @@ _lib = ctypes.CDLL(os.environ.get("HELIX_LIB", os.path.join(_here, "libhelix.so"
 
 
 class HelixStats(ctypes.Structure):
-    # Must match struct helix_stats in ../helix.h (u64 x4, then u32 x4).
+    # Must match struct helix_stats in ../helix.h (u64 x4, then u32 x8 incl. _pad).
     _fields_ = [
         ("uptime_s", ctypes.c_uint64),
         ("ticks", ctypes.c_uint64),

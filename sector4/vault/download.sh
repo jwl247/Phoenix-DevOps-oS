@@ -1,4 +1,6 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env bash
+# (was #!/usr/bin/env zsh — no zsh-only syntax remains, `bash -n` clean;
+#  Ubuntu minimal has no zsh. S34OPS-F22, CLAUDE.md rule 5.)
 # =============================================================================
 # download.sh -- Phoenix DevOps Package Downloader
 # Author:  jwl247 / Phoenix DevOps LLC
@@ -15,7 +17,9 @@ CLONEPOOL="${VAULT}/CLONEPOOL"
 CATALOG_DB="${HOME}/.catalog/catalog.db"
 LOG_DIR="${HOME}/.unitedsys/logs"
 LOG_FILE="${LOG_DIR}/download.log"
-US_CORE="${HOME}/projects/unitedsys/core/us.py"
+# UnitedSys core lives in the repo (was ~/projects/unitedsys — S34OPS-F30).
+_S4_REPO="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
+US_CORE="${PHOENIX_ROOT:-${_S4_REPO}}/sector2/unitedsys/core/us.py"
 VERSION="0.1.0"
 
 mkdir -p "${LOG_DIR}"

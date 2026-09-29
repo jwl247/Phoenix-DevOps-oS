@@ -1,13 +1,17 @@
 # bootstrap — minimal `lol install` bootstrapper
 
-Written 2026-09-12. Verify against current code before trusting a specific line number.
+Written 2026-09-12; re-checked 2026-09-29 (Round 2 audit). Verify against current code before trusting a specific line number.
 
 ## What it is
 `lol-bootstrap.sh` / `lol-bootstrap.ps1` — a separate, minimal installer enabling
 `lol install <package>` (writes to `~/.lol`). Documented in `docs/LOL_INSTALLER.md`.
+- `lol-bootstrap.sh` — Linux/macOS: writes `~/.lol/bin/lol` and adds it to PATH in shell rc files.
+- `lol-bootstrap.ps1` — Windows PowerShell equivalent.
 
 ## Dependencies
-None.
+No packages. Runtime: `bash` + `curl` or `wget` (`lol-bootstrap.sh`), or PowerShell
+(`lol-bootstrap.ps1`); both scripts handle a missing downloader. The generated `lol`
+pipes the target `install.sh`/`install.ps1` from GitHub straight into the shell (unpinned).
 
 ## Commands / entry points
 `bash bootstrap/lol-bootstrap.sh` or `bootstrap/lol-bootstrap.ps1` directly — standalone,

@@ -1,3 +1,5 @@
+> **Historical snapshot (2026-06-29) — superseded by root `CLAUDE.md` and the `CONNECTIONS.md` files (root index + per-directory); kept for the record.** Round-2 audit 2026-09-28 (XCUT-F19): the WSL bridge plan (no WSL — Phoenix's Debian VM is the Linux side), the `SECTOR4/…` paths and `phoenix-intake.exe` (none in the live tree), "intake.py — MISSING" (it exists, deprecated), the `/stats` endpoint (404) and "23 systemd units" (19 unit files in `sector3/services/`) below do not match reality. Do not build from this file.
+
 # PHOENIX DEVOPS OS — MASTER BUILD DOCUMENT
 # jwl247 / Jerry Leftwich / Phoenix DevOps LLC
 # READ ALONGSIDE CLAUDE.md — this is the build map, CLAUDE.md is the law

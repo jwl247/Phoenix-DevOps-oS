@@ -166,7 +166,7 @@ ipcMain.handle('get-sector-paths', async () => {
         '1': path.join(root, 'sector1'),
         '2': path.join(root, 'sector2'),
         '3': path.join(root, 'sector3'),
-        '4': path.join(root, 'SECTOR4'),
+        '4': path.join(root, 'sector4'),
         helix: path.join(root, 'phoenix-core')
     };
     return Object.fromEntries(
@@ -201,7 +201,7 @@ function resolvePhoenixCommand(command) {
         if (process.platform === 'win32' && fs.existsSync(intakePs1)) {
             return `& '${intakePs1.replace(/'/g, "''")}' ${args}`;
         }
-        const intakeSh = path.join(root, 'SECTOR4', 'intake', 'intake.sh');
+        const intakeSh = path.join(root, 'sector4', 'intake', 'intake.sh');
         if (fs.existsSync(intakeSh)) {
             return `bash '${intakeSh.replace(/'/g, "'\\''")}' ${args}`;
         }
@@ -371,7 +371,7 @@ ipcMain.handle('save-file-dialog', async (event, options) => {
 // Get sector file counts
 ipcMain.handle('get-sector-counts', async () => {
     const phoenixRoot = process.env.PHOENIX_ROOT || path.join(os.homedir(), 'Phoenix', 'Phoenix-DevOps-oS');
-    const sectors = ['sector1', 'sector2', 'sector3', 'SECTOR4'];
+    const sectors = ['sector1', 'sector2', 'sector3', 'sector4'];
     const counts = {};
 
     for (const sector of sectors) {

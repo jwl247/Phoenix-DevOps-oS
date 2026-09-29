@@ -50,7 +50,10 @@ set "DISTROS_SH=%DISTROS_SH:C:=/c%"
 set "DISTROS_SH=%DISTROS_SH:c:=/c%"
 
 REM Execute get_distros command
-"%BASH_EXE%" -lc "bash '%DISTROS_SH%' %*"
+REM Script path and arguments go to bash as positional parameters ($0, $@),
+REM never interpolated into the -c string: %* inside the string let a
+REM filename such as "a$(whoami).lol" execute as shell code (S34OPS-F20 class).
+"%BASH_EXE%" -lc "exec bash \"$0\" \"$@\"" "%DISTROS_SH%" %*
 
 exit /b !errorlevel!
 

@@ -3,6 +3,18 @@
 **Part of:** Phoenix DevOps OS
 **Status:** Specification — Open for Contribution
 
+> **Design intent, not the deployed contract (marked 2026-09-29, audit S2CORE-F35).**
+> The truth for what is built is `peer-review/schema.sql` (tables and columns)
+> and the `/review`, `/verify`, `/feed` routes in `worker/index.js` (endpoint
+> table in `README.md`). Known differences from this document: `submissions`
+> also has `name`/`artifact_url` and its status CHECK has no `in_review` or
+> `superseded`; reviews record `voted_at`, not `reviewed_at`;
+> `advertisement_feed` has `advertised_at`/`revoked`/`approvals`/`qr_data`
+> rather than `published_at`/`status`/`changelog`; and there are no separate
+> web pages — `/platform` has Review/Submit/Feed/Verify tabs, `/review/:hex`
+> is JSON, `/submit` and `/revoked` do not exist. Every route needs the bearer
+> (plus Cloudflare Access). Live use as of 2026-09-28: 0 submissions, 0 feed rows.
+
 ---
 
 ## What This Is
@@ -274,6 +286,9 @@ The peer review platform is built on top of the existing Phoenix infrastructure:
 
 ## D1 Schema Additions
 
+> Proposed shape. The deployed schema is `peer-review/schema.sql`; see the
+> note at the top of this file for where the two differ.
+
 ### `submissions` table
 
 ```sql
@@ -340,6 +355,9 @@ CREATE TABLE advertisement_feed (
 ## Website Integration
 
 The peer review platform is served from the Phoenix DevOps OS website and exposed via the packages-worker API.
+
+> As deployed, all of this lives in one page, `/platform` (tabs Review Queue,
+> Submit, Opt-In Feed, Verify). The paths below are the proposed page layout.
 
 ### Pages
 

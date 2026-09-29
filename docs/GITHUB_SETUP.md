@@ -182,7 +182,8 @@ foreach ($file in $files) {
 
 **Bash:**
 ```bash
-find . -type f \( -name "*.md" \) -exec sed -i 's/jwl247/YOUR_USERNAME/g' {} +
+# only the two files listed above — never the whole tree (CLAUDE.md and docs/history/ cite jwl247 on purpose)
+sed -i 's/jwl247/YOUR_USERNAME/g' README.md docs/LOL_INSTALLER.md
 ```
 
 ---

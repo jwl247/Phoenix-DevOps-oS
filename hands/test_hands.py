@@ -48,7 +48,14 @@ def only_declared_tools():
     code, out = hands.run("format_drive", {}, True, "test")
     assert code == 404 and not out["ok"]
     names = {x["name"] for x in hands.public_tools()}
-    assert names == {"status", "open_app", "screenshot", "restart_pc", "cancel_restart"}, names
+    # Per-platform tool sets (S34OPS-F37: the suite used to assert the Windows
+    # set only, so it failed on compaq/pbm3 even though the code was right).
+    if hands.IS_WIN:
+        expected = {"status", "open_app", "screenshot", "restart_pc", "cancel_restart"}
+    else:
+        expected = {"status", "services", "restart_service", "restart_pc", "cancel_restart"}
+    assert names == expected, names
+    assert names == set(hands.TOOLS), "public_tools() must list exactly the declared tools"
     assert all(x["tier"] in ("base", "ask") for x in hands.public_tools()), "no tool may be tier never"
 
 

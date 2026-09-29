@@ -313,7 +313,8 @@ usys run data-processor
 # Run with arguments
 usys run data-processor --input data.csv --output result.json
 
-# Run specific version
+# Run specific version — UNVERIFIED: no name@version split was found in
+# scripts/usys.ps1 in the 2026-09-28 audit; may be unimplemented
 usys run data-processor@1.2.3
 
 # Dry run (validate without executing)
@@ -337,7 +338,7 @@ usys list-suites --runtime python
 
 ## Security Considerations
 
-1. **Sandboxing**: Suites run in isolated environment
+1. **Execution gate, not a sandbox**: `usys run` is a consent + audit boundary (trust stamp + declared-permission check, every decision logged to `~/.unitedsys/logs/suite_exec.jsonl`) — it does not confine what a host-runtime suite does once it runs; only `qemu`-runtime suites are VM-contained. See `SUITE_EXECUTION_GATE.md`. Real sandboxing (Job Object) is still open (audit Tier 1 #2)
 2. **Permission Model**: Explicit permission declarations required
 3. **Validation**: Manifest validated before execution
 4. **Audit Logging**: All suite executions logged

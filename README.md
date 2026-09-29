@@ -26,7 +26,7 @@ Sector 3 — Comms, networking, quadralingual pipeline
 Sector 4 — Helix engine, Frank orchestrator, master vault
 ```
 
-**Helix** is the memory engine — double-strand, quadralingual, benchmarked at 700,000 ops/sec with a 100% cache hit rate. It speaks four languages simultaneously. It does not need a GPU.
+**Helix** is the memory engine — double-strand, quadralingual, benchmarked at 600–687k ops/sec in a pre-2026-03-03 governed Phoronix run (zlib 6, minimum thermal tier — source and caveats in `docs/helix/BENCHMARKS.md` §3) and, as the dm-helix kernel module on pbm3, 177,699 IOPS fully warm and 4.0x / 24x over raw disk on real hands-off work (fio logs, §4). The 100% cache hit rate holds when the working set fits her tiers; 41.7% was measured under forced memory pressure on 2026-09-25 (§ Open). It speaks four languages simultaneously. It does not need a GPU.
 
 **Frank** is the environment orchestrator and audit logger. He knows every drive, routes every write, logs every action. Frank never moves.
 

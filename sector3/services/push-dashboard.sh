@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # push-dashboard.sh — Sync dashboard to Ubuntu over WireGuard/SSH and run the installer.
-# Run from WSL on your Windows machine.
+# Run from Git Bash on Windows or from any Linux box (Phoenix does not use WSL).
+# On Windows the maintained path is push-dashboard.ps1 (PowerShell 7).
 # Phoenix DevOps OS / jwl247 / GPL v3
 #
 # Usage:
-#   bash push-dashboard.sh                        # defaults to 192.168.1.133
+#   bash push-dashboard.sh <host> [ssh-user]      # host is required (the old
+#                                                 # 192.168.1.133 default box is gone)
 #   bash push-dashboard.sh 10.0.0.1               # WireGuard IP
 #   bash push-dashboard.sh 10.0.0.1 jerry         # WireGuard IP + SSH user
 
@@ -14,7 +16,7 @@ BOLD='\033[1m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\
 ok()  { echo -e "${GREEN}✓${NC} $*"; }
 hdr() { echo -e "\n${BOLD}── $* ──${NC}"; }
 
-UBUNTU_HOST="${1:-192.168.1.133}"
+UBUNTU_HOST="${1:?Usage: bash push-dashboard.sh <host> [ssh-user]}"
 UBUNTU_USER="${2:-$(whoami)}"
 UBUNTU_DEST="$UBUNTU_USER@$UBUNTU_HOST"
 

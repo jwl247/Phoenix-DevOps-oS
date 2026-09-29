@@ -52,7 +52,7 @@ check_failover() {
 
 # ── Backend Detection ────────────────────────────────────────
 detect_backend() {
-    # Linux-native backends (WSL2 or bare metal)
+    # Linux-native backends (Phoenix's Debian VM or bare metal)
     command -v apt-get  &>/dev/null && echo "apt"    && return 0
     command -v dnf      &>/dev/null && echo "dnf"    && return 0
     command -v pacman   &>/dev/null && echo "pacman" && return 0
@@ -61,7 +61,7 @@ detect_backend() {
     command -v xbps-install &>/dev/null && echo "xbps" && return 0
     command -v emerge   &>/dev/null && echo "portage" && return 0
 
-    # Windows peer backends (via WSL2 interop or native Win10)
+    # Windows peer backends (native Windows, e.g. from Git Bash)
     command -v winget.exe &>/dev/null && echo "winget" && return 0
     command -v choco.exe  &>/dev/null && echo "choco"  && return 0
     command -v winget     &>/dev/null && echo "winget" && return 0
@@ -172,15 +172,17 @@ translate_cmd() {
                 *)         echo "UNKNOWN_VERB:${verb}" ; return 1 ;;
             esac ;;
         winget)
+            # --accept-*-agreements: juliet drives this non-interactively
+            # (subprocess, 30 s timeout) — a first-run agreement prompt would hang it.
             case "${verb}" in
-                install)   echo "winget install ${pkg}" ;;
-                remove)    echo "winget uninstall ${pkg}" ;;
-                update)    echo "winget upgrade" ;;
-                upgrade)   echo "winget upgrade --all" ;;
-                search)    echo "winget search ${pkg}" ;;
-                info)      echo "winget show ${pkg}" ;;
-                list)      echo "winget list" ;;
-                deps)      echo "winget show ${pkg} --include-versions" ;;
+                install)   echo "winget install ${pkg} --accept-source-agreements --accept-package-agreements" ;;
+                remove)    echo "winget uninstall ${pkg} --accept-source-agreements" ;;
+                update)    echo "winget upgrade --accept-source-agreements" ;;
+                upgrade)   echo "winget upgrade --all --accept-source-agreements --accept-package-agreements" ;;
+                search)    echo "winget search ${pkg} --accept-source-agreements" ;;
+                info)      echo "winget show ${pkg} --accept-source-agreements" ;;
+                list)      echo "winget list --accept-source-agreements" ;;
+                deps)      echo "winget show ${pkg} --versions --accept-source-agreements" ;;
                 clean)     echo "echo 'winget: no clean verb'" ;;
                 *)         echo "UNKNOWN_VERB:${verb}" ; return 1 ;;
             esac ;;

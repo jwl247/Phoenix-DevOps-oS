@@ -32,7 +32,7 @@ Point her at the drive; nothing else is hardcoded:
    - install QEMU (winget);
    - set the MSiSCSI service to Automatic.
 2. **Debian import:** Debian 13 genericcloud qcow2 → intake into the clone pool (Frank's import method) → a new suite `helix-drive` with its own `.suite.json` (RAM, vCPUs, disks, hostfwd 2222→22 and 3260→3260, WHPX). The old Debian 12 suite stays untouched. Switch the image to the standard `linux-image-amd64` kernel, which has the LIO target and dm modules the cloud kernel may lack.
-3. **usys.ps1:** read `hostfwd` and `drives` from the manifest (keep today's ssh forward as the default). Suites without the keys behave exactly as now. Add tests to `scripts/usys-suite-gate.Tests.ps1`-style Pester tests.
+3. **usys.ps1:** read `hostfwd` and `drives` from the manifest (keep today's ssh forward as the default). Suites without the keys behave exactly as now. Add tests to `scripts/usys-suite-gate.Tests.ps1` (standalone harness, no Pester).
 4. **Helix in the VM:** `git archive` the repo to `/opt/phoenix` (same as the Compaq/pbm3), then run `install_helix_boot.sh`. `/etc/default/helix` holds only `HELIX_ORIGIN=/dev/vdb`, `HELIX_RAM=auto`, Strand B = `/dev/vdc` (block device, auto size; small `helix_boot.sh` change so Strand B can be a device, not only a loop image), and no mount (Windows owns the filesystem). Build `helix.ko` against the VM kernel. `dm_helix.c` was proven on 6.12 and Debian 13 ships 6.12, which is why the VM is Debian 13.
 5. **Export:** `targetcli` makes a block backstore `/dev/mapper/helix`, one LUN, an ACL for the Windows initiator IQN, and CHAP. Put it in a systemd unit ordered after `helix.service`.
 6. **Windows side:** `New-IscsiTargetPortal 127.0.0.1`, `Connect-IscsiTarget -IsPersistent`, initialize GPT, NTFS, label `HELIX`, letter H:. Written as a script `tools/helix-drive/connect.ps1`, idempotent.
@@ -60,7 +60,7 @@ Point her at the drive; nothing else is hardcoded:
   3. Hash again: nothing already acknowledged may be lost.
 - **Reboot:** H: comes back by itself at logon.
 - **Tests:**
-  - Pester tests for the manifest-driven hostfwd/drives;
+  - standalone-harness tests (the `usys-suite-gate.Tests.ps1` style, no Pester) for the manifest-driven hostfwd/drives;
   - `helix_test` + `dm_helix_test.sh` inside the VM;
   - the kernel log is clean.
 

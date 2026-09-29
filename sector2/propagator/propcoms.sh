@@ -7,7 +7,9 @@
 # ============================================================
 # COM4 → COM3 → COM2 → COM1 daisy-chain relay.
 # Mirrors propcoms.py logic in bash for shell-level access.
-# Each hop logs to catalog.db and passes to the next.
+# Each hop logs to catalog.db. STUB: the hop itself is not wired (see the
+# commented `nc` line in relay_chain) — `relay` only logs, it sends nothing
+# (audit S2CORE-F13; keep-vs-retire of this chain is S2CORE-F38, Jerry's call).
 # ============================================================
 
 set -euo pipefail
@@ -18,7 +20,9 @@ COM_PORTS=(5564 5563 5562 5561)
 COM_NAMES=(COM4 COM3 COM2 COM1)
 VERSION="0.1.0"
 
-mkdir -p "$(dirname "${LOG_FILE}")"
+# Both parents: on a fresh box ~/.catalog didn't exist and every
+# catalog_log write failed silently behind `|| true` (S2CORE-F13).
+mkdir -p "$(dirname "${LOG_FILE}")" "$(dirname "${CATALOG_DB}")"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG_FILE}"; }
 
@@ -49,7 +53,7 @@ relay_chain() {
     for i in 0 1 2 3; do
         local com="${COM_NAMES[$i]}"
         local port="${COM_PORTS[$i]}"
-        log "[${com}:${port}] Relaying..."
+        log "[${com}:${port}] Relaying... (stub — logged only, not sent)"
         catalog_log "${com}" "${payload}" "RELAY"
         # In live env: echo "${payload}" | nc localhost "${port}"
         sleep 0.1

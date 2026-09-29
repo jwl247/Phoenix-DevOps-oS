@@ -21,6 +21,9 @@ _us() {
                 'doctor:Diagnose system and backends'
                 'rollback:Undo last transaction'
                 'manifests:List available manifests'
+                'seed:Download package into clonepool'
+                'gloss:Glossary management (list, info, amend, check, categories)'
+                'intake-dir:Intake entire directory into clonepool'
             )
             _describe 'us commands' commands
         ;;
@@ -34,6 +37,16 @@ _us() {
                 search)
                     _arguments \
                         '--via[Force specific backend]:backend:(apt dnf pacman zypper brew winget choco scoop pip)'
+                ;;
+                gloss)
+                    _arguments '2:subcommand:(list info amend check categories)'
+                ;;
+                intake-dir)
+                    _arguments \
+                        '--pool[Pool path]:pool:_files -/' \
+                        '--state[State]:state:(white grey black)' \
+                        '--desc[Description prefix]:desc:' \
+                        '2:directory:_files -/'
                 ;;
             esac
         ;;

@@ -62,17 +62,18 @@ function global:clone {
     # -- Find intake.sh
     $intakeCandidates = @(
         $env:PHOENIX_INTAKE,
-        (Join-Path (Split-Path $PSScriptRoot -Parent) "sector2\package-handler\intake.sh"),
-        (Join-Path (Split-Path $PSScriptRoot -Parent) "Phoenix-Package_handler\intake\intake.sh"),
-        (Join-Path $HOME "Phoenix\Phoenix-Package_handler\intake\intake.sh"),
-        (Join-Path $PSScriptRoot "..\..\Phoenix-Package_handler\intake\intake.sh")
+        (Join-Path (Split-Path $PSScriptRoot -Parent) "sector2\package-handler\intake.sh")
     ) | Where-Object { $_ -and (Test-Path $_) }
+    # (standalone Phoenix-Package_handler candidates removed — archived
+    #  2026-09-13, intake.sh lives at that repo's root; S34OPS-F41)
 
     if (-not $intakeCandidates) {
-        Write-Error "clone: intake.sh not found. Set PHOENIX_INTAKE or clone Phoenix-Package_handler next to Phoenix-DevOps-oS."
+        Write-Error "clone: intake.sh not found. Set PHOENIX_INTAKE or run from a Phoenix-DevOps-oS checkout (sector2\package-handler\intake.sh)."
         return
     }
-    $intakeSh = $intakeCandidates[0]
+    # @() — a single surviving candidate is a scalar string, and [0] on a
+    # string is its first character ("F"), not the path.
+    $intakeSh = @($intakeCandidates)[0]
 
     # -- Env warnings
     if (-not $env:PHOENIX_AUTH)       { Write-Warning "clone: PHOENIX_AUTH not set -- D1 sync will be skipped" }
@@ -97,7 +98,9 @@ function global:clone {
     # -- Build args
     $intakeArgs = @($bashFile)
     if ($Category) { $intakeArgs += $Category }
-    if ($Tag)      { $intakeArgs += [char]34 + $Tag + [char]34 }
+    # Passed verbatim: PowerShell quotes array elements for the native call;
+    # wrapping in literal quotes stored them in the tag (fixed in usys.ps1 as F09).
+    if ($Tag)      { $intakeArgs += $Tag }
 
     # -- Dry run
     if ($DryRun) {
@@ -123,9 +126,14 @@ function global:clone {
     $env:PHOENIX_DESTINATION = $Destination
 
     # -- Convert CLONEPOOL_DIR to bash path so JSON sidecar has no Windows backslashes
-    $env:CLONEPOOL_DIR = ConvertTo-GitBashPath $env:CLONEPOOL_DIR
-
-    & $bash $bashIntake @intakeArgs
+    #    (restored afterwards — it used to stay rewritten for the whole session)
+    $savedPool = $env:CLONEPOOL_DIR
+    try {
+        $env:CLONEPOOL_DIR = ConvertTo-GitBashPath $env:CLONEPOOL_DIR
+        & $bash $bashIntake @intakeArgs
+    } finally {
+        $env:CLONEPOOL_DIR = $savedPool
+    }
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  Cloned OK" -ForegroundColor Green

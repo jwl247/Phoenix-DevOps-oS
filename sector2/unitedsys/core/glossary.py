@@ -60,6 +60,7 @@ def init_glossary():
             size         INTEGER,
             pool_path    TEXT,
             sidecar      TEXT,
+            b58          TEXT,
             amended      INTEGER DEFAULT 0,
             intaked_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
             grace_until  DATETIME GENERATED ALWAYS AS
@@ -71,10 +72,22 @@ def init_glossary():
         CREATE INDEX IF NOT EXISTS idx_glossary_hex      ON glossary(hex);
         CREATE INDEX IF NOT EXISTS idx_glossary_state    ON glossary(state);
         CREATE INDEX IF NOT EXISTS idx_glossary_category ON glossary(category_hex);
+    ''')
+    # A glossary table created before 2026-09-29 has no b58 column, yet
+    # add_entry/get_entry/export_book all use it: every insert and lookup
+    # failed on a fresh or old DB (audit S2CORE-F36). Add it in place.
+    cols = {r['name'] for r in conn.execute('PRAGMA table_info(glossary)')}
+    if 'b58' not in cols:
+        conn.execute('ALTER TABLE glossary ADD COLUMN b58 TEXT')
+    # The view is always rebuilt so an old one (without b58) is replaced too.
+    conn.executescript('''
+        CREATE INDEX IF NOT EXISTS idx_glossary_b58      ON glossary(b58);
 
-        CREATE VIEW IF NOT EXISTS glossary_view AS
+        DROP VIEW IF EXISTS glossary_view;
+        CREATE VIEW glossary_view AS
         SELECT
             g.hex,
+            g.b58,
             g.name,
             g.hex        AS qr_id,
             c.name       AS category,
@@ -129,7 +142,8 @@ def add_from_sidecar(sidecar_path):
         _raw_for_cat = raw
         version = data.get('version', '')
         size    = data.get('size_bytes') or data.get('size', 0)
-        pool    = (data.get('clone_pool') or {}).get('path', '') or data.get('pool', '')
+        pool    = ((data.get('clone_pool') or {}).get('path', '') or data.get('pool', '')
+                   or data.get('pool_path', ''))   # intake.sh sidecars use pool_path
         add_entry(
             hex_id      = hex_id,
             name        = name,

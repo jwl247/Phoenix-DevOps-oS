@@ -198,7 +198,7 @@ PHX-OK "Env file written and secured."
 @"
 export PHOENIX_AUTH="$($env:PHOENIX_AUTH)"
 export PHOENIX_WORKER_URL="$WORKER_URL"
-export CLONEPOOL_DIR="/c/Users/$env:USERNAME/Phoenix/clonepool"
+export CLONEPOOL_DIR="$($CLONEPOOL_DIR -replace '\\','/')"
 "@ | Set-Content -Path "$env:USERPROFILE\.phoenix_env.sh" -Encoding UTF8
 icacls "$env:USERPROFILE\.phoenix_env.sh" /inheritance:r /grant:r "$($env:USERNAME):(R,W)" | Out-Null
 PHX-OK "Bash env file written and secured."
@@ -242,30 +242,10 @@ if ($existing -notmatch "gbash") {
     PHX-OK "gbash alias added — Git Bash locked in, WSL blocked."
 }
 
-# ── Watcher injection ─────────────────────────────────────────
-$watcherScript = "$INSTALL_DIR\phoenix_watcher.ps1"
-if ($existing -notmatch "PhoenixWatcher") {
-    Add-Content -Path $ps7Profile -Value ""
-    Add-Content -Path $ps7Profile -Value "# Phoenix Auto-Intake Watcher"
-    Add-Content -Path $ps7Profile -Value "`$phoenixWatcher = `"$watcherScript`""
-    Add-Content -Path $ps7Profile -Value "if (Test-Path `$phoenixWatcher) {"
-    Add-Content -Path $ps7Profile -Value "    `$existingJob = Get-Job -Name 'PhoenixWatcher' -ErrorAction SilentlyContinue"
-    Add-Content -Path $ps7Profile -Value "    if (-not `$existingJob -or `$existingJob.State -ne 'Running') {"
-    Add-Content -Path $ps7Profile -Value "        Start-Job -Name 'PhoenixWatcher' -FilePath `$phoenixWatcher | Out-Null"
-    Add-Content -Path $ps7Profile -Value "        Write-Host ' Phoenix watcher active — Downloads monitored' -ForegroundColor DarkGreen"
-    Add-Content -Path $ps7Profile -Value "    }"
-    Add-Content -Path $ps7Profile -Value "}"
-    PHX-OK "Watcher added to PS7 profile."
-}
-
-# Start watcher now if available
-if (Test-Path $watcherScript) {
-    $existingJob = Get-Job -Name "PhoenixWatcher" -ErrorAction SilentlyContinue
-    if (-not $existingJob -or $existingJob.State -ne 'Running') {
-        Start-Job -Name "PhoenixWatcher" -FilePath $watcherScript | Out-Null
-        Write-Host " Phoenix watcher active — Downloads folder monitored" -ForegroundColor DarkGreen
-    }
-}
+# (A "watcher injection" block added a PS7-profile job for phoenix_watcher.ps1,
+# a script that does not exist in either repo, so it never ran. Removed
+# 2026-09-29, audit S2CORE-F17/F39. `usys watch` is the real Downloads watcher.
+# Profiles that already carry the old block are harmless: it is Test-Path guarded.)
 
 # ── System-wide intake shim ───────────────────────────────────
 $bashPath = $INSTALL_DIR -replace '\\','/' -replace '^C:','/c'
@@ -277,7 +257,7 @@ $bashSecretsFile = "$env:USERPROFILE\phoenix-env.cmd"
 @echo off
 set PHOENIX_AUTH=$($env:PHOENIX_AUTH)
 set PHOENIX_WORKER_URL=$WORKER_URL
-set CLONEPOOL_DIR=/c/Users/$env:USERNAME/Phoenix/clonepool
+set CLONEPOOL_DIR=$($CLONEPOOL_DIR -replace '\\','/')
 "@ | Set-Content -Path $bashSecretsFile -Encoding ASCII
 icacls $bashSecretsFile /inheritance:r /grant:r "$($env:USERNAME):(R)" /grant:r "SYSTEM:(R)" | Out-Null
 PHX-OK "Secure env loader written."
@@ -294,34 +274,20 @@ call "%USERPROFILE%\phoenix-env.cmd"
     PHX-Warn "intake.sh not in repo yet — shim skipped."
 }
 
-# ── Register machine ──────────────────────────────────────────
-PHX-Info "Registering this machine with D1..."
-$regBody = @{
-    package_name = "phoenix-package-handler"
-    hostname     = $env:COMPUTERNAME
-    os           = "Windows"
-    version      = (Get-CimInstance Win32_OperatingSystem).Caption
-    installed_by = "install.ps1"
-    install_dir  = $INSTALL_DIR
-} | ConvertTo-Json
-
-try {
-    $reg = Invoke-WebRequest `
-        -Uri "$WORKER_URL/installed/register" `
-        -Method POST `
-        -Headers @{ "Authorization" = "Bearer $($env:PHOENIX_AUTH)"; "Content-Type" = "application/json" } `
-        -Body $regBody -UseBasicParsing -TimeoutSec 15
-    if ($reg.StatusCode -in @(200,201)) { PHX-OK "Machine registered." }
-    else { PHX-Warn "Registration HTTP $($reg.StatusCode)." }
-} catch {
-    PHX-Warn "Registration failed: $_ — continuing."
-}
+# (A "Register machine" step POSTed to /installed/register here; that route
+# never existed on packages-worker, so every install logged a failed
+# registration. Removed 2026-09-29, audit S2CORE-F10/F39.)
 
 # ── Fetch glossary ────────────────────────────────────────────
+# Cloudflare Access fronts the worker: without the usys-cli service token the
+# request lands on the Access login page instead of /glossary (F10).
 PHX-Info "Fetching package glossary..."
 try {
-    $g = Invoke-RestMethod -Uri "$WORKER_URL/glossary" `
-        -Headers @{ "Authorization" = "Bearer $($env:PHOENIX_AUTH)" } -TimeoutSec 10
+    $glossHeaders = @{ "Authorization" = "Bearer $($env:PHOENIX_AUTH)" }
+    if ($env:CF_ACCESS_CLIENT_ID)     { $glossHeaders["CF-Access-Client-Id"]     = $env:CF_ACCESS_CLIENT_ID }
+    if ($env:CF_ACCESS_CLIENT_SECRET) { $glossHeaders["CF-Access-Client-Secret"] = $env:CF_ACCESS_CLIENT_SECRET }
+    $g = Invoke-RestMethod -Uri "$WORKER_URL/glossary" -MaximumRedirection 0 `
+        -Headers $glossHeaders -TimeoutSec 10
     $pkgs = if ($g.results) { $g.results } elseif ($g.glossary) { $g.glossary } else { @() }
     PHX-OK "Glossary loaded — $($pkgs.Count) packages available."
 } catch {

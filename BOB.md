@@ -1,3 +1,5 @@
+> **Historical snapshot (2026-08-24 session record) — superseded by root `CLAUDE.md` and `docs/history/SESSION-LOG.md`; kept for the record.** Round-2 audit 2026-09-28 (XCUT-F21): the Double-Helix PoC status and the `tools/poc/HELIX-DOUBLE-STRAND-PLAN.md` cleanup item below are out of date (that file is already gone; `docs/helix/BENCHMARKS.md` records what has actually been run).
+
 # BOB.md — Session Record
 Phoenix DevOps OS · Session 2026-08-24
 

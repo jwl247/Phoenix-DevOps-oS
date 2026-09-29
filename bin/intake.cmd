@@ -1,7 +1,8 @@
 @echo off
 REM ============================================================
 REM Phoenix Global Command: intake
-REM Windows CMD wrapper for Phoenix Intake (Sector 4 vault)
+REM Windows CMD wrapper for Phoenix Intake (Sector 2 clonepool -- same
+REM pipeline as `clone`; Sector 4 vault intake is `usys intake`)
 REM ============================================================
 
 setlocal enabledelayedexpansion
@@ -33,11 +34,15 @@ if exist "%USERPROFILE%\.phoenix_env.sh" (
 
 REM Find intake.sh
 set "INTAKE_SH=%PHOENIX_INTAKE%"
+REM In-repo Sector 2 pipeline only (the standalone package-handler repo
+REM keeps intake.sh at its root and was archived 2026-09-13 -- S34OPS-F41).
 if not defined INTAKE_SH (
-    if exist "%USERPROFILE%\Phoenix\package-handler\intake\intake.sh" (
-        set "INTAKE_SH=%USERPROFILE%\Phoenix\package-handler\intake\intake.sh"
-    ) else if exist "%USERPROFILE%\Phoenix\Phoenix-Package_handler\intake\intake.sh" (
-        set "INTAKE_SH=%USERPROFILE%\Phoenix\Phoenix-Package_handler\intake\intake.sh"
+    if exist "%~dp0..\sector2\package-handler\intake.sh" (
+        set "INTAKE_SH=%~dp0..\sector2\package-handler\intake.sh"
+    ) else if exist "%PHOENIX_ROOT%\sector2\package-handler\intake.sh" (
+        set "INTAKE_SH=%PHOENIX_ROOT%\sector2\package-handler\intake.sh"
+    ) else if exist "%USERPROFILE%\Phoenix\Phoenix-DevOps-oS\sector2\package-handler\intake.sh" (
+        set "INTAKE_SH=%USERPROFILE%\Phoenix\Phoenix-DevOps-oS\sector2\package-handler\intake.sh"
     )
 )
 
@@ -52,7 +57,10 @@ set "INTAKE_SH=%INTAKE_SH:C:=/c%"
 set "INTAKE_SH=%INTAKE_SH:c:=/c%"
 
 REM Execute intake command
-"%BASH_EXE%" -lc "%ENV_SOURCE% bash '%INTAKE_SH%' %*"
+REM Script path and arguments go to bash as positional parameters ($0, $@),
+REM never interpolated into the -c string: %* inside the string let a
+REM filename such as "a$(whoami).lol" execute as shell code (S34OPS-F20 class).
+"%BASH_EXE%" -lc "%ENV_SOURCE% exec bash \"$0\" \"$@\"" "%INTAKE_SH%" %*
 
 exit /b !errorlevel!
 

@@ -20,8 +20,9 @@ named place it's supposed to live. This document is that wrapper.
    versioned, tiered). Use this as the starting point rather than building
    a separate asset list from scratch.
 2. **Identify threats** — architecture review (the security-gap-plan
-   process already does this), dependency/CVE awareness, and the planned
-   pen test once it runs.
+   process already does this), dependency/CVE awareness, and the internal pentest rounds (running
+   daily since 2026-09-25 per `../pentest/PROTOCOL.md`; FAIL, 0/3 as of
+   2026-09-28), then the outside pen test after 3 consecutive passes.
 3. **Assess likelihood and impact** — using the severity classification in
    `incident-response-plan.md` as the shared scale, so a "Medium" finding
    here means the same thing it means during an actual incident.
@@ -43,9 +44,12 @@ named place it's supposed to live. This document is that wrapper.
   major architecture change, or a newly discovered vulnerability —
   same trigger list as the Governance Policy, since these are genuinely
   the same events viewed from a risk lens.
-- **The planned pen test** (Jerry's own stated next security checkpoint,
-  per `project_security_gap_plan`) counts as a full ad hoc risk assessment
-  when it runs — not a separate, additional obligation.
+- **The pen test rounds** (Jerry's own stated next security checkpoint,
+  per `project_security_gap_plan`): internal rounds have run daily since
+  2026-09-25 (Rounds 1–2 run 2026-09-25, voided and re-run 2026-09-28,
+  FAIL, 0/3 — updated 2026-09-29); each round counts as an ad hoc risk
+  assessment — not a separate, additional obligation. The outside pen test
+  follows 3 consecutive passing rounds.
 - **Monthly automated documentation review** (real, running, not aspirational
   — built 2026-09-23): a cloud routine
   ([trig_01TSaySpWwFCZM8i31pwZqxU](https://claude.ai/code/routines/trig_01TSaySpWwFCZM8i31pwZqxU),
@@ -77,7 +81,7 @@ Pointer, not a duplicate: the live register is
 | Gap 1 — open GET auth on packages-worker | Fixed, 2026-09-21 | `project_security_gap_plan` |
 | Gap 2 — content encryption at rest | Closed by deliberate risk acceptance, 2026-09-21 | `project_security_gap_plan` |
 | Standing integrity job (T3 #10) | Open, deferred | CLAUDE.md NEXT SESSION |
-| Real pen test | Planned, not yet run | `project_security_gap_plan` |
+| Pen test | Internal rounds running daily per `pentest/PROTOCOL.md` — Rounds 1–2 run 2026-09-25, voided and re-run 2026-09-28, FAIL, 0/3 (updated 2026-09-28); outside test after 3 consecutive passes | `docs/compliance/pentest/` |
 | Filename-collision bug (`hex_id = to_hex(basename)`) | Known, deferred | CLAUDE.md NEXT SESSION |
 
 ## Next scheduled review

@@ -4,7 +4,7 @@
   "description": "Double Helix PoC. Helix-I ingress (Strand A channels 1-4) + snapshot writer. Frank5 conductor. helix_complete_stack.py as the cache backend. paging.py (Linux) watches both strands via shared FS.",
   "author": "jwl247",
   "type": "poc",
-  "entry": "tools/poc/true_double_helix.py",
+  "entry": "true_double_helix.py",
   "runtime": "python",
   "launch_windows": "tools/poc/run-helix-poc.ps1",
   "launch_debian": "tools/poc/run-helix-poc.sh",

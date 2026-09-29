@@ -3,7 +3,9 @@ import argparse, sqlite3, os
 from pathlib import Path
 from collections import defaultdict
 
-DB_PATH  = os.environ.get('UNITEDSYS_DB', str(Path.home() / '.catalog' / 'catalog.db'))
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))   # unitedsys/ for core.*
+from core.catalog import DB_PATH   # same DB resolution as the CLI (S2CORE-F05)
 DOCS_DIR = Path(__file__).parent.parent / 'docs'
 
 def get_conn():

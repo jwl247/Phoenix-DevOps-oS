@@ -1,10 +1,17 @@
-#!/bin/bash
-# start_wsl.sh — start the full WSL2 side of the bridge stack
-# Run this inside your WSL2 Debian session
+#!/usr/bin/env bash
+# RETIRED (2026-09-29, S34OPS-F23): WSL-era concierge bridge launcher.
+# Phoenix does not use WSL (not planned); the Linux side is Phoenix's own
+# Debian VM (`usys run debian`) or bare-metal Debian. The concierge sources
+# live in sector1/concierge/, not next to this file, so this script stops
+# at the bridge.py check below. Kept for history only — do not wire it in.
+#
+# start_wsl.sh — start the full WSL2 side of the bridge stack (historical)
 # Usage: bash start_wsl.sh
 
-PHOENIX_HOME="${PHOENIX_HOME:-$HOME/projects/phoenix}"
 BRIDGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Repo root (was ~/projects/phoenix — S34OPS-F30); frank_http.py lives in
+# sector2/frank/.
+PHOENIX_HOME="${PHOENIX_HOME:-$(cd "$BRIDGE_DIR/../.." && pwd)/sector2/frank}"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log() { echo -e "${GREEN}[phoenix]${NC} $*"; }

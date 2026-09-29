@@ -6,28 +6,30 @@
 
 Path: `/etc/`
 
-First sector in the corridor. `auto_config_installer.py` fires on first boot, profiles hardware, generates configs for all downstream services.
+First sector in the corridor. In this design `auto_config_installer.py` fired on first boot and generated configs for downstream services — that file is not in this repo today (neither the live tree nor `archive/`).
 
-## Files
+## Files — where they actually are (verified 2026-09-28)
 
-| File | Role |
+| File named in this design | Today |
 |------|------|
-| `auto_config_installer.py` | Bootstrap — detects OS, hardware, ports, systemd. Runs once via oneshot unit. |
-| `frankenhelix.py` | ZZZring0 bidirectional listener. COM1-4 daisy-chain. Four Freewheeling instances watching breach_coms1-4. 11/11 self-tests. |
-| `frank_helix.py` | RAM pressure daemon. L1/L2/L3 tiers at 60/75/88%. ZMQ router port 5557. Frank-to-Frank sideload bridge. |
-| `doublehelix2storage.py` | Octahedron quad-engine storage. Vector/NoSQL/relational/time-series. DNA spiral layout. Feeds Frank3. |
-| `ai_paging_linux.py` | RAM/swap daemon. Thermal protection 75/80C. LRU eviction. 64MB AI-mode pages. |
-| `phoenix_auth.py` | SHA3-512 + BLAKE2b double hashing across 10 hardware signals. |
+| `auto_config_installer.py`, `doublehelix2storage.py`, `ai_paging_linux.py` | not in this repo (neither the live tree nor `archive/`); the live paging daemon is `sector4/paging.py` |
+| `frankenhelix.py` | `sector2/ring0/frankenhelix.py` |
+| `frank_helix.py` | `sector2/frank/frank_helix.py` |
+| `phoenix_auth.py` | `sector1/auth/phoenix_auth.py` (SHA3-512 + BLAKE2b hardware fingerprint) |
+
+What Sector 1 actually contains today (`auth/`, `concierge/`, `helix/`, `helix-lightning/`, `kernel/`, `kernels/`, `security/`, `grub/`, `saddle_block.sh`) is inventoried in `sector1/CONNECTIONS.md`.
 
 
 
 ## Systemd Units
 
+Unit files live in `sector3/services/` (not deployed on the build target — see `docs/README.md`'s banner):
+
 ```
-phoenix-log-setup.service      creates /var/log/phoenix
-phoenix-auto-config.service    oneshot bootstrap, runs once
-phoenix-frankenhelix.service   after auto-config
-phoenix-frank-helix.service    after frankenhelix
+phoenix-log-setup.service      does NOT exist (install-units.sh still tries to enable it — S34OPS-F03)
+phoenix-auto-config.service    exists in sector3/services/
+phoenix-frankenhelix.service   exists in sector3/services/
+phoenix-frank-helix.service    exists in sector3/services/
 ```
 
 ## ZMQ Ports

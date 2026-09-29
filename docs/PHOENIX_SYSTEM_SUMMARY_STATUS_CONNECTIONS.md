@@ -1,3 +1,5 @@
+> **Historical snapshot (2026-06-30, Grok-workspace doc) — superseded by root `CLAUDE.md` and the `CONNECTIONS.md` system (`docs/CONNECTIONS.md` + per-directory files + root index); kept for the record.** Round-2 audit 2026-09-28 (XCUT-F22): the WSL dev path (no WSL — Debian VM), "21 units" (19 unit files in `sector3/services/`), `phoenix-intake.exe`, `SECTOR4/connections.py`, `mcps/grok_com_github/`, `New folder/` and `docs/GLOBAL_COMMANDS.md`/`QUICK_START` references below are stale. The 2026-09-25 inline corrections (bindings, auth, stale sector3 worker) remain accurate. Not a living document, despite the line below.
+
 # PHOENIX SYSTEM SUMMARY + STATUS REPORT + CONNECTIONS LIST
 
 **Living Document** — Read this first every session. Update at end of every build session (date + status deltas + new connections).  

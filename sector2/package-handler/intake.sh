@@ -16,8 +16,12 @@
 set -euo pipefail
 
 VERSION="1.7.0"
-SCRIPT_NAME="intake"
-SCRIPT_HEX="737363726970747332f696e74616b65"
+# Self-registration identity: the same name/hex a normal `intake intake.sh`
+# would produce (to_hex "intake.sh"), so self_register() and a real intake
+# land in the same T1/<hex> bucket and the same D1 row. The old value here was
+# a 31-char, odd-length string that was not valid hex (2026-09-28 audit F28).
+SCRIPT_NAME="intake.sh"
+SCRIPT_HEX="696e74616b652e7368"
 MAX_VERSIONS=7   # keep 7 versions per file — a new intake bumps the oldest out
                  # the 3-day figure is the rollback window (how long you have to
                  # act before a new intake can displace an old version), not a
@@ -263,21 +267,27 @@ get_next_version() {
   [[ ! -d "${dir}" ]] && { echo "v1"; return; }
   local files; files=$(ls "${dir}"/v*_* 2>/dev/null || true)
   [[ -z "${files}" ]] && { echo "v1"; return; }
+  # Anchored: only the leading vN_ prefix is the version. An unanchored
+  # 'v[0-9]*' also matched inside the name (helix_v10_notes.txt -> v11).
   local last_num
   last_num=$(echo "${files}" \
     | xargs -I{} basename {} \
-    | grep -o 'v[0-9]*' | grep -o '[0-9]*' \
-    | sort -n | tail -1 || echo "0")
-  echo "v$((last_num + 1))"
+    | version_num_of \
+    | sort -n | tail -1 || true)
+  echo "v$(( ${last_num:-0} + 1 ))"
 }
+
+# Reads basenames on stdin, prints the N of each leading "vN_" prefix.
+# Names without that prefix print nothing (never fails under pipefail).
+version_num_of() { sed -nE 's/^v([0-9]+)_.*/\1/p'; }
 
 get_latest_file() {
   local pool_dir="$1"
   local name="$2"
   ls "${pool_dir}"/v*_"${name}" 2>/dev/null \
     | while read -r f; do
-        num=$(basename "${f}" | grep -o 'v[0-9]*' | grep -o '[0-9]*')
-        echo "${num} ${f}"
+        num=$(basename "${f}" | version_num_of)
+        if [[ -n "${num}" ]]; then echo "${num} ${f}"; fi
       done \
     | sort -n \
     | tail -1 \
@@ -339,8 +349,8 @@ evict_old_versions() {
     all_versions+=("${f}")
   done < <(ls "${pool_dir}"/v*_"${name}" 2>/dev/null \
     | while read -r f; do
-        num=$(basename "${f}" | grep -o 'v[0-9]*' | grep -o '[0-9]*')
-        echo "${num} ${f}"
+        num=$(basename "${f}" | version_num_of)
+        if [[ -n "${num}" ]]; then echo "${num} ${f}"; fi
       done \
     | sort -n | awk '{print $2}' || true)
 
@@ -387,7 +397,7 @@ write_sidecar_basic() {
   "backend": "$(json_escape "${backend}")",
   "notes": "$(json_escape "${notes}")",
   "sensitive": ${sensitive},
-  "pool_path": "$(json_escape "${CLONEPOOL_DIR}/${hex}")",
+  "pool_path": "$(json_escape "$(dirname "${sidecar}")")",
   "companions": [],
   "qr": {
     "header": {"role": "state", "state": "white"},
@@ -533,6 +543,42 @@ upload_to_r2() {
   [[ "${http_code}" == "200" ]] \
     && log "INFO" "R2 OK → ${hex} (${size} bytes)" \
     || log "WARN" "R2 upload failed (${http_code}) → ${hex}"
+  upload_version_to_r2 "${hex}" "${filepath}"
+}
+
+# ── R2 per-version bytes — the byte-retrievable history ────────
+# PUT /clonepool/<hex> above is the overwritten "current" key. The worker
+# logs a `versions` row with store_path = <hex>/versions/<sha3[0:16]> on
+# every content change, but until 2026-09-29 nothing ever uploaded bytes to
+# that key (audit S2CORE-F21: 408/408 version keys 404). This PUTs the same
+# bytes there too. The key is content-addressed, so re-sending identical
+# bytes is an idempotent overwrite with the same content. Hash comes from
+# report_clonepool (LAST_REPORTED_*) when it just hashed this same file, so
+# the common path hashes once; otherwise it is computed here.
+LAST_REPORTED_FILE=""
+LAST_REPORTED_SHA3=""
+upload_version_to_r2() {
+  local hex="$1" filepath="$2"
+  [[ -z "${PHOENIX_AUTH}" || ! -f "${filepath}" ]] && return 0
+  local size; size=$(get_size "${filepath}")
+  (( size > R2_MAX_BYTES )) && return 0   # already WARNed by upload_to_r2
+  local sha3=""
+  if [[ "${LAST_REPORTED_FILE}" == "${filepath}" && -n "${LAST_REPORTED_SHA3}" ]]; then
+    sha3="${LAST_REPORTED_SHA3}"
+  else
+    sha3=$(openssl dgst -sha3-512 -r "${filepath}" 2>/dev/null | awk '{print $1}')
+  fi
+  [[ ${#sha3} -lt 16 ]] && { log "WARN" "R2 version upload skipped — no sha3 for ${filepath}"; return 0; }
+  local key="${hex}/versions/${sha3:0:16}"
+  local http_code
+  http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X PUT \
+    -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
+    --data-binary "@${filepath}" \
+    "${WORKER_URL}/clonepool/${key}" 2>/dev/null)
+  [[ "${http_code}" == "200" ]] \
+    && log "INFO" "R2 version OK → ${key}" \
+    || log "WARN" "R2 version upload failed (${http_code}) → ${key}"
 }
 
 # stored_filepath (10th, optional) is the actual bytes on disk — content
@@ -569,6 +615,8 @@ report_clonepool() {
     hash_sha3=$(openssl dgst -sha3-512 -r "${stored_filepath}" 2>/dev/null | awk '{print $1}')
     hash_blake2=$(openssl dgst -blake2b512 -r "${stored_filepath}" 2>/dev/null | awk '{print $1}')
   fi
+  LAST_REPORTED_FILE="${stored_filepath}"   # reused by upload_version_to_r2
+  LAST_REPORTED_SHA3="${hash_sha3}"
   post_to_d1 "/clonepool" \
     "{\"hex_id\":\"$(json_escape "${hex}")\",\"b58\":\"$(json_escape "${b58:-${hex}}")\",\"name\":\"$(json_escape "${2}")\",\"version\":\"$(json_escape "${3}")\",\"state\":\"$(json_escape "${4}")\",\"pool_path\":\"$(json_escape "${5}")\",\"sidecar_path\":\"$(json_escape "${6}")\",\"tier\":${7},\"size\":${8},\"sensitive\":${sensitive},\"header_qr\":\"$(json_escape "${header_qr}")\",\"footer_qr\":\"$(json_escape "${footer_qr}")\",\"hash_sha3\":\"$(json_escape "${hash_sha3}")\",\"hash_blake2\":\"$(json_escape "${hash_blake2}")\"}"
 }
@@ -643,8 +691,18 @@ intake_deps_from_backend() {
 # (older, pre-hash-fix intakes have no baseline yet — allowed through
 # with a warning rather than hard-blocked, since refusing every legacy
 # file until the backfill runs would just break normal use).
+#
+# The D1 clonepool row only holds the CURRENT hash. An older version (e.g.
+# `intake clone x v2` after v3 exists) is checked against the append-only
+# `versions` ledger instead: valid if its sha3 is a recorded version of this
+# same hex (store_path "<hex>/versions/<sha3[0:16]>" plus the full hash both
+# present). Before 2026-09-29 every non-current version was reported CORRUPT
+# and refused (audit S2CORE-F22). A historical match does NOT POST /validate
+# — that route compares against the current row and would flip qr_valid off.
+# `name` (3rd arg) is the versions.package key; without it only the current
+# hash can match.
 verify_clonepool_copy() {
-  local hex="$1" filepath="$2"
+  local hex="$1" filepath="$2" name="${3:-}"
   [[ -z "${PHOENIX_AUTH}" || ! -f "${filepath}" ]] && { echo "no_baseline"; return; }
   local meta
   meta=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
@@ -663,9 +721,56 @@ verify_clonepool_copy() {
     curl -s -o /dev/null -X POST -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" -H "Content-Type: application/json" \
       -d "{\"hash_sha3\":\"${actual_sha3}\",\"hash_blake2\":\"${actual_blake2}\"}" "${WORKER_URL}/clonepool/${hex}/validate" 2>/dev/null
     echo "valid"
+  elif [[ -n "${actual_sha3}" && -n "${name}" ]] && version_hash_recorded "${hex}" "${name}" "${actual_sha3}"; then
+    echo "valid"
   else
     echo "CORRUPT"
   fi
+}
+
+# GET /versions?package=<name> — rows for every recorded content version.
+# Pretty-printed JSON (one field per line), so plain grep/awk is enough and
+# Python stays optional.
+fetch_versions_json() {
+  local name="$1"
+  local enc_name; enc_name=$(url_encode "${name}")
+  curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
+    "${WORKER_URL}/versions?package=${enc_name}&limit=1000" 2>/dev/null
+}
+
+# True if sha3 is a logged version of this hex (see verify_clonepool_copy).
+version_hash_recorded() {
+  local hex="$1" name="$2" sha3="$3"
+  local vjson; vjson=$(fetch_versions_json "${name}")
+  [[ -z "${vjson}" ]] && return 1
+  grep -qF "\"store_path\": \"${hex}/versions/${sha3:0:16}\"" <<< "${vjson}" \
+    && grep -qF "\"hash_sha3\": \"${sha3}\"" <<< "${vjson}"
+}
+
+# Prints "<store_path> <hash_sha3>" for the versions row labelled <label>
+# whose store_path belongs to <hex>; prints nothing if there is none.
+version_row_for_label() {
+  local hex="$1" name="$2" label="$3"
+  fetch_versions_json "${name}" | awk -v want="${label}" -v pfx="${hex}/versions/" '
+    /"version": "/    { v=$0; sub(/.*"version": "/, "", v); sub(/".*/, "", v) }
+    /"store_path": "/ { s=$0; sub(/.*"store_path": "/, "", s); sub(/".*/, "", s) }
+    /"hash_sha3": "/  { h=$0; sub(/.*"hash_sha3": "/, "", h); sub(/".*/, "", h) }
+    /^[[:space:]]*}/  { if (v == want && index(s, pfx) == 1 && h != "") { print s " " h; exit }
+                        v = ""; s = ""; h = "" }'
+}
+
+# Percent-encode a query-string value (names can hold spaces, &, #, +).
+url_encode() {
+  local LC_ALL=C   # byte-wise, so multi-byte UTF-8 names encode per byte
+  local s="$1" out="" c i
+  for (( i = 0; i < ${#s}; i++ )); do
+    c="${s:i:1}"
+    case "${c}" in
+      [a-zA-Z0-9.~_-]) out+="${c}" ;;
+      *) out+=$(printf '%%%02X' "'${c}") ;;
+    esac
+  done
+  printf '%s' "${out}"
 }
 # Same check, looped over every file in a restored directory snapshot — each
 # file also has its own independent hex/baseline from dir_intake's per-file
@@ -678,7 +783,7 @@ verify_directory_snapshot() {
   while IFS= read -r -d '' f; do
     fname=$(basename "${f}")
     fhex=$(to_hex "${fname}")
-    result=$(verify_clonepool_copy "${fhex}" "${f}")
+    result=$(verify_clonepool_copy "${fhex}" "${f}" "${fname}")
     case "${result}" in
       CORRUPT)     corrupt=$((corrupt+1)); echo "  [CORRUPT] ${fname}" >&2 ;;
       valid)       verified=$((verified+1)) ;;
@@ -694,9 +799,13 @@ report_glossary() {
 
 # ── Self registration ─────────────────────────────────────────
 self_register() {
-  local dir="${CLONEPOOL_DIR}/${SCRIPT_HEX}"
+  # Same T1/<hex> bucket a real `intake intake.sh` uses (was a flat
+  # <pool>/<bad-hex> dir before 2026-09-29, audit F28). A bucket from a real
+  # intake, in any tier, counts as already registered.
+  local existing; existing=$(resolve_pool_dir "${SCRIPT_HEX}")
+  [[ -f "${existing}/${SCRIPT_HEX}.sidecar.json" ]] && { log "INFO" "self: already registered"; return 0; }
+  local dir="${CLONEPOOL_DIR}/T1/${SCRIPT_HEX}"
   local sidecar="${dir}/${SCRIPT_HEX}.sidecar.json"
-  [[ -f "${sidecar}" ]] && { log "INFO" "self: already registered"; return 0; }
   log "INFO" "self: first run — registering intake into clonepool"
   mkdir -p "${dir}"
   local self_path; self_path=$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${0}")
@@ -747,7 +856,21 @@ intake_file() {
     echo "  [1] Proceed — intake and flag sensitive"
     echo "  [2] Cancel"
     echo ""
-    read -rp "  Choice [1/2]: " sens_choice
+    # Unattended callers (watcher, pipes, usys background jobs) have no
+    # stdin: INTAKE_YES=1 means proceed (flagged sensitive, same as directory
+    # intake's choice 1); otherwise EOF on read means the safe default,
+    # cancel. Before 2026-09-29 the EOF killed the script under set -e
+    # with nothing intaked and no message (audit F08).
+    local sens_choice=""
+    if [[ "${INTAKE_YES:-0}" == "1" ]]; then
+      sens_choice="1"
+      log "INFO" "sensitive: non-interactive (INTAKE_YES=1) — proceeding, flagged sensitive"
+    elif ! read -rp "  Choice [1/2]: " sens_choice; then
+      sens_choice="2"
+      echo ""
+      echo " [intake:CANCEL] No input (non-interactive) — sensitive file NOT intaked."
+      echo "                 Re-run with INTAKE_YES=1 to intake it flagged sensitive."
+    fi
     if [[ "${sens_choice}" != "1" ]]; then
       echo " [intake:CANCEL] Sensitive file — intake cancelled"
       return 0
@@ -769,7 +892,15 @@ intake_file() {
     echo "  [2] Replace        — evict old, store new"
     echo "  [3] Keep both      — version it anyway"
     echo ""
-    read -rp "Choice [1/2/3]: " choice
+    # Non-interactive (INTAKE_YES=1 or no stdin): keep existing — an
+    # identical file needs no new version, and nothing is deleted (F08).
+    local choice=""
+    if [[ "${INTAKE_YES:-0}" == "1" ]]; then
+      choice="1"
+    elif ! read -rp "Choice [1/2/3]: " choice; then
+      choice="1"
+      echo ""
+    fi
     case "${choice}" in
       1)
         echo "[intake:OK] Kept existing ${existing_ver} — incoming discarded"
@@ -877,24 +1008,34 @@ fetch_r2_fallback() {
   local remote_version
   remote_version=$(echo "${meta}" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
   [[ -z "${remote_version}" ]] && return 1
-  # D1's clonepool row only tracks the current tier's version per hex — an
-  # older version asked by number isn't recoverable from R2 this way (R2
-  # objects are keyed by hex_id alone, not by version/tier).
-  if [[ "${req_version}" != "latest" && "${req_version}" != "${remote_version}" ]]; then
-    return 1
-  fi
-
   local baseline_sha3
   baseline_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
 
+  # Current version -> the overwritten "current" key (<hex>). Any other
+  # version -> its immutable per-content key (<hex>/versions/<sha3[0:16]>),
+  # looked up by its D1 version label in the `versions` ledger and checked
+  # against that row's own hash. Labels here are D1's (`versions.version`),
+  # which is all a machine with no local copy has. Before 2026-09-29 any
+  # non-current request just returned 1 (audit S2CORE-F22).
+  local r2_key="${hex}" fetched_version="${remote_version}"
+  if [[ "${req_version}" != "latest" && "${req_version}" != "${remote_version}" ]]; then
+    local vrow; vrow=$(version_row_for_label "${hex}" "${name}" "${req_version}")
+    [[ -z "${vrow}" ]] && return 1
+    r2_key="${vrow%% *}"
+    baseline_sha3="${vrow#* }"
+    fetched_version="${req_version}"
+  fi
+
   local pool_dir="${CLONEPOOL_DIR}/T1/${hex}"
   mkdir -p "${pool_dir}"
-  local tmp; tmp="${pool_dir}/.r2-fetch-${remote_version}_${name}.tmp"
+  local tmp; tmp="${pool_dir}/.r2-fetch-${fetched_version}_${name}.tmp"
+  remote_version="${fetched_version}"
 
   local http_code
-  http_code=$(curl -s -o "${tmp}" -w "%{http_code}" -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${hex}" 2>/dev/null)
+  http_code=$(curl -s -o "${tmp}" -w "%{http_code}" -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${r2_key}" 2>/dev/null)
   if [[ "${http_code}" != "200" ]]; then
     rm -f "${tmp}"
+    rmdir "${pool_dir}" 2>/dev/null || true   # don't leave an empty bucket that hides R2 next time
     return 1
   fi
 
@@ -902,6 +1043,7 @@ fetch_r2_fallback() {
     local actual_sha3; actual_sha3=$(openssl dgst -sha3-512 -r "${tmp}" 2>/dev/null | awk '{print $1}')
     if [[ "${actual_sha3}" != "${baseline_sha3}" ]]; then
       rm -f "${tmp}"
+      rmdir "${pool_dir}" 2>/dev/null || true
       log "WARN" "R2 fallback BLOCKED (hash mismatch): ${name} ${remote_version}"
       return 1
     fi
@@ -910,7 +1052,7 @@ fetch_r2_fallback() {
   mv "${tmp}" "${pool_dir}/${remote_version}_${name}"
   log "INFO" "R2 fallback: pulled ${name} ${remote_version} from R2 (no local copy) → ${pool_dir}"
   custody_log_local "${hex}" "${name}" "clone_in_from_r2" "${remote_version}" \
-    "${WORKER_URL}/clonepool/${hex}" "${pool_dir}/${remote_version}_${name}" "white" "user"
+    "${WORKER_URL}/clonepool/${r2_key}" "${pool_dir}/${remote_version}_${name}" "white" "user"
   report_custody "${hex}" "${name}" "clone_in_from_r2" "white" "user"
   return 0
 }
@@ -969,7 +1111,7 @@ intake_clone() {
   local version; version=$(basename "${target}" | grep -o '^v[0-9]*')
   local dest="${PWD}/${name}"
 
-  local verify_result; verify_result=$(verify_clonepool_copy "${hex}" "${target}")
+  local verify_result; verify_result=$(verify_clonepool_copy "${hex}" "${target}" "${name}")
   case "${verify_result}" in
     CORRUPT)
       echo ""
@@ -1111,7 +1253,12 @@ rotate_clonepool_tiers() {
       [[ -z "${registered_at}" ]] && continue
 
       local reg_epoch now_epoch age_days
-      reg_epoch=$(date -d "${registered_at}" +%s 2>/dev/null || echo 0)
+      # GNU date -d first; BSD/macOS date has no -d, so fall back to -j -f
+      # (registered_at is always written as UTC "%Y-%m-%dT%H:%M:%SZ"). Before
+      # 2026-09-29 BSD got 0 here and rotation silently skipped everything (F33).
+      reg_epoch=$(date -d "${registered_at}" +%s 2>/dev/null \
+        || date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "${registered_at}" +%s 2>/dev/null \
+        || echo 0)
       [[ "${reg_epoch}" == "0" ]] && continue
       now_epoch=$(date -u +%s)
       age_days=$(( (now_epoch - reg_epoch) / 86400 ))
@@ -1158,8 +1305,10 @@ intake_from_backend() {
   log "INFO" "backend intake: ${pkg_name} from ${backend} ${version}"
 
   if [[ -n "${install_path}" && -f "${install_path}" ]]; then
-    intake_file "${install_path}" "${backend}" "installed from ${backend} ${version}"
-    local rc=$?
+    # `|| rc=$?`: under set -e a bare failing call would abort the script
+    # before rc is read, skipping the deps step (audit F31).
+    local rc=0
+    intake_file "${install_path}" "${backend}" "installed from ${backend} ${version}" || rc=$?
     intake_deps_from_backend "${pkg_name}" "${backend}"
     return "${rc}"
   fi
@@ -1213,6 +1362,10 @@ intake_status() {
     && echo " Python  : ${PYTHON_CMD}" \
     || echo " Python  : not found (non-critical)"
   echo " Retention: ${MAX_VERSIONS} versions per file"
+  # These counts are this machine's local sidecars (the trimmed cache), not
+  # the pool of record: D1/R2 hold the full set (GET /toc pool_summary).
+  # Tier eviction clears local copies, so Black is normally 0 here (F19).
+  echo " Local cache (sidecars on this machine; D1/R2 hold the full pool):"
   echo " Total   : ${total}"
   echo " White   : ${white} (active)"
   echo " Grey    : ${grey} (deprecated)"
@@ -1438,7 +1591,7 @@ intake_directory() {
     echo ""
   fi
 
-  # INTAKE_YES=1 bypasses the interactive prompt (used by intake_project)
+  # INTAKE_YES=1 bypasses the interactive prompt (unattended callers)
   local choice
   if [[ "${INTAKE_YES:-0}" == "1" ]]; then
     choice="1"
@@ -1599,7 +1752,7 @@ DIRSIDECAR
   echo "  To restore: intake clone ${dirname}"
   echo ""
 
-  # Machine-readable output for intake_project() caller
+  # Machine-readable output for unattended (INTAKE_YES=1) callers
   if [[ "${INTAKE_YES:-0}" == "1" ]]; then
     echo "[intake:DIR:HEX] ${hex}"
     echo "[intake:DIR:VER] ${version}"
@@ -1633,8 +1786,8 @@ intake_clone_directory() {
   if [[ "${version}" == "latest" ]]; then
     snapshot=$(ls -d "${pool_dir}"/v*_"${name}" 2>/dev/null \
       | while read -r d; do
-          num=$(basename "${d}" | grep -o 'v[0-9]*' | grep -o '[0-9]*')
-          echo "${num} ${d}"
+          num=$(basename "${d}" | version_num_of)
+          if [[ -n "${num}" ]]; then echo "${num} ${d}"; fi
         done \
       | sort -n | tail -1 | cut -d' ' -f2-)
   else
@@ -1692,11 +1845,16 @@ resolve_lol() {
   fi
 }
 
+# ── Entry point ───────────────────────────────────────────────
+# Preflight first: a bad token must stop the run with the one loud banner,
+# before self_register makes its own D1/R2 calls (which would only log
+# per-call WARNs). Order fixed 2026-09-29 (audit F28).
+if [[ "${1:-help}" != "help" && "${1:-help}" != "--help" && "${1:-help}" != "-h" ]]; then
+  preflight_auth
+fi
+
 # ── Self register ─────────────────────────────────────────────
 self_register
-
-# ── Entry point ───────────────────────────────────────────────
-[[ "${1:-help}" != "help" && "${1:-help}" != "--help" && "${1:-help}" != "-h" ]] && preflight_auth
 
 case "${1:-help}" in
   help|--help|-h) show_help ;;
@@ -1705,14 +1863,12 @@ case "${1:-help}" in
     shift
     name="${1:-}"; version="${2:-latest}"
     [[ "${name}" == *.lol ]] && name="${name%.lol}"
-    # project clone takes priority, then directory, then single file
-    if [[ "${name}" == "project" ]]; then
-      shift
-      intake_clone_project "$@"
-    else
-      intake_clone_directory "${name}" "${version}" 2>/dev/null \
-        || intake_clone "${name}" "${version}"
-    fi
+    # Directory snapshot first, then single file. (A `clone project` branch
+    # called intake_clone_project, which was never defined anywhere in git
+    # history: exit 127 "command not found". Removed 2026-09-29, audit F06;
+    # restore a whole tree with `intake clone <dir>`.)
+    intake_clone_directory "${name}" "${version}" 2>/dev/null \
+      || intake_clone "${name}" "${version}"
     ;;
   prune)          intake_prune ;;
   backend)        shift; intake_from_backend "$@" ;;

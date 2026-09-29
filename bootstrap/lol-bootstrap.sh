@@ -79,17 +79,19 @@ case "$PACKAGE" in
         ;;
 esac
 
-# Execute installer
+# Execute installer. The pipeline runs inside the `if` so a failure reaches
+# the "Installation failed" branch instead of being cut off by set -e.
+install_ok=0
 if command -v curl &>/dev/null; then
-    curl -fsSL "$INSTALL_URL" | bash
+    if curl -fsSL "$INSTALL_URL" | bash; then install_ok=1; fi
 elif command -v wget &>/dev/null; then
-    wget -qO- "$INSTALL_URL" | bash
+    if wget -qO- "$INSTALL_URL" | bash; then install_ok=1; fi
 else
     echo "[ERROR] Neither curl nor wget found"
     exit 1
 fi
 
-if [[ $? -eq 0 ]]; then
+if [[ $install_ok -eq 1 ]]; then
     echo ""
     echo "  [LOL] Installation complete!"
     echo ""

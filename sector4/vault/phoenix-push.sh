@@ -1,4 +1,6 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env bash
+# (was #!/usr/bin/env zsh — no zsh-only syntax remains, `bash -n` clean;
+#  Ubuntu minimal has no zsh. S34OPS-F22, CLAUDE.md rule 5.)
 # =============================================================================
 # phoenix-push.sh -- Phoenix DevOps Vault Push
 # Author:  jwl247 / Phoenix DevOps LLC

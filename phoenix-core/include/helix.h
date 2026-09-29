@@ -56,7 +56,9 @@ typedef struct {
     char        state[32];      /* "white" | "green" | "red" etc.         */
     int         tier;           /* 1–4                                    */
     uint64_t    size;           /* bytes                                  */
-    char        hash_sha3[128]; /* full SHA3-256 hex (for audit)          */
+    char        hash_sha3[128]; /* PLACEHOLDER: copy of the SHA-256 hex_id —
+                                 * no SHA3 is computed yet (helix_core.c).
+                                 * Not comparable with intake.sh's SHA3-512. */
     char        category[64];
     char        label[128];
     char        intaked_at[32]; /* ISO-8601 UTC                           */

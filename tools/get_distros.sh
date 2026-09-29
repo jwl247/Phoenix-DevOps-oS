@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ============================================================
 # get_distros.sh — Download top 10 Linux ISOs to Ventoy
 # Usage: sudo bash get_distros.sh [destination]
@@ -26,8 +26,11 @@ download() {
     fi
 
     wget -c --show-progress -O "$file" "$url" 2>&1 | tee -a "$LOG"
+    # wget's own status, not tee's (S34OPS-F43): a failed download used to be
+    # reported as "Done" whenever tee succeeded.
+    local rc=${PIPESTATUS[0]}
 
-    if [ $? -eq 0 ] && [ -s "$file" ]; then
+    if [ "$rc" -eq 0 ] && [ -s "$file" ]; then
         echo "  Done: $(basename "$url")"
     else
         echo "  FAILED: $name" | tee -a "$LOG"

@@ -17,9 +17,9 @@ INTAKE_SH="${PHOENIX_INTAKE:-}"
 if [[ -z "$INTAKE_SH" ]]; then
     for candidate in \
         "$REPO_ROOT/sector2/package-handler/intake.sh" \
-        "$(dirname "$REPO_ROOT")/Phoenix-Package_handler/intake/intake.sh" \
-        "$HOME/Phoenix/Phoenix-Package_handler/intake/intake.sh" \
-        "$REPO_ROOT/../Phoenix-Package_handler/intake/intake.sh"
+        "$HOME/Phoenix/Phoenix-DevOps-oS/sector2/package-handler/intake.sh"
+    # (standalone Phoenix-Package_handler candidates removed — that repo keeps
+    #  intake.sh at its root and was archived 2026-09-13; S34OPS-F41)
     do
         if [[ -f "$candidate" ]]; then
             INTAKE_SH="$(realpath "$candidate")"
@@ -33,7 +33,7 @@ if [[ -z "$INTAKE_SH" || ! -f "$INTAKE_SH" ]]; then
     echo "  clone: ERROR -- intake.sh not found"
     echo "  Options:"
     echo "    export PHOENIX_INTAKE=/path/to/intake.sh"
-    echo "    Clone Phoenix-Package_handler next to Phoenix-DevOps-oS"
+    echo "    or run from inside a Phoenix-DevOps-oS checkout (sector2/package-handler/intake.sh)"
     echo ""
     exit 1
 fi

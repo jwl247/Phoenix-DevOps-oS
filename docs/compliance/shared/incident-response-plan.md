@@ -79,8 +79,10 @@ alerting — a real gap in detection sources, noted above). Contained and
 remediated same session: app-layer `isAuthorized()` gate added to all 19
 open routes, plus a leftover Cloudflare Access bypass policy from
 2026-03-27 removed. Verified end-to-end (unauthenticated GET → 401,
-authenticated `intake.sh status` → succeeds). Documented in CLAUDE.md's
-SESSION LOG and `project_security_gap_plan` memory with commit references.
+authenticated `intake.sh status` → succeeds). Documented in the SESSION LOG
+(now `docs/history/SESSION-LOG.md`) and `project_security_gap_plan` memory as
+dated entries + git history (rewritten 2026-09-25; the commit references
+originally cited no longer resolve).
 No notification was required (pre-contract, no FCI/CUI existed in the
 system at the time). This is the template every future incident should
 follow, whether or not this exact plan document existed when it happened.

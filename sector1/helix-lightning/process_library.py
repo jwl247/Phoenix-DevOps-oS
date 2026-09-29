@@ -551,9 +551,12 @@ class ProcessLibrary:
             log.error(f"Library index write failed: {e}")
 
         # Full index to disk for inspection
+        # Platform temp dir, not a literal "/tmp" (<drive>:\tmp on Windows —
+        # audit S1-F27).
+        import tempfile
         index_path = Path(os.environ.get(
             "PHOENIX_LIBRARY_INDEX",
-            "/tmp/phoenix_library.json"
+            os.path.join(tempfile.gettempdir(), "phoenix_library.json")
         ))
         try:
             with open(index_path, "w") as f:
@@ -824,7 +827,10 @@ if __name__ == "__main__":
         )
 
     print("\n" + "="*60)
-    print(f"Library index written to: /tmp/phoenix_library.json")
+    import tempfile
+    print("Library index written to: " + os.environ.get(
+        "PHOENIX_LIBRARY_INDEX",
+        os.path.join(tempfile.gettempdir(), "phoenix_library.json")))
     print(f"All suits pre-loaded and ready.")
     print(f"Frank reaches in. The suit is already there.")
     print("="*60)

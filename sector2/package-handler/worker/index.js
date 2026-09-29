@@ -3,12 +3,14 @@
 // Role: Catalog index — clonepool, glossary, TOC, packages, peer review
 // DB: phoenix_dev_db (D1) — the backbone
 // Auth: PHOENIX_AUTH (Cloudflare secret)
-// Version: 3.4.0
+// Version: 3.5.0
 
 const HEADERS = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  // PATCH is /clonepool/:hex/tier (tier rotation); without it a browser
+  // preflight for that route was refused (audit S2CORE-F30).
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
@@ -39,7 +41,43 @@ async function resolveConnection(db, id) {
   const like = await db.prepare(
     `SELECT * FROM connections WHERE name LIKE ? ESCAPE '\\' OR path LIKE ? ESCAPE '\\' ORDER BY LENGTH(path) ASC LIMIT 1`
   ).bind(pat, pat).first();
-  return like || null;
+  if (like) return like;
+  // Last resort: the description. Most file-level lookups ("intake",
+  // "frank_save", "usys.ps1") name a file that lives inside a directory node,
+  // so it only appears in that node's description (audit CONN-F10).
+  const desc = await db.prepare(
+    `SELECT * FROM connections WHERE description LIKE ? ESCAPE '\\' ORDER BY LENGTH(path) ASC LIMIT 1`
+  ).bind(pat).first();
+  return desc || null;
+}
+
+// ── Connections ↔ glossary enrichment ────────────────────────────────────────
+// connections.hex is sha256(path)[:16] (parse-connections.js) while
+// glossary.hex is intake.sh's to_hex(basename) — raw hex of the file or
+// directory name. A `LEFT JOIN glossary g ON g.hex = c.hex` could therefore
+// never match (0 of 37 rows, audit CONN-F03). Enrich by the intake key
+// instead: hex of the node path's last segment.
+function intakeHexOfPath(p) {
+  const base = String(p || '').replace(/\/+$/, '').split('/').pop();
+  return Array.from(new TextEncoder().encode(base), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+async function enrichWithGlossary(db, rows) {
+  const list = rows.filter(Boolean);
+  const keys = [...new Set(list.map((r) => intakeHexOfPath(r.path)).filter(Boolean))];
+  const byHex = new Map();
+  for (let i = 0; i < keys.length; i += 90) {           // stay under D1's bind limit
+    const chunk = keys.slice(i, i + 90);
+    const res = await db.prepare(
+      `SELECT hex, state, pool_path FROM glossary WHERE hex IN (${chunk.map(() => '?').join(',')})`
+    ).bind(...chunk).all();
+    for (const g of res.results) byHex.set(g.hex, g);
+  }
+  for (const r of list) {
+    const g = byHex.get(intakeHexOfPath(r.path));
+    r.file_state = g ? g.state : null;
+    r.file_pool_path = g ? g.pool_path : null;
+  }
+  return rows;
 }
 
 // ── Platform HTML ───────────────────────────────────────────────────────────
@@ -529,6 +567,7 @@ async function verifyArtifact() {
   const el = document.getElementById('verify-result');
   if(!res.ok && res.status !== 200) { el.innerHTML = '<div class="card"><span class="badge rejected">Error loading</span></div>'; return; }
   const d = res.data;
+  const rv = d.revocation || {};  // /verify nests revocation details (S2CORE-F15)
   const statusColor = d.verified ? 'approved' : (d.status === 'revoked' ? 'black' : d.status === 'pending' ? 'pending' : 'rejected');
   el.innerHTML = '<div class="card">' +
     '<div class="row" style="gap:10px;margin-bottom:8px">' +
@@ -538,9 +577,9 @@ async function verifyArtifact() {
     (d.name ? '<div><b>' + esc(d.name) + '</b></div>' : '') +
     (d.description ? '<p class="meta" style="margin-top:4px">' + esc(d.description) + '</p>' : '') +
     '<div class="row" style="margin-top:8px;gap:12px">' +
-      (d.reviewed_at ? '<span class="meta">Reviewed: ' + esc(d.reviewed_at.substring(0,10)) + '</span>' : '') +
-      (d.revoked_by ? '<span class="meta">Revoked by: ' + esc(d.revoked_by) + '</span>' : '') +
-      (d.reason ? '<span class="meta">Reason: ' + esc(d.reason) + '</span>' : '') +
+      (d.submitted_at ? '<span class="meta">Submitted: ' + esc(String(d.submitted_at).substring(0,10)) + '</span>' : '') +
+      (rv.revoked_by ? '<span class="meta">Revoked by: ' + esc(rv.revoked_by) + '</span>' : '') +
+      (rv.reason ? '<span class="meta">Reason: ' + esc(rv.reason) + '</span>' : '') +
     '</div>' +
     '<div class="hex" style="margin-top:8px">' + esc(hex) + '</div>' +
   '</div>';
@@ -583,9 +622,9 @@ export default {
       // Exists so a token rotation (or intake.sh's preflight) can confirm the
       // local PHOENIX_AUTH actually matches this worker's secret in one cheap
       // call, instead of finding out from a pile of silent per-file 401s.
-      if (path === '/whoami') {
+      if (path === '/whoami' && req.method === 'GET') {
         if (!isAuthorized(req, env)) return err('unauthorized', 401);
-        return ok({ ok: true, worker: 'packages-worker', version: '3.4.0' });
+        return ok({ ok: true, worker: 'packages-worker', version: '3.5.0' });
       }
 
       // ── Health (GET / or GET /health — API clients) ──────────────────────────
@@ -596,11 +635,50 @@ export default {
         return ok({
           status: 'ok',
           worker: 'packages-worker',
-          version: '3.4.0',
+          version: '3.5.0',
           brand: 'USys — United Systems',
           db: 'phoenix_dev_db',
           tables: tables.n,
           platform_ui: '/platform',
+        });
+      }
+
+      // ── Stats (GET /stats — dashboard get-phoenix-stats / Help Desk prompt) ─
+      // dashboard/main.js reads glossary_total, custody_total and r2_objects
+      // (null = unknown, never a guess). Before 2026-09-29 this route did not
+      // exist and every call 404'd (audit S2CORE-F29 / DASH-F05). R2 listing
+      // is paged 1000 keys at a time and capped at R2_STATS_MAX_PAGES so one
+      // dashboard poll can never turn into an unbounded list walk; past the cap
+      // r2_objects is a floor and r2_objects_capped is true.
+      if (path === '/stats' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const count = async (table) => {
+          try {
+            const row = await db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first();
+            return row ? row.n : null;
+          } catch { return null; }
+        };
+        const [glossary_total, custody_total, clonepool_total, versions_total] = await Promise.all([
+          count('glossary'), count('custody'), count('clonepool'), count('versions'),
+        ]);
+        let r2_objects = null, r2_objects_capped = false;
+        if (env.CLONEPOOL_BUCKET) {
+          const R2_STATS_MAX_PAGES = 20;
+          let cursor, pages = 0, n = 0, truncated = true;
+          while (truncated && pages < R2_STATS_MAX_PAGES) {
+            const listed = await env.CLONEPOOL_BUCKET.list({ limit: 1000, cursor });
+            n += listed.objects.length;
+            truncated = listed.truncated;
+            cursor = listed.cursor;
+            pages++;
+          }
+          r2_objects = n;
+          r2_objects_capped = truncated;
+        }
+        return ok({
+          glossary_total, custody_total, clonepool_total, versions_total,
+          r2_objects, r2_objects_capped,
+          generated_at: new Date().toISOString(),
         });
       }
 
@@ -820,11 +898,20 @@ export default {
         if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const id = decodeURIComponent(path.slice(11));
         if (!id) return err('id required', 400);
-        const existing = await db.prepare('SELECT id FROM clonepool WHERE hex_id = ? OR name = ?').bind(id, id).first();
-        if (!existing) return err('not found', 404);
-        if (env.CLONEPOOL_BUCKET) await env.CLONEPOOL_BUCKET.delete(id);
-        await db.prepare('DELETE FROM clonepool WHERE hex_id = ? OR name = ?').bind(id, id).run();
-        return ok({ ok: true, deleted: id });
+        // Resolve to ONE row, then act on its hex_id: R2 objects are keyed by
+        // hex_id, so deleting key = <name> (a by-name call) orphaned the real
+        // object, and `WHERE hex_id = ? OR name = ?` removed every row that
+        // shared the name (audit S2CORE-F15). Exact hex match wins; a name
+        // shared by several rows is refused (409) instead of guessing.
+        const matches = (await db.prepare(
+          'SELECT id, hex_id FROM clonepool WHERE hex_id = ? OR name = ?'
+        ).bind(id, id).all()).results;
+        const existing = matches.find((m) => m.hex_id === id) || (matches.length === 1 ? matches[0] : null);
+        if (!matches.length) return err('not found', 404);
+        if (!existing) return ok({ error: 'ambiguous name — delete by hex_id', hex_ids: matches.map((m) => m.hex_id) }, 409);
+        if (env.CLONEPOOL_BUCKET) await env.CLONEPOOL_BUCKET.delete(existing.hex_id);
+        await db.prepare('DELETE FROM clonepool WHERE id = ?').bind(existing.id).run();
+        return ok({ ok: true, deleted: existing.hex_id });
       }
 
       // POST /clonepool/:hex/validate — integrity check at point of use. See
@@ -1022,8 +1109,9 @@ export default {
       // CONNECTIONS.md, plus the real relationships between them (parsed from
       // "Connects to / connected from" + shared area). One node per bullet/row
       // in a CONNECTIONS.md; edges live in `links` (JSON array of hex ids).
-      // Where a node is also a real intaked file, LEFT JOIN glossary pulls in
-      // its live state — same pattern glossary already uses for clonepool.
+      // Where a node is also a real intaked file/dir, enrichWithGlossary()
+      // adds its live state (file_state / file_pool_path), keyed by the
+      // intake hex of the path's last segment (see CONN-F03 above).
       // columns: hex, name, path, area, description, key_fact, source_file,
       //          state, links, updated_at
       // ══════════════════════════════════════════════════════════════════════
@@ -1034,16 +1122,36 @@ export default {
         const area = url.searchParams.get('area');
         const params = [];
         const conditions = [];
-        let query = `SELECT c.*, g.state AS file_state, g.pool_path AS file_pool_path
-                      FROM connections c
-                      LEFT JOIN glossary g ON g.hex = c.hex`;
+        let query = 'SELECT c.* FROM connections c';
         if (search) { conditions.push('(c.name LIKE ? OR c.description LIKE ? OR c.path LIKE ?)'); params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
         if (area) { conditions.push('c.area = ?'); params.push(area); }
         if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
         query += ' ORDER BY c.name';
 
         const result = await db.prepare(query).bind(...params).all();
+        await enrichWithGlossary(db, result.results);
         return ok({ connections: result.results, count: result.results.length });
+      }
+
+      // POST /connections/reconcile — body { keep: [hex, ...] }: delete every
+      // node NOT in the list. The upsert below never deletes, so a node
+      // removed or renamed in a CONNECTIONS.md stayed in D1 (and in /related)
+      // forever (audit CONN-F09). parse-connections.js sends the full hex list
+      // after a clean run. Guarded: an empty or malformed list deletes nothing.
+      if (path === '/connections/reconcile' && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const body = await req.json();
+        const keep = Array.isArray(body.keep) ? body.keep.filter((h) => typeof h === 'string' && /^[0-9a-f]{16}$/.test(h)) : [];
+        if (!keep.length || keep.length !== (body.keep || []).length) {
+          return err('keep must be a non-empty array of 16-char hex ids', 400);
+        }
+        const keepSet = new Set(keep);
+        const all = await db.prepare('SELECT hex FROM connections').all();
+        const stale = all.results.map((r) => r.hex).filter((h) => !keepSet.has(h));
+        for (const h of stale) {
+          await db.prepare('DELETE FROM connections WHERE hex = ?').bind(h).run();
+        }
+        return ok({ ok: true, kept: keep.length, deleted: stale });
       }
 
       if (path === '/connections' && req.method === 'POST') {
@@ -1079,7 +1187,7 @@ export default {
         return ok({ ok: true, hex: body.hex, name: body.name });
       }
 
-      // GET /connections/:id/related — the "snow globe": exactly 8 neighbors,
+      // GET /connections/:id/related — the "snow globe": up to 8 neighbors,
       // closest first. 1) explicit edges from `links` (both directions),
       // 2) same-area entries not already picked, 3) backfill from anywhere if
       // the graph around this node is still short. Must be checked before the
@@ -1105,6 +1213,7 @@ export default {
           const rows = await db.prepare(`SELECT * FROM connections WHERE hex IN (${placeholders})`).bind(...candidateHexes).all();
           for (const row of rows.results) {
             if (picked.length >= 8) break;
+            row.via = 'edge';
             picked.push(row);
             pickedHexes.add(row.hex);
           }
@@ -1118,6 +1227,7 @@ export default {
             `SELECT * FROM connections WHERE area = ? AND hex NOT IN (${placeholders}) ORDER BY name LIMIT ?`
           ).bind(center.area, ...excludeHexes, need).all();
           for (const row of rows.results) {
+            row.via = 'area';
             picked.push(row);
             pickedHexes.add(row.hex);
           }
@@ -1130,16 +1240,21 @@ export default {
           const rows = await db.prepare(
             `SELECT * FROM connections WHERE hex NOT IN (${placeholders}) ORDER BY RANDOM() LIMIT ?`
           ).bind(...excludeHexes, need).all();
-          for (const row of rows.results) picked.push(row);
+          for (const row of rows.results) { row.via = 'backfill'; picked.push(row); }
         }
 
-        return ok({ center, related: picked.slice(0, 8), count: picked.slice(0, 8).length });
+        // `via` (edge | area | backfill) lets a caller tell a documented
+        // relationship from same-area or random padding (audit CONN-F11).
+        const related = picked.slice(0, 8);
+        await enrichWithGlossary(db, [center, ...related]);
+        return ok({ center, related, count: related.length });
       }
 
       if (path.startsWith('/connections/') && req.method === 'GET') {
         if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const id = decodeURIComponent(path.slice('/connections/'.length));
         const row = await resolveConnection(db, id);
+        if (row) await enrichWithGlossary(db, [row]);
         return row ? ok(row) : err('not found', 404);
       }
 

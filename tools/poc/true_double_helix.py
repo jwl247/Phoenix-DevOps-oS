@@ -34,6 +34,18 @@ from typing import Optional, Callable
 from dataclasses import dataclass
 from enum import IntEnum
 
+# DOUBLE-HELIX-PLAN Sub-Task 1 (S34OPS-F29a): put sector1/helix-lightning on
+# sys.path so `franken5` imports without run-helix-poc.ps1's PYTHONPATH.
+# PHOENIX_SECTOR1 first (set by the suite manifest when run from the clone
+# pool), then the repo layout relative to this file.
+for _lightning in (
+    Path(os.environ["PHOENIX_SECTOR1"]) / "helix-lightning" if os.environ.get("PHOENIX_SECTOR1") else None,
+    Path(__file__).resolve().parent.parent.parent / "sector1" / "helix-lightning",
+):
+    if _lightning is not None and _lightning.is_dir() and str(_lightning) not in sys.path:
+        sys.path.insert(0, str(_lightning))
+        break
+
 from franken5 import (
     Frank5, get_frank, SharedMemoryBus,
     FrankSignal, SHM_PATH, STAGE_SLOT_SIZE,

@@ -6,7 +6,7 @@ mechanism, added for security audit **Tier 1 #1 (permission enforcement)** and
 
 Lives in `scripts/usys.ps1` (`Assert-UsysSuiteExecutionAllowed` and helpers,
 just above `Invoke-UsysRun`). Tests: `scripts/usys-suite-gate.Tests.ps1`
-(16/16, standalone — no Pester).
+(18/18 as of 2026-09-28, standalone — no Pester).
 
 ## What it checks
 

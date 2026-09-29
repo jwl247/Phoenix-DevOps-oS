@@ -184,9 +184,9 @@ function Get-UsysCloneIntakeSh {
     # clones lack the CF-Access headers (2026-09-21) and would fail silently.
     $candidates = @(
         $env:PHOENIX_INTAKE,
-        (Join-Path $repo 'sector2\package-handler\intake.sh'),
-        (Join-Path $parent 'Phoenix-Package_handler\intake\intake.sh'),
-        (Join-Path $HOME 'Phoenix\Phoenix-Package_handler\intake\intake.sh')
+        (Join-Path $repo 'sector2\package-handler\intake.sh')
+        # standalone Phoenix-Package_handler candidates removed (archived
+        # 2026-09-13; intake.sh lives at that repo's root) — S34OPS-F41
     ) | Where-Object { $_ -and (Test-Path $_) }
     return $candidates | Select-Object -First 1
 }
@@ -420,7 +420,8 @@ function Invoke-UsysStatus {
     Write-Host "    Git Bash       : $(if ($bash) { $bash } else { 'NOT FOUND' })"
     Write-Host "    intake.sh (S4) : $(Get-UsysIntakeSh)"
     Write-Host "    intake.sh (S2) : $(Get-UsysCloneIntakeSh)"
-    Write-Host "    usys.sh        : $(Get-UsysBashUsys)"
+    $legacyEngine = Get-UsysBashUsys
+    Write-Host "    usys.sh        : $(if ($legacyEngine) { $legacyEngine } else { 'not shipped (legacy registry verbs disabled)' })"
     Write-Host ''
 
     Write-Host '  -- Environment --' -ForegroundColor Yellow
@@ -545,22 +546,28 @@ function Invoke-UsysDoctor {
     Write-Host '  -- Known issues (checking for regression OR for stale docs) --' -ForegroundColor Yellow
     $s4intake = Join-Path $repo 'sector4\intake\intake.sh'
     if (Test-Path $s4intake) {
-        if ((Get-Content $s4intake -Raw) -match '\*\(\.\)') {
-            Write-Host '    sector4/intake/intake.sh : zsh-glob bug still present (documented — use usys clone instead)' -ForegroundColor DarkYellow
-        } else {
-            $msg = 'sector4/intake/intake.sh : documented zsh-glob bug is GONE — CONNECTIONS.md is stale, re-verify and update it'
-            Write-Host "    $msg" -ForegroundColor Cyan
+        # Code lines only: the 2026-09-21 fix left the old glob text inside
+        # an explanatory comment, which made a raw-file grep report the bug
+        # as still present (S34OPS-F26 / CONN-F07).
+        $s4code = Get-Content $s4intake | Where-Object { $_ -notmatch '^\s*#' }
+        if ($s4code -match '\*\(\.\)') {
+            $msg = 'sector4/intake/intake.sh : zsh-only **/*(.) glob is back in code (regression of the 2026-09-21 find-based fix)'
+            Write-Host "    $msg" -ForegroundColor Red
             $problems += $msg
+        } else {
+            Write-Host '    sector4/intake/intake.sh : zsh-glob bug fixed (find -print0; 2026-09-21)' -ForegroundColor Green
         }
     }
     $dashMain = Join-Path $repo 'dashboard\main.js'
     if (Test-Path $dashMain) {
-        if (Select-String -Path $dashMain -Pattern "'SECTOR4'" -Quiet) {
-            Write-Host '    dashboard/main.js : SECTOR4/sector4 casing bug still present (documented)' -ForegroundColor DarkYellow
-        } else {
-            $msg = 'dashboard/main.js : documented SECTOR4 casing bug is GONE — CONNECTIONS.md is stale, re-verify and update it'
-            Write-Host "    $msg" -ForegroundColor Cyan
+        # -CaseSensitive: Select-String ignores case by default, so the fixed
+        # lowercase 'sector4' used to match too and this reported the bug forever.
+        if (Select-String -Path $dashMain -Pattern "'SECTOR4'" -CaseSensitive -Quiet) {
+            $msg = "dashboard/main.js : 'SECTOR4' uppercase is back (regression of the 2026-09-29 casing fix; the directory is sector4/)"
+            Write-Host "    $msg" -ForegroundColor Red
             $problems += $msg
+        } else {
+            Write-Host '    dashboard/main.js : SECTOR4/sector4 casing bug fixed (2026-09-29)' -ForegroundColor Green
         }
     }
     $cloneDir = Get-UsysClonepoolDir
@@ -659,7 +666,7 @@ function Invoke-UsysClone {
     $intake = Get-UsysCloneIntakeSh
 
     if (-not $bash)   { Write-UsysErr 'Git Bash not found. Install Git for Windows or set PHOENIX_BASH.'; return }
-    if (-not $intake) { Write-UsysErr 'clone intake.sh not found. Clone Phoenix-Package_handler or set PHOENIX_INTAKE.'; return }
+    if (-not $intake) { Write-UsysErr 'clone intake.sh not found (expected sector2\package-handler\intake.sh in this repo) — or set PHOENIX_INTAKE.'; return }
 
     if (-not $env:PHOENIX_AUTH)       { Write-UsysWarn 'PHOENIX_AUTH not set — D1 sync skipped' }
     if (-not $env:PHOENIX_WORKER_URL) { Write-UsysWarn 'PHOENIX_WORKER_URL not set — D1 sync skipped' }
@@ -886,8 +893,13 @@ function Invoke-UsysDelegate {
     $bash   = Get-UsysGitBash
 
     if (-not $engine) {
-        Write-UsysErr "bash usys engine not found — run: usys init (or install unitedsys)"
-        Write-UsysInfo 'Commands: register, call, swap, rollback, list, info, remove, where, sync'
+        # Honest answer (S34OPS-F32): nothing in this repo ships usys.sh and
+        # `usys init` does not create it, so these verbs are not implemented
+        # here. They only work if an external legacy engine is pointed at by
+        # USYS_ENGINE (or dropped at ~/.usys/usys.sh).
+        Write-UsysErr "usys $SubCommand : not implemented in this repo — the legacy unitedsys registry engine (usys.sh) is not shipped, and 'usys init' does not install it."
+        Write-UsysInfo 'Set USYS_ENGINE to an existing usys.sh to use: register, call, swap, rollback, list, info, remove, where, sync'
+        Write-UsysInfo "For the clone pool use: usys search / usys list-suites / usys clone / usys pull"
         return
     }
     if (-not $bash) {
@@ -902,6 +914,29 @@ function Invoke-UsysDelegate {
 # =============================================================================
 # COMMAND: pull — fetch a suite from D1/clonepool by name and stage it locally
 # =============================================================================
+# SHA3-512 of a file as lowercase hex (the hash intake.sh records as D1
+# hash_sha3). .NET 8+ SHA3 when the OS supports it, else python3 hashlib.
+# Returns '' if neither is available — callers must treat that as "cannot verify".
+function Get-UsysSha3Hex {
+    param([Parameter(Mandatory)][string]$Path)
+    try {
+        $t = [Type]::GetType('System.Security.Cryptography.SHA3_512')
+        if ($t -and [System.Security.Cryptography.SHA3_512]::IsSupported) {
+            $bytes = [System.IO.File]::ReadAllBytes($Path)
+            return ([Convert]::ToHexString([System.Security.Cryptography.SHA3_512]::HashData($bytes))).ToLowerInvariant()
+        }
+    } catch { }
+    $py = if (Get-Command python3 -EA SilentlyContinue) { 'python3' }
+          elseif (Get-Command python -EA SilentlyContinue) { 'python' }
+          else { $null }
+    if (-not $py) { return '' }
+    try {
+        $out = & $py -c 'import hashlib,sys; print(hashlib.sha3_512(open(sys.argv[1],"rb").read()).hexdigest())' $Path 2>$null
+        if ($LASTEXITCODE -eq 0 -and $out -match '^[0-9a-f]{128}$') { return [string]$out }
+    } catch { }
+    return ''
+}
+
 function Invoke-UsysPull {
     [CmdletBinding()]
     param(
@@ -968,10 +1003,15 @@ function Invoke-UsysPull {
         $safeName = [System.IO.Path]::GetFileName([string]$resp.name)
         if (-not $safeName -or $safeName -in '.', '..') { Write-UsysErr "invalid name in D1 record: '$($resp.name)'"; return }
         $outFile = Join-Path $Destination $safeName
+        # Download to a side file first; it only becomes $outFile once its
+        # SHA3-512 matches the D1 custody record (S34OPS-F24 — same
+        # meta-then-verify pattern as portal/server.py pool_fetch).
+        $partFile = "$outFile.phx-partial"
 
         try {
-            Invoke-WebRequest -Uri $objUri -Headers $headers -Method GET -OutFile $outFile -ErrorAction Stop | Out-Null
+            Invoke-WebRequest -Uri $objUri -Headers $headers -Method GET -OutFile $partFile -ErrorAction Stop | Out-Null
         } catch {
+            Remove-Item -LiteralPath $partFile -Force -ErrorAction SilentlyContinue
             $statusCode = $_.Exception.Response.StatusCode.value__
             if ($statusCode -eq 404) {
                 Write-UsysErr "'$($resp.name)' is in D1 but not in R2 — it likely predates R2 upload being wired (2026-08-22), or was never uploaded. Nothing to pull down."
@@ -981,7 +1021,42 @@ function Invoke-UsysPull {
             return
         }
 
-        Write-UsysOk "Cloned to working directory: $outFile"
+        # Custody baseline: the D1 row by hex_id (?meta=true forces the row,
+        # never the R2 bytes).
+        $want = ''
+        try {
+            $metaUri = "$($workerUrl.TrimEnd('/'))/clonepool/$([Uri]::EscapeDataString($resp.hex_id))?meta=true"
+            $meta = Invoke-RestMethod -Uri $metaUri -Headers (Get-UsysWorkerHeaders -Accept) -Method GET -ErrorAction Stop
+            $row = if ($meta.result) { $meta.result } elseif ($meta.item) { $meta.item } else { $meta }
+            $want = ([string]$row.hash_sha3).Trim().ToLowerInvariant()
+        } catch {
+            $want = ''
+        }
+        $got = Get-UsysSha3Hex -Path $partFile
+        $verdict = if (-not $want) { 'refused-no-baseline' }
+                   elseif (-not $got) { 'refused-no-sha3' }
+                   elseif ($got -ne $want) { 'refused-mismatch' }
+                   else { 'verified' }
+        Write-UsysSuiteExecLog @{
+            event   = 'pull'
+            name    = $safeName
+            hex_id  = [string]$resp.hex_id
+            verdict = $verdict
+            want    = if ($want) { $want.Substring(0, [Math]::Min(16, $want.Length)) } else { '' }
+            got     = if ($got)  { $got.Substring(0, [Math]::Min(16, $got.Length)) } else { '' }
+        }
+        if ($verdict -ne 'verified') {
+            Remove-Item -LiteralPath $partFile -Force -ErrorAction SilentlyContinue
+            switch ($verdict) {
+                'refused-no-baseline' { Write-UsysErr "'$safeName' has no SHA3 custody fingerprint in D1 — refusing unverified bytes. Re-intake it (usys clone) to record one." }
+                'refused-no-sha3'     { Write-UsysErr "SHA3-512 unavailable on this machine (needs .NET SHA3 support or python3) — refusing unverified bytes." }
+                default               { Write-UsysErr "'$safeName': R2 bytes don't match D1 custody ($($got.Substring(0,12)) vs $($want.Substring(0,12))) — refused, nothing written." }
+            }
+            return
+        }
+        Move-Item -LiteralPath $partFile -Destination $outFile -Force
+
+        Write-UsysOk "Cloned to working directory (SHA3-512 verified against D1): $outFile"
         return
     }
 
@@ -2122,7 +2197,8 @@ function Show-UsysHelp {
     VM-contained and pass freely. Bypass all of it: PHOENIX_SUITE_NO_GATE=1.
     Decisions log to ~/.unitedsys/logs/suite_exec.jsonl.
 
-  Registry (requires ~/.usys/usys.sh):
+  Legacy registry — NOT SHIPPED (only works with an external usys.sh via
+  USYS_ENGINE; 'usys init' does not install one):
     register <file> <name>       Register callable file
     call <name> [args...]        Invoke registered file
     list | info <name> | where <name>
