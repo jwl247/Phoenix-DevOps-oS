@@ -1,0 +1,24 @@
+# operations-set.txt — what a Phoenix worker on the ground needs, pulled from
+# Phoenix in R2 (docs/plans/compaq-road-test-plan.md, Phase 1).
+# One repo-relative path per line; a trailing / means the whole directory.
+# CLAUDE.md AI SAFETY RULE 6: the engine team IS the apps — Helix, Frank and
+# their companions travel together, never trimmed to "just the kernel".
+
+# Helix — kernel (dm-helix, Frank3 slots, libhelix, boot) and userspace managers
+sector1/kernels/
+sector1/helix/
+
+# CoPES guardians (security companions)
+sector1/security/
+
+# Frank — import authority, audit logger, hardware orchestrator
+sector2/frank/
+
+# Paging manager / Doppelganger (Linux)
+sector4/paging.py
+
+# systemd units for the team
+sector3/services/
+
+# The import method itself, so a worker can pull the rest
+sector2/package-handler/intake.sh

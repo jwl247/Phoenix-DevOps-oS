@@ -25,6 +25,8 @@ Verify against current code before trusting a specific line number.
   there, installs Claude Code. `push-dashboard.sh <host> [user]` is the bash twin.
 - `sector3/services/install-dashboard-windows.ps1` — Windows dashboard autostart (called from repo-root `install.ps1`).
 - `sector3/translator/translator.sh <verb> [pkg]` — promoted to `/etc/systemd/system/translator.sh` by `deploy/deploy.sh`.
+- `sector3/worker-up/dataplane-up.sh <name> [check]` — stand up or re-check a Phoenix data plane on a Cloudflare account (R2 bucket + D1 with `sector2/package-handler/worker/schema-d1.sql` + packages-worker deployed as `<name>` with its own `PHOENIX_AUTH`). Env: `CF_API_TOKEN`, `CF_ACCOUNT_ID`. State: `~/.phoenix/worker-up/<name>/`. Re-runnable.
+- `sector3/worker-up/seed-dataplane.sh <name> [list]` — push `sector3/worker-up/operations-set.txt` into that data plane through `intake.sh`, sandboxed (own HOME, catalog, logs, pool) so the caller's Phoenix is untouched. First data plane: `phoenix-roadtest` on the jerry.leftwich1 account (2026-09-29, `docs/plans/compaq-road-test-plan.md`).
 
 ## Connects to / connected from
 - `sector3/services/push-dashboard.ps1` → `sector3/services/scout-ubuntu.sh` → `sector3/services/deploy-dashboard.sh` (remote) → `dashboard/`.
@@ -35,6 +37,7 @@ Verify against current code before trusting a specific line number.
 - `sector3/services/phoenix-paging.service` → `sector4/paging.py`; `sector3/services/helix.service` → `sector1/kernels/helix_boot.sh`.
 - `portal/server.py` → `sector3/phoenix-net/mesh-worker/index.js`.
 - `dashboard/main.js` maps sector slots `'1'/'2'/'3'` → `sector1/2/3` and `'4'` → `sector4`.
+- `sector3/worker-up/` → `sector2/package-handler/worker/index.js` + `schema-d1.sql` (deploys them), → `sector2/package-handler/intake.sh` (seeds through it), → Cloudflare API on the TARGET account only.
 
 ## Known issues (verified, not guessed)
 - **`sector3/workers/packages-worker/` is a stale duplicate.** The live worker is
