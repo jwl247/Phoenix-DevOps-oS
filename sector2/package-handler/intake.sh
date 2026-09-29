@@ -1666,7 +1666,16 @@ intake_directory() {
     local dup_result
     dup_result=$(check_duplicate "${f}" "${file_pool}" "${file_orig}")
     if [[ "${dup_result}" == dup:* ]]; then
-      log "INFO" "dir dup skipped: ${rel}"
+      # Unchanged since its last intake: no new version, but it is still part
+      # of THIS snapshot and THIS manifest, at the version already in the pool.
+      # Before 2026-09-29 it was left out of both, so a re-intaked directory's
+      # snapshot and manifest held only the files that had changed.
+      local dup_file="${dup_result#dup:}"
+      local dup_ver; dup_ver=$(basename "${dup_file}"); dup_ver="${dup_ver%%_*}"
+      mkdir -p "${snapshot_dir}/$(dirname "${rel}")"
+      cp "${dup_file}" "${snapshot_dir}/${rel}"
+      manifest_entries+="  {\"hex\":\"$(json_escape "${file_hex}")\",\"name\":\"$(json_escape "${file_orig}")\",\"path\":\"$(json_escape "${rel}")\",\"version\":\"$(json_escape "${dup_ver}")\",\"checksum\":\"$(json_escape "${checksum}")\"},"
+      log "INFO" "dir: unchanged, kept ${dup_ver}: ${rel}"
       (( success++ )) || true
       continue
     fi
