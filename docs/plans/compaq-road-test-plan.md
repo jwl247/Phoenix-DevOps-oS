@@ -85,6 +85,13 @@
 17. Start from a blank `/opt/phoenix-roadtest` on the Compaq, holding only the box credential.
 18. Run `intake clone` for the H.L.K clone. H.L.K comes up and pulls the rest of the operations set through ingress. It runs a job, then pushes results through egress.
 
+### Phase 5 — if it passes, it becomes a process (Jerry, 2026-09-29)
+"The connection from R2 (jerry.leftwich1) to the Compaq will have to become a process if good, including building the tunnels etc." The Compaq run is the first instance of a repeatable procedure, not a one-off. So:
+19. **Every step in Phases 0–4 is built as a script from the start, never as hand-typed commands:** create or bind the bucket and D1, deploy the worker, create the tunnels and their configs, issue the box credential, set up the two Helix instances, bootstrap the H.L.K clone. Each script can run again safely (it checks before it creates) and logs to custody.
+20. **Tunnels are created by the process, not by hand.** Per machine: an ingress and an egress tunnel, each with its own secret and remote config, and the connector token handed only to that machine. Retiring a machine means rotating or deleting its tunnels, the same steps as the 2026-09-29 cleanup.
+21. **One entry point:** a `usys` verb (working name `usys worker up <machine>` / `usys worker down <machine>`) that runs the whole chain for a new machine and reports M1–M7 at the end. The game client path is this same process.
+22. **A runbook** (`docs/runbooks/worker-up.md`) written from the real run, with every command's expected output, so the process can be checked or run by hand if the automation breaks.
+
 ## 3. What gets measured (docs/helix/BENCHMARKS.md precision rule)
 
 | # | Measure | Why it matters for the game |
