@@ -1,6 +1,6 @@
 # Compaq road test — Phoenix from the cloud, a worker on the ground
 
-**Status:** PLAN — written 2026-09-29, not approved, nothing built. Build starts only on Jerry's "build".
+**Status:** BUILDING. Jerry said "build" on 2026-09-29. Phases 0, 1, 2 and 4 are done and measured (§3b). Phase 3 (the H.L.K clone) is next. Open questions settled, using the proposals (Jerry, 2026-09-29).
 **Question it answers (Jerry, 2026-09-29):** can a machine come up from nothing and run as a Phoenix worker, pulling what it needs from Phoenix in R2 and pushing results back, with H.L.K directing it? This is the delivery shape Monster Phoenix needs. Measure it and decide.
 **Hard rule:** our system stays unaffected. That means the jw.leftwich1 Cloudflare account (its R2, D1, workers and tunnel), the Precision, pbm3 and the HP. The only exception is the Round 2 audit fixes.
 
@@ -69,6 +69,13 @@
 
 **Proof:** both devices report `double dandelion` in `dmsetup status`, both survive a reboot, and the existing paging, hands and mesh services still run.
 
+### Decision 2026-09-29 — ingress gets the shared memory, egress stays simple
+Jerry: "the ingress … need[s] a shared memory so data [it has] read she has read too", and "ingress, not egress".
+- **Ingress: read-through equals known.** Everything ingress pulls lands straight in her RAM strand (Strand A), so it is warm on first use, not second. That needs dm-helix to **warm on write** for the ingress instance, a small kernel change. H.L.K also records each pulled item in one shared index keyed by content hash (the SHA3 Phoenix already carries), so H.L.K knows what she holds. Why: M2 showed a freshly pulled 64 MiB file re-read at disk speed (117 MiB/s), because she had not "read" it yet.
+- **Egress: kept simple.** Unmanaged (plain disk), or Helix with no shared memory, whichever measures better. Why: M4 showed Helix barely changes write speed (16 MiB push 289 s managed vs 272 s unmanaged), and the upload line is the limit.
+- **Peering:** the shared memory sits in the middle, in H.L.K. Ingress and egress never talk to each other directly (the 09-28 shape). Before that can work, the kernel must publish each instance's Dandelion separately: today the two instances overwrite one shared slot (`dm_helix.c:81-83`, `:1050`, `:1296`).
+- **Not decided, just captured:** the paging manager follows machine load instead of Helix heat, and still presents to Helix in her terms. "Unbind her strands" is an open question.
+
 ### Phase 3 — the H.L.K clone
 13. Port H.L.K's loop (`hud/AiChatService.cs`: model tiers, ACTION parsing, stricter yes-gate, history cap) to a Linux Python service, `phoenix-hlk`, beside hands.
 14. Its tools are declared, not a raw shell:
@@ -105,6 +112,31 @@
 | M7 | Our system untouched: our worker's `/health` counts, our R2 object count, E: pool file count, identical before and after | the hard rule |
 
 Pass or fail lines for M1–M4 are Jerry's call. Proposed starting points: M1 < 5 min, M3 p95 < 250 ms warm, M5 = 0 failures and 100% of tampered blobs refused, M7 = identical.
+
+## 3b. Results — run 2026-09-29 on pbm-compaq (`sector3/worker-up/roadtest-measure.sh`, nanosecond clocks)
+
+| # | Measure | Result | Proposed line | |
+|---|---|---|---|---|
+| M1 | Cold start: blank dir → operations set (intake.sh + 6 items, 73 files) | **40.3 s**, 73/73 byte-identical to git (first run 143 s, before the parallel pulls) | < 5 min | pass |
+| M2 | Pull 64 MiB R2 → ingress, hash-checked | **14.39 s = 4.45 MiB/s** (~37 Mbit/s) | — | — |
+| M2 | Re-read after pull, page cache dropped | 0.548 s = **117 MiB/s** (disk speed: she hadn't read it yet → the ingress decision above) | — | gap |
+| M2 | Re-read, warm | 0.0148 s = 4,330 MiB/s (Linux page cache, not a Helix number) | — | — |
+| M3 | Small object p50 / p95, one kept-alive connection | 1 KiB 87 / **113 ms** · 16 KiB 100 / **235 ms** · 256 KiB 141 / 302 ms · 1 MiB 305 / 496 ms | p95 < 250 ms | pass ≤ 16 KiB, fail ≥ 256 KiB |
+| M3 | Same, a new connection each request | 1 KiB 218 / 298 ms … 1 MiB 765 / 995 ms | — | why H.L.K holds one connection open |
+| M4 | Push egress → R2 + D1 receipt (64 KiB + 1 MiB + 16 MiB) | managed **0.05 MiB/s** (314.6 s) · unmanaged **0.06 MiB/s** (292.3 s); staging on the egress disk 22.1 vs 17.6 MiB/s | — | the big problem: upload |
+| M5 | Tampered object in R2 | **refused**; clones again after restore | 100 % refused | pass |
+| M6 | Both Helix instances' counters | recorded around every phase in `results.json`; the shared Dandelion slot is mixed between the two instances (kernel bug) | — | fix |
+| M7 | Our system untouched | our D1 custody 2077 / clonepool 531 / glossary 276 / versions 410, our R2 464 objects, E: pool 228 files — identical before and after Phases 0–1 | identical | pass (re-check at the end) |
+
+Also found and fixed along the way (system fixes):
+- a directory could not be cloned from R2 at all;
+- a re-intaked directory lost its unchanged files;
+- directory intake dropped Makefiles, `.target` units and extensionless scripts;
+- seeding shipped Windows CRLF bytes;
+- a folder's files were pulled one at a time (now in parallel);
+- the paging unit pulled the single Helix back up;
+- a race loading the modules at boot;
+- the road-test key was printed during a check and has been rotated.
 
 ## 4. Rollback (every phase)
 

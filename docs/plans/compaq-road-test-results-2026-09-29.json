@@ -1,0 +1,139 @@
+[
+ {
+  "m": "M6",
+  "at": "start",
+  "ingress": "double dandelion heat 0.000 state cold compression 1.000 lanes 64 strandA raw 3790 zlib5 126 zbytes 55960 pending_bytes 9211904 strandB slots 16777216 used 1310 bonly 1310 rungs 0 b_hits 3 b_writes 1320 b_zero_copy 0 b_evictions 0 b_ioerr 0 entries 5226 temps frozen 5226 cold 0 warm 0 hot 0 blazing 0 hits 181 zhits 0 misses 5128 inserts 5249 evictions 0 invalidations 23 compressed 130 cooled_bytes 5880109 zfail 0 bypass 1",
+  "egress": "double dandelion heat 0.000 state cold compression 1.000 lanes 64 strandA raw 252 zlib5 27 zbytes 14124 pending_bytes 208896 strandB slots 8388608 used 706 bonly 706 rungs 0 b_hits 1 b_writes 708 b_zero_copy 0 b_evictions 0 b_ioerr 0 entries 985 temps frozen 985 cold 0 warm 0 hot 0 blazing 0 hits 171 zhits 0 misses 929 inserts 1050 evictions 0 invalidations 65 compressed 74 cooled_bytes 3151546 zfail 0 bypass 1"
+ },
+ {
+  "m": "M4",
+  "mode": "managed",
+  "bytes": 65536,
+  "stage_ns": 191694155,
+  "push_ns": 4806040756
+ },
+ {
+  "m": "M4",
+  "mode": "managed",
+  "bytes": 1048576,
+  "stage_ns": 157470455,
+  "push_ns": 20485825063
+ },
+ {
+  "m": "M4",
+  "mode": "managed",
+  "bytes": 16777216,
+  "stage_ns": 422484228,
+  "push_ns": 289265967321
+ },
+ {
+  "m": "M6",
+  "at": "after-M4-managed",
+  "ingress": "double dandelion heat 0.000 state cold compression 1.000 lanes 64 strandA raw 5700 zlib5 174 zbytes 195815 pending_bytes 7376896 strandB slots 16777216 used 3502 bonly 3501 rungs 1 b_hits 4 b_writes 3512 b_zero_copy 0 b_evictions 0 b_ioerr 0 entries 9375 temps frozen 5226 cold 4148 warm 0 hot 0 blazing 0 hits 276 zhits 0 misses 5298 inserts 9404 evictions 0 invalidations 29 compressed 178 cooled_bytes 14915294 zfail 0 bypass 1",
+  "egress": "double dandelion heat 0.000 state cold compression 1.000 lanes 64 strandA raw 4613 zlib5 24 zbytes 11753 pending_bytes 208896 strandB slots 8388608 used 706 bonly 706 rungs 0 b_hits 1 b_writes 708 b_zero_copy 0 b_evictions 0 b_ioerr 0 entries 5343 temps frozen 1246 cold 4097 warm 0 hot 0 blazing 0 hits 177 zhits 0 misses 1010 inserts 5420 evictions 0 invalidations 77 compressed 74 cooled_bytes 3151546 zfail 0 bypass 1"
+ },
+ {
+  "m": "M4",
+  "mode": "unmanaged",
+  "bytes": 65536,
+  "stage_ns": 121715109,
+  "push_ns": 3549236895
+ },
+ {
+  "m": "M4",
+  "mode": "unmanaged",
+  "bytes": 1048576,
+  "stage_ns": 407510572,
+  "push_ns": 16370577177
+ },
+ {
+  "m": "M4",
+  "mode": "unmanaged",
+  "bytes": 16777216,
+  "stage_ns": 439028840,
+  "push_ns": 272423999453
+ },
+ {
+  "m": "M6",
+  "at": "after-M4-unmanaged",
+  "ingress": "double dandelion heat 0.000 state cold compression 1.000 lanes 64 strandA raw 6448 zlib5 126 zbytes 55960 pending_bytes 6328320 strandB slots 16777216 used 2807 bonly 2801 rungs 6 b_hits 9 b_writes 5304 b_zero_copy 0 b_evictions 0 b_ioerr 0 entries 9375 temps frozen 5226 cold 4149 warm 0 hot 0 blazing 0 hits 453 zhits 4 misses 5443 inserts 13513 evictions 0 invalidations 4138 compressed 178 cooled_bytes 22255326 zfail 0 bypass 1",
+  "egress": "double dandelion heat 0.000 state cold compression 1.000 lanes 64 strandA raw 680 zlib5 0 zbytes 0 pending_bytes 0 strandB slots 8388608 used 0 bonly 0 rungs 0 b_hits 0 b_writes 0 b_zero_copy 0 b_evictions 0 b_ioerr 0 entries 680 temps frozen 0 cold 0 warm 0 hot 0 blazing 0 hits 170 zhits 0 misses 560 inserts 681 evictions 0 invalidations 1 compressed 0 cooled_bytes 0 zfail 0 bypass 1"
+ },
+ {
+  "m": "M2",
+  "what": "pull R2->ingress (verified)",
+  "bytes": 67108864,
+  "ns": 14390632063
+ },
+ {
+  "m": "M2",
+  "what": "re-read from ingress Helix (cold)",
+  "bytes": 67108864,
+  "ns": 548177964
+ },
+ {
+  "m": "M2",
+  "what": "re-read from ingress Helix (warm)",
+  "bytes": 67108864,
+  "ns": 14779857
+ },
+ {
+  "m": "M6",
+  "at": "after-M2",
+  "ingress": "double dandelion heat 0.100 state surging compression 0.300 lanes 64 strandA raw 22580 zlib5 126 zbytes 55960 pending_bytes 6328320 strandB slots 16777216 used 3059 bonly 3055 rungs 4 b_hits 11 b_writes 5560 b_zero_copy 0 b_evictions 0 b_ioerr 0 entries 25761 temps frozen 9320 cold 14840 warm 0 hot 0 blazing 0 hits 507 zhits 4 misses 5710 inserts 29908 evictions 0 invalidations 4147 compressed 178 cooled_bytes 22255326 zfail 0 bypass 1",
+  "egress": "double dandelion heat 0.000 state cold compression 1.000 lanes 64 strandA raw 327 zlib5 68 zbytes 46803 pending_bytes 970752 strandB slots 8388608 used 643 bonly 643 rungs 0 b_hits 0 b_writes 644 b_zero_copy 0 b_evictions 0 b_ioerr 0 entries 1038 temps frozen 1038 cold 0 warm 0 hot 0 blazing 0 hits 170 zhits 0 misses 930 inserts 1051 evictions 0 invalidations 13 compressed 74 cooled_bytes 2889379 zfail 0 bypass 1"
+ },
+ {
+  "m": "M3",
+  "kib": 1,
+  "new_conn_p50_ms": 218.234,
+  "new_conn_p95_ms": 297.924,
+  "keepalive_p50_ms": 86.9,
+  "keepalive_p95_ms": 112.792,
+  "n": 20
+ },
+ {
+  "m": "M3",
+  "kib": 16,
+  "new_conn_p50_ms": 261.918,
+  "new_conn_p95_ms": 477.426,
+  "keepalive_p50_ms": 100.354,
+  "keepalive_p95_ms": 235.379,
+  "n": 20
+ },
+ {
+  "m": "M3",
+  "kib": 256,
+  "new_conn_p50_ms": 330.371,
+  "new_conn_p95_ms": 425.531,
+  "keepalive_p50_ms": 140.781,
+  "keepalive_p95_ms": 301.661,
+  "n": 20
+ },
+ {
+  "m": "M3",
+  "kib": 1024,
+  "new_conn_p50_ms": 765.328,
+  "new_conn_p95_ms": 994.775,
+  "keepalive_p50_ms": 304.927,
+  "keepalive_p95_ms": 495.962,
+  "n": 20
+ },
+ {
+  "m": "M6",
+  "at": "after-M3",
+  "ingress": "double dandelion heat 0.000 state cold compression 1.000 lanes 64 strandA raw 20850 zlib5 126 zbytes 55960 pending_bytes 5541888 strandB slots 16777216 used 4787 bonly 4783 rungs 4 b_hits 11 b_writes 7288 b_zero_copy 0 b_evictions 0 b_ioerr 0 entries 25759 temps frozen 9320 cold 16439 warm 0 hot 0 blazing 0 hits 514 zhits 4 misses 5716 inserts 29914 evictions 0 invalidations 4155 compressed 178 cooled_bytes 30381790 zfail 0 bypass 1",
+  "egress": "double dandelion heat 0.000 state cold compression 1.000 lanes 64 strandA raw 327 zlib5 68 zbytes 46803 pending_bytes 970752 strandB slots 8388608 used 643 bonly 643 rungs 0 b_hits 0 b_writes 644 b_zero_copy 0 b_evictions 0 b_ioerr 0 entries 1038 temps frozen 1038 cold 0 warm 0 hot 0 blazing 0 hits 170 zhits 0 misses 930 inserts 1051 evictions 0 invalidations 13 compressed 74 cooled_bytes 2889379 zfail 0 bypass 1"
+ },
+ {
+  "m": "M5",
+  "tampered_refused": true,
+  "restored_clones": true
+ },
+ {
+  "m": "M6",
+  "at": "end",
+  "ingress": "double dandelion heat 0.000 state cold compression 1.000 lanes 64 strandA raw 20849 zlib5 126 zbytes 55960 pending_bytes 5541888 strandB slots 16777216 used 4787 bonly 4783 rungs 4 b_hits 11 b_writes 7288 b_zero_copy 0 b_evictions 0 b_ioerr 0 entries 25758 temps frozen 9320 cold 16438 warm 0 hot 0 blazing 0 hits 514 zhits 4 misses 5716 inserts 29914 evictions 0 invalidations 4156 compressed 178 cooled_bytes 30381790 zfail 0 bypass 1",
+  "egress": "double dandelion heat 0.000 state cold compression 1.000 lanes 64 strandA raw 327 zlib5 68 zbytes 46803 pending_bytes 970752 strandB slots 8388608 used 643 bonly 643 rungs 0 b_hits 0 b_writes 644 b_zero_copy 0 b_evictions 0 b_ioerr 0 entries 1038 temps frozen 1038 cold 0 warm 0 hot 0 blazing 0 hits 170 zhits 0 misses 930 inserts 1051 evictions 0 invalidations 13 compressed 74 cooled_bytes 2889379 zfail 0 bypass 1"
+ }
+]

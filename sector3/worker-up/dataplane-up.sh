@@ -121,7 +121,8 @@ elif [[ $MODE == check ]]; then die "worker not at current index.js (deployed ${
 else
   wr deploy >"$STATE/deploy.log" 2>&1 || { tail -20 "$STATE/deploy.log"; die "deploy failed (log: $STATE/deploy.log)"; }
   if [[ $new_auth == yes ]]; then
-    wr secret put PHOENIX_AUTH < "$STATE/auth" >/dev/null 2>&1 || die "could not set PHOENIX_AUTH"
+    # No trailing newline in the secret, whatever the file holds.
+    printf '%s' "$(cat "$STATE/auth")" | wr secret put PHOENIX_AUTH >/dev/null 2>&1 || die "could not set PHOENIX_AUTH"
   fi
   echo "$cur" > "$STATE/deployed.sha"
   say "worker" "deployed $NAME at index.js ${cur:0:12}"
@@ -132,7 +133,8 @@ SUB=$(api GET /workers/subdomain | jq_py "print((d.get('result') or {}).get('sub
 URL="https://$NAME.$SUB.workers.dev"; echo "$URL" > "$STATE/url"
 h=""; for i in 1 2 3 4 5 6; do h=$(curl -s -o /dev/null -w '%{http_code}' "$URL/health"); [[ $h == 200 ]] && break; sleep 5; done
 [[ $h == 200 ]] || die "$URL/health -> $h"
-a=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $(cat "$STATE/auth")" "$URL/stats")
+# A new secret can take a few seconds to reach every edge: retry before failing.
+a=""; for i in 1 2 3 4 5 6 7 8; do a=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $(cat "$STATE/auth")" "$URL/stats"); [[ $a == 200 ]] && break; sleep 5; done
 n=$(curl -s -o /dev/null -w '%{http_code}' "$URL/stats")
 [[ $a == 200 ]] || die "$URL/stats with auth -> $a"
 [[ $n == 401 ]] || die "$URL/stats WITHOUT auth -> $n (must be 401)"
