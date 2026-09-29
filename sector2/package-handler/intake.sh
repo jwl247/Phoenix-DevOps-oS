@@ -1731,8 +1731,14 @@ DIRSIDECAR
 
   custody_log_local "${hex}" "${dirname}" "dir_intake" "${version}" \
     "${dirpath}" "${snapshot_dir}" "white" "${backend}"
+  # The manifest (this sidecar: every file's hex, relative path, version) is
+  # hashed into the directory's D1 row and uploaded as the directory hex's R2
+  # object, so a machine with no local pool can rebuild the tree from R2
+  # (fetch_dir_r2_fallback). Before 2026-09-29 it stayed local only and a
+  # directory could never be cloned anywhere but the machine that intaked it.
   report_clonepool "${hex}" "${dirname}" "${version}" "white" \
-    "${pool_dir}" "${dir_sidecar}" "1" "${total_size}" "${any_sensitive_included}"
+    "${pool_dir}" "${dir_sidecar}" "1" "${total_size}" "${any_sensitive_included}" "${dir_sidecar}"
+  upload_to_r2 "${hex}" "${dir_sidecar}"
   report_custody "${hex}" "${dirname}" "dir_intake" "white" "${backend}"
   report_glossary "${hex}" "${dirname}" \
     "Directory snapshot: ${#known_files[@]} files, ${version}" \
@@ -1760,6 +1766,73 @@ DIRSIDECAR
 }
 
 # ── Directory clone out ───────────────────────────────────────
+# ── R2 fallback for a directory — rebuild the snapshot from R2 ────────
+# Fetches the directory's manifest from R2, checks it against the SHA3 in the
+# directory's D1 row, pulls every file through fetch_r2_fallback (each one
+# checked against its own D1 hash), and lays them out as an ordinary local
+# snapshot — so the normal verify + copy in intake_clone_directory runs
+# unchanged afterwards. Latest version only for now. Quiet until the object
+# is known to be a directory manifest: the clone dispatcher tries the
+# directory path first for every name.
+fetch_dir_r2_fallback() {
+  local name="$1" hex="$2" version="$3"
+  [[ -z "${PHOENIX_AUTH}" || "${version}" != "latest" ]] && return 1
+  local auth=(-H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}")
+  # Probe the first bytes only: a manifest opens with "type": "directory", and
+  # anything else (every plain file) must not cost a second full download.
+  local probe
+  probe=$(curl -s "${auth[@]}" "${WORKER_URL}/clonepool/${hex}" 2>/dev/null | head -c 120)
+  grep -q '"type": "directory"' <<<"${probe}" || return 1
+  local meta want
+  meta=$(curl -s "${auth[@]}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
+  want=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
+  [[ ${#want} -lt 64 ]] && return 1        # no manifest hash in D1: nothing to trust
+  local tmp code got
+  tmp=$(mktemp)
+  code=$(curl -s -o "${tmp}" -w "%{http_code}" "${auth[@]}" "${WORKER_URL}/clonepool/${hex}" 2>/dev/null)
+  if [[ "${code}" != "200" ]] || ! grep -q '"type": "directory"' "${tmp}"; then rm -f "${tmp}"; return 1; fi
+  got=$(openssl dgst -sha3-512 -r "${tmp}" 2>/dev/null | awk '{print $1}')
+  if [[ "${got}" != "${want}" ]]; then
+    rm -f "${tmp}"
+    echo " ⚠  R2 manifest for '${name}' does not match its D1 hash — refusing to rebuild it"
+    log "WARN" "dir R2 fallback BLOCKED (manifest hash mismatch): ${name}"
+    return 1
+  fi
+  local ver pool_dir snap
+  ver=$(grep -o '"version": "[^"]*"' "${tmp}" | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
+  pool_dir="${CLONEPOOL_DIR}/T1/${hex}"
+  snap="${pool_dir}/${ver}_${name}"
+  mkdir -p "${snap}"
+  local entry fhex fname fpath fver fpool n=0
+  while IFS= read -r entry; do
+    fhex=$(sed -E 's/.*"hex":"([^"]*)".*/\1/' <<<"${entry}")
+    fname=$(sed -E 's/.*"name":"([^"]*)".*/\1/' <<<"${entry}")
+    fpath=$(sed -E 's/.*"path":"([^"]*)".*/\1/' <<<"${entry}")
+    fver=$(sed -E 's/.*"version":"([^"]*)".*/\1/' <<<"${entry}")
+    case "${fpath}" in
+      /*|*..*|"") echo " ⚠  unsafe path in the '${name}' manifest: '${fpath}' — refusing"
+                  rm -rf "${snap}"; rm -f "${tmp}"; return 1 ;;
+    esac
+    fpool=$(resolve_pool_dir "${fhex}")
+    if [[ ! -f "${fpool}/${fver}_${fname}" ]]; then
+      if ! fetch_r2_fallback "${fname}" "${fhex}" "${fver}" >/dev/null; then
+        echo " ⚠  '${name}': could not pull ${fpath} (${fver}) from R2 — nothing rebuilt"
+        rm -rf "${snap}"; rm -f "${tmp}"; return 1
+      fi
+      fpool=$(resolve_pool_dir "${fhex}")
+    fi
+    mkdir -p "$(dirname "${snap}/${fpath}")"
+    cp "${fpool}/${fver}_${fname}" "${snap}/${fpath}"
+    n=$((n+1))
+  done < <(grep -o '{"hex":"[^}]*}' "${tmp}")
+  mv "${tmp}" "${pool_dir}/${hex}.sidecar.json"
+  log "INFO" "dir R2 fallback: rebuilt ${name} ${ver} (${n} files) from R2 → ${snap}"
+  custody_log_local "${hex}" "${name}" "clone_in_from_r2" "${ver}" \
+    "${WORKER_URL}/clonepool/${hex}" "${snap}" "white" "user"
+  report_custody "${hex}" "${name}" "clone_in_from_r2" "white" "user"
+  return 0
+}
+
 intake_clone_directory() {
   local name="${1:-}"
   local version="${2:-latest}"
@@ -1767,10 +1840,15 @@ intake_clone_directory() {
   local hex; hex=$(to_hex "${name}")
   local pool_dir; pool_dir=$(resolve_pool_dir "${hex}")
   local sidecar="${pool_dir}/${hex}.sidecar.json"
-
-  if [[ ! -d "${pool_dir}" ]]; then
-    echo "[intake:MISS] '${name}' not found in clonepool"
-    return 1
+  if [[ ! -f "${sidecar}" ]]; then
+    # No local copy: rebuild it from R2 if it's a directory there.
+    if fetch_dir_r2_fallback "${name}" "${hex}" "${version}"; then
+      pool_dir=$(resolve_pool_dir "${hex}")
+      sidecar="${pool_dir}/${hex}.sidecar.json"
+    else
+      echo "[intake:MISS] '${name}' not found in clonepool"
+      return 1
+    fi
   fi
 
   # Check if it's a directory type
