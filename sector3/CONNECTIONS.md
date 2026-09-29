@@ -27,6 +27,8 @@ Verify against current code before trusting a specific line number.
 - `sector3/translator/translator.sh <verb> [pkg]` — promoted to `/etc/systemd/system/translator.sh` by `deploy/deploy.sh`.
 - `sector3/worker-up/dataplane-up.sh <name> [check]` — stand up or re-check a Phoenix data plane on a Cloudflare account (R2 bucket + D1 with `sector2/package-handler/worker/schema-d1.sql` + packages-worker deployed as `<name>` with its own `PHOENIX_AUTH`). Env: `CF_API_TOKEN`, `CF_ACCOUNT_ID`. State: `~/.phoenix/worker-up/<name>/`. Re-runnable.
 - `sector3/worker-up/seed-dataplane.sh <name> [list]` — push `sector3/worker-up/operations-set.txt` into that data plane through `intake.sh`, sandboxed (own HOME, catalog, logs, pool) so the caller's Phoenix is untouched. First data plane: `phoenix-roadtest` on the jerry.leftwich1 account (2026-09-29, `docs/plans/compaq-road-test-plan.md`).
+- `sector3/worker-up/helix-pair-up.sh <ingress-serial> <egress-serial> [check]` — run as root on a box: turns its single Helix into `helix@ingress` (existing `helix-origin` disk) + `helix@egress` (a blank second disk, partitioned `helix-egress` only if blank), per-instance `/etc/default/helix-<i>`, explicit Strand A each. Uses `sector3/services/helix@.service`. Live on pbm-compaq since 2026-09-29 (survives reboot).
+- Known: `phoenix-hands` on pbm-compaq restart-loops (~11×, Errno 99) after boot until meshd has brought the mesh address up, then runs — it binds the mesh IP before it exists. Self-heals; wants an ExecStartPre wait for the address.
 
 ## Connects to / connected from
 - `sector3/services/push-dashboard.ps1` → `sector3/services/scout-ubuntu.sh` → `sector3/services/deploy-dashboard.sh` (remote) → `dashboard/`.

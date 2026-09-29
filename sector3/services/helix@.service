@@ -1,0 +1,24 @@
+# helix@.service — one named kernel Helix instance: helix@ingress, helix@egress.
+# dm-helix device `helix-<instance>`, settings /etc/default/helix-<instance>,
+# mounted at HELIX_MOUNT (default /srv/helix-<instance>). All instances share
+# one helix.ko + Frank3 slots; the first up loads them, the last down unloads.
+# Use either helix.service (the single Helix) or helix@*.service, not both on
+# the same origin disk. Set up by sector3/worker-up/helix-pair-up.sh.
+[Unit]
+Description=Helix kernel instance %i (dm-helix double strand, own Dandelion)
+DefaultDependencies=no
+After=local-fs.target systemd-udev-settle.service
+Before=phoenix-paging.service
+Conflicts=shutdown.target helix.service
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/phoenix/sector1/kernels/helix_boot.sh start %i
+ExecStop=/opt/phoenix/sector1/kernels/helix_boot.sh stop %i
+TimeoutStartSec=900
+TimeoutStopSec=300
+
+[Install]
+WantedBy=multi-user.target

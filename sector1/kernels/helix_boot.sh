@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 # helix_boot.sh — bring Helix up at boot (helix.service) and down at shutdown.
 #
-#   helix_boot.sh start | stop | status
+#   helix_boot.sh start | stop | status              the single Helix, device `helix`
+#   helix_boot.sh start | stop | status <instance>   a named one, device `helix-<instance>`
+#
+# Named instances (2026-09-29, Compaq road test: helix@ingress + helix@egress)
+# read /etc/default/helix-<instance> and default to their own origin partlabel
+# (helix-<instance>), their own Strand B image and their own mount. dm-helix
+# keeps per-device state (hx_ctr: own Dandelion, own strands), so N instances
+# share one helix.ko. Give each an explicit HELIX_RAM: `auto` is half the
+# machine's RAM PER INSTANCE. Stopping one instance never unloads the modules
+# while another helix device is still up.
 #
 # Loads helix.ko + both Frank3 slots, builds the double helix over her origin
 # disk, and mounts it. Settings come from /etc/default/helix:
@@ -18,17 +27,32 @@
 # are rebuilt against the new headers before loading (linux-headers-amd64).
 set -euo pipefail
 K=$(cd "$(dirname "$0")" && pwd)
-[ -f /etc/default/helix ] && . /etc/default/helix
-ORIGIN=${HELIX_ORIGIN:-/dev/disk/by-partlabel/helix-origin}
+INST=${2:-}
+if [ -n "$INST" ]; then
+  case "$INST" in *[!a-z0-9]*|'') echo "helix_boot: instance must be a-z0-9"; exit 2 ;; esac
+  CONF=/etc/default/helix-$INST; NAME=helix-$INST
+  D_ORIGIN=/dev/disk/by-partlabel/helix-$INST; D_BIMG=/var/lib/helix/strandB-$INST.img; D_MNT=/srv/helix-$INST
+else
+  CONF=/etc/default/helix; NAME=helix
+  D_ORIGIN=/dev/disk/by-partlabel/helix-origin; D_BIMG=/var/lib/helix/strandB.img; D_MNT=/srv/helix
+fi
+[ -f "$CONF" ] && . "$CONF"
+ORIGIN=${HELIX_ORIGIN:-$D_ORIGIN}
 RAM=${HELIX_RAM:-auto}
-BIMG=${HELIX_B_IMG:-/var/lib/helix/strandB.img}
+BIMG=${HELIX_B_IMG:-$D_BIMG}
 BMB=${HELIX_B_MB:-65536}
-MNT=${HELIX_MOUNT:-/srv/helix}
-NAME=helix
+MNT=${HELIX_MOUNT:-$D_MNT}
 
-log() { echo "helix_boot: $*"; }
+log() { echo "helix_boot[$NAME]: $*"; }
+
+# Instances start in parallel at boot (helix@ingress + helix@egress): without
+# a lock both see helix.ko missing, both insmod, and the second dies with
+# "File exists" (seen 2026-09-29). One lock serialises module load, loop
+# setup and dmsetup across every instance.
+serialize() { exec 9>/run/helix_boot.lock; flock -w 120 9 || { log "lock timeout"; exit 1; }; }
 
 start() {
+  serialize
   if [ "$(modinfo -F vermagic "$K/helix.ko" 2>/dev/null | cut -d' ' -f1)" != "$(uname -r)" ]; then
     log "modules not built for $(uname -r): rebuilding"
     make -C "$K" >/dev/null
@@ -59,15 +83,19 @@ start() {
 }
 
 stop() {
+  serialize
   mountpoint -q "$MNT" && umount "$MNT"
   if dmsetup status "$NAME" >/dev/null 2>&1; then
     dmsetup remove "$NAME"
   fi
   LOOPB=$(losetup -j "$BIMG" 2>/dev/null | cut -d: -f1)
   [ -n "$LOOPB" ] && losetup -d "$LOOPB"
-  for m in frank3_slot_b frank3_slot_a helix; do
-    lsmod | grep -q "^$m " && rmmod "$m"
-  done
+  # Only the last Helix down unloads her modules.
+  if [ -z "$(dmsetup ls --target helix 2>/dev/null | grep -v '^No devices found')" ]; then
+    for m in frank3_slot_b frank3_slot_a helix; do
+      if lsmod | grep -q "^$m "; then rmmod "$m"; fi
+    done
+  fi
   log "down"
 }
 
@@ -75,5 +103,5 @@ case "${1:-}" in
   start)  start ;;
   stop)   stop ;;
   status) cat /proc/helix 2>/dev/null; dmsetup status "$NAME" 2>/dev/null || echo "no $NAME target" ;;
-  *) echo "usage: $0 start|stop|status"; exit 2 ;;
+  *) echo "usage: $0 start|stop|status [instance]"; exit 2 ;;
 esac

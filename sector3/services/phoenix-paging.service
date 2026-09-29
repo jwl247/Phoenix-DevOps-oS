@@ -4,8 +4,11 @@
 # Install: sector1/kernels/install_helix_boot.sh
 [Unit]
 Description=Phoenix AI paging manager (Helix-fed)
-After=helix.service
-Wants=helix.service
+# Ordering only, for either layout: the single helix.service or the named
+# helix@ingress / helix@egress pair. No Wants=: libhelix follows every dm-helix
+# device that is up (or none), and a Wants=helix.service here pulled the single
+# Helix back up and — via helix@'s Conflicts= — stopped the pair (2026-09-29).
+After=helix.service helix@ingress.service helix@egress.service
 
 [Service]
 Type=simple
