@@ -452,6 +452,7 @@ custody_log_local() {
         src="$5" dst="$6" state="$7" actor="$8"
   command -v sqlite3 &>/dev/null || return 0
   sqlite3 "${CATALOG_DB}" 2>/dev/null <<SQL
+PRAGMA busy_timeout = 5000;
 CREATE TABLE IF NOT EXISTS custody (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   hex_id TEXT NOT NULL, name TEXT NOT NULL, action TEXT NOT NULL,
@@ -776,20 +777,29 @@ url_encode() {
 # file also has its own independent hex/baseline from dir_intake's per-file
 # loop, so this is just verify_clonepool_copy applied per file. Prints
 # "corrupt|verified|unverified" counts.
+# Each check is a few round trips to the worker (~220 ms apiece on a fresh
+# TLS connection, measured from pbm-compaq 2026-09-29), so files are checked
+# INTAKE_PARALLEL at a time (default 8) instead of one after another.
+INTAKE_PARALLEL="${INTAKE_PARALLEL:-8}"
 verify_directory_snapshot() {
   local snapshot="$1"
   local corrupt=0 verified=0 unverified=0
-  local f fname fhex result
+  local results; results=$(mktemp)
+  local f
   while IFS= read -r -d '' f; do
-    fname=$(basename "${f}")
-    fhex=$(to_hex "${fname}")
-    result=$(verify_clonepool_copy "${fhex}" "${f}" "${fname}")
-    case "${result}" in
-      CORRUPT)     corrupt=$((corrupt+1)); echo "  [CORRUPT] ${fname}" >&2 ;;
-      valid)       verified=$((verified+1)) ;;
-      no_baseline) unverified=$((unverified+1)) ;;
-    esac
+    (
+      fname=$(basename "${f}")
+      r=$(verify_clonepool_copy "$(to_hex "${fname}")" "${f}" "${fname}")
+      [[ "${r}" == CORRUPT ]] && echo "  [CORRUPT] ${fname}" >&2
+      echo "${r}" >> "${results}"
+    ) &
+    while (( $(jobs -rp | wc -l) >= INTAKE_PARALLEL )); do wait -n 2>/dev/null || true; done
   done < <(find "${snapshot}" -type f -print0)
+  wait || true
+  corrupt=$(grep -c '^CORRUPT$' "${results}" || true)
+  verified=$(grep -c '^valid$' "${results}" || true)
+  unverified=$(grep -c '^no_baseline$' "${results}" || true)
+  rm -f "${results}"
   echo "${corrupt}|${verified}|${unverified}"
 }
 report_glossary() {
@@ -1824,28 +1834,39 @@ fetch_dir_r2_fallback() {
   pool_dir="${CLONEPOOL_DIR}/T1/${hex}"
   snap="${pool_dir}/${ver}_${name}"
   mkdir -p "${snap}"
-  local entry fhex fname fpath fver fpool n=0
-  while IFS= read -r entry; do
-    fhex=$(sed -E 's/.*"hex":"([^"]*)".*/\1/' <<<"${entry}")
-    fname=$(sed -E 's/.*"name":"([^"]*)".*/\1/' <<<"${entry}")
-    fpath=$(sed -E 's/.*"path":"([^"]*)".*/\1/' <<<"${entry}")
-    fver=$(sed -E 's/.*"version":"([^"]*)".*/\1/' <<<"${entry}")
+  local entry fhex fname fpath fver fpool n=0 fails seen=" "
+  local fields='s/.*"hex":"([^"]*)","name":"([^"]*)","path":"([^"]*)","version":"([^"]*)".*/\1\t\2\t\3\t\4/'
+  # 1) every path checked before anything is written
+  while IFS=$'\t' read -r fhex fname fpath fver; do
     case "${fpath}" in
       /*|*..*|"") echo " ⚠  unsafe path in the '${name}' manifest: '${fpath}' — refusing"
                   rm -rf "${snap}"; rm -f "${tmp}"; return 1 ;;
     esac
+  done < <(grep -o '{"hex":"[^}]*}' "${tmp}" | sed -E "${fields}")
+  # 2) each distinct file pulled once, INTAKE_PARALLEL at a time. Two entries
+  #    can share a hex (the known to_hex(basename) collision) and must not both
+  #    write the same temp file.
+  fails=$(mktemp)
+  while IFS=$'\t' read -r fhex fname fpath fver; do
+    [[ "${seen}" == *" ${fhex}:${fver} "* ]] && continue
+    seen+="${fhex}:${fver} "
+    [[ -f "$(resolve_pool_dir "${fhex}")/${fver}_${fname}" ]] && continue
+    ( fetch_r2_fallback "${fname}" "${fhex}" "${fver}" >/dev/null || echo "${fpath} (${fver})" >> "${fails}" ) &
+    while (( $(jobs -rp | wc -l) >= INTAKE_PARALLEL )); do wait -n 2>/dev/null || true; done
+  done < <(grep -o '{"hex":"[^}]*}' "${tmp}" | sed -E "${fields}")
+  wait || true
+  if [[ -s "${fails}" ]]; then
+    echo " ⚠  '${name}': could not pull from R2 — nothing rebuilt: $(tr '\n' ' ' < "${fails}")"
+    rm -rf "${snap}"; rm -f "${tmp}" "${fails}"; return 1
+  fi
+  rm -f "${fails}"
+  # 3) lay the tree out
+  while IFS=$'\t' read -r fhex fname fpath fver; do
     fpool=$(resolve_pool_dir "${fhex}")
-    if [[ ! -f "${fpool}/${fver}_${fname}" ]]; then
-      if ! fetch_r2_fallback "${fname}" "${fhex}" "${fver}" >/dev/null; then
-        echo " ⚠  '${name}': could not pull ${fpath} (${fver}) from R2 — nothing rebuilt"
-        rm -rf "${snap}"; rm -f "${tmp}"; return 1
-      fi
-      fpool=$(resolve_pool_dir "${fhex}")
-    fi
     mkdir -p "$(dirname "${snap}/${fpath}")"
     cp "${fpool}/${fver}_${fname}" "${snap}/${fpath}"
     n=$((n+1))
-  done < <(grep -o '{"hex":"[^}]*}' "${tmp}")
+  done < <(grep -o '{"hex":"[^}]*}' "${tmp}" | sed -E "${fields}")
   mv "${tmp}" "${pool_dir}/${hex}.sidecar.json"
   log "INFO" "dir R2 fallback: rebuilt ${name} ${ver} (${n} files) from R2 → ${snap}"
   custody_log_local "${hex}" "${name}" "clone_in_from_r2" "${ver}" \
