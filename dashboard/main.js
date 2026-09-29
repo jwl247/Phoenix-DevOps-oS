@@ -23,7 +23,7 @@ function createWindow() {
         backgroundColor: '#00000000',
         transparent: true,
         title: 'Phoenix DevOps OS - Command Center',
-        icon: path.join(__dirname, 'assets', 'icon.png'),
+        icon: path.join(__dirname, 'assets', 'phoenix-logo.png'),   // assets/icon.png never existed (DASH-F12)
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -621,11 +621,16 @@ ipcMain.handle('get-phoenix-stats', async () => {
         if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
             return { success: false, error: 'Cloudflare Access redirected to login — CF_ACCESS_CLIENT_ID/SECRET not set' };
         }
-        if (!res.ok) return { success: false, error: `Worker returned ${res.status}` };
+        // A 404 just means this worker build has no /stats route yet (it is
+        // being added on the worker side, S2CORE 2026-09-28). That is "stats
+        // unavailable" — not "D1 offline", which is what the chat prompt used
+        // to claim every turn (DASH-F05).
+        if (res.status === 404) return { success: false, unavailable: true, error: 'stats unavailable (worker has no /stats route)' };
+        if (!res.ok) return { success: false, unavailable: true, error: `stats unavailable (worker returned ${res.status})` };
         const data = await res.json();
         return { success: true, ...data };
     } catch (e) {
-        return { success: false, error: e.message };
+        return { success: false, unavailable: true, error: `stats unavailable (${e.message})` };
     }
 });
 
@@ -926,9 +931,18 @@ const PHOENIX_MANUAL_PATH = path.join(__dirname, 'manual', 'PHOENIX_MANUAL.md');
 const LAURIE_GUIDE_PATH   = path.join(__dirname, 'manual', 'LAURIE_GUIDE.md');
 
 function _phoenixSystemPrompt(stats) {
-    const statsLine = stats
-        ? `System state: ${stats.glossary_total} files in glossary, ${stats.custody_total} custody events, ${stats.r2_objects} R2 objects.`
-        : 'System state: offline (D1 not reachable right now).';
+    // Only claim what the stats call actually returned. No stats means the
+    // numbers are unavailable this session — it does NOT mean D1 is offline
+    // (the old wording told the model that on every turn, DASH-F05).
+    const parts = [];
+    if (stats && stats.success) {
+        if (stats.glossary_total != null) parts.push(`${stats.glossary_total} files in glossary`);
+        if (stats.custody_total != null) parts.push(`${stats.custody_total} custody events`);
+        if (stats.r2_objects != null) parts.push(`${stats.r2_objects} R2 objects`);
+    }
+    const statsLine = parts.length
+        ? `System state: ${parts.join(', ')}.`
+        : 'System state: live stats unavailable this session (do not infer that D1 or the worker is down).';
     return [
         'You are the Phoenix DevOps OS Help Desk operator — built into every Phoenix desktop.',
         'Phoenix is a deterministic, self-healing, versioned OS built on Debian/Ubuntu.',
@@ -1489,5 +1503,3 @@ console.log('Phoenix Dashboard Electron app started');
 console.log('Platform:', process.platform);
 console.log('PHOENIX_ROOT:', process.env.PHOENIX_ROOT || 'Not set');
 console.log('CLONEPOOL_DIR:', process.env.CLONEPOOL_DIR || 'Not set');
-
-// Made with Bob

@@ -39,12 +39,17 @@ function makeFakeDB() {
                 async run() {
                     if (sql.startsWith('INSERT INTO leads')) {
                         const [name, business_name, email, phone, code_hash, code_expires_at] = params;
+                        // Mirror schema.sql's NOT NULL columns — the real D1 raises here.
+                        for (const [col, v] of [['name', name], ['business_name', business_name], ['email', email], ['code_hash', code_hash], ['code_expires_at', code_expires_at]]) {
+                            if (v === null || v === undefined) throw new Error(`D1_ERROR: NOT NULL constraint failed: leads.${col}`);
+                        }
                         const row = { id: nextId++, name, business_name, email, phone, code_hash, code_expires_at, attempt_count: 0, verified_at: null, hubspot_synced_at: null };
                         leads.push(row);
                         return { meta: { last_row_id: row.id } };
                     }
                     if (sql.startsWith('UPDATE leads SET name=')) {
                         const [name, business_name, phone, code_hash, code_expires_at, id] = params;
+                        if (name === null || name === undefined || business_name === null || business_name === undefined) throw new Error('D1_ERROR: NOT NULL constraint failed: leads.name');
                         Object.assign(leads.find(l => l.id === id), { name, business_name, phone, code_hash, code_expires_at, attempt_count: 0 });
                         return { meta: {} };
                     }
@@ -105,15 +110,31 @@ test('POST /lead HTML-escapes the visitor name in the verification email (audit 
     assert.ok(html.includes('&lt;a href=&quot;https://evil.example&quot;&gt;'));
 });
 
+test('POST /lead without a name is a 400, not a D1 NOT NULL 500 (audit OFFICE-F14, 2026-09-28)', async () => {
+    const env = { DB: makeFakeDB() };
+    for (const body of [{ business_name: 'Acme', email: 'a@b.com' }, { name: '   ', business_name: 'Acme', email: 'a@b.com' }]) {
+        const res = await app.fetch(req('lead', 'POST', body), env);
+        assert.strictEqual(res.status, 400);
+        assert.strictEqual((await res.json()).error, 'name required');
+    }
+    assert.strictEqual(env.DB.leads.length, 0, 'nothing must reach the table');
+});
+
+test('the mock D1 enforces leads.name NOT NULL like the real schema', async () => {
+    const db = makeFakeDB();
+    await assert.rejects(() => db.prepare('INSERT INTO leads (name, business_name, email, phone, code_hash, code_expires_at) VALUES (?,?,?,?,?,?)')
+        .bind(null, 'Acme', 'a@b.com', null, 'h', 'x').run(), /NOT NULL constraint failed: leads.name/);
+});
+
 test('POST /lead rejects oversized fields', async () => {
     const env = { DB: makeFakeDB() };
-    const res = await app.fetch(req('lead', 'POST', { business_name: 'A'.repeat(5000), email: 'a@b.com' }), env);
+    const res = await app.fetch(req('lead', 'POST', { name: 'Dave', business_name: 'A'.repeat(5000), email: 'a@b.com' }), env);
     assert.strictEqual(res.status, 400);
 });
 
 test('POST /lead rejects an invalid email', async () => {
     const env = { DB: makeFakeDB() };
-    const res = await app.fetch(req('lead', 'POST', { business_name: 'Acme', email: 'nope' }), env);
+    const res = await app.fetch(req('lead', 'POST', { name: 'Dave', business_name: 'Acme', email: 'nope' }), env);
     assert.strictEqual(res.status, 400);
 });
 
@@ -130,15 +151,15 @@ test('POST /lead succeeds, reports send failure honestly with no RESEND_API_KEY'
 
 test('a resubmission before verifying reuses the same row, not a duplicate', async () => {
     const env = { DB: makeFakeDB() };
-    await app.fetch(req('lead', 'POST', { business_name: 'Acme Roofing', email: 'dave@acme.com' }), env);
-    await app.fetch(req('lead', 'POST', { business_name: 'Acme Roofing LLC', email: 'dave@acme.com' }), env);
+    await app.fetch(req('lead', 'POST', { name: 'Dave', business_name: 'Acme Roofing', email: 'dave@acme.com' }), env);
+    await app.fetch(req('lead', 'POST', { name: 'Dave', business_name: 'Acme Roofing LLC', email: 'dave@acme.com' }), env);
     assert.strictEqual(env.DB.leads.length, 1);
     assert.strictEqual(env.DB.leads[0].business_name, 'Acme Roofing LLC');
 });
 
 test('full flow: /lead then /verify with the real code succeeds', async () => {
     const env = { DB: makeFakeDB() };
-    const leadRes = await app.fetch(req('lead', 'POST', { business_name: 'Acme Roofing', email: 'dave@acme.com' }), env);
+    const leadRes = await app.fetch(req('lead', 'POST', { name: 'Dave', business_name: 'Acme Roofing', email: 'dave@acme.com' }), env);
     assert.strictEqual((await leadRes.json()).ok, true);
 
     const verifyRes = await app.fetch(req('verify', 'POST', { email: 'dave@acme.com', code: EXPECTED_CODE }), env);
@@ -150,7 +171,7 @@ test('full flow: /lead then /verify with the real code succeeds', async () => {
 
 test('/verify rejects a wrong code without revealing the real one', async () => {
     const env = { DB: makeFakeDB() };
-    await app.fetch(req('lead', 'POST', { business_name: 'Acme Roofing', email: 'dave@acme.com' }), env);
+    await app.fetch(req('lead', 'POST', { name: 'Dave', business_name: 'Acme Roofing', email: 'dave@acme.com' }), env);
     const res = await app.fetch(req('verify', 'POST', { email: 'dave@acme.com', code: '000000' }), env);
     const body = await res.json();
     assert.strictEqual(res.status, 401);
@@ -160,7 +181,7 @@ test('/verify rejects a wrong code without revealing the real one', async () => 
 
 test('/verify locks out after 5 wrong attempts', async () => {
     const env = { DB: makeFakeDB() };
-    await app.fetch(req('lead', 'POST', { business_name: 'Acme Roofing', email: 'dave@acme.com' }), env);
+    await app.fetch(req('lead', 'POST', { name: 'Dave', business_name: 'Acme Roofing', email: 'dave@acme.com' }), env);
     for (let i = 0; i < 5; i++) {
         await app.fetch(req('verify', 'POST', { email: 'dave@acme.com', code: '000000' }), env);
     }
@@ -170,7 +191,7 @@ test('/verify locks out after 5 wrong attempts', async () => {
 
 test('/verify rejects an expired code', async () => {
     const env = { DB: makeFakeDB() };
-    await app.fetch(req('lead', 'POST', { business_name: 'Acme Roofing', email: 'dave@acme.com' }), env);
+    await app.fetch(req('lead', 'POST', { name: 'Dave', business_name: 'Acme Roofing', email: 'dave@acme.com' }), env);
     env.DB.leads[0].code_expires_at = new Date(Date.now() - 1000).toISOString(); // force expiry
     const res = await app.fetch(req('verify', 'POST', { email: 'dave@acme.com', code: EXPECTED_CODE }), env);
     assert.strictEqual(res.status, 410);
@@ -200,7 +221,7 @@ test('verified lead syncs to HubSpot when a token is configured', async () => {
         return realFetch(url, opts);
     };
     const env = { DB: makeFakeDB(), HUBSPOT_PRIVATE_APP_TOKEN: 'fake-token' };
-    await app.fetch(req('lead', 'POST', { business_name: 'Acme Roofing', email: 'dave@acme.com' }), env);
+    await app.fetch(req('lead', 'POST', { name: 'Dave', business_name: 'Acme Roofing', email: 'dave@acme.com' }), env);
     const res = await app.fetch(req('verify', 'POST', { email: 'dave@acme.com', code: EXPECTED_CODE }), env);
     const body = await res.json();
     globalThis.fetch = realFetch;

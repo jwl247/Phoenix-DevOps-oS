@@ -49,11 +49,6 @@ function renderPhaseHtml({ project, phase, checklistItems, linkedDocs }) {
 <html><head><meta charset="utf-8"><title>Phase Report — ${esc(phase.label)}</title>
 <style>
   body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; margin: 2.5cm; }
-  .letterhead { display: flex; align-items: center; gap: 14pt; margin-bottom: 16pt;
-    padding-bottom: 12pt; border-bottom: 2px solid #333; }
-  .letterhead-logo svg { display: block; height: 40pt; width: auto; }
-  .lh-name { font-size: 13pt; font-weight: 700; }
-  .lh-addr { font-size: 9pt; color: #555; }
   h1 { font-size: 18pt; padding-bottom: 4pt; }
   h1.no-letterhead { border-bottom: 2px solid #333; }
   .subhead { font-size: 10pt; color: #555; margin-top: -4pt; margin-bottom: 12pt; }

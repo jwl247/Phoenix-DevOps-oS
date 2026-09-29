@@ -71,6 +71,12 @@ public partial class MainWindow : Window
         _lines.Add(_voice.UnavailableReason is null
             ? $"[SYS] {_voice.ArmedLine}"
             : $"[SYS] {_voice.UnavailableReason}");
+        // [HANDS] catalog / [SYS] ollama lines from H.L.K-10 (HUD-F03, HUD-F04).
+        // They arrive on background threads; subscribing starts the hands refresh.
+        _ai.Note += line => Dispatcher.BeginInvoke(() => { _lines.Add(line); RefreshChatLog(); });
+        if (ClaudeCodeSession.InstalledPath() is null)
+            _lines.Add("[SYS] Claude Code isn't installed here (no ~/.local/bin/claude.exe or npm claude.cmd): " +
+                       "the CLAUDE CODE pane and the subscription tier won't answer. Ollama and the API tier still work.");
         RefreshChatLog();
 
         // The CLAUDE CODE pane works in the Phoenix repo.

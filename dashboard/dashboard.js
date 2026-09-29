@@ -63,7 +63,8 @@ const SECTOR_META = {
     }
 };
 
-const RUNIT_EXTS = new Set(['.ps1', '.sh', '.py', '.js', '.mjs', '.cjs', '.exe', '.cmd', '.bat', '.com']);
+// .cmd/.bat deliberately absent: main.js's secure runner refuses batch files (DASH-F17).
+const RUNIT_EXTS = new Set(['.ps1', '.sh', '.py', '.js', '.mjs', '.cjs', '.exe', '.com']);
 
 class PhoenixDashboard {
     constructor() {
@@ -1289,6 +1290,7 @@ class PhoenixDashboard {
         // really answering. Check the configured provider first.
         const authStatus = await ipcRenderer.invoke('get-ai-status').catch(() => null);
         const provider = (authStatus?.provider || 'helpdesk').toLowerCase();
+        this._aiProvider = provider;   // _hudSend's wait/error wording keys off this (DASH-F16)
 
         if (provider === 'claude') {
             this._updateProviderIndicator('status-ok', `CLAUDE API (${authStatus.model || 'claude-sonnet-5'})`, 'claude (api key)',
@@ -1397,7 +1399,13 @@ class PhoenixDashboard {
         this._hudAppend(message, 'hud-msg-user');
         this._hudHistory.push({ role: 'user', content: message });
 
-        const thinking = this._hudAppend('connecting to Ollama (first reply may take ~15s)...', 'hud-msg-thinking');
+        // Say which backend is actually being asked (DASH-F16): only the
+        // helpdesk/ollama chain goes to Ollama; claude = API key, subscription = CLI.
+        const prov = this._aiProvider || 'helpdesk';
+        const waitText = prov === 'claude' ? 'connecting to Claude API...'
+                       : prov === 'subscription' ? 'connecting to Claude (subscription, via claude CLI)...'
+                       : 'connecting to Ollama (first reply may take ~15s)...';
+        const thinking = this._hudAppend(waitText, 'hud-msg-thinking');
         const box = document.getElementById('hud-messages');
 
         // Streamed reply support: a chunk means Claude API streaming is
@@ -1451,7 +1459,10 @@ class PhoenixDashboard {
             if (streamDiv) streamDiv.remove();
             const err = (result.error || 'Help Desk unavailable.').replace(/\n/g, ' · ');
             this._hudAppend(err, 'hud-msg-error');
-            document.getElementById('hud-provider').textContent = 'help desk offline — Ollama app must be running';
+            document.getElementById('hud-provider').textContent =
+                prov === 'claude' ? 'claude api unavailable — check the API key / network'
+              : prov === 'subscription' ? 'claude (subscription) unavailable — check `claude login`'
+              : 'help desk offline — Ollama app must be running';
             this._refreshHelpDeskStatus();
         }
 
@@ -1755,5 +1766,3 @@ window.phoenixIntegration = {
         return this.executeUsysCommand(cmd);
     }
 };
-
-// Made with Bob

@@ -17,10 +17,14 @@ a = AiChatService.ParseAction("Sure.\n```\nACTION {\"machine\":\"pbm3\",\"tool\"
 Check("ACTION inside a code fence is read", a is { machine: "pbm3", tool: "restart_pc" });
 Check("a plain answer is not an action", AiChatService.ParseAction("The Compaq is fine, 40% memory used.") is null);
 Check("broken JSON is not an action", AiChatService.ParseAction("ACTION {machine: compaq") is null);
-foreach (var y in new[] { "yes", "Yeah, do it.", "go ahead", "ok", "Yes please" })
+foreach (var y in new[] { "yes", "Yeah, do it.", "go ahead", "ok", "Yes please", "OK!", "Confirmed.", "yes, please" })
     Check($"yes: \"{y}\"", AiChatService.IsYes(y));
 foreach (var n in new[] { "no", "yes wait", "not yet", "what?", "", "yes but first tell me what that restarts on the box please" })
     Check($"not a yes: \"{n}\"", !AiChatService.IsYes(n));
+// HUD-F01 (2026-09-28 audit): a clarifying question that merely STARTS with a
+// yes-word is not consent. Each of these ran a pending restart before the fix.
+foreach (var n in new[] { "ok what does that do", "okay, what will that restart?", "sure but which one", "go ahead and tell me first", "ok?", "yes if it's safe" })
+    Check($"a question is not a yes: \"{n}\"", !AiChatService.IsYes(n));
 
 if (args.Contains("--live"))
 {

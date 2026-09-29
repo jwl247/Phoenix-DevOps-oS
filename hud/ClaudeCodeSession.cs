@@ -29,7 +29,16 @@ public sealed class ClaudeCodeSession
     public event Action<bool, string, double>? Finished; // ok, error text (if any), seconds
 
     public string? SessionId { get; private set; }
-    public bool IsRunning => _proc is { HasExited: false };
+    // HUD-F02: HasExited throws on a Process that never started; that used to
+    // take the whole HUD down on the second Send when claude.exe was missing.
+    public bool IsRunning
+    {
+        get
+        {
+            try { return _proc is { HasExited: false }; }
+            catch (InvalidOperationException) { return false; }
+        }
+    }
 
     private Process? _proc;
     private readonly string _workingDir;
@@ -101,8 +110,8 @@ public sealed class ClaudeCodeSession
             _proc = null;
         };
 
+        proc.Start();   // throws when Claude Code isn't installed; _proc stays null (HUD-F02)
         _proc = proc;
-        proc.Start();
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
         proc.StandardInput.Write(message);
@@ -206,11 +215,16 @@ public sealed class ClaudeCodeSession
     // This machine's real install is the native ~/.local/bin/claude.exe (not
     // the npm claude.cmd older code assumed — the bug that silenced H.L.K-10
     // on 2026-09-22). Running the .exe directly also skips a cmd.exe layer.
-    private static string FindClaudeExe()
+    //
+    // Shared by this pane, H.L.K-10's CLI tiers and the startup [SYS] line so
+    // all three agree on what's installed. Null when neither install exists.
+    public static string? InstalledPath()
     {
         var native = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin", "claude.exe");
         if (File.Exists(native)) return native;
         var npm = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm", "claude.cmd");
-        return File.Exists(npm) ? npm : "claude";
+        return File.Exists(npm) ? npm : null;
     }
+
+    private static string FindClaudeExe() => InstalledPath() ?? "claude";
 }

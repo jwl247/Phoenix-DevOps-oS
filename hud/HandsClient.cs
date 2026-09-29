@@ -17,24 +17,95 @@ public sealed class HandsClient
     private readonly string _base =
         (Environment.GetEnvironmentVariable("PHOENIX_CONSOLE_URL") ?? "http://127.0.0.1:8470").TrimEnd('/');
 
-    private JsonElement? _machines;
-    private DateTime _machinesAt = DateTime.MinValue;
+    // HUD-F03 (2026-09-28 audit): the Console answers /api/hands by asking
+    // every machine in turn, 22 s measured with pbm3 down. That used to sit
+    // on the message path, so the first H.L.K turn each minute stalled with
+    // nothing on screen. Now the catalog is fetched in the background on a
+    // timer and a message uses the last one that landed. One snapshot object
+    // is swapped whole, so the timer thread and the message path never see
+    // half an update.
+    private sealed record Snapshot(JsonElement Machines, DateTime At);
+    private volatile Snapshot? _snap;
+    private readonly object _gate = new();
+    private Task? _inflight;
+    private int _started;
 
-    /// <summary>machine name -> { ok, version, tools[] }, cached a minute. Null when the Console is down.</summary>
-    public async Task<JsonElement?> GetMachinesAsync()
+    private static readonly TimeSpan MaxAge = TimeSpan.FromMinutes(1);
+    // Before the very first catalog lands, a message waits this long for it
+    // and then goes on without tools rather than stalling the whole turn.
+    private static readonly TimeSpan FirstWait = TimeSpan.FromSeconds(3);
+
+    /// <summary>"catalog: compaq, precision (pbm3 unreachable)", or null before the first fetch.</summary>
+    public string? CatalogLine { get; private set; }
+
+    /// <summary>Fires with the new CatalogLine whenever it changes. Raised on a background thread.</summary>
+    public event Action<string>? CatalogChanged;
+
+    /// <summary>Starts the timer once; later calls do nothing.</summary>
+    public void StartBackgroundRefresh(TimeSpan every)
     {
-        if (_machines is not null && DateTime.UtcNow - _machinesAt < TimeSpan.FromMinutes(1)) return _machines;
+        if (Interlocked.Exchange(ref _started, 1) == 1) return;
+        _ = Task.Run(async () =>
+        {
+            while (true)
+            {
+                await RefreshAsync();
+                await Task.Delay(every);
+            }
+        });
+    }
+
+    private Task RefreshAsync()
+    {
+        lock (_gate) return _inflight ??= FetchAsync();
+    }
+
+    private async Task FetchAsync()
+    {
+        await Task.Yield();   // never finish inside RefreshAsync's lock, or _inflight would never clear
         try
         {
             var json = await Http.GetStringAsync(_base + "/api/hands");
-            _machines = JsonSerializer.Deserialize<JsonElement>(json).GetProperty("machines");
-            _machinesAt = DateTime.UtcNow;
+            var machines = JsonSerializer.Deserialize<JsonElement>(json).GetProperty("machines");
+            _snap = new Snapshot(machines, DateTime.UtcNow);
+            var up = new List<string>();
+            var down = new List<string>();
+            foreach (var m in machines.EnumerateObject())
+                (m.Value.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True ? up : down).Add(m.Name);
+            SetLine("catalog: " + (up.Count > 0 ? string.Join(", ", up) : "no machine reachable")
+                    + (down.Count > 0 ? $" ({string.Join(", ", down)} unreachable)" : ""));
         }
-        catch
+        catch (Exception e)
         {
-            _machines = null;
+            // The Console itself isn't answering: no hands, and say so.
+            _snap = null;
+            SetLine($"the Console isn't answering ({e.GetType().Name}) — no hands until it does");
         }
-        return _machines;
+        finally
+        {
+            lock (_gate) _inflight = null;
+        }
+    }
+
+    private void SetLine(string line)
+    {
+        if (line == CatalogLine) return;
+        CatalogLine = line;
+        CatalogChanged?.Invoke(line);
+    }
+
+    /// <summary>
+    /// machine name -> { ok, version, tools[] } from the last background fetch.
+    /// Null when the Console is down. Never waits on the Console once a first
+    /// catalog exists; a stale one just starts a refresh.
+    /// </summary>
+    public async Task<JsonElement?> GetMachinesAsync()
+    {
+        var snap = _snap;
+        if (snap is not null && DateTime.UtcNow - snap.At < MaxAge) return snap.Machines;
+        var refresh = RefreshAsync();
+        if (snap is null) await Task.WhenAny(refresh, Task.Delay(FirstWait));
+        return _snap?.Machines ?? snap?.Machines;
     }
 
     /// <summary>The live tool list, written for the model. Empty when nothing is reachable.</summary>

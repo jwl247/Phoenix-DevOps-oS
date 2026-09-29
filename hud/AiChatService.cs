@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Hud;
 
@@ -42,12 +43,43 @@ public class AiChatService
     private readonly HttpClient _http = new HttpClient { Timeout = TimeSpan.FromSeconds(120) };
     private readonly List<(string role, string content)> _history = new();
 
+    // HUD-F04: the whole transcript is re-sent on every model call (and, on
+    // the subscription tier, re-spawned into a fresh `claude -p` each turn),
+    // so it is capped to the last 20 turns — 40 entries — like the dashboard.
+    private const int MaxHistoryEntries = 40;
+
+    private void Remember(string role, string content)
+    {
+        _history.Add((role, content));
+        if (_history.Count > MaxHistoryEntries) _history.RemoveRange(0, _history.Count - MaxHistoryEntries);
+    }
+
     public AiAuthConfig Config { get; private set; } = new();
+
+    /// <summary>
+    /// Plain-words lines for the pane that aren't a reply: "[HANDS] catalog: …"
+    /// when the reachable hands change, "[SYS] ollama: …" when the configured
+    /// model isn't the one that ends up running. Subscribing starts the
+    /// background hands refresh (HUD-F03), so no line can fire before anyone
+    /// is listening.
+    /// </summary>
+    public event Action<string>? Note
+    {
+        add { _note += value; EnsureHandsStarted(); }
+        remove { _note -= value; }
+    }
+    private Action<string>? _note;
 
     public AiChatService()
     {
         LoadConfig();
+        _hands.CatalogChanged += line => _note?.Invoke("[HANDS] " + line);
     }
+
+    /// <summary>What the last hands fetch found, or null before the first one lands.</summary>
+    public string? HandsCatalogLine => _hands.CatalogLine is { } l ? "[HANDS] " + l : null;
+
+    private void EnsureHandsStarted() => _hands.StartBackgroundRefresh(TimeSpan.FromMinutes(1));
 
     public void LoadConfig()
     {
@@ -81,6 +113,7 @@ public class AiChatService
                     var val = line[(eq + 1)..].Trim().Trim('"', '\'');
                     if (key == "PHOENIX_AI_PROVIDER") cfg.Provider = val;
                     if (key == "PHOENIX_OLLAMA_URL") cfg.OllamaUrl = val;
+                    if (key == "PHOENIX_AI_MODEL" && val.Length > 0) cfg.Model = val;   // same key the dashboard honours
                 }
             }
         }
@@ -100,12 +133,13 @@ public class AiChatService
     /// between them (Jerry, 2026-09-22: "they have to tie together"). The Claude
     /// API path attaches it as a real vision content block; the CLI paths point
     /// Claude at the file path (Read is never in the disallowed-tools list, so
-    /// even the restricted CLI can open it). Ollama's configured model
-    /// (llama3.2, text-only) gets no image — silently skipped there.
+    /// even the restricted CLI can open it). Ollama's model (text-only) gets
+    /// no image — silently skipped there.
     /// </param>
     public async Task<AiChatResult> SendAsync(string message, string? imagePath = null, Action<string>? onChunk = null)
     {
         var steps = new List<string>();
+        EnsureHandsStarted();
 
         // A tool that "asks first" is waiting: THIS message is the user's answer.
         // The HUD decides yes/no itself from the user's own words; the model is
@@ -115,18 +149,18 @@ public class AiChatService
             _pending = null;
             if (!IsYes(message))
             {
-                _history.Add(("user", message));
-                _history.Add(("assistant", "Okay, I won't."));
+                Remember("user", message);
+                Remember("assistant", "Okay, I won't.");
                 steps.Add($"{p.Machine} · {p.Label} · you said no, nothing was done");
                 return new AiChatResult { Success = true, Provider = "hands", Reply = "Okay, I won't.", Steps = steps };
             }
             var (st, body) = await _hands.RunAsync(p.Machine, p.Tool, p.Args, confirm: true);
             steps.Add(StepLine(p.Machine, p.Label, st, body, confirmed: true));
-            _history.Add(("user", $"{message}\n\n{ToolResultText(p.Machine, p.Tool, st, body)}"));
+            Remember("user", $"{message}\n\n{ToolResultText(p.Machine, p.Tool, st, body)}");
             return await ModelLoopAsync(null, onChunk, steps);
         }
 
-        _history.Add(("user", message));
+        Remember("user", message);
         return await ModelLoopAsync(imagePath, onChunk, steps);
     }
 
@@ -170,11 +204,11 @@ public class AiChatService
             var action = ParseAction(call.reply);
             if (action is null)
             {
-                _history.Add(("assistant", call.reply));
+                Remember("assistant", call.reply);
                 return new AiChatResult { Success = true, Provider = provider, Reply = call.reply, Steps = steps };
             }
 
-            _history.Add(("assistant", action.Value.raw));
+            Remember("assistant", action.Value.raw);
             var (st, body) = await _hands.RunAsync(action.Value.machine, action.Value.tool, action.Value.args, confirm: false);
             var label = ToolLabel(action.Value.tool, action.Value.args);
 
@@ -184,17 +218,17 @@ public class AiChatService
                                ?? $"{label} on {action.Value.machine}?";
                 _pending = new PendingAction(action.Value.machine, action.Value.tool, label, action.Value.args);
                 var ask = $"{question} Say yes to go ahead, or no.";
-                _history.Add(("assistant", ask));
+                Remember("assistant", ask);
                 steps.Add($"{action.Value.machine} · {label} · waiting for your yes");
                 return new AiChatResult { Success = true, Provider = provider, Reply = ask, Steps = steps };
             }
 
             steps.Add(StepLine(action.Value.machine, label, st, body, confirmed: false));
-            _history.Add(("user", ToolResultText(action.Value.machine, action.Value.tool, st, body)));
+            Remember("user", ToolResultText(action.Value.machine, action.Value.tool, st, body));
         }
 
         const string stopped = "I stopped after four steps without a final answer. Tell me what you want next.";
-        _history.Add(("assistant", stopped));
+        Remember("assistant", stopped);
         return new AiChatResult { Success = true, Provider = provider, Reply = stopped, Steps = steps };
     }
 
@@ -285,19 +319,35 @@ public class AiChatService
         return null;
     }
 
-    private static readonly HashSet<string> YesWords = new(StringComparer.OrdinalIgnoreCase)
-        { "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "confirm", "confirmed", "affirmative", "go", "proceed" };
-    private static readonly string[] NoWords = { "no", "nope", "don't", "dont", "not", "wait", "stop", "cancel", "hold" };
+    // HUD-F01 (2026-09-28 audit): the old gate took any short message whose
+    // FIRST word was a yes-word and that had none of nine no-words in it — so
+    // "okay, what will that restart?" ran the restart. Now the WHOLE message
+    // has to be a yes phrase (or a run of them: "Yeah, do it."), and anything
+    // with a question mark is never a yes. CLAUDE.md, THE INTERACTION MODEL:
+    // tier 2 runs on the user's own yes, only.
+    private static readonly Regex YesPhrase = new(
+        @"^(yes|yeah|yep|yup|ok|okay|sure|confirm(ed)?|affirmative|go|proceed|do it|go ahead)( please)?$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>The user's own words decide; anything unclear counts as no.</summary>
     internal static bool IsYes(string message)
     {
-        var words = new string(message.ToLowerInvariant().Select(c => char.IsLetter(c) || c == '\'' || c == ' ' ? c : ' ').ToArray())
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length == 0 || words.Length > 6) return false;
-        if (words.Any(w => NoWords.Contains(w))) return false;
-        var text = string.Join(' ', words);
-        return YesWords.Contains(words[0]) || text.StartsWith("do it") || text.StartsWith("go ahead");
+        if (string.IsNullOrWhiteSpace(message) || message.Contains('?')) return false;
+        // "Yeah, do it." / "OK!" / "yes, please": every comma- or
+        // period-separated piece must itself be a yes phrase. One stray clause
+        // ("yes if it's safe", "sure but which one") and it is not a yes.
+        var pieces = message
+            .Split(new[] { ',', '.', '!', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(p => Regex.Replace(p, @"\s+", " "))
+            .ToArray();
+        if (pieces.Length == 0) return false;
+        for (var i = 0; i < pieces.Length; i++)
+        {
+            if (YesPhrase.IsMatch(pieces[i])) continue;
+            if (i > 0 && pieces[i].Equals("please", StringComparison.OrdinalIgnoreCase)) continue;
+            return false;
+        }
+        return true;
     }
 
     private static string ToolLabel(string tool, JsonElement args)
@@ -329,29 +379,58 @@ public class AiChatService
     }
 
     /// <summary>
-    /// Streams the reply to the screen, except an ACTION line: that is held
-    /// back (it's for the HUD, not the user). Text that clearly isn't an
-    /// ACTION flows through as it arrives.
+    /// Streams the reply to the screen, except ACTION lines (and bare code
+    /// fences around them): those are for the HUD, not the user, and are held
+    /// back wherever they appear. Before HUD-F07 the decision was made once on
+    /// the first chunk, so "Sure.\n```\nACTION {…}\n```" — the shape a CLI tier
+    /// streams line by line — leaked the raw JSON into the chat. Now it works
+    /// per line: a line goes out as soon as it clearly isn't an ACTION line,
+    /// or when it ends.
     /// </summary>
     private sealed class ActionAwareStream(Action<string>? sink)
     {
-        private readonly StringBuilder _held = new();
-        private bool _decided, _isAction;
+        private readonly StringBuilder _line = new();   // the current, unfinished line
+        private bool _passing;                          // this line already went out as it arrived
 
         public void Push(string chunk)
         {
-            if (sink is null) return;
-            if (_decided)
+            if (sink is null || chunk.Length == 0) return;
+            var start = 0;
+            while (start < chunk.Length)
             {
-                if (!_isAction) sink(chunk);
+                var nl = chunk.IndexOf('\n', start);
+                if (nl < 0) { Take(chunk[start..], endOfLine: false); return; }
+                Take(chunk[start..(nl + 1)], endOfLine: true);
+                start = nl + 1;
+            }
+        }
+
+        private void Take(string piece, bool endOfLine)
+        {
+            if (_passing)
+            {
+                sink!(piece);
+                if (endOfLine) _passing = false;
                 return;
             }
-            _held.Append(chunk);
-            var start = _held.ToString().TrimStart().TrimStart('`');
-            if (start.Length < "ACTION".Length && "ACTION".StartsWith(start, StringComparison.Ordinal)) return;
-            _decided = true;
-            _isAction = start.StartsWith("ACTION", StringComparison.Ordinal);
-            if (!_isAction) sink(_held.ToString());
+            _line.Append(piece);
+            var text = _line.ToString();
+            var head = text.TrimStart().TrimStart('`').TrimStart();
+            if (endOfLine)
+            {
+                var bare = text.Trim();
+                var isFence = bare.Length > 0 && bare.All(c => c == '`');
+                if (!head.StartsWith("ACTION", StringComparison.Ordinal) && !isFence) sink!(text);
+                _line.Clear();
+                return;
+            }
+            var couldBeAction = head.Length < "ACTION".Length
+                ? "ACTION".StartsWith(head, StringComparison.Ordinal)
+                : head.StartsWith("ACTION", StringComparison.Ordinal);
+            if (couldBeAction) return;   // keep holding until the line decides itself
+            sink!(text);
+            _line.Clear();
+            _passing = true;
         }
     }
 
@@ -395,15 +474,51 @@ public class AiChatService
         "services or state unless a [hands result] in this conversation told you; if the user asks about a machine, " +
         "use a tool first. Never say an action was sent, done or cancelled unless a [hands result] says so.";
 
+    // HUD-F04 / UI-F08: honour the configured model (ai_auth.json "model" or
+    // PHOENIX_AI_MODEL; "llama3" when neither is set) the way the dashboard's
+    // _resolveOllamaModel does: if it isn't pulled, use the closest pulled name
+    // (exact, then prefix, then whatever is there) instead of failing, and say
+    // so once in the pane. On this box today ai_auth.json says llama3.2 and
+    // only llama3:latest is pulled, so that fallback is what keeps Ollama
+    // answering until Jerry pulls llama3.2 or changes the config.
+    private string? _resolvedOllamaModel;
+
+    private async Task<string> ResolveOllamaModelAsync(string baseUrl)
+    {
+        if (_resolvedOllamaModel is not null) return _resolvedOllamaModel;
+        var preferred = string.IsNullOrWhiteSpace(Config.Model) ? "llama3" : Config.Model.Trim();
+        List<string> pulled;
+        try
+        {
+            var json = await _http.GetStringAsync(baseUrl + "/api/tags");
+            pulled = JsonSerializer.Deserialize<JsonElement>(json).GetProperty("models").EnumerateArray()
+                .Select(m => m.TryGetProperty("name", out var n) ? n.GetString() : null)
+                .OfType<string>().ToList();
+        }
+        catch
+        {
+            return preferred;   // Ollama itself is down: let /api/chat fail with the real error
+        }
+        var pick = pulled.FirstOrDefault(n => n == preferred || n == preferred + ":latest")
+                   ?? pulled.FirstOrDefault(n => n.StartsWith(preferred, StringComparison.OrdinalIgnoreCase))
+                   ?? pulled.FirstOrDefault()
+                   ?? preferred;
+        if (pick != preferred && pick != preferred + ":latest")
+            _note?.Invoke($"[SYS] ollama: model \"{preferred}\" isn't pulled — using \"{pick}\" (ollama pull {preferred} to change that).");
+        return _resolvedOllamaModel = pick;
+    }
+
     private async Task<string> ChatOllamaAsync(string systemPrompt)
     {
-        var url = (Config.OllamaUrl ?? "http://localhost:11434").TrimEnd('/') + "/api/chat";
+        var baseUrl = (Config.OllamaUrl ?? "http://localhost:11434").TrimEnd('/');
+        var url = baseUrl + "/api/chat";
+        var model = await ResolveOllamaModelAsync(baseUrl);
         var tools = systemPrompt.Contains("ACTION {", StringComparison.Ordinal);
         var messages = new List<object> { new { role = "system", content = tools ? systemPrompt + OllamaShapeRules : systemPrompt } };
         messages.AddRange(_history.Select(t => (object)new { role = t.role, content = t.content }));
         var body = tools
-            ? JsonSerializer.Serialize(new { model = "llama3", messages, stream = false, format = OllamaReplyShape, options = new { temperature = 0 } })
-            : JsonSerializer.Serialize(new { model = "llama3", messages, stream = false });
+            ? JsonSerializer.Serialize(new { model, messages, stream = false, format = OllamaReplyShape, options = new { temperature = 0 } })
+            : JsonSerializer.Serialize(new { model, messages, stream = false });
         var res = await _http.PostAsync(url, new StringContent(body, Encoding.UTF8, "application/json"));
         if (!res.IsSuccessStatusCode) throw new Exception($"Ollama {(int)res.StatusCode}");
         var json = await res.Content.ReadAsStringAsync();
@@ -468,7 +583,7 @@ public class AiChatService
                 messages.Add(new { role = t.role, content = t.content });
             }
         }
-        var payload = JsonSerializer.Serialize(new { model, max_tokens = 1024, system = systemPrompt, messages, stream = true });
+        var payload = JsonSerializer.Serialize(new { model, max_tokens = ClaudeMaxTokens, system = systemPrompt, messages, stream = true });
 
         using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages");
         req.Headers.Add("x-api-key", apiKey);
@@ -485,72 +600,91 @@ public class AiChatService
         await using var stream = await res.Content.ReadAsStreamAsync();
         using var reader = new StreamReader(stream);
         var full = new StringBuilder();
+        string? stopReason = null;
         string? line;
         while ((line = await reader.ReadLineAsync()) != null)
         {
             if (!line.StartsWith("data:")) continue;
             var jsonStr = line[5..].Trim();
             if (jsonStr.Length == 0) continue;
-            try
+            JsonElement evt;
+            try { evt = JsonSerializer.Deserialize<JsonElement>(jsonStr); }
+            catch (JsonException) { continue; }   // not an event we can read; the next line may be
+            var type = evt.TryGetProperty("type", out var t) ? t.GetString() : null;
+            if (type == "content_block_delta"
+                && evt.TryGetProperty("delta", out var d) && d.TryGetProperty("text", out var txt))
             {
-                var evt = JsonSerializer.Deserialize<JsonElement>(jsonStr);
-                if (evt.TryGetProperty("type", out var t) && t.GetString() == "content_block_delta"
-                    && evt.TryGetProperty("delta", out var d) && d.TryGetProperty("text", out var txt))
-                {
-                    var chunk = txt.GetString() ?? "";
-                    full.Append(chunk);
-                    onChunk?.Invoke(chunk);
-                }
+                var chunk = txt.GetString() ?? "";
+                full.Append(chunk);
+                onChunk?.Invoke(chunk);
             }
-            catch { }
+            else if (type == "error")
+            {
+                // HUD-F15: a mid-stream error (overloaded_error, rate_limit_error…)
+                // arrives as an event on a 200 stream, not as a status code. It
+                // used to be swallowed and show up as a truncated or "empty" reply.
+                var err = evt.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.Object ? e : evt;
+                var kind = err.TryGetProperty("type", out var k) ? k.GetString() : "error";
+                var msg = err.TryGetProperty("message", out var m) ? m.GetString() : jsonStr;
+                throw new Exception($"Claude API stream error ({kind}): {msg}");
+            }
+            else if (type == "message_delta"
+                     && evt.TryGetProperty("delta", out var md) && md.TryGetProperty("stop_reason", out var sr))
+            {
+                stopReason = sr.GetString();
+            }
         }
+        // HUD-F15: the reply's own stop reason. A refusal is not an answer, and
+        // a reply cut off at the token cap must not be passed off as complete
+        // (ParseAction on a truncated ACTION line silently becomes prose).
+        if (stopReason == "refusal") throw new Exception("Claude declined to answer this (stop_reason: refusal).");
+        if (stopReason == "max_tokens")
+            throw new Exception($"reply cut off at max_tokens={ClaudeMaxTokens}. What came through: {full}");
         if (full.Length == 0) throw new Exception("Claude API returned empty response");
         return full.ToString();
     }
 
-    // Same fix as ClaudeCliWindow.xaml.cs's ResolveClaudeCli() (2026-09-21) —
-    // this machine's real install is a native binary at ~/.local/bin/claude.exe,
-    // not the npm-global claude.cmd this used to assume. That mismatch silently
-    // broke the "helpdesk" provider's Ollama-down fallback (confirmed live
-    // 2026-09-22: Ollama not running -> falls through to this CLI path -> cmd.exe
-    // can't find claude.cmd -> voice/chat gets no reply at all).
-    private static string FindClaudeCli()
+    private const int ClaudeMaxTokens = 1024;
+
+    // This machine's real install is a native binary at ~/.local/bin/claude.exe,
+    // not the npm-global claude.cmd this used to assume — a mismatch that
+    // silently broke the "helpdesk" provider's Ollama-down fallback (confirmed
+    // live 2026-09-22: Ollama not running -> falls through to this CLI path ->
+    // cmd.exe can't find claude.cmd -> voice/chat gets no reply at all). The
+    // lookup is ClaudeCodeSession.InstalledPath, shared with the CLAUDE CODE
+    // pane and the startup [SYS] line, so all three agree on what's installed.
+    //
+    // HUD-F06: the .exe is run directly as FileName. `cmd.exe /c "<path>" …`
+    // strips the quotes when the profile path has a space (C:\Users\Laurie
+    // Leftwich\) and runs C:\Users\Laurie instead. Only the npm .cmd shim still
+    // needs cmd.exe; it is wrapped in a second pair of quotes, cmd's own rule
+    // for keeping the inner ones.
+    private static ProcessStartInfo ClaudeCliStartInfo(string args)
     {
-        string[] candidates =
-        {
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin", "claude.exe"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm", "claude.cmd"),
-        };
-        foreach (var c in candidates)
-        {
-            if (File.Exists(c)) return $"\"{c}\"";
-        }
-        return "claude.cmd";
+        var cli = ClaudeCodeSession.InstalledPath() ?? "claude";
+        return cli.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) || cli.EndsWith(".bat", StringComparison.OrdinalIgnoreCase)
+            ? new ProcessStartInfo { FileName = "cmd.exe", Arguments = $"/c \"\"{cli}\" {args}\"" }
+            : new ProcessStartInfo { FileName = cli, Arguments = args };
     }
 
     private static Task<string> RunClaudeCliAsync(string prompt, bool fullTools, Action<string>? onChunk)
     {
         var tcs = new TaskCompletionSource<string>();
-        var cli = FindClaudeCli();
         var args = fullTools
             ? "--print --dangerously-skip-permissions"
             : "--print --disallowedTools Bash,Write,Edit,WebFetch,WebSearch";
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = "cmd.exe",
-            Arguments = $"/c {cli} {args}",
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            // Claude Code writes UTF-8. Without these, .NET read it as the
-            // console code page and every em dash came out as "â€”".
-            StandardInputEncoding = new UTF8Encoding(false),
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
+        var psi = ClaudeCliStartInfo(args);
+        psi.RedirectStandardInput = true;
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        psi.UseShellExecute = false;
+        psi.CreateNoWindow = true;
+        // Claude Code writes UTF-8. Without these, .NET read it as the
+        // console code page and every em dash came out as "â€”".
+        psi.StandardInputEncoding = new UTF8Encoding(false);
+        psi.StandardOutputEncoding = Encoding.UTF8;
+        psi.StandardErrorEncoding = Encoding.UTF8;
         // Same reasoning as main.js: strip API-key auth so a CLI-tier call
         // can't silently fall back to pay-per-token billing.
         psi.EnvironmentVariables.Remove("ANTHROPIC_API_KEY");
@@ -568,6 +702,11 @@ public class AiChatService
         proc.ErrorDataReceived += (_, e) => { if (e.Data != null) stderr.AppendLine(e.Data); };
         proc.Exited += (_, _) =>
         {
+            // HUD-F05: Exited can fire before the last OutputDataReceived
+            // callbacks; WaitForExit() with no timeout drains them first, the
+            // same way ClaudeCodeSession does. Otherwise a long reply's tail
+            // (or the ACTION line at its end) could be lost.
+            try { proc.WaitForExit(); } catch { }
             if (proc.ExitCode != 0) tcs.TrySetException(new Exception(stderr.Length > 0 ? stderr.ToString() : $"claude exited {proc.ExitCode}"));
             else tcs.TrySetResult(stdout.ToString().Trim());
         };

@@ -163,30 +163,26 @@ ButtonGenerator
     .define({
         id: 'poc-helix',
         label: 'HELIX STATUS',
-        sub: 'read shared snapshot + service state',
+        sub: 'usys status — sectors, mounts, catalog',
         panel: true,
         onClick({ invoke, panel }) {
-            if (!panel) return;
+            if (!panel || !panel.classList.contains('open')) return;
             panel.innerHTML = 'reading...';
-            Promise.all([
-                invoke('execute-command', 'usys status').catch(e => ({ success: false, error: e.message })),
-                invoke('read-file', 'F:/Phoenix/helix-pages/windows_snapshot.json').catch(e => ({ success: false, error: e.message }))
-            ]).then(([status, snap]) => {
-                const lines = [];
-                if (status.success && status.output) lines.push(status.output.trim());
-                else lines.push('usys status: ' + (status.error || 'unavailable'));
-                if (snap.success && snap.content) {
-                    try {
-                        const j = JSON.parse(snap.content);
-                        lines.push('snapshot: hot=' + j.hot_mb + ' warm=' + j.warm_mb +
-                                   ' hit=' + j.hit_rate + ' @ ' + new Date(j.timestamp * 1000).toLocaleTimeString());
-                    } catch (_) { lines.push('snapshot: ' + snap.content.slice(0, 120)); }
-                } else {
-                    lines.push('snapshot: ' + (snap.error || 'not readable'));
-                }
-                panel.innerHTML = '<pre style="white-space:pre-wrap;font-size:10px;margin:0;">' +
-                    lines.join('\n\n') + '</pre>';
-            });
+            // Only the `usys status` half is real. The old second half read a
+            // shared-snapshot JSON over a `read-file` channel that preload never
+            // allowed, from a path that does not exist (DASH-F02, 2026-09-28).
+            invoke('execute-command', 'usys status')
+                .catch(e => ({ success: false, error: e.message }))
+                .then(status => {
+                    const text = (status.success && status.output)
+                        ? status.output.trim()
+                        : 'usys status: ' + (status.error || status.stderr || 'unavailable');
+                    const pre = document.createElement('pre');
+                    pre.style.cssText = 'white-space:pre-wrap;font-size:10px;margin:0;';
+                    pre.textContent = text;
+                    panel.innerHTML = '';
+                    panel.appendChild(pre);
+                });
         }
     })
     .define({
@@ -208,15 +204,19 @@ ButtonGenerator
     .define({
         id: 'poc-watch',
         label: 'WATCH DOWNLOADS',
-        sub: 'auto-intake everything in F:\\Phoenix\\Downloads',
+        sub: 'auto-intake F:\\Phoenix\\Downloads (usys shared root; created on first run)',
         onClick({ invoke, el }) {
             const original = el.textContent;
             el.textContent = 'starting...';
-            const script = (window.phoenixDashboard && window.phoenixDashboard._phoenixRoot
-                ? window.phoenixDashboard._phoenixRoot
-                : 'D:/Users/jwlef/Phoenix/Phoenix-DevOps-oS') +
-                '/tools/poc/watch-downloads.ps1';
-            invoke('run-file', { filePath: script, args: '' })
+            // The repo root comes from main.js's own resolver (PHOENIX_ROOT or
+            // ~/Phoenix/Phoenix-DevOps-oS) via get-user-dirs.phoenix — never a
+            // hardcoded drive letter (DASH-F03, 2026-09-28).
+            invoke('get-user-dirs')
+                .then(dirs => {
+                    if (!dirs || !dirs.phoenix) throw new Error('PHOENIX_ROOT not resolved — set it in ~/.phoenix/phoenix.env');
+                    const script = dirs.phoenix.replace(/[\\/]+$/, '') + '/tools/poc/watch-downloads.ps1';
+                    return invoke('run-file', { filePath: script, args: '' });
+                })
                 .then(r => {
                     el.textContent = original;
                     if (!r.success) alert(r.error || r.stderr || 'failed');
@@ -227,11 +227,13 @@ ButtonGenerator
     .define({
         id: 'poc-intake-now',
         label: 'INTAKE DOWNLOADS NOW',
-        sub: 'one-shot phx-sync Downloads',
+        sub: 'one-shot usys phx-sync Downloads',
         onClick({ invoke, el }) {
             const original = el.textContent;
             el.textContent = 'intaking...';
-            invoke('execute-command', 'phx-sync Downloads')
+            // phx-sync is a usys subcommand; the command allowlist only accepts
+            // help / usys ... / intake ... (DASH-F04, 2026-09-28).
+            invoke('execute-command', 'usys phx-sync Downloads')
                 .then(r => {
                     el.textContent = original;
                     if (!r.success) alert(r.error || r.stderr || 'failed');
@@ -316,7 +318,96 @@ ButtonGenerator
         id: 'clonepool',
         label: 'CLONEPOOL',
         sub: 'clone / sync any intaked file',
-        panel: true
+        panel: true,
+        // Moved here from hud-layout.js's legacy id-based handler, which bound
+        // at script-parse time — before mount() created #action-clonepool —
+        // so the panel opened empty (DASH-F01, 2026-09-28). Same channels:
+        // list-clonepool-files / open-directory-dialog / clone-file-to-workdir.
+        onClick({ invoke, panel }) {
+            if (!panel || !panel.classList.contains('open')) return;
+            let searchTimer = null;
+
+            const renderRows = (result) => {
+                const list = document.createElement('div');
+                result.files.forEach(file => {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;justify-content:space-between;gap:6px;padding:4px 0;font-size:10px;border-bottom:1px solid rgba(255,255,255,0.06);';
+                    const name = document.createElement('span');
+                    name.textContent = file.relPath;
+                    name.title = file.relPath;
+                    name.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;';
+                    const mkBtn = (label, mode) => {
+                        const b = document.createElement('button');
+                        b.type = 'button';
+                        b.textContent = label;
+                        b.className = 'hud-action-btn';
+                        b.style.cssText = 'padding:2px 8px;font-size:9px;';
+                        b.addEventListener('click', async () => {
+                            const dirResult = await invoke('open-directory-dialog', { title: `${label === 'CLONE' ? 'Clone' : 'Sync'} to...` })
+                                .catch(e => ({ success: false, error: e.message }));
+                            if (!dirResult.success) { if (dirResult.error) alert(dirResult.error); return; }
+                            const r = await invoke('clone-file-to-workdir', { sourcePath: file.absPath, targetDir: dirResult.dir, mode })
+                                .catch(e => ({ success: false, error: e.message }));
+                            if (!r.success) { alert(r.error); return; }
+                            if (mode === 'clone') alert(`Cloned to ${r.destPath}`);
+                            else alert(r.copied ? `Synced to ${r.destPath}` : 'Already up to date.');
+                        });
+                        return b;
+                    };
+                    row.appendChild(name);
+                    row.appendChild(mkBtn('CLONE', 'clone'));
+                    row.appendChild(mkBtn('SYNC', 'sync'));
+                    list.appendChild(row);
+                });
+                return list;
+            };
+
+            const load = async (query) => {
+                const status = panel.querySelector('.clonepool-status');
+                const listSlot = panel.querySelector('.clonepool-list');
+                if (!status || !listSlot) return;
+                status.textContent = 'loading...';
+                const result = await invoke('list-clonepool-files', { query })
+                    .catch(e => ({ success: false, error: e.message }));
+                listSlot.innerHTML = '';
+                if (!result.success) {
+                    status.textContent = '';
+                    const err = document.createElement('span');
+                    err.style.color = 'var(--red-light)';
+                    err.textContent = result.error || 'clonepool unavailable';
+                    listSlot.appendChild(err);
+                    return;
+                }
+                if (!result.files.length) {
+                    status.textContent = query ? `no matches for "${query}"` : 'clonepool is empty';
+                    return;
+                }
+                status.textContent = result.truncated
+                    ? `showing ${result.files.length} of ${result.matched}${query ? ` matching "${query}"` : ''} (${result.total} total — narrow with search)`
+                    : `${result.files.length}${query ? ` matching "${query}"` : ''} of ${result.total} total`;
+                listSlot.appendChild(renderRows(result));
+            };
+
+            panel.innerHTML = '';
+            const search = document.createElement('input');
+            search.type = 'text';
+            search.className = 'clonepool-search';
+            search.placeholder = 'filter by path...';
+            search.style.cssText = 'width:100%;box-sizing:border-box;margin-bottom:6px;padding:4px 6px;font-size:10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:inherit;';
+            const status = document.createElement('div');
+            status.className = 'clonepool-status';
+            status.style.cssText = 'font-size:9px;opacity:0.6;margin-bottom:4px;';
+            const list = document.createElement('div');
+            list.className = 'clonepool-list';
+            panel.appendChild(search);
+            panel.appendChild(status);
+            panel.appendChild(list);
+            search.addEventListener('input', () => {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(() => load(search.value), 250);
+            });
+            load('');
+        }
     })
     .define({
         id: 'screenshot',

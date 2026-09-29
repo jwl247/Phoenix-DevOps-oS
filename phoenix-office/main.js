@@ -563,6 +563,20 @@ function registerIpc() {
         } catch (e) { return { ok: false, error: e.message }; }
     });
 
+    // True/false when the worker answered, undefined when it couldn't be
+    // asked (no auth, network error) — callers must not treat that as "no".
+    async function isSealed(hex) {
+        if (!WORKER_AUTH) return undefined;
+        try {
+            const res = await fetch(`${WORKER_URL.replace(/\/+$/, '')}/documents/${encodeURIComponent(hex)}`, {
+                headers: { Authorization: `Bearer ${WORKER_AUTH}` },
+            });
+            if (res.ok) return true;
+            if (res.status === 404) return false;
+            return undefined;
+        } catch (_) { return undefined; }
+    }
+
     ipcMain.handle('office:verify', async (_e, { document, attempt } = {}) => {
         try {
             const r = await lib.tamperGuard.checkAndAlert(document, {
@@ -570,7 +584,25 @@ function registerIpc() {
                 notifyWorkerUrl: WORKER_AUTH ? WORKER_URL : undefined,
                 phoenixAuth: WORKER_AUTH,
             });
-            return { ok: true, integrity: r.integrity, notified: r.notified };
+            // Real retry of a failed seal. office:sign is best-effort on the
+            // seal (a worker outage must not block signing), and its banner
+            // said "retry from Verify" — but nothing ever re-sent the bytes,
+            // so a signed-but-unsealed record stayed local-only forever
+            // (audit OFFICE-F16, 2026-09-28). Only for an intact SIGNED
+            // document the worker has no row for; the worker's PUT is
+            // write-once/idempotent, so a repeat is a no-op, never a replace.
+            let sealed;
+            if (document && document.state === 'SIGNED' && WORKER_AUTH && r.integrity && !r.integrity.tampered) {
+                const hex = lib.fileFormat.documentIdentityHash(document);
+                const have = await isSealed(hex);
+                if (have === true) sealed = { ok: true, already: true };
+                else if (have === false) {
+                    const p = docPath(document);
+                    if (fs.existsSync(p)) sealed = await sealToWorker(hex, fs.readFileSync(p));
+                    else sealed = { ok: false, error: `local file not found: ${p}` };
+                }
+            }
+            return { ok: true, integrity: r.integrity, notified: r.notified, sealed };
         } catch (e) { return { ok: false, error: e.message }; }
     });
 

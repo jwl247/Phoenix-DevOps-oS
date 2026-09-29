@@ -49,7 +49,7 @@ CREATE INDEX IF NOT EXISTS idx_authors_author_id ON office_authors(author_id);
 CREATE TABLE IF NOT EXISTS office_documents (
   id                     INTEGER PRIMARY KEY AUTOINCREMENT,
   hex                    TEXT    NOT NULL UNIQUE,        -- document identity hash (file-format.js documentIdentityHash)
-  b58                    TEXT    DEFAULT NULL,           -- short TAV address, matches the file's header QR
+  b58                    TEXT    DEFAULT NULL,           -- reserved: the worker writes NULL (index.js upsertDocumentRecord); the .office file's own header carries the b58, nothing reads this column
   state                  TEXT    NOT NULL DEFAULT 'DRAFT'
                            CHECK(state IN ('DRAFT','PENDING_REVIEW','SIGNED')),
   author_id              TEXT    NOT NULL,               -- FK -> office_authors.author_id
@@ -65,7 +65,17 @@ CREATE TABLE IF NOT EXISTS office_documents (
   legal_hold_reason      TEXT    DEFAULT NULL,            -- doubles as the legal matter/case reference, same pattern Microsoft 365 ties a hold to an eDiscovery case
   signed_at              TEXT    DEFAULT NULL,
   created_at             TEXT    NOT NULL DEFAULT (datetime('now')),
-  updated_at             TEXT    DEFAULT NULL
+  updated_at             TEXT    DEFAULT NULL,
+  -- Project Assist (2026-09-25): optional membership in one project/phase.
+  -- Nullable soft-FKs, same idiom as supersedes_hex — a plain standalone
+  -- document leaves all three NULL. Added here so a FRESH database gets
+  -- them from this file alone (audit OFFICE-F13, 2026-09-28: before this
+  -- they existed only as ALTER comments at the bottom, and a clean
+  -- `d1 execute --file=schema.sql` died at idx_documents_project). The
+  -- already-live phoenix_office_db got them via migrations/001 by hand.
+  project_id             TEXT    DEFAULT NULL,           -- FK -> office_projects.id
+  phase_id               TEXT    DEFAULT NULL,           -- FK -> office_project_phases.id
+  doc_role               TEXT    DEFAULT NULL            -- e.g. 'proposal', 'change_order' — what the document is to the phase
 );
 
 CREATE INDEX IF NOT EXISTS idx_documents_author ON office_documents(author_id);
@@ -319,17 +329,15 @@ CREATE TABLE IF NOT EXISTS office_checklist_decisions (
 
 CREATE INDEX IF NOT EXISTS idx_checklist_decisions_item ON office_checklist_decisions(item_id);
 
--- office_documents gains three nullable columns so a document can (optionally)
--- belong to a project/phase. Nullable FK columns, not a join table: a
--- document belongs to at most one project at a time (a proposal is written
--- for one project; a correction is already handled by supersedes_hex) —
--- same idiom as the existing supersedes_hex soft-FK, not a new relationship
--- shape. Purely additive; does not touch hex/hash_sha3/hash_blake2 or any
--- existing tamper-evidence guarantee.
---   wrangler d1 execute phoenix_office_db --command="ALTER TABLE office_documents ADD COLUMN project_id TEXT DEFAULT NULL" --remote
---   wrangler d1 execute phoenix_office_db --command="ALTER TABLE office_documents ADD COLUMN phase_id TEXT DEFAULT NULL" --remote
---   wrangler d1 execute phoenix_office_db --command="ALTER TABLE office_documents ADD COLUMN doc_role TEXT DEFAULT NULL" --remote
---   wrangler d1 execute phoenix_office_db --file=schema.sql --remote   (picks up the 5 new tables above, all CREATE IF NOT EXISTS)
---   wrangler d1 execute phoenix_office_db --file=worker/seed-checklist-catalog.sql --remote   (INSERT OR IGNORE, safe to re-run)
+-- office_documents' three project columns (project_id/phase_id/doc_role) are
+-- declared in the CREATE TABLE above (a fresh DB gets them from this file).
+-- A database created from a schema.sql older than 2026-09-28 needs them
+-- added once — see migrations/001-office-documents-project-columns.sql
+-- (SQLite/D1 has no ADD COLUMN IF NOT EXISTS, so that script is applied by
+-- hand after checking PRAGMA table_info; the live phoenix_office_db already
+-- has all three, applied 2026-09-25). Purely additive; does not touch
+-- hex/hash_sha3/hash_blake2 or any existing tamper-evidence guarantee.
+--   wrangler d1 execute phoenix_office_db --file=schema.sql --remote   (all CREATE IF NOT EXISTS — safe to re-run)
+--   wrangler d1 execute phoenix_office_db --file=seed-checklist-catalog.sql --remote   (INSERT OR IGNORE, safe to re-run)
 CREATE INDEX IF NOT EXISTS idx_documents_project ON office_documents(project_id);
 CREATE INDEX IF NOT EXISTS idx_documents_phase   ON office_documents(phase_id);

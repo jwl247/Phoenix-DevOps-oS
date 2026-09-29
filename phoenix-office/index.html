@@ -904,7 +904,15 @@ async function verify(){
   if (r.integrity.tampered) banner('bad', '⚠ TAMPERED — fields no longer match the signed baseline. '
     + (r.notified && r.notified.sent ? 'The counterparty has been notified.'
       : r.notified ? 'Notification: ' + esc(r.notified.error || 'not sent') : ''));
-  else banner('ok', '✓ Verified — the document matches its signed baseline exactly.');
+  else {
+    // office:verify also re-seals an intact SIGNED document the worker has
+    // no copy of (the "retry from Verify" the sign banner promises).
+    const s = r.sealed;
+    const sealNote = !s ? '' : s.ok && s.already ? ' Sealed in your Phoenix Office workspace.'
+      : s.ok ? ` Remote seal completed now (${s.bytes || '?'} bytes).`
+      : ' Remote seal still pending: ' + esc(s.error || 'unknown error') + ' — verify again to retry.';
+    banner('ok', '✓ Verified — the document matches its signed baseline exactly.' + sealNote);
+  }
 }
 async function changeOrder(){
   const r = await api.invoke('office:change-order', {

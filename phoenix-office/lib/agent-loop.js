@@ -131,7 +131,10 @@ function createAgentLoop({ tools, aiComplete, persona, sealDocument, resolveSign
             const messages = session.modelMessages.slice(-MAX_HISTORY);
             let replyText, via;
             try {
-                const r = await aiComplete({ system: sys, messages });
+                // json: true — the loop's replies are the {tool,args}/{final}
+                // contract, so a JSON-capable provider (Ollama) may constrain
+                // to it. Tool-internal drafting calls do not pass this.
+                const r = await aiComplete({ system: sys, messages, json: true });
                 replyText = r.text; via = r.via;
             } catch (e) {
                 session.transcript.push({ role: 'assistant', content: `offline — ${e.message}` });
@@ -145,6 +148,14 @@ function createAgentLoop({ tools, aiComplete, persona, sealDocument, resolveSign
                 return { state: 'done', message: parsed.final, document: session.document, project: session.project, transcript: session.transcript, via, lastToolData: session.lastToolData };
             }
 
+            if (parsed.malformed) {
+                // parseModelReply flagged near-miss JSON (or valid JSON in the
+                // wrong shape). Say so — before this it fell through to
+                // `unknown tool "undefined"`, a misleading correction for a
+                // small local model (audit OFFICE-F19, 2026-09-28).
+                session.modelMessages.push({ role: 'user', content: '[tool result] your reply was not a single valid JSON object in the required shape — resend it as exactly {"tool": "<name>", "args": {...}} or {"final": "<message>"}, nothing else.' });
+                continue;
+            }
             const tool = tools.get(parsed.tool);
             if (!tool) {
                 session.modelMessages.push({ role: 'user', content: `[tool result] unknown tool "${parsed.tool}" — pick one from the catalog exactly as named.` });

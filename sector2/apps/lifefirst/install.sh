@@ -119,12 +119,18 @@ ok "database + user ready"
 if [[ "$DB_ALREADY_EXISTS" == "0" ]]; then
     mysql "$LF_DB_NAME" < "$SRC_DIR/module_1_database.sql"
     ok "schema loaded, seed users (you + laurie) created"
+    # module_5 (Memory AI) queries memory_key/memory_value/... which module_1's
+    # memory_storage never defined — every "remember" request 500'd. The
+    # migration renames/adds those columns; idempotent on MariaDB.
+    mysql "$LF_DB_NAME" < "$SRC_DIR/module_5_memory_migration.sql"
+    ok "memory_storage migrated to module_5's column contract"
     if [[ -f "$SRC_DIR/secure_settings_schema.sql" ]]; then
         mysql "$LF_DB_NAME" < "$SRC_DIR/secure_settings_schema.sql"
         ok "secure_settings schema loaded"
     fi
 else
-    warn "database already existed — schema/seed NOT re-run (safe re-install). Run migrations by hand if the schema changed."
+    warn "database already existed — schema/seed NOT re-run (safe re-install). Run migrations by hand if the schema changed:"
+    warn "  mysql $LF_DB_NAME < $SRC_DIR/module_5_memory_migration.sql   (idempotent; required once for Memory AI)"
 fi
 
 # =============================================================================

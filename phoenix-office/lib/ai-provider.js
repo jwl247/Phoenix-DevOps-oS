@@ -43,7 +43,11 @@ function findClaudeCli() {
 
 // Ollama's /api/chat, non-streaming. A short probe timeout so an absent/
 // stopped Ollama fails fast instead of stalling the whole chain.
-async function tryOllama({ system, messages }) {
+// `json: true` (the ReAct loop) turns on Ollama's grammar-constrained JSON
+// mode; plain drafting calls (draft_field, draft_checklist_rationale) leave
+// it off, since forcing it there made a drafted field value come back as a
+// JSON blob instead of the value itself (audit OFFICE-F15, 2026-09-28).
+async function tryOllama({ system, messages, json = false }) {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), 20000);
     const model = ollamaModel();
@@ -60,7 +64,8 @@ async function tryOllama({ system, messages }) {
                 // failure mode of near-miss JSON (a missing brace, wrong
                 // shape) that would otherwise silently fall through
                 // agent-loop.js's parser as if it were a real chat reply.
-                format: 'json',
+                // Only when the caller asked for JSON — see `json` above.
+                ...(json ? { format: 'json' } : {}),
                 messages: [{ role: 'system', content: system }, ...messages],
             }),
             signal: controller.signal,
@@ -129,7 +134,7 @@ function tryClaudeCli({ system, messages }) {
 // complete({ system, messages }) -> { text, via }. Tries each candidate in
 // order, offline-first; throws only if every candidate fails, with all
 // their errors attached so the caller can show something useful.
-async function complete({ system, messages }) {
+async function complete({ system, messages, json = false }) {
     const attempts = [
         ['ollama', tryOllama],
         ['api', tryAnthropic],
@@ -138,7 +143,7 @@ async function complete({ system, messages }) {
     const errors = [];
     for (const [name, fn] of attempts) {
         try {
-            return await fn({ system, messages });
+            return await fn({ system, messages, json });
         } catch (e) {
             errors.push(`${name}: ${e.message}`);
         }

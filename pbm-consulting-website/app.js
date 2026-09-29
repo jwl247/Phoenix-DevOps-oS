@@ -10,6 +10,13 @@ leadForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   leadStatus.textContent = 'Sending your verification code…';
   const fd = new FormData(leadForm);
+  // The form is `novalidate` (so the status line, not a browser bubble,
+  // explains problems) — so check the required fields here. leads.name is
+  // NOT NULL in the worker's D1; a blank name used to reach the worker and
+  // come back as a 500 (audit OFFICE-F14, 2026-09-28).
+  for (const [key, label] of [['name', 'your name'], ['business_name', 'your business name'], ['email', 'a business email']]) {
+    if (!String(fd.get(key) || '').trim()) { leadStatus.textContent = `Please enter ${label}.`; return; }
+  }
   const turnstileToken = leadForm.querySelector('[name="cf-turnstile-response"]')?.value || '';
   try {
     const res = await fetch(`${LEADS_API}/lead`, {

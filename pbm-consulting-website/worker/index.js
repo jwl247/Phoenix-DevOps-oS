@@ -142,6 +142,9 @@ async function handleLead(req, env) {
   try { body = await req.json(); } catch (_) { return jsonResponse({ ok: false, error: 'invalid JSON body' }, 400); }
 
   const { name, business_name, email, phone, turnstile_token } = body || {};
+  // leads.name is NOT NULL (schema.sql) — a blank name used to hit D1 and
+  // surface as a 500 ("Could not reach the server"). Reject it up front.
+  if (!name || typeof name !== 'string' || !name.trim()) return jsonResponse({ ok: false, error: 'name required' }, 400);
   if (!business_name || typeof business_name !== 'string') return jsonResponse({ ok: false, error: 'business_name required' }, 400);
   if (!isValidEmail(email)) return jsonResponse({ ok: false, error: 'a valid email is required' }, 400);
   if (tooLong(name, MAX_FIELD.name) || tooLong(business_name, MAX_FIELD.business_name) || tooLong(phone, MAX_FIELD.phone)) {

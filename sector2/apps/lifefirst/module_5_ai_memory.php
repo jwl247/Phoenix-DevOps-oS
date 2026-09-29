@@ -122,7 +122,7 @@ function storeMemory($userId, $message, $data) {
             $parsed['confidence']
         );
         $stmt->execute();
-        $memoryId = $stmt->insert_id();
+        $memoryId = $stmt->insert_id;
         
         $message_text = "Remembered: " . $parsed['key'] . " = " . $parsed['value'];
     }
