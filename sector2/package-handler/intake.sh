@@ -1459,14 +1459,26 @@ is_skip_ext() {
 
 is_known_type() {
   local file="$1"
+  local base="${file##*/}"
+  # Build and doc files known by name, not extension. Before 2026-09-29 a
+  # directory intake silently dropped them — a worker pulling sector1/kernels
+  # from R2 got no Makefile and could not build helix.ko.
+  case "${base}" in
+    Makefile|makefile|GNUmakefile|Kbuild|Kconfig|Dockerfile|README|LICENSE|COPYING) return 0 ;;
+  esac
   local ext="${file##*.}"; ext="${ext,,}"
   case "${ext}" in
     sh|bash|zsh|py|js|mjs|cjs|ts|json|yaml|yml|toml|env|\
-    conf|cfg|ini|service|timer|socket|sql|md|markdown|txt|\
+    conf|cfg|ini|service|timer|socket|target|path|mount|automount|slice|\
+    sql|md|markdown|txt|mk|\
     xml|html|htm|css|c|h|cpp|hpp|rs|go|ps1|\
     kt|kts|php|gradle|properties|bat|cmd|jsonc|spec|csv) return 0 ;;
-    *) return 1 ;;
   esac
+  # An extensionless script (helix_run, bin/ shims) announces itself with #!.
+  if [[ "${base}" != *.* ]] && [[ "$(head -c 2 "${file}" 2>/dev/null)" == "#!" ]]; then
+    return 0
+  fi
+  return 1
 }
 
 # ── Human readable size ───────────────────────────────────────

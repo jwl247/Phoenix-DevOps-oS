@@ -39,12 +39,22 @@ run_intake() {
     bash "$REPO/sector2/package-handler/intake.sh" "$@" </dev/null
 }
 
+# Seed from the COMMIT's bytes, not the working tree: on Windows a text=auto
+# file is checked out with CRLF, and seeding the working copy shipped those
+# CRLF bytes to Linux workers (2026-09-29: 5 files differed from git).
+# autocrlf/eol forced off so git archive writes the stored blob; files with an
+# explicit eol=crlf attribute (bin/*.cmd) still come out CRLF, as intended.
+EXPORT="$STATE/export-$COMMIT"
+rm -rf "$EXPORT"; mkdir -p "$EXPORT"
+git -C "$REPO" -c core.autocrlf=false -c core.eol=lf archive --format=tar HEAD -- \
+  $(grep -vE '^\s*(#|$)' "$LIST" | sed 's:/$::') | tar -x -C "$EXPORT"
+
 echo "== seeding $NAME from commit $COMMIT"
 start=$(date +%s)
 ok=0; bad=0
 while IFS= read -r rel; do
   [[ -z "$rel" || "$rel" == \#* ]] && continue
-  src="$REPO/$rel"
+  src="$EXPORT/$rel"
   [[ -e "$src" ]] || { echo "  MISSING  $rel"; bad=$((bad+1)); continue; }
   if run_intake "$src" "roadtest" "seed $COMMIT" >"$STATE/seed-$(echo "$rel" | tr '/' '_').log" 2>&1; then
     echo "  ok       $rel"; ok=$((ok+1))
