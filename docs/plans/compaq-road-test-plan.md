@@ -1,6 +1,6 @@
 # Compaq road test — Phoenix from the cloud, a worker on the ground
 
-**Status:** BUILDING. Jerry said "build" on 2026-09-29. Phases 0, 1, 2 and 4 are done and measured (§3b). Phase 3 (the H.L.K clone) is next. Open questions settled, using the proposals (Jerry, 2026-09-29).
+**Status:** BUILT AND RUNNING on pbm-compaq, 2026-09-29. Phases 0–4 are done and measured (§3b, §3c): the data plane, the seed, two Helix instances, the H.L.K clone (imported from R2, `phoenix-hlk.service`), and the cold start. Next: warm on write for ingress, the upload diagnosis, and a model tier for H.L.K (Jerry's call). Phase 5 (the process) follows.
 **Question it answers (Jerry, 2026-09-29):** can a machine come up from nothing and run as a Phoenix worker, pulling what it needs from Phoenix in R2 and pushing results back, with H.L.K directing it? This is the delivery shape Monster Phoenix needs. Measure it and decide.
 **Hard rule:** our system stays unaffected. That means the jw.leftwich1 Cloudflare account (its R2, D1, workers and tunnel), the Precision, pbm3 and the HP. The only exception is the Round 2 audit fixes.
 
@@ -137,6 +137,25 @@ Also found and fixed along the way (system fixes):
 - the paging unit pulled the single Helix back up;
 - a race loading the modules at boot;
 - the road-test key was printed during a check and has been rotated.
+
+## 3c. Phase 3 live run — H.L.K on pbm-compaq, 2026-09-29
+
+The box imported H.L.K from Phoenix in R2 (4.5 s, checked against D1) and runs it as `phoenix-hlk.service` on `10.47.0.3:8472`. The one allowed caller is the Precision (`10.47.0.2`), and every call needs the 0600 token; without it, HTTP 401 over the mesh.
+
+| Step | Result |
+|---|---|
+| pull `kernels` | 16 files, 2.92 s |
+| prefetch `helix`, `frank`, `security` (background, in parallel) | 13 / 4 / 12 files, 6.39 / 1.58 / 1.96 s |
+| read everything just pulled, page cache dropped | **hit_rate_now 23.2 %**: pulled data is NOT yet warm, which confirms the ingress decision (warm on write) |
+| stage → push asks → confirm yes | pushed; D1 receipt `1bc321caf9dc8d12` = local; 2.67 s |
+| update H.L.K itself | the box re-imported 0.1.1 by itself once clone checked Phoenix for newer versions |
+| audit | asked / declined / ran-with-confirmation all logged |
+| M7, our system | unchanged at the end: D1 2077 / 531 / 276 / 410, R2 464, E: pool 228 |
+
+Found and fixed during Phase 3 (system fixes):
+- Cloudflare 403s Python's default user agent (error 1010), which broke the push receipt check.
+- `intake clone` never refreshed a stale local copy: a directory was cloned from its old snapshot, and a stale file read as an "INTEGRITY FAILURE". Phoenix is now the authority on every clone.
+- dm-helix's shared Dandelion slot was overwritten by every instance and zeroed by any removal.
 
 ## 4. Rollback (every phase)
 
