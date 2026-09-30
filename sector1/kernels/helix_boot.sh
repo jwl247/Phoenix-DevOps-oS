@@ -20,6 +20,7 @@
 #   HELIX_B_IMG    Strand B image on the fastest disk (default /var/lib/helix/strandB.img)
 #   HELIX_B_MB     Strand B size in MiB       (default 65536)
 #   HELIX_MOUNT    where her filesystem goes  (default /srv/helix)
+#   HELIX_WARM_WRITE  1 = what's written through her becomes warm (default 0)
 #
 # Never formats anything: the filesystem on /dev/mapper/helix is made once, by
 # hand. dm-helix is write-through, so the origin disk is always complete;
@@ -42,6 +43,9 @@ RAM=${HELIX_RAM:-auto}
 BIMG=${HELIX_B_IMG:-$D_BIMG}
 BMB=${HELIX_B_MB:-65536}
 MNT=${HELIX_MOUNT:-$D_MNT}
+# HELIX_WARM_WRITE=1: blocks written through her are read back into Strand A,
+# so what came in is warm on first use (the ingress instance; 2026-09-29).
+OPT=""; [ "${HELIX_WARM_WRITE:-0}" = 1 ] && OPT=" warm_write"
 
 log() { echo "helix_boot[$NAME]: $*"; }
 
@@ -69,7 +73,7 @@ start() {
     chmod 600 "$BIMG"
     LOOPB=$(losetup -j "$BIMG" | cut -d: -f1)
     [ -n "$LOOPB" ] || LOOPB=$(losetup --direct-io=on --show -f "$BIMG")
-    dmsetup create "$NAME" --table "0 $(blockdev --getsz "$ORIGIN") helix $ORIGIN $RAM $LOOPB $BMB"
+    dmsetup create "$NAME" --table "0 $(blockdev --getsz "$ORIGIN") helix $ORIGIN $RAM $LOOPB $BMB$OPT"
     log "up: origin $ORIGIN, Strand A $(dmsetup table $NAME | cut -d' ' -f5) MiB RAM, Strand B $BMB MiB on $LOOPB"
   fi
   mkdir -p "$MNT"

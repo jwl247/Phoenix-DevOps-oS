@@ -175,6 +175,16 @@ struct hx_cache {
 	void *deflate_ws;           /* tick only */
 	void * __percpu *inflate_ws;/* per-CPU, used under a lane lock */
 	struct delayed_work tick;
+	/* warm_write (table keyword): blocks written through her are read back
+	 * into Strand A by a worker, through hx_insert's normal race guard, so
+	 * data that came IN through this instance is warm on first use (ingress:
+	 * "what she has read in, she knows"). Off unless asked for. */
+	bool warm_write;
+	spinlock_t warm_lock;
+	struct list_head warm_q;             /* hx_warm ranges waiting */
+	unsigned long warm_pending;          /* blocks queued */
+	struct delayed_work warm_work;
+	atomic64_t warmed, warm_dropped;
 };
 
 struct hx_pb {
@@ -986,6 +996,101 @@ static u64 hx_relieve(struct hx_cache *hc, u8 *buf)
 	return freed;
 }
 
+struct hx_warm {
+	struct list_head node;
+	unsigned long first, n;
+	unsigned int tries;
+};
+
+#define HX_WARM_MAX_PENDING  (1UL << 17)     /* 512 MiB of blocks queued, then drop */
+#define HX_WARM_TRIES        50              /* x 100 ms: wait out a write burst */
+
+/* Read written blocks back from the origin into Strand A. hx_insert refuses a
+ * block if any write raced the read (global wgen) or it's already there, so a
+ * range that loses the race is retried a little later, once the burst settles. */
+static void hx_warm_worker(struct work_struct *w)
+{
+	struct hx_cache *hc = container_of(to_delayed_work(w), struct hx_cache, warm_work);
+	struct hx_warm *wr;
+	unsigned long flags, i;
+	bool again = false;
+
+	for (;;) {
+		spin_lock_irqsave(&hc->warm_lock, flags);
+		wr = list_first_entry_or_null(&hc->warm_q, struct hx_warm, node);
+		if (wr)
+			list_del(&wr->node);
+		spin_unlock_irqrestore(&hc->warm_lock, flags);
+		if (!wr)
+			break;
+		for (i = 0; i < wr->n; i++) {
+			unsigned long idx = wr->first + i;
+			u64 gen = atomic64_read(&hc->wgen);
+			struct page *pg;
+
+			if (xa_load(&hc->blocks, idx))
+				continue;                        /* already on her strands */
+			pg = alloc_page(GFP_NOIO | __GFP_NOWARN);
+			if (!pg)
+				break;
+			if (hx_sync_io(hc->dev->bdev, REQ_OP_READ, (sector_t)idx << HX_SECT_SHIFT, pg)) {
+				put_page(pg);
+				continue;
+			}
+			if (atomic64_read(&hc->wgen) != gen) {  /* a write raced: retry later */
+				put_page(pg);
+				break;
+			}
+			hx_insert(hc, idx, pg, gen);
+			atomic64_inc(&hc->warmed);
+		}
+		if (i < wr->n && ++wr->tries < HX_WARM_TRIES) {
+			wr->first += i;                     /* keep what's left, try again */
+			wr->n -= i;
+			spin_lock_irqsave(&hc->warm_lock, flags);
+			list_add(&wr->node, &hc->warm_q);
+			hc->warm_pending -= i;
+			spin_unlock_irqrestore(&hc->warm_lock, flags);
+			again = true;
+			break;
+		}
+		spin_lock_irqsave(&hc->warm_lock, flags);
+		hc->warm_pending -= wr->n;
+		spin_unlock_irqrestore(&hc->warm_lock, flags);
+		if (i < wr->n)
+			atomic64_add(wr->n - i, &hc->warm_dropped);
+		kfree(wr);
+	}
+	if (again)
+		queue_delayed_work(hc->wq, &hc->warm_work, msecs_to_jiffies(100));
+}
+
+static void hx_warm_queue(struct hx_cache *hc, sector_t rel, unsigned int sectors)
+{
+	struct hx_warm *wr;
+	unsigned long first, last, flags;
+
+	if (!sectors)
+		return;
+	first = rel >> HX_SECT_SHIFT;
+	last = (rel + sectors - 1) >> HX_SECT_SHIFT;
+	wr = kmalloc(sizeof(*wr), GFP_ATOMIC | __GFP_NOWARN);
+	spin_lock_irqsave(&hc->warm_lock, flags);
+	if (!wr || hc->warm_pending + (last - first + 1) > HX_WARM_MAX_PENDING) {
+		spin_unlock_irqrestore(&hc->warm_lock, flags);
+		atomic64_add(last - first + 1, &hc->warm_dropped);
+		kfree(wr);
+		return;
+	}
+	wr->first = first;
+	wr->n = last - first + 1;
+	wr->tries = 0;
+	list_add_tail(&wr->node, &hc->warm_q);
+	hc->warm_pending += wr->n;
+	spin_unlock_irqrestore(&hc->warm_lock, flags);
+	queue_delayed_work(hc->wq, &hc->warm_work, msecs_to_jiffies(20));
+}
+
 static void hx_publish_dandelion(void)
 {
 	struct hx_cache *hc;
@@ -1151,9 +1256,11 @@ static int hx_end_io(struct dm_target *ti, struct bio *bio, blk_status_t *error)
 	struct hx_cache *hc = ti->private;
 	struct hx_pb *pb = dm_per_bio_data(bio, sizeof(struct hx_pb));
 
-	if (pb->write)
+	if (pb->write) {
 		hx_invalidate(hc, pb->rel, pb->iter.bi_size >> 9);
-	else if (pb->fill && !*error)
+		if (hc->warm_write && !*error && bio_op(bio) == REQ_OP_WRITE)
+			hx_warm_queue(hc, pb->rel, pb->iter.bi_size >> 9);
+	} else if (pb->fill && !*error)
 		hx_fill(hc, bio, pb);
 	return DM_ENDIO_DONE;
 }
@@ -1190,8 +1297,18 @@ static int hx_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	unsigned int ram_mb, i;
 	int r, cpu;
 
+	bool warm_write = false;
+
+	if (argc == 3 || argc == 5) {             /* trailing option keyword */
+		if (strcmp(argv[argc - 1], "warm_write")) {
+			ti->error = "unknown option (only: warm_write)";
+			return -EINVAL;
+		}
+		warm_write = true;
+		argc--;
+	}
 	if (argc != 2 && argc != 4) {
-		ti->error = "usage: helix <origin_dev> <ram_mb|auto> [<strandB_dev> <b_mb>]";
+		ti->error = "usage: helix <origin_dev> <ram_mb|auto> [<strandB_dev> <b_mb>] [warm_write]";
 		return -EINVAL;
 	}
 	/* "auto" = her real size: half the machine's RAM (her config was
@@ -1265,6 +1382,10 @@ static int hx_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	}
 	spin_lock_init(&hc->b_lock);
 	spin_lock_init(&hc->defer_lock);
+	hc->warm_write = warm_write;
+	spin_lock_init(&hc->warm_lock);
+	INIT_LIST_HEAD(&hc->warm_q);
+	INIT_DELAYED_WORK(&hc->warm_work, hx_warm_worker);
 	bio_list_init(&hc->deferred);
 	INIT_WORK(&hc->b_write_work, hx_b_writer);
 	for (i = 0; i < HX_READ_WORKERS; i++) {
@@ -1317,6 +1438,14 @@ static void hx_dtr(struct dm_target *ti)
 	mutex_lock(&hx_instances_lock);
 	list_del(&hc->node);
 	mutex_unlock(&hx_instances_lock);
+	hc->warm_write = false;
+	cancel_delayed_work_sync(&hc->warm_work);
+	while (!list_empty(&hc->warm_q)) {
+		struct hx_warm *wr = list_first_entry(&hc->warm_q, struct hx_warm, node);
+
+		list_del(&wr->node);
+		kfree(wr);
+	}
 	cancel_delayed_work_sync(&hc->tick);
 	flush_workqueue(hc->wq);                /* B writer + deferred reads done */
 	for (i = 0; i < HX_LANES; i++) {
@@ -1368,7 +1497,8 @@ static void hx_status(struct dm_target *ti, status_type_t type, unsigned int fla
 		       "b_zero_copy %lld b_evictions %lld b_ioerr %lld "
 		       "entries %lu temps frozen %u cold %u warm %u hot %u blazing %u "
 		       "hits %lld zhits %lld misses %lld inserts %lld evictions %lld "
-		       "invalidations %lld compressed %lld cooled_bytes %lld zfail %lld bypass %lld",
+		       "invalidations %lld compressed %lld cooled_bytes %lld zfail %lld bypass %lld "
+		       "warm_write %d warmed %lld warm_dropped %lld",
 		       hc->bdev ? "double" : "single",
 		       hc->heat / 1000, hc->heat % 1000, hx_state_names[hc->state],
 		       hc->compression / 1000, hc->compression % 1000, HX_LANES,
@@ -1382,13 +1512,17 @@ static void hx_status(struct dm_target *ti, status_type_t type, unsigned int fla
 		       atomic64_read(&hc->misses), atomic64_read(&hc->inserts),
 		       atomic64_read(&hc->evictions), atomic64_read(&hc->invalidations),
 		       atomic64_read(&hc->compressed), atomic64_read(&hc->cooled_bytes),
-		       atomic64_read(&hc->zfail), atomic64_read(&hc->bypass));
+		       atomic64_read(&hc->zfail), atomic64_read(&hc->bypass),
+		       hc->warm_write ? 1 : 0, atomic64_read(&hc->warmed),
+		       atomic64_read(&hc->warm_dropped));
 		break;
 	case STATUSTYPE_TABLE:
 		if (hc->bdev)
 			DMEMIT("%s %u %s %u", hc->dev->name, hc->ram_mb, hc->bdev->name, hc->b_mb);
 		else
 			DMEMIT("%s %u", hc->dev->name, hc->ram_mb);
+		if (hc->warm_write)
+			DMEMIT(" warm_write");
 		break;
 	case STATUSTYPE_IMA:
 		*result = '\0';

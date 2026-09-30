@@ -40,7 +40,7 @@ import urllib.error
 import urllib.request
 import uuid
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 HOME = os.path.expanduser("~")
 STATE = os.environ.get("HLK_STATE", os.path.join(HOME, ".phoenix-hlk"))
 CRED = os.environ.get("HLK_CRED", os.path.join(HOME, ".phoenix-worker"))
@@ -196,6 +196,9 @@ def tool_pull(args):
         elif os.path.exists(dest):
             os.remove(dest)
         os.rename(got, dest)
+        # Flush now: with warm_write on ingress she warms blocks as they reach
+        # the disk, and the filesystem would otherwise hold them 5-30 s first.
+        subprocess.run(["sync", "-f", dest])
     finally:
         subprocess.run(["rm", "-rf", tmp])
     ms = (now_ns() - t0) / 1e6

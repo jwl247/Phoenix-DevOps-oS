@@ -65,7 +65,7 @@ else
 fi
 
 # ── 3. per-instance settings (written once) ──────────────────────────────
-write_conf() { # instance origin bimg bmb
+write_conf() { # instance origin bimg bmb warm_write
   local f=/etc/default/helix-$1
   if [ -f "$f" ]; then say "config" "$f exists — left as is"; return; fi
   [ "$MODE" = check ] && die "$f missing"
@@ -77,11 +77,12 @@ HELIX_RAM=$RAM_MB                        # explicit: auto = half the RAM PER ins
 HELIX_B_IMG=$3
 HELIX_B_MB=$4
 HELIX_MOUNT=/srv/helix-$1
+HELIX_WARM_WRITE=$5                      # 1 on ingress: what comes in is warm on first use
 EOF
   say "config" "wrote $f"
 }
-write_conf ingress /dev/disk/by-partlabel/helix-origin /var/lib/helix/strandB.img 65536
-write_conf egress  /dev/disk/by-partlabel/helix-egress /var/lib/helix/strandB-egress.img 32768
+write_conf ingress /dev/disk/by-partlabel/helix-origin /var/lib/helix/strandB.img 65536 1
+write_conf egress  /dev/disk/by-partlabel/helix-egress /var/lib/helix/strandB-egress.img 32768 0
 
 # ── 4. hand over from the single helix.service ───────────────────────────
 if [ "$MODE" != check ]; then
