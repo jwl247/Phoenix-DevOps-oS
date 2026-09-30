@@ -178,6 +178,31 @@ The slow push (M4, ~0.9 Mbit/s) was **not Phoenix**. Measured on the Compaq:
 
 **Next, noted:** each push uploads the bytes twice (the current key plus the per-version key). A server-side copy in the worker would halve push time.
 
+## 3e. H.L.K's local brain — 2026-09-29
+
+Jerry: "it has to travel with the system", and "I can't afford a straight Anthropic API cost". So H.L.K's AI runs on the worker itself, from what the worker imported from Phoenix. The API path stays in the code, switched off.
+
+**Getting it onto the box:**
+- **Runtime:** Ollama 0.34.4, CPU-only. That's 21 MB of a 1.4 GB release: the GPU libraries were stripped, and the release was checksum-verified against Ollama's `sha256sum.txt`.
+- **Model:** llama3.2:3b, 1.93 GB. Chosen for its commercial-friendly licence; the Qwen2.5 3B is research-only, and Jerry doesn't want Qwen.
+- **Import:** both were intaked into `phoenix-roadtest`, the model through the new multipart path (31 parts, 655 s). All local copies were then deleted, and the box pulled both back from Phoenix in 251 s, checked against D1.
+- **Running it:** `sector3/worker-up/model-up.sh` unpacks both and runs `phoenix-ollama.service` on 127.0.0.1 only, with the model pinned in memory.
+
+**Which model (eval_models.py, 6 requests, i5-2400):**
+
+| Model | Tools right, free-form | Tools right, constrained JSON (H.L.K 0.2.x) | Speed |
+|---|---|---|---|
+| llama3.2:1b | 1 / 6 | 5 / 6 (copied the example's file name) | 11.4 tok/s |
+| **llama3.2:3b** | 3 / 6 | **6 / 6** | 7.0 tok/s |
+| qwen2.5:3b | 3 / 6 | 6 / 6 | 7.3 tok/s |
+
+**Talking to H.L.K (`POST /chat`), live:**
+- Before the fast path: 9–35 s per request (78 s cold).
+- After it (H.L.K 0.2.2: the model stays loaded, and simple tools answer from their own result): **4–6 s** for status and warm, 15 s for a pull (8 s of that is the transfer), 11.5 s for a general question.
+- It used the right tool every time and answered truthfully from the tool results. Push asked first.
+
+**Verdict for the game (Jerry asked "it's not fast enough is it?"):** fine for directing, too slow for a real-time KITT on this 2011 CPU. Open, and Jerry's call: whether the game client may use the player's GPU for H.L.K; Phoenix OS boxes blacklist GPU drivers.
+
 ## 4. Rollback (every phase)
 
 - **Phase 0:** delete the roadtest bucket, D1 and worker on the jerry account. Ours was never touched.
