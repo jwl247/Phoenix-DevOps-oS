@@ -238,3 +238,25 @@ a:focus-visible, .cta:focus-visible {
 @media (max-width: 760px) {
   .apply-form .field-row, .apply-form .checks { grid-template-columns: 1fr; }
 }
+
+/* ── site nav + Laurie's story (2026-09-30) ────────────────────────── */
+.masthead > a { display: block; }
+.topnav { display: flex; gap: 22px; margin-left: auto; font-weight: 500; font-size: 15px; }
+.topnav a { color: var(--forest); text-decoration: none; border-bottom: 2px solid transparent; padding-bottom: 2px; }
+.topnav a:hover, .topnav a[aria-current="page"] { border-bottom-color: var(--oxblood); }
+.hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 26px; }
+.text-link { color: var(--oxblood); font-weight: 600; text-decoration: none; }
+.text-link:hover { text-decoration: underline; }
+.founder-quote { margin: 0 0 18px; padding: 0 0 0 20px; border-left: 4px solid var(--oxblood); }
+.founder-quote p { font-family: 'Fraunces', Georgia, serif; font-size: clamp(21px, 2.4vw, 27px); line-height: 1.3; color: var(--forest); margin: 0 0 8px; }
+.founder-quote .founder-sign { font: 600 14px 'IBM Plex Sans', sans-serif; color: var(--oxblood); letter-spacing: 0.04em; }
+.story-hero { display: block; }
+.story-hero h1 { max-width: 22ch; }
+.story p { font-size: 17px; line-height: 1.7; }
+.story .pull { font-family: 'Fraunces', Georgia, serif; font-size: 22px; line-height: 1.35; color: var(--forest); margin: 1.2em 0; }
+.signature { font-family: 'Fraunces', Georgia, serif; font-size: 26px; color: var(--forest); margin-top: 1.6em; }
+.signature span { display: block; font: 500 14px 'IBM Plex Sans', sans-serif; color: #5a5346; margin-top: 4px; }
+@media (max-width: 760px) {
+  .masthead { flex-wrap: wrap; }
+  .topnav { order: 3; width: 100%; margin-left: 0; }
+}
