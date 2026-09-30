@@ -590,6 +590,104 @@ async function handleUnsub(req, env, token) {
   return html(unsubPage('Done — you will not get Set-Aside Radar emails anymore.'));
 }
 
+// ---------------------------------------------------------------- billing (Stripe)
+//
+// $9.99/month through a Stripe Payment Link (created in the Stripe dashboard,
+// recurring monthly). The worker never holds a Stripe API key: it only builds
+// the link and listens to Stripe's signed webhook.
+//   POST /subscribers/ask-to-pay?id=  (admin) emails that subscriber the ask + link.
+//                                     Nobody is charged without being asked first.
+//   POST /stripe/webhook              signature-checked; records who pays in `billing`.
+// Paying never gates the digest here: when the beta ends is Jerry's call.
+
+const STRIPE_TOLERANCE_S = 300;
+
+function payUrl(env, sub) {
+  if (!env.STRIPE_PAYMENT_LINK) return null;
+  const u = new URL(env.STRIPE_PAYMENT_LINK);
+  u.searchParams.set('client_reference_id', `radar-${sub.id}`);
+  u.searchParams.set('prefilled_email', sub.email);
+  return u.toString();
+}
+
+function timingSafeEqualHex(a, b) {
+  if (a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
+
+// Stripe-Signature: t=<unix>,v1=<hex hmac-sha256 of "t.body">[,v1=...]
+async function verifyStripeSignature(env, header, body, nowS = Math.floor(Date.now() / 1000)) {
+  if (!env.STRIPE_WEBHOOK_SECRET || !header) return false;
+  const parts = header.split(',').map(p => p.trim().split('='));
+  const t = Number((parts.find(([k]) => k === 't') || [])[1]);
+  const sigs = parts.filter(([k]) => k === 'v1').map(([, v]) => v || '');
+  if (!Number.isFinite(t) || !sigs.length || Math.abs(nowS - t) > STRIPE_TOLERANCE_S) return false;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.STRIPE_WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${t}.${body}`)));
+  const want = Array.from(mac).map(b => b.toString(16).padStart(2, '0')).join('');
+  return sigs.some(s => timingSafeEqualHex(s, want));
+}
+
+async function setBilling(env, subscriberId, fields) {
+  await env.DB.prepare(`INSERT INTO billing (subscriber_id, status, stripe_customer, stripe_subscription, updated_at) VALUES (?,?,?,?,?)
+    ON CONFLICT(subscriber_id) DO UPDATE SET status=excluded.status,
+      stripe_customer=COALESCE(excluded.stripe_customer, billing.stripe_customer),
+      stripe_subscription=COALESCE(excluded.stripe_subscription, billing.stripe_subscription),
+      updated_at=excluded.updated_at`)
+    .bind(subscriberId, fields.status, fields.customer || null, fields.subscription || null, new Date().toISOString()).run();
+}
+
+async function handleStripeWebhook(req, env) {
+  const body = await req.text();
+  if (!(await verifyStripeSignature(env, req.headers.get('Stripe-Signature'), body))) return json({ ok: false, error: 'bad signature' }, 400);
+  let ev;
+  try { ev = JSON.parse(body); } catch { return json({ ok: false, error: 'bad json' }, 400); }
+  if (!ev || typeof ev.id !== 'string' || !ev.data || !ev.data.object) return json({ ok: false, error: 'not an event' }, 400);
+
+  // Stripe retries; each event is applied once.
+  const fresh = await env.DB.prepare('INSERT OR IGNORE INTO stripe_events (id, type, received_at) VALUES (?,?,?)').bind(ev.id, String(ev.type), new Date().toISOString()).run();
+  if (!fresh.meta.changes) return json({ ok: true, duplicate: true });
+
+  const o = ev.data.object;
+  if (ev.type === 'checkout.session.completed') {
+    const m = /^radar-(\d+)$/.exec(String(o.client_reference_id || ''));
+    let sub = m ? await env.DB.prepare('SELECT id FROM subscribers WHERE id = ?').bind(Number(m[1])).first() : null;
+    const email = o.customer_details && o.customer_details.email;
+    if (!sub && email) sub = await env.DB.prepare('SELECT id FROM subscribers WHERE email = ?').bind(String(email).trim().toLowerCase()).first();
+    if (!sub) return json({ ok: true, matched: false });
+    await setBilling(env, sub.id, { status: o.payment_status === 'paid' ? 'active' : String(o.payment_status || 'pending'), customer: o.customer, subscription: o.subscription });
+    return json({ ok: true, matched: true });
+  }
+  if (ev.type === 'customer.subscription.updated' || ev.type === 'customer.subscription.deleted') {
+    const row = await env.DB.prepare('SELECT subscriber_id FROM billing WHERE stripe_subscription = ?').bind(String(o.id)).first();
+    if (!row) return json({ ok: true, matched: false });
+    await setBilling(env, row.subscriber_id, { status: ev.type === 'customer.subscription.deleted' ? 'canceled' : String(o.status) });
+    return json({ ok: true, matched: true });
+  }
+  return json({ ok: true, ignored: ev.type });
+}
+
+async function askToPay(url, env) {
+  const id = Number(url.searchParams.get('id'));
+  const row = id ? await env.DB.prepare('SELECT * FROM subscribers WHERE id = ? AND active = 1').bind(id).first() : null;
+  if (!row) return json({ ok: false, error: 'no active subscriber with that id' }, 404);
+  const link = payUrl(env, row);
+  if (!link) return json({ ok: false, error: 'STRIPE_PAYMENT_LINK is not set' }, 503);
+  const unsubUrl = `${baseUrl(env)}/unsub/${row.unsub_token}`;
+  const sent = await sendEmail(env, {
+    to: row.email,
+    subject: 'Set-Aside Radar: keep it coming for $9.99 a month?',
+    text: `Hi${row.name ? ' ' + row.name : ''},\n\nThanks for trying Set-Aside Radar during the beta. We promised to ask before ever charging you, so this is us asking.\n\nRadar is $9.99 a month. If you want to keep getting your matched set-aside bids, you can subscribe here (card handled by Stripe, cancel any time):\n${link}\n\nIf not, no hard feelings. You can stop the emails here: ${unsubUrl}\n\nPBM Consulting Service · 6814 Chris Madsen Rd, Guthrie, OK 73044`,
+    unsubUrl,
+  });
+  if (sent !== 'ok') return json({ ok: false, error: `email not sent: ${sent}` }, 502);
+  await env.DB.prepare(`INSERT INTO billing (subscriber_id, status, updated_at) VALUES (?, 'asked', ?) ON CONFLICT(subscriber_id) DO UPDATE SET status='asked', updated_at=excluded.updated_at WHERE billing.status NOT IN ('active','trialing','past_due')`)
+    .bind(row.id, new Date().toISOString()).run();
+  return json({ ok: true, subscriber_id: row.id, emailed: row.email });
+}
+
 // ---------------------------------------------------------------- applications
 //
 // Public form at pbmconsultingservice.com/radar.html. Flow:
@@ -597,8 +695,8 @@ async function handleUnsub(req, env, token) {
 //   POST /apply/verify  code ok -> status 'review', Jerry/Laurie get a notice with a review link
 //   GET  /review/:token shows the application; POST approves or declines (a GET never acts)
 // Approval turns it into a subscriber and sends the applicant a welcome note.
-// Price is $9.99/month, free during the beta. No payment anywhere in this path yet,
-// and nobody is charged without being asked first.
+// Price is $9.99/month, free during the beta. No payment in this path: paying is
+// a separate ask (POST /subscribers/ask-to-pay), and nobody is charged without it.
 
 const SITE_ORIGIN = 'https://pbmconsultingservice.com';
 const PUBLIC_CERTS = ['small', 'wosb', 'edwosb', 'hubzone', '8a', 'sdvosb', 'vosb'];
@@ -857,6 +955,8 @@ export default {
         admin_auth: env.PHOENIX_AUTH ? 'set' : 'UNSET',
         turnstile_enforced: !!(env.TURNSTILE_SECRET && env.TURNSTILE_HOSTNAMES),
         admin_notify: env.ADMIN_NOTIFY_EMAIL ? 'set' : 'UNSET',
+        stripe_payment_link: env.STRIPE_PAYMENT_LINK ? (env.STRIPE_PAYMENT_LINK.includes('/test_') ? 'test' : 'live') : 'UNSET',
+        stripe_webhook: env.STRIPE_WEBHOOK_SECRET ? 'set' : 'UNSET',
         last_run: last || null,
       });
     }
@@ -885,15 +985,20 @@ export default {
       return handleUnsub(req, env, token);
     }
 
-    const admin = ['/whoami', '/subscribers', '/preview', '/run', '/runs', '/applications', '/applications/approve', '/applications/reject'];
+    if (path === '/stripe/webhook' && req.method === 'POST') return handleStripeWebhook(req, env);
+
+    const admin = ['/whoami', '/subscribers', '/subscribers/ask-to-pay', '/preview', '/run', '/runs', '/applications', '/applications/approve', '/applications/reject'];
     if (admin.includes(path)) {
       if (!(await isAuthorized(req, env))) return json({ ok: false, error: 'unauthorized' }, 401);
       // rotate-phoenix-auth.sh verifies each leg here.
       if (path === '/whoami') return json({ ok: true, worker: 'pbm-radar-worker' });
       if (path.startsWith('/applications')) return adminApplications(req, url, env, path);
+      if (path === '/subscribers/ask-to-pay' && req.method === 'POST') return askToPay(url, env);
       if (path === '/subscribers' && req.method === 'POST') return upsertSubscriber(req, env);
       if (path === '/subscribers' && req.method === 'GET') {
-        const r = await env.DB.prepare('SELECT id, email, name, naics, certs, states, ptypes, mode, active, created_at FROM subscribers ORDER BY id').all();
+        const r = await env.DB.prepare(`SELECT s.id, s.email, s.name, s.naics, s.certs, s.states, s.ptypes, s.mode, s.active, s.created_at,
+          COALESCE(b.status, 'beta') AS billing, b.updated_at AS billing_updated_at
+          FROM subscribers s LEFT JOIN billing b ON b.subscriber_id = s.id ORDER BY s.id`).all();
         return json({ ok: true, subscribers: r.results || [] });
       }
       if (path === '/preview' && req.method === 'GET') return preview(url, env);

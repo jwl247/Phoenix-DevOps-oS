@@ -447,5 +447,90 @@ await t('CORS preflight allows only the PBM site', async () => {
   eq(r.headers.get('Access-Control-Allow-Methods'), 'POST, OPTIONS');
 });
 
+// ---------------------------------------------------------------- billing (Stripe)
+const WHSEC = 'whsec_test_secret';
+const LINK = 'https://buy.stripe.com/test_abc123';
+const billEnv = (extra = {}) => freshEnv({ STRIPE_PAYMENT_LINK: LINK, STRIPE_WEBHOOK_SECRET: WHSEC, ...extra });
+async function stripeSig(body, t = Math.floor(Date.now() / 1000), secret = WHSEC) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${t}.${body}`)));
+  return `t=${t},v1=${Array.from(mac).map(b => b.toString(16).padStart(2, '0')).join('')}`;
+}
+async function hook(env, ev, sig) {
+  const body = JSON.stringify(ev);
+  return worker.fetch(new Request('https://radar.test/stripe/webhook', { method: 'POST', headers: { 'Stripe-Signature': sig || await stripeSig(body) }, body }), env);
+}
+const billingOf = (env, id) => env.DB.raw.prepare('SELECT * FROM billing WHERE subscriber_id = ?').get(id);
+
+await t('ask-to-pay: admin only, emails the link with the subscriber prefilled, marks asked', async () => {
+  const env = billEnv();
+  const id = await addSub(env);
+  eq((await worker.fetch(new Request(`https://radar.test/subscribers/ask-to-pay?id=${id}`, { method: 'POST' }), env)).status, 401);
+  emails = [];
+  const r = await (await admin(env, `/subscribers/ask-to-pay?id=${id}`, 'POST')).json();
+  ok(r.ok, JSON.stringify(r));
+  eq(emails.length, 1);
+  const txt = emails[0].body.text;
+  ok(txt.includes(`${LINK}?client_reference_id=radar-${id}&prefilled_email=`), 'pay link with reference');
+  ok(txt.includes('/unsub/'), 'way out included');
+  eq(billingOf(env, id).status, 'asked');
+  const list = await (await admin(env, '/subscribers')).json();
+  eq(list.subscribers[0].billing, 'asked');
+});
+await t('ask-to-pay refuses with no payment link configured', async () => {
+  const env = freshEnv();
+  const id = await addSub(env);
+  emails = [];
+  eq((await admin(env, `/subscribers/ask-to-pay?id=${id}`, 'POST')).status, 503);
+  eq(emails.length, 0);
+});
+await t('webhook: checkout completed -> active; updated/deleted follow; retries apply once', async () => {
+  const env = billEnv();
+  const id = await addSub(env);
+  const done = { id: 'evt_1', type: 'checkout.session.completed', data: { object: { client_reference_id: `radar-${id}`, payment_status: 'paid', customer: 'cus_1', subscription: 'sub_1' } } };
+  const r = await (await hook(env, done)).json();
+  ok(r.ok && r.matched, JSON.stringify(r));
+  eq(billingOf(env, id).status, 'active');
+  eq(billingOf(env, id).stripe_subscription, 'sub_1');
+  eq((await (await hook(env, done)).json()).duplicate, true);
+  await hook(env, { id: 'evt_2', type: 'customer.subscription.updated', data: { object: { id: 'sub_1', status: 'past_due' } } });
+  eq(billingOf(env, id).status, 'past_due');
+  await hook(env, { id: 'evt_3', type: 'customer.subscription.deleted', data: { object: { id: 'sub_1', status: 'canceled' } } });
+  eq(billingOf(env, id).status, 'canceled');
+  eq(billingOf(env, id).stripe_customer, 'cus_1', 'customer kept');
+});
+await t('webhook: falls back to email when there is no reference', async () => {
+  const env = billEnv();
+  const id = await addSub(env);
+  const email = env.DB.raw.prepare('SELECT email FROM subscribers WHERE id = ?').get(id).email;
+  await hook(env, { id: 'evt_9', type: 'checkout.session.completed', data: { object: { payment_status: 'paid', customer_details: { email: email.toUpperCase() }, subscription: 'sub_9' } } });
+  eq(billingOf(env, id).status, 'active');
+});
+await t('webhook: bad, stale, missing signature or no secret -> 400, nothing recorded', async () => {
+  const env = billEnv();
+  const id = await addSub(env);
+  const ev = { id: 'evt_x', type: 'checkout.session.completed', data: { object: { client_reference_id: `radar-${id}`, payment_status: 'paid', subscription: 'sub_x' } } };
+  const body = JSON.stringify(ev);
+  eq((await hook(env, ev, await stripeSig(body, undefined, 'whsec_wrong'))).status, 400);
+  eq((await hook(env, ev, await stripeSig(body, Math.floor(Date.now() / 1000) - 3600))).status, 400);
+  eq((await worker.fetch(new Request('https://radar.test/stripe/webhook', { method: 'POST', body }), env)).status, 400);
+  eq((await hook(freshEnv(), ev)).status, 400);
+  eq(billingOf(env, id), undefined);
+  eq(env.DB.raw.prepare('SELECT COUNT(*) n FROM stripe_events').get().n, 0);
+});
+await t('ask-to-pay never downgrades someone already paying', async () => {
+  const env = billEnv();
+  const id = await addSub(env);
+  await hook(env, { id: 'evt_p', type: 'checkout.session.completed', data: { object: { client_reference_id: `radar-${id}`, payment_status: 'paid', subscription: 'sub_p' } } });
+  await admin(env, `/subscribers/ask-to-pay?id=${id}`, 'POST');
+  eq(billingOf(env, id).status, 'active');
+});
+await t('health reports stripe link mode + webhook without values', async () => {
+  const h = await (await worker.fetch(new Request('https://radar.test/health'), billEnv())).json();
+  eq(h.stripe_payment_link, 'test');
+  eq(h.stripe_webhook, 'set');
+  ok(!JSON.stringify(h).includes(WHSEC));
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

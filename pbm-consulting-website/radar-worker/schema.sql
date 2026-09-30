@@ -82,3 +82,21 @@ CREATE TABLE IF NOT EXISTS applications (
 );
 CREATE INDEX IF NOT EXISTS idx_app_email ON applications(email);
 CREATE INDEX IF NOT EXISTS idx_app_status ON applications(status);
+
+-- Billing ($9.99/mo via a Stripe Payment Link). One row per subscriber once
+-- they've been asked or have paid; no row = still on the free beta.
+-- status: asked | active | trialing | past_due | unpaid | canceled | ... (Stripe's word)
+CREATE TABLE IF NOT EXISTS billing (
+  subscriber_id       INTEGER PRIMARY KEY REFERENCES subscribers(id),
+  status              TEXT NOT NULL,
+  stripe_customer     TEXT,
+  stripe_subscription TEXT UNIQUE,
+  updated_at          TEXT NOT NULL
+);
+
+-- Stripe webhook events already applied (Stripe retries; each applies once).
+CREATE TABLE IF NOT EXISTS stripe_events (
+  id          TEXT PRIMARY KEY,
+  type        TEXT,
+  received_at TEXT NOT NULL
+);

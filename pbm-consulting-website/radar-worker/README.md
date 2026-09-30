@@ -61,6 +61,8 @@ It's Laurie's product, and PBM is customer zero.
 | `GET /preview?subscriber=&date=YYYY-MM-DD` | Bearer | matches from stored bids (costs no SAM request) |
 | `POST /run?dry=1&fetch=0&date=` | Bearer | manual run. `dry=1` builds the email but doesn't send; `fetch=0` reuses stored bids |
 | `GET /runs` | Bearer | last 30 runs |
+| `POST /subscribers/ask-to-pay?id=` | Bearer | emails that subscriber the $9.99/mo ask with their Stripe Payment Link (reference + email prefilled) and an unsubscribe link; marks billing `asked` (never downgrades a payer) |
+| `POST /stripe/webhook` | Stripe signature | `checkout.session.completed` -> `active`; `customer.subscription.updated/deleted` -> Stripe's status / `canceled`. HMAC-checked, 5-min tolerance, each event applied once |
 
 ## Secrets
 - `SAM_API_KEY`: sam.gov → Account Details → request public API key. **Expires every 90 days.**
@@ -68,11 +70,20 @@ It's Laurie's product, and PBM is customer zero.
 - `RESEND_FROM`: `Set-Aside Radar <radar@pbmconsultingservice.com>`
 - `TURNSTILE_SECRET`: application-form bot check, widget `pbm-radar-application` (sitekey `0x4AAAAAAFFZlAsR3JQ08oA0`). Vault copy: `RADAR_TURNSTILE_SECRET`. `TURNSTILE_HOSTNAMES` var = `pbmconsultingservice.com` (no localhost in production). Fails closed.
 - `ADMIN_NOTIFY_EMAIL`: comma list of reviewers who get "new application" notices (a secret so emails stay out of the public repo).
+- `STRIPE_PAYMENT_LINK`: the Radar Payment Link URL (`/test_` in test mode). `STRIPE_WEBHOOK_SECRET`: the webhook endpoint's signing secret. Both set by `stripe-setup.sh`; the worker holds no Stripe API key.
 - `PHOENIX_AUTH`: a leg in `sector2/package-handler/rotate-phoenix-auth.sh`. Never hand-set it.
+
+## Billing ($9.99/month, Stripe)
+Nobody is charged without being asked: `/subscribers/ask-to-pay` is the ask, and `GET /subscribers` shows each one's `billing` (`beta` = never asked).
+```bash
+bash stripe-setup.sh test   # product + $9.99/mo price + Payment Link + webhook, secrets, schema, deploy (test mode)
+bash stripe-setup.sh live   # same with the live key (STRIPE_SECRET_KEY_LIVE) once test checks out
+```
+The key is read from the vault drop file and never printed or passed on a command line.
 
 ## Run / test / deploy
 ```bash
-npm test                                  # 35 tests, real SQLite via node:sqlite, SAM + Resend faked
+npm test                                  # 42 tests, real SQLite via node:sqlite, SAM + Resend faked
 npx wrangler deploy
 npx wrangler d1 execute pbm_radar_db --remote --file=schema.sql   # schema (idempotent)
 curl -X POST -H "Authorization: Bearer $PHOENIX_AUTH" "https://pbm-radar-worker.phoenix-jwl.workers.dev/run?dry=1"
@@ -82,4 +93,5 @@ curl -X POST -H "Authorization: Bearer $PHOENIX_AUTH" "https://pbm-radar-worker.
 - **Self-serve profile editing** (Jerry 2026-09-27: "it needs an add or remove code"): a subscriber adds or removes NAICS codes (and states/certs) themselves, from a link in the digest. It would reuse the unsub-token pattern and a small form.
 - **Award watch** (2026-09-27, McConnell MACC): follow a bid and get its award notice, so you can pitch the winners for sub work.
 - Paid tiers ($29 / $99).
+- Ending the beta: paying does not gate the digest yet. When the free beta ends is Jerry's call; then unpaid subscribers (billing not `active`/`trialing`) get skipped in `runRadar`.
 - Full bid descriptions (each one costs a SAM request).
