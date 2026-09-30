@@ -1007,6 +1007,7 @@ intake_file() {
 # pulling from Phoenix over the network — still needs `intake clone` to work
 # by fetching straight from R2 through packages-worker. Mirrors the same
 # auth/meta pattern verify_clonepool_copy already uses above.
+LAST_R2_FETCHED=""
 fetch_r2_fallback() {
   local name="$1" hex="$2" req_version="$3"
   [[ -z "${PHOENIX_AUTH}" ]] && return 1
@@ -1060,7 +1061,8 @@ fetch_r2_fallback() {
   fi
 
   mv "${tmp}" "${pool_dir}/${remote_version}_${name}"
-  log "INFO" "R2 fallback: pulled ${name} ${remote_version} from R2 (no local copy) → ${pool_dir}"
+  LAST_R2_FETCHED="${pool_dir}/${remote_version}_${name}"
+  log "INFO" "R2 fallback: pulled ${name} ${remote_version} from R2 → ${pool_dir}"
   custody_log_local "${hex}" "${name}" "clone_in_from_r2" "${remote_version}" \
     "${WORKER_URL}/clonepool/${r2_key}" "${pool_dir}/${remote_version}_${name}" "white" "user"
   report_custody "${hex}" "${name}" "clone_in_from_r2" "white" "user"
@@ -1122,6 +1124,20 @@ intake_clone() {
   local dest="${PWD}/${name}"
 
   local verify_result; verify_result=$(verify_clonepool_copy "${hex}" "${target}" "${name}")
+  # Phoenix is the authority. A local copy that no longer matches D1's CURRENT
+  # hash is stale (a newer version was intaked elsewhere) or altered: pull the
+  # current one from R2 — itself checked against D1 — and clone that. Before
+  # 2026-09-29 a stale copy was reported as an INTEGRITY FAILURE and a worker
+  # could never receive an update to anything it had pulled once.
+  if [[ "${verify_result}" == "CORRUPT" && "${req_version}" == "latest" ]]; then
+    if fetch_r2_fallback "${name}" "${hex}" "latest" >/dev/null && [[ -f "${LAST_R2_FETCHED}" ]]; then
+      target="${LAST_R2_FETCHED}"
+      version=$(basename "${target}" | grep -o '^v[0-9]*')
+      verify_result="valid"
+      echo "[intake:OK] Local copy was out of date — refreshed from Phoenix (R2), checked against D1"
+      log "INFO" "clone: stale local ${name} refreshed from R2 (${version})"
+    fi
+  fi
   case "${verify_result}" in
     CORRUPT)
       echo ""
@@ -1833,6 +1849,7 @@ fetch_dir_r2_fallback() {
   ver=$(grep -o '"version": "[^"]*"' "${tmp}" | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
   pool_dir="${CLONEPOOL_DIR}/T1/${hex}"
   snap="${pool_dir}/${ver}_${name}"
+  rm -rf "${snap}"                     # rebuilt whole from the manifest, no stale leftovers
   mkdir -p "${snap}"
   local entry fhex fname fpath fver fpool n=0 fails seen=" "
   local fields='s/.*"hex":"([^"]*)","name":"([^"]*)","path":"([^"]*)","version":"([^"]*)".*/\1\t\2\t\3\t\4/'
@@ -1882,6 +1899,25 @@ intake_clone_directory() {
   local hex; hex=$(to_hex "${name}")
   local pool_dir; pool_dir=$(resolve_pool_dir "${hex}")
   local sidecar="${pool_dir}/${hex}.sidecar.json"
+
+  # Phoenix is the authority: a local directory whose manifest no longer matches
+  # D1's current manifest hash is out of date — rebuild it from R2.
+  if [[ -f "${sidecar}" && "${version}" == "latest" && -n "${PHOENIX_AUTH}" ]] \
+     && grep -q '"type": "directory"' "${sidecar}" 2>/dev/null; then
+    local d1_manifest local_manifest
+    d1_manifest=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
+                  "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null \
+                  | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[0-9a-f]*"' | head -1 | grep -o '[0-9a-f]\{64,\}' || true)
+    local_manifest=$(openssl dgst -sha3-512 -r "${sidecar}" 2>/dev/null | awk '{print $1}')
+    if [[ -n "${d1_manifest}" && "${d1_manifest}" != "${local_manifest}" ]]; then
+      if fetch_dir_r2_fallback "${name}" "${hex}" "${version}"; then
+        echo "[intake:OK] Local '${name}' was out of date — rebuilt from Phoenix (R2), checked against D1"
+        pool_dir=$(resolve_pool_dir "${hex}")
+        sidecar="${pool_dir}/${hex}.sidecar.json"
+      fi
+    fi
+  fi
+
   if [[ ! -f "${sidecar}" ]]; then
     # No local copy: rebuild it from R2 if it's a directory there.
     if fetch_dir_r2_fallback "${name}" "${hex}" "${version}"; then
