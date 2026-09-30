@@ -157,6 +157,27 @@ Found and fixed during Phase 3 (system fixes):
 - `intake clone` never refreshed a stale local copy: a directory was cloned from its old snapshot, and a stale file read as an "INTEGRITY FAILURE". Phoenix is now the authority on every clone.
 - dm-helix's shared Dandelion slot was overwritten by every instance and zeroed by any removal.
 
+## 3d. Upload diagnosis and fix — 2026-09-29
+
+The slow push (M4, ~0.9 Mbit/s) was **not Phoenix**. Measured on the Compaq:
+
+| Test | Result |
+|---|---|
+| raw upload straight to Cloudflare (no worker, no intake) | 0.88–1.08 Mbit/s: the same as the worker path |
+| Precision, same router, raw upload | 6.6–8.5 Mbit/s: the house uplink is fine |
+| Compaq over the LAN: sending / receiving | 6.7 / 44.5 Mbit/s: one-directional |
+| NIC: e1000e 82579LM, gigabit card | linked at 100 Mbit, advertising only 10/100 (downshifted), zero local errors |
+| TCP retransmits during an upload | **4.6 %** (healthy is under 0.1 %) |
+| offload (TSO/GSO) on vs off | no difference, so not the known e1000e bug |
+| congestion control CUBIC → **BBR** | **1.07 → 20–26 Mbit/s** up |
+| 16 MiB push egress → R2 + D1 receipt | **289.3 s → 20.7 s** (14×) |
+
+**Fixed in software:** `sector3/worker-up/net-tune.sh` sets BBR + fq on the worker, persisted in `/etc/sysctl.d/90-phoenix-bbr.conf`, applied on pbm-compaq; `net-tune.sh revert` undoes it. Every worker should get it: the game-client shape runs over lossy home, Starlink and mobile links.
+
+**Still worth doing by hand (Jerry):** swap the Compaq's network cable, and use another router or switch port, ideally a gigabit one. A gigabit card downshifted to 10/100 with send-only loss points at a bad cable pair or a bad port.
+
+**Next, noted:** each push uploads the bytes twice (the current key plus the per-version key). A server-side copy in the worker would halve push time.
+
 ## 4. Rollback (every phase)
 
 - **Phase 0:** delete the roadtest bucket, D1 and worker on the jerry account. Ours was never touched.
