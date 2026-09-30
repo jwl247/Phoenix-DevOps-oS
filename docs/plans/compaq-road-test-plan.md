@@ -203,6 +203,45 @@ Jerry: "it has to travel with the system", and "I can't afford a straight Anthro
 
 **Verdict for the game (Jerry asked "it's not fast enough is it?"):** fine for directing, too slow for a real-time KITT on this 2011 CPU. Open, and Jerry's call: whether the game client may use the player's GPU for H.L.K; Phoenix OS boxes blacklist GPU drivers.
 
+## 6. Decision record — for and against this method (2026-09-29)
+
+**Jerry's rule for the game:** "Whatever makes this work as an advantage, that's what we do. If running a standard game format with Unity or some other engine that exists is going to be way better, then I'll have to consider that."
+So this is not a choice between this method and a standard engine. The game client is Unity, as planned (see project notes). Phoenix is the delivery and authority layer behind it. H.L.K and Helix keep their place only where they measurably beat what the engine already does.
+
+### For (proven on pbm-compaq, 2026-09-29)
+| Point | Evidence |
+|---|---|
+| A blank machine becomes a working Phoenix worker | cold start 40 s; 73/73 files byte-identical to git |
+| What arrives is exactly what was approved | every byte checked against D1; tampered manifest, file and copy all refused |
+| Phoenix stays the authority | stale copies self-heal on the next pull; H.L.K updated itself from Phoenix |
+| Large objects | 1.93 GB model in 31 parts; 250 MiB cloned back byte-identical |
+| The AI travels with the system, with no paid API | H.L.K on a local model imported from Phoenix; right tool 6/6 |
+| Ingress makes data fast after it arrives | freshly pulled data 100 % from memory (was 23 %); 37× over the bare disk on repeat reads (BENCHMARKS §5b) |
+| Cheap to operate | R2 has no download fees; ~2 GB stored costs pennies |
+| Not fragile at the core | reboots survived; write-through, so no data loss; our own system unchanged throughout |
+| Repeatable | every step is a script (Phase 5 mostly written) |
+
+### Against / not yet proven
+| Point | Evidence |
+|---|---|
+| Talking to H.L.K on old hardware | 4–6 s per question, 11.5 s for an open question, on the 2011 i5-2400: fine for directing, too slow for a real-time KITT |
+| Helix under many clients | dbench at 48 clients runs at 0.26× the bare disk: a server-side risk |
+| Helix vs a *standard* Linux box | not proven: our wins are against a bare disk, and Linux's page cache is fast too. The larger-than-RAM comparison is owed. |
+| Per-file overhead | ~1 s of round trips per file, so content must ship as bundles or packs |
+| The player's connection | 1.93 GB took 251 s at ~64 Mbit/s; lossy links need BBR (the Compaq's cable) |
+| Young code | ~15 real bugs found and fixed in one day: measuring works, and there is more to find |
+| Security loose ends | 8 open findings in addendum 2; A2-N1 (keys on the curl command line) caused a real exposure |
+| Hand-glued pieces | scripts copied onto the box by hand during the test; the Phase 5 automation isn't done |
+
+### Verdict
+The core idea is **proven sound**: delivery, verification, authority, the AI travelling with the system, and ingress warmth all worked on real hardware. What stands against it is speed on old hardware, Helix under heavy load, and polish. Those are engineering problems with clear next steps, not a wrong road.
+
+### How to keep it an advantage (what decides each piece)
+1. **Unity (or the chosen engine) draws the game.** Phoenix delivers the engine's content packs (e.g. Unity asset bundles), checked against D1, from R2 with no download fees. That is an advantage a standard engine does not have on its own: custody, tamper refusal and one authority.
+2. **Helix stays only if she beats standard caching.** Run the larger-than-RAM comparison: Helix against plain Linux page cache, and against a standard SSD cache (e.g. bcache or lvmcache). If she loses, ingress runs on the standard cache and nothing else changes.
+3. **H.L.K stays as director and companion if it earns its seat.** Measure it on a current gaming PC (and, if Jerry allows it, the player's GPU) against the engine's own asset-streaming logic. Keep what beats it.
+4. **Security before anything ships:** close A2-N1, then run the Round 2 security round.
+
 ## 4. Rollback (every phase)
 
 - **Phase 0:** delete the roadtest bucket, D1 and worker on the jerry account. Ours was never touched.
