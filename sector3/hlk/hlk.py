@@ -40,7 +40,7 @@ import urllib.error
 import urllib.request
 import uuid
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 HOME = os.path.expanduser("~")
 STATE = os.environ.get("HLK_STATE", os.path.join(HOME, ".phoenix-hlk"))
 CRED = os.environ.get("HLK_CRED", os.path.join(HOME, ".phoenix-worker"))
@@ -105,7 +105,9 @@ def worker_meta(name):
     """The D1 row for a name (hash baseline), from Phoenix."""
     hexid = name.encode().hex()
     req = urllib.request.Request(f"{cred('url')}/clonepool/{hexid}?meta=true",
-                                 headers={"Authorization": f"Bearer {cred('auth')}"})
+                                 headers={"Authorization": f"Bearer {cred('auth')}",
+                                          # Cloudflare answers Python's default UA with 403 (error 1010)
+                                          "User-Agent": f"phoenix-hlk/{VERSION}"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.loads(r.read().decode())
 
