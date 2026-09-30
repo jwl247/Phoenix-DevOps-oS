@@ -22,3 +22,6 @@ sector3/services/
 
 # The import method itself, so a worker can pull the rest
 sector2/package-handler/intake.sh
+
+# H.L.K — the third of the triplet (directs ingress/egress)
+sector3/hlk/
