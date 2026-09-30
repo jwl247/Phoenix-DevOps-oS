@@ -32,7 +32,12 @@ DIRTY=$(git -C "$REPO" status --porcelain -- $(grep -vE '^\s*(#|$)' "$LIST") | h
 [[ -z "$DIRTY" ]] || { echo "uncommitted changes under the operations set — commit first so every seeded file maps to one commit"; exit 1; }
 
 run_intake() {
+  # On Windows keep the system folders: without LOCALAPPDATA the Python
+  # install manager behind `python` installed a whole runtime (335 MB) into
+  # the current directory (2026-09-29). Unset on Linux, so nothing changes there.
   env -i PATH="$PATH" HOME="$SEED_HOME" USERPROFILE="$SEED_HOME" \
+    ${SYSTEMROOT:+SYSTEMROOT="$SYSTEMROOT"} ${LOCALAPPDATA:+LOCALAPPDATA="$LOCALAPPDATA"} \
+    ${APPDATA:+APPDATA="$APPDATA"} ${TEMP:+TEMP="$TEMP"} ${TMP:+TMP="$TMP"} \
     PHOENIX_WORKER_URL="$(cat "$STATE/url")" PHOENIX_AUTH="$(cat "$STATE/auth")" \
     CF_ACCESS_CLIENT_ID="" CF_ACCESS_CLIENT_SECRET="" \
     CLONEPOOL_DIR="$SEED_HOME/pool" PHOENIX_INTAKE="" INTAKE_YES=1 \
