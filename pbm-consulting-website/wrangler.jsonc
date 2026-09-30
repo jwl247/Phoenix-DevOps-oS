@@ -10,6 +10,9 @@
   "compatibility_date": "2026-09-01",
   "assets": { "directory": "." },
   "routes": [
-    { "pattern": "pbmconsultingservice.com", "custom_domain": true }
+    { "pattern": "pbmconsultingservice.com", "custom_domain": true },
+    // www serves the same site (the deploy creates its DNS + certificate);
+    // every page names the bare domain as canonical.
+    { "pattern": "www.pbmconsultingservice.com", "custom_domain": true }
   ]
 }

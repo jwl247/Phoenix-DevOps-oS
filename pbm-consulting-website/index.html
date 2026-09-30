@@ -8,13 +8,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="canonical" href="https://pbmconsultingservice.com/">
 <link rel="stylesheet" href="styles.css">
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
 <body>
 
 <header class="masthead">
-  <img class="wordmark" src="assets/logo.svg" alt="PBM Consulting Service">
+  <img class="wordmark" src="assets/logo.png" width="194" height="44" alt="PBM Consulting Service">
+  <img class="bee" src="assets/bee.svg" alt="" width="48" height="42">
 </header>
 
 <main>
@@ -45,14 +47,9 @@
     <a class="cta" href="#start">Find out if you qualify</a>
   </section>
 
-  <!-- Video slot for the landing-page video — drop the real embed in once
-       shot. Cloudflare Stream <iframe> or a direct <video src> pointing
-       at an R2-hosted file both fit here without changing the layout. -->
-  <section class="video-slot" id="video" aria-label="How PBM Consulting Service works">
-    <div class="video-frame">
-      <p class="video-placeholder-text">Video coming soon</p>
-    </div>
-  </section>
+  <!-- Video slot: hidden until the landing-page video exists. Put back
+       <section class="video-slot" id="video"> with a Cloudflare Stream
+       <iframe> or an R2-hosted <video src> when it is shot. -->
 
   <section class="folio" id="why">
     <div class="tab">why this exists</div>
@@ -153,7 +150,7 @@
       email you a verification code first — this keeps your file tied to
       a real business, the same way the certification itself will.</p>
 
-      <form id="lead-form" novalidate>
+      <form id="lead-form" class="apply-form" novalidate>
         <div class="field"><label for="lf-name">Your name</label>
           <input id="lf-name" name="name" type="text" required autocomplete="name"></div>
         <div class="field"><label for="lf-business">Business name</label>
@@ -171,7 +168,7 @@
         <p class="form-status" id="lead-status" role="status"></p>
       </form>
 
-      <form id="verify-form" hidden novalidate>
+      <form id="verify-form" class="apply-form" hidden novalidate>
         <div class="field"><label for="vf-code">Verification code</label>
           <input id="vf-code" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required
                  placeholder="6-digit code from your email"></div>

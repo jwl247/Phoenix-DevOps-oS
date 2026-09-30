@@ -108,10 +108,32 @@ def banner():
     return img
 
 
+def wordmark(height=132):
+    """Site logo: the stamp beside the name on a transparent ground, for the
+    website masthead (shown 44 px tall, drawn at 3x for sharp screens)."""
+    s = height / 132
+    st = stamp(height, bg=(0, 0, 0, 0))
+    font, sub = fraunces(round(56 * s), 600), plex(round(22 * s), 600)
+    gap = round(22 * s)
+    probe = ImageDraw.Draw(st)
+    w = st.width + gap + round(probe.textlength("PBM Consulting", font=font)) + round(8 * s)
+    img = Image.new("RGBA", (w, height), (0, 0, 0, 0))
+    img.alpha_composite(st, (0, 0))
+    d = ImageDraw.Draw(img)
+    x = st.width + gap
+    d.text((x, round(74 * s)), "PBM Consulting", font=font, fill=FOREST, anchor="ls")
+    d.text((x + round(2 * s), round(108 * s)), "SERVICE", font=sub, fill=OXBLOOD, anchor="ls")
+    return img
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=r"E:\Phoenix\video\brand")
+    ap.add_argument("--logo", help="also write the website logo (transparent PNG) to this path")
     a = ap.parse_args()
+    if a.logo:
+        wordmark().save(a.logo, optimize=True)
+        print(f"wrote {a.logo}")
     os.makedirs(a.out, exist_ok=True)
     banner().convert("RGB").save(os.path.join(a.out, "banner.png"), optimize=True)
     stamp(800).convert("RGB").save(os.path.join(a.out, "profile.png"), optimize=True)

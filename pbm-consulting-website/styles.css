@@ -40,7 +40,10 @@ a { color: var(--oxblood); }
 /* ── masthead ─────────────────────────────────────────────────────── */
 .masthead {
   padding: 28px clamp(20px, 6vw, 64px) 0;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
 }
+/* the pink bee (Jerry, 2026-09-30): one on every page, flying top right */
+.bee { width: 48px; height: auto; display: block; transform: rotate(-8deg); }
 .wordmark { height: 44px; width: auto; display: block; }
 
 /* ── hero ─────────────────────────────────────────────────────────── */
@@ -215,7 +218,7 @@ a:focus-visible, .cta:focus-visible {
 .apply-form .field { margin: 0 0 16px; }
 .apply-form .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 .apply-form label, .apply-form legend { display: block; font-weight: 600; font-size: 14px; margin-bottom: 5px; }
-.apply-form input[type=text], .apply-form input[type=email], .apply-form textarea {
+.apply-form input[type=text], .apply-form input[type=email], .apply-form input[type=tel], .apply-form textarea {
   width: 100%; box-sizing: border-box; font: 16px 'IBM Plex Sans', sans-serif; color: var(--ink);
   background: #fff; border: 1px solid var(--line); border-radius: 3px; padding: 10px 12px;
 }
