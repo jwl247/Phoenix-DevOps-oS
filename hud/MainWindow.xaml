@@ -42,9 +42,11 @@
              old ConPTY terminal, which had to live in a separate opaque window
              (WPF can't draw native controls in a transparent window) and died
              to "Session Terminated". Jerry, 2026-09-27: "make claude cli like
-             the hlk10's, it'd work, being clear". -->
-        <Border x:Name="ClaudeCodePane" Style="{StaticResource HudPanel}" HorizontalAlignment="Stretch"
-                VerticalAlignment="Top" Margin="0,64,356,0">
+             the hlk10's, it'd work, being clear".
+             Right column, filling the gap between LIVE MONITOR (64..264) and
+             H.L.K-10 (bottom, 293 tall) with 12px spacing (Jerry, 2026-09-29). -->
+        <Border x:Name="ClaudeCodePane" Style="{StaticResource HudPanel}" Width="340" HorizontalAlignment="Right"
+                VerticalAlignment="Stretch" Margin="0,276,0,305">
             <Grid Margin="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -103,7 +105,7 @@
 
         <!-- AI Chat — H.L.K-10's comms panel, bottom-right, edge-anchored -->
         <Border Style="{StaticResource HudPanel}" Width="340" HorizontalAlignment="Right"
-                VerticalAlignment="Bottom" Margin="0,0,0,0" Height="440">
+                VerticalAlignment="Bottom" Margin="0,0,0,0" Height="293">
             <Grid Margin="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>

@@ -83,12 +83,8 @@ public partial class MainWindow : Window
         var root = Environment.GetEnvironmentVariable("PHOENIX_ROOT");
         if (!string.IsNullOrEmpty(root) && Directory.Exists(root)) Environment.CurrentDirectory = root;
 
-        // 1/3 of screen height, not a hardcoded pixel value — same
-        // resolution-independence reasoning as the full-screen MainWindow
-        // sizing fix (SystemParameters, not a fixed number that only looks
-        // right on the one screen it was tuned against).
-        // Same height as the Live Monitor panel beside it (Jerry, 2026-09-27).
-        ClaudeCodePane.Height = 200;
+        // CLAUDE CODE pane height comes from its XAML margins now — it
+        // stretches to fill the right column between LIVE MONITOR and H.L.K-10.
 
         // Fill the work area, not the whole screen — at full screen height the
         // bottom-anchored H.L.K-10 panel's input row sat behind the taskbar.
