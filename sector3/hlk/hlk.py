@@ -40,7 +40,7 @@ import urllib.error
 import urllib.request
 import uuid
 
-VERSION = "0.1.2"
+VERSION = "0.2.0"
 HOME = os.path.expanduser("~")
 STATE = os.environ.get("HLK_STATE", os.path.join(HOME, ".phoenix-hlk"))
 CRED = os.environ.get("HLK_CRED", os.path.join(HOME, ".phoenix-worker"))
@@ -377,31 +377,76 @@ def confirm(pid, answer, caller):
 
 
 # ── optional model tier (drives the same tools) ───────────────────────────
-MODEL_RULES = ("You are H.L.K, directing a Phoenix worker box: ingress Helix (what comes in from Phoenix), "
-               "egress Helix (what goes out). To use a tool, reply with ONE line: ACTION {\"tool\":\"<name>\",\"args\":{...}} "
-               "and nothing else; you'll get the result back. Otherwise answer plainly. Never claim a tool ran unless a "
-               "[tool result] says so. push asks the human first — say so. Tools:\n")
+MODEL_RULES = ("You are H.L.K, directing a Phoenix worker box. Ingress Helix holds what came in from Phoenix; "
+               "egress Helix holds what goes out. Answer with the JSON object only: say = a short plain answer for "
+               "the human, tool = the ONE tool to run (or \"none\"), args = that tool's arguments. Use a tool whenever "
+               "the request is about the box, its Helix, or items (files and folders like kernels, helix, frank, "
+               "security). push asks the human first — tell them. Never claim a tool ran unless a [tool result] says so.\n"
+               "Examples:\n"
+               "\"how are the helixes doing\" -> {\"say\":\"Checking both.\",\"tool\":\"status\",\"args\":{}}\n"
+               "\"is kernels warm\" -> {\"say\":\"Checking.\",\"tool\":\"warm\",\"args\":{\"name\":\"kernels\"}}\n"
+               "\"bring in frank\" -> {\"say\":\"Pulling frank.\",\"tool\":\"pull\",\"args\":{\"name\":\"frank\"}}\n"
+               "\"get a, b and c ready ahead of time\" -> {\"say\":\"Prefetching.\",\"tool\":\"prefetch\",\"args\":{\"names\":[\"a\",\"b\",\"c\"]}}\n"
+               "\"send out.txt to Phoenix\" -> {\"say\":\"That needs your yes.\",\"tool\":\"push\",\"args\":{\"name\":\"out.txt\"}}\n"
+               "\"what is a cache\" -> {\"say\":\"A fast copy kept close.\",\"tool\":\"none\",\"args\":{}}\n"
+               "Tools:\n")
 
 
-def model_reply(history):
+def reply_shape():
+    """The only shape a local model may answer in. Constrained decoding (Ollama
+    `format`) keeps a small model on the tool list instead of wandering into
+    prose — measured on pbm-compaq 2026-09-29: free-form ACTION lines got 1-3/6
+    right with 1-3B models."""
+    return {"type": "object",
+            "properties": {"say": {"type": "string"},
+                           "tool": {"type": "string", "enum": sorted(TOOLS) + ["none"]},
+                           "args": {"type": "object"}},
+            "required": ["say", "tool", "args"]}
+
+
+def system_prompt():
+    return MODEL_RULES + "\n".join(f"- {n}: {s['says']} (args: {json.dumps(s['params'])})" for n, s in TOOLS.items())
+
+
+def model_decide(history):
+    """-> {"say": str, "tool": name or None, "args": dict}, whichever tier answers.
+    Local (Ollama) is the tier that travels with the system; the API tier is
+    optional and off unless someone chooses to fund it (Jerry, 2026-09-29)."""
     tier = os.environ.get("HLK_MODEL", "none")
-    system = MODEL_RULES + "\n".join(f"- {n}: {s['says']} (args: {json.dumps(s['params'])})" for n, s in TOOLS.items())
     if tier == "ollama":
-        body = {"model": os.environ.get("HLK_OLLAMA_MODEL", "llama3"), "stream": False,
-                "messages": [{"role": "system", "content": system}] + history, "options": {"temperature": 0}}
+        body = {"model": os.environ.get("HLK_OLLAMA_MODEL", "qwen2.5:3b"), "stream": False, "format": reply_shape(),
+                "messages": [{"role": "system", "content": system_prompt()}] + history,
+                "options": {"temperature": 0}}
         req = urllib.request.Request(os.environ.get("HLK_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/") + "/api/chat",
                                      data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=180) as r:
-            return json.loads(r.read())["message"]["content"]
+        with urllib.request.urlopen(req, timeout=300) as r:
+            content = json.loads(r.read())["message"]["content"]
+        try:
+            d = json.loads(content)
+        except json.JSONDecodeError:
+            return {"say": content, "tool": None, "args": {}}
+        tool = d.get("tool")
+        return {"say": str(d.get("say", "")), "tool": None if tool in (None, "none") else str(tool),
+                "args": d.get("args") if isinstance(d.get("args"), dict) else {}}
     if tier == "api":
         key = open(os.environ["HLK_ANTHROPIC_KEY_FILE"], encoding="utf-8").read().strip()
         body = {"model": os.environ.get("HLK_API_MODEL", "claude-sonnet-5-5"), "max_tokens": 1024,
-                "system": system, "messages": history}
+                "system": system_prompt() + "\nReply with the JSON object only.", "messages": history}
         req = urllib.request.Request("https://api.anthropic.com/v1/messages", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json", "x-api-key": key,
                                               "anthropic-version": "2023-06-01"})
         with urllib.request.urlopen(req, timeout=180) as r:
-            return "".join(b.get("text", "") for b in json.loads(r.read())["content"])
+            text = "".join(b.get("text", "") for b in json.loads(r.read())["content"])
+        m = re.search(r"\{.*\}", text, re.S)
+        try:
+            d = json.loads(m.group(0)) if m else {}
+        except json.JSONDecodeError:
+            d = {}
+        if not d:
+            return {"say": text, "tool": None, "args": {}}
+        tool = d.get("tool")
+        return {"say": str(d.get("say", "")), "tool": None if tool in (None, "none") else str(tool),
+                "args": d.get("args") if isinstance(d.get("args"), dict) else {}}
     raise RuntimeError("no model tier configured (HLK_MODEL=ollama|api) — every tool still works on POST /call")
 
 
@@ -409,20 +454,16 @@ def chat(message, caller):
     history = [{"role": "user", "content": str(message)}]
     steps = []
     for _ in range(4):
-        reply = model_reply(history).strip()
-        m = re.search(r"ACTION\s*(\{.*\})", reply, re.S)
-        if not m:
-            return {"reply": reply, "steps": steps}
-        try:
-            act = json.loads(m.group(1))
-        except json.JSONDecodeError:
-            return {"reply": reply, "steps": steps}
-        code, res = call(str(act.get("tool")), act.get("args") or {}, caller, "chat")
-        steps.append({"tool": act.get("tool"), "code": code})
+        d = model_decide(history)
+        if not d["tool"]:
+            return {"reply": d["say"], "steps": steps}
+        code, res = call(d["tool"], d["args"], caller, "chat")
+        steps.append({"tool": d["tool"], "code": code})
         if code == 202:
             return {"reply": res["question"], "pending": res["pending"], "steps": steps}
-        history += [{"role": "assistant", "content": reply},
-                    {"role": "user", "content": f"[tool result] {json.dumps(res)[:4000]}"}]
+        history += [{"role": "assistant", "content": json.dumps(d)},
+                    {"role": "user", "content": f"[tool result] {json.dumps(res)[:4000]} — now answer the human "
+                                                 f"(tool \"none\") unless another tool is really needed."}]
     return {"reply": "Stopped after four steps without a final answer.", "steps": steps}
 
 
