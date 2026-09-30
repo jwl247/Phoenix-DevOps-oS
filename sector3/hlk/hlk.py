@@ -40,7 +40,7 @@ import urllib.error
 import urllib.request
 import uuid
 
-VERSION = "0.2.0"
+VERSION = "0.2.2"
 HOME = os.path.expanduser("~")
 STATE = os.environ.get("HLK_STATE", os.path.join(HOME, ".phoenix-hlk"))
 CRED = os.environ.get("HLK_CRED", os.path.join(HOME, ".phoenix-worker"))
@@ -416,7 +416,9 @@ def model_decide(history):
     if tier == "ollama":
         body = {"model": os.environ.get("HLK_OLLAMA_MODEL", "qwen2.5:3b"), "stream": False, "format": reply_shape(),
                 "messages": [{"role": "system", "content": system_prompt()}] + history,
-                "options": {"temperature": 0}}
+                # keep the model AND the already-read instructions loaded between
+                # decisions: re-reading them was most of each decision's time
+                "keep_alive": -1, "options": {"temperature": 0}}
         req = urllib.request.Request(os.environ.get("HLK_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/") + "/api/chat",
                                      data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=300) as r:
@@ -450,6 +452,41 @@ def model_decide(history):
     raise RuntimeError("no model tier configured (HLK_MODEL=ollama|api) — every tool still works on POST /call")
 
 
+def summarize(tool, res):
+    """The answer straight from a tool's result — exact, and no second model
+    call (on a CPU box that second call doubled every request; 2026-09-29)."""
+    if not isinstance(res, dict):
+        return str(res)[:300]
+    if res.get("ok") is False:
+        return f"That didn't work: {res.get('error', 'unknown error')}."
+    if tool == "status":
+        parts = []
+        for inst in INSTANCES:
+            i = res.get(inst) or {}
+            if not i.get("up"):
+                parts.append(f"{inst} is down")
+                continue
+            now = f", {i['hit_rate_now']}% served from memory since last look" if i.get("hit_rate_now") is not None else ""
+            parts.append(f"{inst} is {i.get('state')}, {i.get('hit_rate_total')}% hit rate overall{now}")
+        idx = res.get("index") or {}
+        return "; ".join(parts) + f". I hold {idx.get('warm_items', 0)} items warm."
+    if tool == "warm":
+        if "items" in res:
+            return f"{len(res['items'])} items in the index: " + ", ".join(r["name"] for r in res["items"][:12]) + "."
+        return f"{res.get('name')} is {'warm in ingress' if res.get('warm') else 'not warm — I can pull it'}."
+    if tool == "pull":
+        return f"Pulled {res.get('name')}: {res.get('files')} files, {res.get('bytes')} bytes in {res.get('ms', 0) / 1000:.1f} s, every file checked against D1."
+    if tool == "prefetch":
+        return f"Prefetching {', '.join(res.get('queued', []))} in the background (job {res.get('job')})."
+    if tool == "verify":
+        return f"{res.get('name')} {'matches' if res.get('ok') else 'does NOT match'} its D1 hash."
+    if tool == "stage":
+        return f"Staged {res.get('name')} on egress ({res.get('bytes')} bytes). It leaves only when you confirm a push."
+    if tool == "jobs":
+        return json.dumps(res)[:300]
+    return json.dumps(res)[:300]
+
+
 def chat(message, caller):
     history = [{"role": "user", "content": str(message)}]
     steps = []
@@ -461,6 +498,8 @@ def chat(message, caller):
         steps.append({"tool": d["tool"], "code": code})
         if code == 202:
             return {"reply": res["question"], "pending": res["pending"], "steps": steps}
+        if os.environ.get("HLK_NARRATE") != "1":          # fast path: answer from the result itself
+            return {"reply": summarize(d["tool"], res), "steps": steps}
         history += [{"role": "assistant", "content": json.dumps(d)},
                     {"role": "user", "content": f"[tool result] {json.dumps(res)[:4000]} — now answer the human "
                                                  f"(tool \"none\") unless another tool is really needed."}]
