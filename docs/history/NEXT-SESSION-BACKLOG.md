@@ -119,3 +119,9 @@
 - **Google sign-in on Sign** — one real signed document end to end before the campaign demo.
 - **Pentest Round 2 carryovers:** re-house `lifefirst-mustanswer` + PHOENIX_AUTH; orphaned D1 `workorder-kernel-db`/`phoenix-archive`; gitleaks/trufflehog over full history; Round 1 for office-notify / phoenix-office / pbm-leads / lifefirst-mcp workers.
 - Open Jerry calls: broad inbound `python.exe` firewall rule on this PC? lighter daily pentest?
+
+## Atlas snow globe — self-serve lookup (Jerry, 2026-09-30; after the 10/8 catch date, in this order)
+Intent: anyone looks something up and always sees it plus 8 neighbors with brief descriptions derived from `CONNECTIONS.md`, so other features get discovered organically. HUD scope (not the Electron dashboard). Backend already live: `GET /connections/<id>/related` in packages-worker. Reverses the 2026-09-20 "chat only, no panel" call for Atlas; Claude-as-atlas in chat stays.
+- **A. Atlas view in the HUD** — search box, the looked-up entry in the center, 8 cards (name + description) around it, click a card to re-center (walk the graph). Includes the prerequisite fix: `/related` backfill uses `ORDER BY RANDOM()` (`sector2/package-handler/worker/index.js` ~L1305), so short-linked entries get random, unrelated filler that changes each lookup; replace with deterministic neighbors-of-neighbors (2-hop) ranking before building the view.
+- **B. `usys atlas <thing>`** — same 8 results in any terminal.
+- **C. Both** — B on top of A once A exists.
