@@ -44,6 +44,7 @@
  */
 #define DM_MSG_PREFIX "helix"
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/device-mapper.h>
 #include <linux/bio.h>
 #include <linux/blkdev.h>
@@ -82,6 +83,22 @@ atomic_t helix_dandelion_heat = ATOMIC_INIT(0);          /* 0..1000 */
 atomic_t helix_dandelion_state = ATOMIC_INIT(HX_COOL_COLD);
 atomic_t helix_dandelion_compression = ATOMIC_INIT(1000); /* 300..1000 */
 
+/* Every live instance (helix, or helix-ingress + helix-egress, ...). The three
+ * atomics above are ONE published Dandelion for /proc/helix and GET_STATS, so
+ * they carry the aggregate: the hottest heat, the hottest state by heat rank
+ * (cold < cooling < warm < hot < surging — NOT the HX_COOL_* enum order, which
+ * is a name-lookup order with cooling last), and the deepest compression.
+ * Before 2026-09-29 every instance's tick overwrote them and any instance's
+ * removal zeroed them, so with two instances the published Dandelion flipped
+ * between them and read cold while one was still running. Each instance's own
+ * Dandelion is in its `dmsetup status` line. */
+static LIST_HEAD(hx_instances);
+static DEFINE_MUTEX(hx_instances_lock);
+static const u8 hx_heat_rank[] = {
+	[HX_COOL_COLD] = 0, [HX_COOL_COOLING] = 1, [HX_COOL_WARM] = 2,
+	[HX_COOL_HOT] = 3, [HX_COOL_SURGING] = 4,
+};
+
 enum hx_list { HX_ON_A, HX_ON_PEND, HX_ON_B };
 
 struct hx_entry {
@@ -115,6 +132,7 @@ struct hx_lane {
 };
 
 struct hx_cache {
+	struct list_head node;      /* on hx_instances */
 	struct dm_dev *dev;
 	unsigned int ram_mb;
 	u64 lane_budget;            /* A bytes per lane */
@@ -968,6 +986,27 @@ static u64 hx_relieve(struct hx_cache *hc, u8 *buf)
 	return freed;
 }
 
+static void hx_publish_dandelion(void)
+{
+	struct hx_cache *hc;
+	u32 heat = 0, comp = 1000;
+	int state = HX_COOL_COLD, s;
+
+	mutex_lock(&hx_instances_lock);
+	list_for_each_entry(hc, &hx_instances, node) {
+		heat = max(heat, READ_ONCE(hc->heat));
+		comp = min(comp, READ_ONCE(hc->compression));
+		s = READ_ONCE(hc->state);
+		if (s >= 0 && s < (int)ARRAY_SIZE(hx_heat_rank) &&
+		    hx_heat_rank[s] > hx_heat_rank[state])
+			state = s;
+	}
+	mutex_unlock(&hx_instances_lock);
+	atomic_set(&helix_dandelion_heat, heat);
+	atomic_set(&helix_dandelion_state, state);
+	atomic_set(&helix_dandelion_compression, comp);
+}
+
 static void hx_dandelion_tick(struct work_struct *w)
 {
 	struct hx_cache *hc = container_of(to_delayed_work(w), struct hx_cache, tick);
@@ -1047,9 +1086,7 @@ static void hx_dandelion_tick(struct work_struct *w)
 		hc->heat = hc->heat > cool ? hc->heat - (u32)cool : 0;
 		atomic64_add(freed, &hc->cooled_bytes);
 	}
-	atomic_set(&helix_dandelion_heat, hc->heat);
-	atomic_set(&helix_dandelion_state, hc->state);
-	atomic_set(&helix_dandelion_compression, hc->compression);
+	hx_publish_dandelion();
 
 	schedule_delayed_work(&hc->tick, msecs_to_jiffies(HX_TICK_MS));
 }
@@ -1253,6 +1290,10 @@ static int hx_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	ti->num_discard_bios = 1;
 	ti->num_write_zeroes_bios = 1;
 
+	mutex_lock(&hx_instances_lock);
+	list_add_tail(&hc->node, &hx_instances);
+	mutex_unlock(&hx_instances_lock);
+
 	INIT_DELAYED_WORK(&hc->tick, hx_dandelion_tick);
 	schedule_delayed_work(&hc->tick, msecs_to_jiffies(HX_TICK_MS));
 	if (hc->bdev)
@@ -1273,6 +1314,9 @@ static void hx_dtr(struct dm_target *ti)
 	unsigned long idx, flags;
 	unsigned int i;
 
+	mutex_lock(&hx_instances_lock);
+	list_del(&hc->node);
+	mutex_unlock(&hx_instances_lock);
 	cancel_delayed_work_sync(&hc->tick);
 	flush_workqueue(hc->wq);                /* B writer + deferred reads done */
 	for (i = 0; i < HX_LANES; i++) {
@@ -1293,9 +1337,7 @@ static void hx_dtr(struct dm_target *ti)
 	xa_for_each(&hc->blocks, idx, e)
 		xa_erase(&hc->blocks, idx);
 	xa_destroy(&hc->blocks);
-	atomic_set(&helix_dandelion_heat, 0);
-	atomic_set(&helix_dandelion_state, HX_COOL_COLD);
-	atomic_set(&helix_dandelion_compression, 1000);
+	hx_publish_dandelion();                 /* from the instances still up (cold if none) */
 	helix_intent_post("helix_down %s", hc->dev->name);
 	hx_destroy(ti, hc);
 }
