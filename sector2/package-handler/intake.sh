@@ -525,61 +525,117 @@ post_to_d1() {
 # pool_path that only exists on this one machine's disk. This closes that
 # gap going forward. Not fatal on failure (same posture as post_to_d1):
 # a stalled R2 upload shouldn't abort an otherwise-successful local intake.
-R2_MAX_BYTES=$((100 * 1024 * 1024))  # Workers request-body ceiling, conservative
+# Objects up to R2_SINGLE_MAX go up in one PUT; bigger ones (models, game
+# packs) in R2_PART pieces through the worker's multipart routes (3.6.0) —
+# a Workers request body is capped near 100 MB, R2 itself takes ~5 TB.
+# Before 2026-09-29 anything over 100 MB was simply not uploaded.
+R2_SINGLE_MAX=$((95 * 1024 * 1024))
+R2_PART=$((64 * 1024 * 1024))
+_auth_hdrs=()
+_r2_auth() {
+  _auth_hdrs=(-H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}")
+}
+
+# r2_put <key> <file> <sha3> — 0 on success. The sha3 is recorded on the object
+# so the worker can later copy it server-side only when it is these exact bytes.
+r2_put() {
+  local key="$1" filepath="$2" sha3="$3" size code
+  _r2_auth
+  size=$(get_size "${filepath}")
+  if (( size <= R2_SINGLE_MAX )); then
+    code=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "${_auth_hdrs[@]}" -H "X-Phoenix-SHA3: ${sha3}" \
+           --data-binary "@${filepath}" "${WORKER_URL}/clonepool/${key}" 2>/dev/null)
+    [[ "${code}" == "200" ]]
+    return
+  fi
+  local uid n=1 parts="" part resp etag nparts
+  nparts=$(( (size + R2_PART - 1) / R2_PART ))
+  uid=$(curl -s -X POST "${_auth_hdrs[@]}" -H "Content-Type: application/json" -d "{\"sha3\":\"${sha3}\"}" \
+        "${WORKER_URL}/clonepool/${key}/mpu" 2>/dev/null | grep -o '"uploadId"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)"$/\1/')
+  [[ -z "${uid}" ]] && { log "WARN" "R2 multipart: could not start ${key}"; return 1; }
+  part=$(mktemp)
+  while (( n <= nparts )); do
+    dd if="${filepath}" of="${part}" bs="${R2_PART}" skip=$((n - 1)) count=1 iflag=fullblock status=none 2>/dev/null \
+      || dd if="${filepath}" of="${part}" bs="${R2_PART}" skip=$((n - 1)) count=1 status=none
+    resp=$(curl -s -X PUT "${_auth_hdrs[@]}" --data-binary "@${part}" \
+           "${WORKER_URL}/clonepool/${key}/mpu/${uid}/${n}" 2>/dev/null)
+    etag=$(grep -o '"etag"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${resp}" | sed -E 's/.*"([^"]*)"$/\1/')
+    if [[ -z "${etag}" ]]; then
+      rm -f "${part}"
+      curl -s -o /dev/null -X DELETE "${_auth_hdrs[@]}" "${WORKER_URL}/clonepool/${key}/mpu/${uid}" 2>/dev/null
+      log "WARN" "R2 multipart: part ${n}/${nparts} of ${key} failed — aborted"
+      return 1
+    fi
+    parts+="{\"partNumber\":${n},\"etag\":\"${etag}\"},"
+    n=$((n + 1))
+  done
+  rm -f "${part}"
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${_auth_hdrs[@]}" -H "Content-Type: application/json" \
+         -d "{\"parts\":[${parts%,}]}" "${WORKER_URL}/clonepool/${key}/mpu/${uid}/complete" 2>/dev/null)
+  [[ "${code}" == "200" ]] && log "INFO" "R2 multipart OK → ${key} (${nparts} parts, ${size} bytes)"
+  [[ "${code}" == "200" ]]
+}
+
+# The file's SHA3-512: from report_clonepool when it just hashed this same
+# file (LAST_REPORTED_*), otherwise computed here.
+LAST_REPORTED_FILE=""
+LAST_REPORTED_SHA3=""
+_sha3_of() {
+  if [[ "${LAST_REPORTED_FILE}" == "$1" && -n "${LAST_REPORTED_SHA3}" ]]; then
+    echo "${LAST_REPORTED_SHA3}"
+  else
+    openssl dgst -sha3-512 -r "$1" 2>/dev/null | awk '{print $1}'
+  fi
+}
+
+# ── R2 uploader — actual file bytes, not just D1 metadata ──────
+# R2 was documented as the canonical content store from the start, but
+# nothing in this pipeline ever uploaded to it — D1 held pointers to a
+# pool_path that only exists on this one machine's disk. This closes that
+# gap going forward. Not fatal on failure (same posture as post_to_d1):
+# a stalled R2 upload shouldn't abort an otherwise-successful local intake.
 upload_to_r2() {
   local hex="$1" filepath="$2"
   [[ -z "${PHOENIX_AUTH}" ]] && { log "WARN" "PHOENIX_AUTH not set — skipping R2 upload"; return 0; }
   [[ ! -f "${filepath}" ]] && { log "WARN" "R2 upload: file not found: ${filepath}"; return 0; }
-  local size; size=$(get_size "${filepath}")
-  if (( size > R2_MAX_BYTES )); then
-    log "WARN" "R2 upload skipped — ${filepath} is $(( size / 1024 / 1024 ))MB, over the $(( R2_MAX_BYTES / 1024 / 1024 ))MB cap"
-    return 0
+  local size sha3; size=$(get_size "${filepath}"); sha3=$(_sha3_of "${filepath}")
+  if r2_put "${hex}" "${filepath}" "${sha3}"; then
+    log "INFO" "R2 OK → ${hex} (${size} bytes)"
+    upload_version_to_r2 "${hex}" "${filepath}" "${sha3}" copy
+  else
+    log "WARN" "R2 upload failed → ${hex}"
+    upload_version_to_r2 "${hex}" "${filepath}" "${sha3}"
   fi
-  local http_code
-  http_code=$(curl -s -o /dev/null -w "%{http_code}" \
-    -X PUT \
-    -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
-    --data-binary "@${filepath}" \
-    "${WORKER_URL}/clonepool/${hex}" 2>/dev/null)
-  [[ "${http_code}" == "200" ]] \
-    && log "INFO" "R2 OK → ${hex} (${size} bytes)" \
-    || log "WARN" "R2 upload failed (${http_code}) → ${hex}"
-  upload_version_to_r2 "${hex}" "${filepath}"
 }
 
 # ── R2 per-version bytes — the byte-retrievable history ────────
 # PUT /clonepool/<hex> above is the overwritten "current" key. The worker
 # logs a `versions` row with store_path = <hex>/versions/<sha3[0:16]> on
 # every content change, but until 2026-09-29 nothing ever uploaded bytes to
-# that key (audit S2CORE-F21: 408/408 version keys 404). This PUTs the same
-# bytes there too. The key is content-addressed, so re-sending identical
-# bytes is an idempotent overwrite with the same content. Hash comes from
-# report_clonepool (LAST_REPORTED_*) when it just hashed this same file, so
-# the common path hashes once; otherwise it is computed here.
-LAST_REPORTED_FILE=""
-LAST_REPORTED_SHA3=""
+# that key (audit S2CORE-F21: 408/408 version keys 404). The key is
+# content-addressed, so re-sending identical bytes is an idempotent overwrite.
+# When the current key was just written with these bytes, the worker copies it
+# INSIDE R2 (3.6.0) — the bytes cross the network once, not twice (a 16 MiB
+# push from pbm-compaq spent half its time on the second copy). The copy only
+# happens if the source's recorded sha3 is this file's; otherwise, or on an
+# older worker, the bytes are uploaded as before.
 upload_version_to_r2() {
-  local hex="$1" filepath="$2"
+  local hex="$1" filepath="$2" sha3="${3:-}" mode="${4:-upload}"
   [[ -z "${PHOENIX_AUTH}" || ! -f "${filepath}" ]] && return 0
-  local size; size=$(get_size "${filepath}")
-  (( size > R2_MAX_BYTES )) && return 0   # already WARNed by upload_to_r2
-  local sha3=""
-  if [[ "${LAST_REPORTED_FILE}" == "${filepath}" && -n "${LAST_REPORTED_SHA3}" ]]; then
-    sha3="${LAST_REPORTED_SHA3}"
-  else
-    sha3=$(openssl dgst -sha3-512 -r "${filepath}" 2>/dev/null | awk '{print $1}')
-  fi
+  [[ -z "${sha3}" ]] && sha3=$(_sha3_of "${filepath}")
   [[ ${#sha3} -lt 16 ]] && { log "WARN" "R2 version upload skipped — no sha3 for ${filepath}"; return 0; }
-  local key="${hex}/versions/${sha3:0:16}"
-  local http_code
-  http_code=$(curl -s -o /dev/null -w "%{http_code}" \
-    -X PUT \
-    -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
-    --data-binary "@${filepath}" \
-    "${WORKER_URL}/clonepool/${key}" 2>/dev/null)
-  [[ "${http_code}" == "200" ]] \
-    && log "INFO" "R2 version OK → ${key}" \
-    || log "WARN" "R2 version upload failed (${http_code}) → ${key}"
+  local key="${hex}/versions/${sha3:0:16}" code
+  if [[ "${mode}" == "copy" ]]; then
+    _r2_auth
+    code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${_auth_hdrs[@]}" -H "Content-Type: application/json" \
+           -d "{\"from\":\"${hex}\",\"sha3\":\"${sha3}\"}" "${WORKER_URL}/clonepool/${key}/copy" 2>/dev/null)
+    if [[ "${code}" == "200" ]]; then log "INFO" "R2 version OK (server copy) → ${key}"; return 0; fi
+  fi
+  if r2_put "${key}" "${filepath}" "${sha3}"; then
+    log "INFO" "R2 version OK → ${key}"
+  else
+    log "WARN" "R2 version upload failed → ${key}"
+  fi
 }
 
 # stored_filepath (10th, optional) is the actual bytes on disk — content

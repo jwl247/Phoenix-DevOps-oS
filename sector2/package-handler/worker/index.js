@@ -3,7 +3,7 @@
 // Role: Catalog index — clonepool, glossary, TOC, packages, peer review
 // DB: phoenix_dev_db (D1) — the backbone
 // Auth: PHOENIX_AUTH (Cloudflare secret)
-// Version: 3.5.0
+// Version: 3.6.0
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -624,7 +624,7 @@ export default {
       // call, instead of finding out from a pile of silent per-file 401s.
       if (path === '/whoami' && req.method === 'GET') {
         if (!isAuthorized(req, env)) return err('unauthorized', 401);
-        return ok({ ok: true, worker: 'packages-worker', version: '3.5.0' });
+        return ok({ ok: true, worker: 'packages-worker', version: '3.6.0' });
       }
 
       // ── Health (GET / or GET /health — API clients) ──────────────────────────
@@ -635,7 +635,7 @@ export default {
         return ok({
           status: 'ok',
           worker: 'packages-worker',
-          version: '3.5.0',
+          version: '3.6.0',
           brand: 'USys — United Systems',
           db: 'phoenix_dev_db',
           tables: tables.n,
@@ -861,6 +861,67 @@ export default {
         return ok({ clonepool: result.results, count: result.results.length, filter: state || 'all' });
       }
 
+      // ── Large objects + server-side copy (3.6.0, 2026-09-29) ─────────────
+      // A single request body is capped (~100 MB) on Workers, so bigger objects
+      // (models, game packs) go up in parts; R2 itself takes objects of ~5 TB.
+      //   POST   /clonepool/<key>/mpu                        {sha3}  -> {uploadId}
+      //   PUT    /clonepool/<key>/mpu/<uploadId>/<partNumber> body   -> {partNumber, etag}
+      //   POST   /clonepool/<key>/mpu/<uploadId>/complete     {parts:[{partNumber,etag}]}
+      //   DELETE /clonepool/<key>/mpu/<uploadId>                        abort
+      //   POST   /clonepool/<key>/copy  {from, sha3}  copy INSIDE R2, no re-upload —
+      //          only when the source object's recorded sha3 equals the one given,
+      //          so a version key can never receive someone else's newer bytes.
+      // <key> is a hex id, or <hex>/versions/<sha3[0:16]>. Uploads record the
+      // client's SHA3-512 in the object's custom metadata (header X-Phoenix-SHA3).
+      {
+        const m = path.match(/^\/clonepool\/([0-9a-f]+(?:\/versions\/[0-9a-f]{16})?)\/(mpu|copy)(?:\/([^/]+))?(?:\/(\d+|complete))?$/);
+        if (m) {
+          if (!isAuthorized(req, env)) return err('unauthorized', 401);
+          if (!env.CLONEPOOL_BUCKET) return err('R2 bucket not bound to this worker', 500);
+          const [, key, kind, uploadId, tail] = m;
+          const bucket = env.CLONEPOOL_BUCKET;
+          const sha3ok = v => typeof v === 'string' && /^[0-9a-f]{128}$/.test(v);
+          if (kind === 'copy' && req.method === 'POST' && !uploadId) {
+            const b = await req.json().catch(() => ({}));
+            if (typeof b.from !== 'string' || !/^[0-9a-f]+$/.test(b.from) || !sha3ok(b.sha3)) return err('from (hex) and sha3 required', 400);
+            const src = await bucket.get(b.from);
+            if (!src) return err('source not found', 404);
+            if ((src.customMetadata || {}).sha3 !== b.sha3) {
+              src.body.cancel();
+              return err('source bytes are not the ones named (sha3 mismatch) — upload instead', 409);
+            }
+            const { readable, writable } = new FixedLengthStream(src.size);
+            const pump = src.body.pipeTo(writable);
+            await bucket.put(key, readable, { customMetadata: { sha3: b.sha3 } });
+            await pump;
+            return ok({ ok: true, key, from: b.from, bytes: src.size });
+          }
+          if (kind === 'mpu' && req.method === 'POST' && !uploadId) {
+            const b = await req.json().catch(() => ({}));
+            const mpu = await bucket.createMultipartUpload(key, sha3ok(b.sha3) ? { customMetadata: { sha3: b.sha3 } } : {});
+            return ok({ ok: true, key, uploadId: mpu.uploadId });
+          }
+          if (kind === 'mpu' && uploadId && req.method === 'PUT' && tail && tail !== 'complete') {
+            const n = parseInt(tail, 10);
+            if (!(n >= 1 && n <= 10000)) return err('partNumber 1..10000', 400);
+            const part = await bucket.resumeMultipartUpload(key, decodeURIComponent(uploadId)).uploadPart(n, req.body);
+            return ok({ ok: true, partNumber: part.partNumber, etag: part.etag });
+          }
+          if (kind === 'mpu' && uploadId && req.method === 'POST' && tail === 'complete') {
+            const b = await req.json().catch(() => ({}));
+            if (!Array.isArray(b.parts) || !b.parts.length) return err('parts required', 400);
+            const obj = await bucket.resumeMultipartUpload(key, decodeURIComponent(uploadId)).complete(
+              b.parts.map(x => ({ partNumber: Number(x.partNumber), etag: String(x.etag) })));
+            return ok({ ok: true, key, bytes: obj.size });
+          }
+          if (kind === 'mpu' && uploadId && req.method === 'DELETE' && !tail) {
+            await bucket.resumeMultipartUpload(key, decodeURIComponent(uploadId)).abort();
+            return ok({ ok: true, aborted: key });
+          }
+          return err('bad multipart/copy request', 400);
+        }
+      }
+
       // PUT /clonepool/:id — upload the CURRENT bytes for a hex_id (overwritten
       // on every re-intake — this is "latest," not history; see /versions/ above
       // for the immutable per-content copy).
@@ -870,7 +931,9 @@ export default {
         if (!hex_id) return err('hex_id required', 400);
         if (!env.CLONEPOOL_BUCKET) return err('R2 bucket not bound to this worker', 500);
         const bytes = await req.arrayBuffer();
-        await env.CLONEPOOL_BUCKET.put(hex_id, bytes);
+        const sha3 = req.headers.get('X-Phoenix-SHA3') || '';
+        await env.CLONEPOOL_BUCKET.put(hex_id, bytes,
+          /^[0-9a-f]{128}$/.test(sha3) ? { customMetadata: { sha3 } } : undefined);
         return ok({ ok: true, hex_id, bytes: bytes.byteLength });
       }
 
@@ -885,7 +948,8 @@ export default {
         if (env.CLONEPOOL_BUCKET && !wantsMeta) {
           const obj = await env.CLONEPOOL_BUCKET.get(id);
           if (obj) {
-            return new Response(obj.body, { status: 200, headers: { 'Content-Type': 'application/octet-stream' } });
+            return new Response(obj.body, { status: 200, headers: { 'Content-Type': 'application/octet-stream',
+                                                                      'Content-Length': String(obj.size) } });
           }
         }
         const row = await db
