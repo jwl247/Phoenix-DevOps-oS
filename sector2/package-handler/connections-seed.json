@@ -30,7 +30,7 @@
     "key_fact": "`sector3/workers/packages-worker/` is a **stale, dead duplicate** of the real worker at `sector2/package-handler/worker/` — don't edit it thinking it's live.",
     "source_file": "CONNECTIONS.md, sector3/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"30883d1df2fc62f5\",\"b7bd55c11b781b0c\",\"f7ac2afbc9927964\",\"971da9a789ab199d\",\"a1aba4936f8f8fd2\",\"8dff57dd9caf1201\",\"3160df97c34fce4b\",\"5fd2e93c6bc16ed3\",\"849e6626ce9ea0af\",\"4363aaa08e4f1bd2\",\"4d526f236b2b1fc3\",\"b7826bfbd998a94f\",\"5a4c098eb82ff3a2\",\"d0960501f8971be8\",\"072fcfbdebc62d00\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"30883d1df2fc62f5\",\"b7bd55c11b781b0c\",\"f7ac2afbc9927964\",\"971da9a789ab199d\",\"a1aba4936f8f8fd2\",\"8dff57dd9caf1201\",\"3160df97c34fce4b\",\"5fd2e93c6bc16ed3\",\"849e6626ce9ea0af\",\"4363aaa08e4f1bd2\",\"4d526f236b2b1fc3\",\"b7826bfbd998a94f\",\"5a4c098eb82ff3a2\",\"d0960501f8971be8\",\"072fcfbdebc62d00\",\"2d87f9e76d5dbf11\"]"
   },
   {
     "hex": "5a4c098eb82ff3a2",
@@ -49,7 +49,7 @@
     "path": "dashboard",
     "area": "dashboard",
     "description": "The Phoenix \"Command Center\" Electron app: real terminal (SHELL pane via `terminal-pty.js`), a Claude Code hotline (CLAUDE pane), sector file browser, clonepool browser, HUD-mode glass overlay, Office/ScriptForge launchers, Config Centralizer (Settings tab), Live Monitor screen capture. Main files: `main.js` (Electron main process), `preload.js`, `index.html`, `dashboard.js`, `hud-*.js/.css`, `button-generator.js`/`action-buttons.js`, `config-centralizer.js`, launchers (`office-launcher.js`, `scriptforge-launcher.js`, `google-launcher.js`, `steam-launcher.js`), `manual/PHOENIX_MANUAL.md` + `manual/LAURIE_GUIDE.md`.",
-    "key_fact": "`main.js` has a `SECTOR4` vs `sector4` casing bug (works on Windows NTFS, would break on case-sensitive filesystems).",
+    "key_fact": "`main.js` sector paths are lowercase `sector1`–`sector4` (the old `SECTOR4` casing bug was fixed 2026-09-29).",
     "source_file": "CONNECTIONS.md, dashboard/CONNECTIONS.md",
     "state": "white",
     "links": "[\"971da9a789ab199d\",\"74c05e2f9190b4c2\",\"ae2002a7528b058d\",\"5a4c098eb82ff3a2\",\"8c5967fd8486f344\",\"829768ca64b1b6f0\",\"8dff57dd9caf1201\",\"2d87f9e76d5dbf11\",\"eaae18e72d174fc6\",\"fe573334dc2e08a5\",\"4363aaa08e4f1bd2\",\"c9361ee760a0a611\",\"79efd15e5339e7b2\"]"
@@ -932,7 +932,7 @@
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"f9d35d43770d3909\",\"9b776b8b8b8f07b7\",\"4fd9c8a3d43a9294\",\"66cd9688a2ae0682\",\"ae2002a7528b058d\",\"0e8f689408bbeece\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"f9d35d43770d3909\",\"9b776b8b8b8f07b7\",\"4fd9c8a3d43a9294\",\"66cd9688a2ae0682\",\"ae2002a7528b058d\",\"2d87f9e76d5dbf11\",\"0e8f689408bbeece\"]"
   },
   {
     "hex": "2d87f9e76d5dbf11",
@@ -943,7 +943,7 @@
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"15b92ac2b6f12ca6\",\"f58a9b91f140cf3f\",\"d0960501f8971be8\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"15b92ac2b6f12ca6\",\"ae2002a7528b058d\",\"8dff57dd9caf1201\",\"f58a9b91f140cf3f\",\"d0960501f8971be8\"]"
   },
   {
     "hex": "15b92ac2b6f12ca6",
