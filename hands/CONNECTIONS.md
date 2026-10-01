@@ -8,7 +8,7 @@ The small helper on each Phoenix machine that does the jobs a web page can't. Th
 Console (click) and H.L.K (voice) drive the same fixed list of tools, under the CLAUDE.md
 permission tiers: base (runs), ask (needs a real yes), never (not a tool at all). Standard
 library only; every call is logged to `~/.unitedsys/logs/hands.jsonl`.
-- `hands.py` — the helper. Windows tools: status, open_app (allow-list), screenshot, restart_pc, cancel_restart. Linux tools: status, services, restart_service (mesh agent / Ollama only), restart_pc, cancel_restart. HTTP `GET /tools`, `GET /log`, `POST /run`; token-gated; `--mesh --allow-from` for boxes; self-update from the hub's clone-pool relay, SHA3-checked and compile-checked, atomic swap.
+- `hands/hands.py` — the helper. Windows tools: status, open_app (allow-list), screenshot, restart_pc, cancel_restart. Linux tools: status, services, restart_service (mesh agent / Ollama only), restart_pc, cancel_restart. HTTP `GET /tools`, `GET /log`, `POST /run`; token-gated; `--mesh --allow-from` for boxes; self-update from the hub's clone-pool relay, SHA3-checked and compile-checked, atomic swap.
 - `install_remote.py` — installs hands on a headless box over SSH (bytes over stdin, CRLF stripped), makes the box's token on the box, stores it in `~/.phoenix/hands-tokens.json` on the hub (owner-only).
 - `phoenix-hands.service` — systemd unit on the boxes: `/opt/phoenix-hands/hands.py --mesh --allow-from 10.47.0.2 --update-from http://precision.phx:8470/pool/hands.py`.
 - `test_hands.py` — 7 tests (tiers, fixed per-platform tool list, audit log, self-update refusal paths); runs on Windows and Linux.

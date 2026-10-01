@@ -8,7 +8,7 @@
     "key_fact": "Guardian/honeypot security system resurrected 2026-09-09, wired into `main_kernel.py` + `phoenix_auth.py`. `sector1/grub/` is a second, unconfirmed-live USys implementation — ask before assuming it's dead.",
     "source_file": "CONNECTIONS.md, sector1/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"2cde6bdbe65b2296\",\"b7bd55c11b781b0c\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"a07692cf80ba56f2\",\"1462bf4284baafce\",\"d03c76fc5584c3dd\",\"f7ac2afbc9927964\",\"d6aa039866df21ee\",\"a1aba4936f8f8fd2\",\"8355d66a7c20229d\",\"4257a5404f3c1eec\",\"24402f8a69479302\",\"ae2002a7528b058d\",\"5a4c098eb82ff3a2\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"2cde6bdbe65b2296\",\"b7bd55c11b781b0c\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"a07692cf80ba56f2\",\"1462bf4284baafce\",\"d03c76fc5584c3dd\",\"f7ac2afbc9927964\",\"d6aa039866df21ee\",\"a1aba4936f8f8fd2\",\"0f773c9134b2e8df\",\"2f1a6d5e516b8031\",\"eb06cca118444289\",\"8355d66a7c20229d\",\"4257a5404f3c1eec\",\"24402f8a69479302\",\"ae2002a7528b058d\",\"5a4c098eb82ff3a2\"]"
   },
   {
     "hex": "74c05e2f9190b4c2",
@@ -19,18 +19,18 @@
     "key_fact": "Canonical intake pipeline lives at `sector2/package-handler/intake.sh`. `sector2/frank/frank_save.py`'s drive-tiering logic is built but never called.",
     "source_file": "CONNECTIONS.md, sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"f9d35d43770d3909\",\"51a1f05af85e342e\",\"ba2776c90792d2fe\",\"971da9a789ab199d\",\"ae2002a7528b058d\",\"66cd9688a2ae0682\",\"e14eae3777414e90\",\"46b42b4229cd7a39\",\"65408225e6f957dc\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"a60260bdfb558038\",\"8c5967fd8486f344\",\"4fd9c8a3d43a9294\",\"a32affab459eef1a\",\"8dff57dd9caf1201\",\"2d87f9e76d5dbf11\",\"15b92ac2b6f12ca6\",\"45364e3228a28e13\",\"5241b6fd4103ff95\",\"e0f90a47a3630004\",\"fe573334dc2e08a5\",\"eaae18e72d174fc6\",\"51dda0aaa75cca7f\",\"33d485653f8a5612\",\"003e99aec4ffad75\",\"f5d21aaf5aa70a2b\",\"c7e0279cccb39441\"]"
+    "links": "[\"f9d35d43770d3909\",\"51a1f05af85e342e\",\"ba2776c90792d2fe\",\"971da9a789ab199d\",\"ae2002a7528b058d\",\"66cd9688a2ae0682\",\"e14eae3777414e90\",\"46b42b4229cd7a39\",\"65408225e6f957dc\",\"829768ca64b1b6f0\",\"a60260bdfb558038\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"4fd9c8a3d43a9294\",\"a32affab459eef1a\",\"8dff57dd9caf1201\",\"2d87f9e76d5dbf11\",\"3aaeac3b672c2c29\",\"3f0096497d3ac9a2\",\"dbb1e1de35f8a1d4\",\"15b92ac2b6f12ca6\",\"45364e3228a28e13\",\"5241b6fd4103ff95\",\"e0f90a47a3630004\",\"fe573334dc2e08a5\",\"eaae18e72d174fc6\",\"51dda0aaa75cca7f\",\"33d485653f8a5612\",\"003e99aec4ffad75\",\"7170da25dc303b71\",\"5430311e56708256\",\"f5d21aaf5aa70a2b\",\"c7e0279cccb39441\",\"1462bf4284baafce\",\"50d51a233d8ff488\"]"
   },
   {
     "hex": "ae2002a7528b058d",
     "name": "sector3",
     "path": "sector3",
     "area": "sector3",
-    "description": "sector3 — Comms/networking, systemd services, Phoenix Mesh",
+    "description": "sector3 — Comms/networking, systemd services, Phoenix Mesh, the worker road test",
     "key_fact": "`sector3/workers/packages-worker/` is a **stale, dead duplicate** of the real worker at `sector2/package-handler/worker/` — don't edit it thinking it's live.",
     "source_file": "CONNECTIONS.md, sector3/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"30883d1df2fc62f5\",\"b7bd55c11b781b0c\",\"f7ac2afbc9927964\",\"971da9a789ab199d\",\"a1aba4936f8f8fd2\",\"8dff57dd9caf1201\",\"3160df97c34fce4b\",\"5fd2e93c6bc16ed3\",\"849e6626ce9ea0af\",\"4363aaa08e4f1bd2\",\"4d526f236b2b1fc3\",\"b7826bfbd998a94f\",\"5a4c098eb82ff3a2\",\"d0960501f8971be8\",\"072fcfbdebc62d00\",\"2d87f9e76d5dbf11\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"7f981588473fbc31\",\"b7bd55c11b781b0c\",\"f7ac2afbc9927964\",\"971da9a789ab199d\",\"0f773c9134b2e8df\",\"2f1a6d5e516b8031\",\"a1aba4936f8f8fd2\",\"8dff57dd9caf1201\",\"3aaeac3b672c2c29\",\"51dda0aaa75cca7f\",\"76fbad2417f34f2a\",\"4d526f236b2b1fc3\",\"3160df97c34fce4b\",\"5fd2e93c6bc16ed3\",\"849e6626ce9ea0af\",\"4363aaa08e4f1bd2\",\"e60e0b27cdddfd28\",\"ab31d986b71e6749\",\"a877e61bd6a80203\",\"aff88c6662579906\",\"33a2b7b4aec981b8\",\"63388ec43c164af1\",\"66be75bfcbbf72f0\",\"fd90f1c00d77a35e\",\"8c34e0996cfb53db\",\"37e28d2dd0e159eb\",\"05beb4f4c9ec1016\",\"2e44e0b3b6d84943\",\"df9dd9b48f5ba743\",\"69b19065a543212d\",\"384bcaaae67367ab\",\"b7826bfbd998a94f\",\"50d51a233d8ff488\",\"5a4c098eb82ff3a2\",\"d0960501f8971be8\",\"072fcfbdebc62d00\",\"2d87f9e76d5dbf11\"]"
   },
   {
     "hex": "5a4c098eb82ff3a2",
@@ -41,18 +41,18 @@
     "key_fact": "`sector4/intake/intake.sh`'s zsh-glob syntax error was fixed 2026-09-21 (`43c27ad`: shebang now zsh, glob replaced by `find`). `usys intake` still routes here while `usys clone` goes to `sector2/package-handler/intake.sh`; whether that is a mis-route or sector 4's own pipeline is an open call for Jerry (audit CONN-F08).",
     "source_file": "CONNECTIONS.md, sector4/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"a1aba4936f8f8fd2\",\"971da9a789ab199d\",\"4363aaa08e4f1bd2\",\"ae2002a7528b058d\",\"c9361ee760a0a611\",\"4a23e3f77d4c268d\",\"79efd15e5339e7b2\",\"b44cf41ce87d6659\",\"39cfc819a4e4452c\",\"9a75bf2a8447b15c\",\"f5d21aaf5aa70a2b\"]"
+    "links": "[\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"a1aba4936f8f8fd2\",\"971da9a789ab199d\",\"ab31d986b71e6749\",\"4363aaa08e4f1bd2\",\"ae2002a7528b058d\",\"c9361ee760a0a611\",\"4a23e3f77d4c268d\",\"79efd15e5339e7b2\",\"b44cf41ce87d6659\",\"39cfc819a4e4452c\",\"9a75bf2a8447b15c\",\"f5d21aaf5aa70a2b\",\"e60e0b27cdddfd28\",\"63388ec43c164af1\"]"
   },
   {
     "hex": "66cd9688a2ae0682",
     "name": "dashboard",
     "path": "dashboard",
     "area": "dashboard",
-    "description": "The Phoenix \"Command Center\" Electron app: real terminal (SHELL pane via `terminal-pty.js`), a Claude Code hotline (CLAUDE pane), sector file browser, clonepool browser, HUD-mode glass overlay, Office/ScriptForge launchers, Config Centralizer (Settings tab), Live Monitor screen capture. Main files: `main.js` (Electron main process), `preload.js`, `index.html`, `dashboard.js`, `hud-*.js/.css`, `button-generator.js`/`action-buttons.js`, `config-centralizer.js`, launchers (`office-launcher.js`, `scriptforge-launcher.js`, `google-launcher.js`, `steam-launcher.js`), `manual/PHOENIX_MANUAL.md` + `manual/LAURIE_GUIDE.md`.",
+    "description": "The Phoenix \"Command Center\" Electron app. Legacy: kept running, not developed; the Phoenix Console (`portal/`) is the front door and `hud/` is the HUD (decided 2026-09-26). Buttons cut that day (HUD MODE, TELEMETRY, DEBIAN ENGINE, HELIX STATUS, PHORONIX, WATCH/INTAKE DOWNLOADS, PHOENIX GUIDE, VENV, CLONEPOOL; MAP, SECTOR MAP, task/report stubs, CLAUDE and GUIDE tabs) were removed 2026-09-30; sector switches, THROUGHPUT, YOU WERE HERE and the meters are hidden. What's left: AI CHAT, HELP CHAT, SETTINGS (Config Centralizer), CODES (CLI + RUNIT), SHELL (real terminal via `terminal-pty.js`), GLOSSARY; right column GOOGLE, STEAM, SCRIPTFORGE, OFFICE, RUN, OPEN PS7, OPEN FILE EXPLORER, DRIVER UPDATES (opens Windows Update's driver list; the user picks), SCREENSHOT, LIVE MONITOR. Main files: `main.js` (Electron main process), `preload.js`, `index.html`, `dashboard.js`, `hud-*.js/.css`, `button-generator.js`/`action-buttons.js`, `config-centralizer.js`, launchers (`office-launcher.js`, `scriptforge-launcher.js`, `google-launcher.js`, `steam-launcher.js`), `manual/PHOENIX_MANUAL.md` + `manual/LAURIE_GUIDE.md`.",
     "key_fact": "`main.js` sector paths are lowercase `sector1`–`sector4` (the old `SECTOR4` casing bug was fixed 2026-09-29).",
     "source_file": "CONNECTIONS.md, dashboard/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"971da9a789ab199d\",\"74c05e2f9190b4c2\",\"ae2002a7528b058d\",\"5a4c098eb82ff3a2\",\"8c5967fd8486f344\",\"829768ca64b1b6f0\",\"8dff57dd9caf1201\",\"2d87f9e76d5dbf11\",\"eaae18e72d174fc6\",\"fe573334dc2e08a5\",\"4363aaa08e4f1bd2\",\"c9361ee760a0a611\",\"79efd15e5339e7b2\"]"
+    "links": "[\"971da9a789ab199d\",\"74c05e2f9190b4c2\",\"ae2002a7528b058d\",\"5a4c098eb82ff3a2\",\"8c5967fd8486f344\",\"829768ca64b1b6f0\",\"8dff57dd9caf1201\",\"2d87f9e76d5dbf11\",\"eaae18e72d174fc6\",\"fe573334dc2e08a5\",\"4363aaa08e4f1bd2\",\"c9361ee760a0a611\",\"79efd15e5339e7b2\",\"63b51d46400ede45\",\"f9d35d43770d3909\",\"46262755af4fe0fe\",\"78cf4842afe41dcb\"]"
   },
   {
     "hex": "8c5967fd8486f344",
@@ -63,7 +63,7 @@
     "key_fact": "`bin/*` and the dashboard call through here; `tools/clone.sh` and `scripts/hsf-intake.sh` call `sector2/package-handler/intake.sh` directly. The `usys run debian` elevation failure is handled (falls back to tcg acceleration).",
     "source_file": "CONNECTIONS.md, scripts/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"61ad4a8d1e45f706\",\"51a1f05af85e342e\",\"57b94356302c8571\",\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"0149ab52b4c96671\",\"de1b1f60e8fb172a\",\"4fd9c8a3d43a9294\",\"23460fe27bbd0839\",\"8c0625570131b178\",\"de8236d2355447a1\",\"74c05e2f9190b4c2\",\"5a4c098eb82ff3a2\",\"f9d35d43770d3909\",\"971da9a789ab199d\",\"6dae1b7eb15a4a2a\"]"
+    "links": "[\"61ad4a8d1e45f706\",\"51a1f05af85e342e\",\"57b94356302c8571\",\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"0149ab52b4c96671\",\"de1b1f60e8fb172a\",\"4fd9c8a3d43a9294\",\"23460fe27bbd0839\",\"8c0625570131b178\",\"de8236d2355447a1\",\"74c05e2f9190b4c2\",\"5a4c098eb82ff3a2\",\"f9d35d43770d3909\",\"971da9a789ab199d\",\"6dae1b7eb15a4a2a\",\"50d51a233d8ff488\"]"
   },
   {
     "hex": "f9d35d43770d3909",
@@ -74,7 +74,7 @@
     "key_fact": "`tools/poc/` is where Debian/Ubuntu QEMU boot manifests + launchers live.",
     "source_file": "CONNECTIONS.md, tools/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"c7e0279cccb39441\",\"74c05e2f9190b4c2\",\"51a1f05af85e342e\",\"d9fa231292757a7e\",\"745d592e109d6f02\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"4fd9c8a3d43a9294\",\"8c5967fd8486f344\",\"8dff57dd9caf1201\",\"0e8f689408bbeece\",\"dbcb6ea598ad03ac\",\"b76d381fb0346d50\",\"de4b5d40759ef20b\",\"5499b4b55f5c3c7b\",\"b355ff7607d8e86e\",\"7070b92178a0489b\",\"4be84287d9d36b55\",\"7ce62bfc657fd5df\",\"63b51d46400ede45\",\"ca629317e6f339c3\",\"76abc3d0044d6fb1\",\"9b776b8b8b8f07b7\",\"f7ac2afbc9927964\",\"4a23e3f77d4c268d\",\"4363aaa08e4f1bd2\"]"
+    "links": "[\"c7e0279cccb39441\",\"74c05e2f9190b4c2\",\"51a1f05af85e342e\",\"d9fa231292757a7e\",\"745d592e109d6f02\",\"4fd9c8a3d43a9294\",\"8c5967fd8486f344\",\"8dff57dd9caf1201\",\"0e8f689408bbeece\",\"dbcb6ea598ad03ac\",\"b76d381fb0346d50\",\"de4b5d40759ef20b\",\"5499b4b55f5c3c7b\",\"b355ff7607d8e86e\",\"7070b92178a0489b\",\"4be84287d9d36b55\",\"7ce62bfc657fd5df\",\"63b51d46400ede45\",\"ca629317e6f339c3\",\"ef8e461421e00936\",\"a75084716ee29b00\",\"c89e6f33153d830e\",\"76abc3d0044d6fb1\",\"9b776b8b8b8f07b7\",\"f7ac2afbc9927964\",\"4a23e3f77d4c268d\",\"66cd9688a2ae0682\",\"56cc318b711082fb\",\"50d51a233d8ff488\",\"4363aaa08e4f1bd2\"]"
   },
   {
     "hex": "51a1f05af85e342e",
@@ -85,7 +85,7 @@
     "key_fact": "Thin shims into `scripts/` and `tools/`; `bin/usys` has a dead fallback to a nonexistent `scripts/usys.sh`.",
     "source_file": "CONNECTIONS.md, bin/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"61ad4a8d1e45f706\",\"57b94356302c8571\",\"c7e0279cccb39441\",\"ba2776c90792d2fe\",\"bbb127e4be86c6ff\",\"d9fa231292757a7e\",\"745d592e109d6f02\",\"927c3acb453a3ded\",\"4cd73ea6ae2001c0\",\"6dae1b7eb15a4a2a\",\"549ab9571e588daf\",\"a3d2d016705b94c7\",\"4aabd81a43e1cf25\",\"eeff368e8b391ad5\",\"8c5967fd8486f344\",\"f9d35d43770d3909\",\"74c05e2f9190b4c2\"]"
+    "links": "[\"61ad4a8d1e45f706\",\"57b94356302c8571\",\"c7e0279cccb39441\",\"ba2776c90792d2fe\",\"bbb127e4be86c6ff\",\"d9fa231292757a7e\",\"745d592e109d6f02\",\"927c3acb453a3ded\",\"4cd73ea6ae2001c0\",\"6dae1b7eb15a4a2a\",\"549ab9571e588daf\",\"a3d2d016705b94c7\",\"4aabd81a43e1cf25\",\"eeff368e8b391ad5\",\"8c5967fd8486f344\",\"f9d35d43770d3909\",\"74c05e2f9190b4c2\",\"3b1bdfa4bc550b65\",\"043df5bdbf6639d7\",\"50d51a233d8ff488\"]"
   },
   {
     "hex": "333c04dd151a2a68",
@@ -96,7 +96,7 @@
     "key_fact": "Self-contained, zero references from the rest of the repo — confirm with Jerry whether it's active.",
     "source_file": "CONNECTIONS.md, bootstrap/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"daaedd0e14db6c15\",\"4ebf7503052b4a56\"]"
+    "links": "[\"daaedd0e14db6c15\",\"4ebf7503052b4a56\",\"50d51a233d8ff488\",\"043df5bdbf6639d7\"]"
   },
   {
     "hex": "46b42b4229cd7a39",
@@ -107,7 +107,7 @@
     "key_fact": "Contains the *previous* attempt at a connections doc (`PHOENIX_SYSTEM_SUMMARY_STATUS_CONNECTIONS.md`); its wrong worker/bindings references were corrected 2026-09-25, but this file supersedes it.",
     "source_file": "CONNECTIONS.md, docs/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"e14eae3777414e90\",\"59ff16cf86777e84\",\"a84b61a5eb74b2d9\",\"e1e2599b3802e11c\",\"ed89614bbe29ecb9\",\"e1166f910544b198\",\"0b5ca119d2be595a\",\"9751e1c375a07222\",\"828609cafca30b46\",\"77d770e18ff07b21\",\"1ce443b4b8c68129\",\"3e6768ffe398dd53\",\"4fe19973cc307b4b\",\"22f76ec3a4b5747d\",\"90e054e32f683a92\",\"2a674a24d53ebb21\",\"480f520cb99da3c2\",\"39f7624b2f61e915\",\"ea98f6bfda243690\",\"7c734d038a95a9b4\",\"74c05e2f9190b4c2\"]"
+    "links": "[\"e14eae3777414e90\",\"59ff16cf86777e84\",\"a84b61a5eb74b2d9\",\"e1e2599b3802e11c\",\"ed89614bbe29ecb9\",\"e1166f910544b198\",\"0b5ca119d2be595a\",\"9751e1c375a07222\",\"828609cafca30b46\",\"77d770e18ff07b21\",\"1ce443b4b8c68129\",\"3e6768ffe398dd53\",\"4fe19973cc307b4b\",\"22f76ec3a4b5747d\",\"90e054e32f683a92\",\"2a674a24d53ebb21\",\"480f520cb99da3c2\",\"39f7624b2f61e915\",\"ea98f6bfda243690\",\"7c734d038a95a9b4\",\"74c05e2f9190b4c2\",\"6ebdb617a8104a77\"]"
   },
   {
     "hex": "0eb3e36bfb24dcd9",
@@ -129,7 +129,7 @@
     "key_fact": "Legacy/parallel to the bash intake pipeline; its `tools/intake.py` is explicitly deprecated.",
     "source_file": "CONNECTIONS.md, phoenix-core/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"651656c6ba73df99\",\"d4d23e829dc8bcca\",\"8df7971204bfad1c\",\"313534d3b1c00934\",\"df70b368bf8587f9\",\"f04d48eb3ef2fc63\",\"65408225e6f957dc\",\"ee35720a6719b7a3\",\"a60260bdfb558038\",\"7a1cdbc9d77fe434\",\"74c05e2f9190b4c2\",\"5a4c098eb82ff3a2\",\"f9d35d43770d3909\",\"66cd9688a2ae0682\",\"4fe19973cc307b4b\",\"8c5967fd8486f344\"]"
+    "links": "[\"651656c6ba73df99\",\"d4d23e829dc8bcca\",\"8df7971204bfad1c\",\"313534d3b1c00934\",\"df70b368bf8587f9\",\"f04d48eb3ef2fc63\",\"65408225e6f957dc\",\"ee35720a6719b7a3\",\"a60260bdfb558038\",\"7a1cdbc9d77fe434\",\"74c05e2f9190b4c2\",\"5a4c098eb82ff3a2\",\"66cd9688a2ae0682\",\"8c5967fd8486f344\"]"
   },
   {
     "hex": "b7bd55c11b781b0c",
@@ -140,7 +140,7 @@
     "key_fact": "`deploy/deploy.sh` only `sudo cp`s `sector3/translator/translator.sh` into `/etc/systemd`; the rsync/ssh dashboard push is `sector3/services/push-dashboard.sh`/`.ps1`, not this.",
     "source_file": "CONNECTIONS.md, deploy/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"30883d1df2fc62f5\",\"2cde6bdbe65b2296\",\"ae2002a7528b058d\",\"971da9a789ab199d\"]"
+    "links": "[\"7f981588473fbc31\",\"2cde6bdbe65b2296\",\"ae2002a7528b058d\",\"971da9a789ab199d\"]"
   },
   {
     "hex": "56cc318b711082fb",
@@ -148,32 +148,32 @@
     "path": "pbm-consulting-website",
     "area": "pbm-consulting-website",
     "description": "pbmconsultingservice.com (Workers static assets) + `worker/` (pbm-leads-worker: lead form, Turnstile, email code) + `radar-worker/` (Set-Aside Radar, see its README)",
-    "key_fact": "Three separate deploys from one folder; `.assetsignore` keeps both worker folders out of the public site. No per-dir doc yet.",
-    "source_file": "CONNECTIONS.md",
+    "key_fact": "Three separate deploys from one folder; `.assetsignore` keeps both worker folders out of the public site.",
+    "source_file": "CONNECTIONS.md, pbm-consulting-website/CONNECTIONS.md",
     "state": "white",
-    "links": "[]"
+    "links": "[\"c89e6f33153d830e\",\"f9d35d43770d3909\",\"b333fc50a366d02e\",\"3bc6703ce8243bba\",\"5e5c124f3acd3d68\",\"0eac6a39f90aaf3e\",\"c602db001fc8920d\",\"8306e648d5635ba0\",\"bac45ef88d3f85a4\",\"b28b84e92c3f9ffa\",\"1abddcde66808aca\",\"da270506a3b64ec7\",\"fb95aa1057effbfe\",\"8803e04d8fb22978\",\"8268a9e73cf9904f\",\"a32affab459eef1a\"]"
   },
   {
     "hex": "78cf4842afe41dcb",
     "name": "hud",
     "path": "hud",
     "area": "hud",
-    "description": "The real Phoenix HUD (WPF, C#): live monitor, CLI pane, voice; `hud.checks/` is its check harness",
-    "key_fact": "Not the Electron dashboard (that stays as-is). No per-dir doc yet.",
-    "source_file": "CONNECTIONS.md",
+    "description": "A see-through WPF (.NET 9) overlay over the whole screen. Jerry talks to H.L.K-10 by voice or text, it sees the screen, and it acts on the machines through the hands. This is the HUD; the Electron `dashboard/` is a separate app and stays as-is.",
+    "key_fact": "Not the Electron dashboard (that stays as-is).",
+    "source_file": "CONNECTIONS.md, hud/CONNECTIONS.md",
     "state": "white",
-    "links": "[]"
+    "links": "[\"32d20391e963e3c0\",\"53ecd135ccf90968\",\"46262755af4fe0fe\",\"8c910aaa10efed1f\",\"07e6a85027a55492\",\"9d7595cda71006c5\",\"b02ebca497051114\",\"8b29c660b3dd87e8\",\"be67d8148fae257b\",\"0ce975886b4e7d20\",\"e6ed39928c3f6372\",\"d0960501f8971be8\",\"45a229d57d35d935\",\"66cd9688a2ae0682\"]"
   },
   {
     "hex": "31f3b2f7b1210b44",
     "name": "phoenix-office",
     "path": "phoenix-office",
     "area": "phoenix-office",
-    "description": "Standalone sister product of Office (Secretariat, Legal Hold, Project Assist) with its own D1/R2/worker",
-    "key_fact": "Separate from `sector2/apps/office/`. No per-dir doc yet.",
-    "source_file": "CONNECTIONS.md",
+    "description": "Laurie's business tool, shipped to people who do not run Phoenix at all. A desktop app (Electron) for work orders, invoices, inspections, change orders, proposals, safety plans and schedules. A field locks the moment it is filled; once a document is signed it is frozen, and any later edit to the file is detected and the other party is notified until they acknowledge. It also has Secretariat (an AI helper that acts only through a fixed tool list), Legal Hold, and Project Assist (projects, phases, PMBOK checklist, bid factors). It has its own Cloudflare Worker, own D1 database (`phoenix_office_db`), own R2 buckets and own token. It shares nothing with Phoenix's packages-worker, `phoenix_dev_db` or `PHOENIX_AUTH`, and never calls `intake.sh`. Signed documents are stored by their own content hash, never by filename.",
+    "key_fact": "Separate from `sector2/apps/office/`.",
+    "source_file": "CONNECTIONS.md, phoenix-office/CONNECTIONS.md",
     "state": "white",
-    "links": "[]"
+    "links": "[\"260fc5cbcd411a08\",\"4ae649edb410e720\",\"9b9e17eb01627f83\",\"3aba1b7fbe22b9d2\",\"7762df2d2962e649\",\"04c0dd0a7e77bf98\",\"5d43c5d95636d817\",\"7526bcc474911f3b\",\"7d7c8f5cff322bac\",\"485679e1137a8f3a\",\"7332ee30419b8ca0\",\"66ff7c78b9507f6b\",\"b2832f4873d97d1b\",\"71d1a675f3dc6eab\",\"485c4368eaf8b7b3\",\"2a738fdab54826a0\",\"671da7162a844221\",\"925079247bb3ae40\",\"5cf1d27d771cd9c1\",\"c90c07d20f3c95c7\",\"19f4271c6043f12b\",\"89e618331791995c\",\"8f3d4357e4bea58d\",\"371be1248e09810b\",\"ec4257ea40ffc22b\",\"a0cc17baa64a96c3\",\"ab4e0b97e15e10b0\",\"c3f44338c7e9ea1a\",\"91d95c5b8bf53d63\",\"b9482ac83d5bd79a\",\"02351d50f2ee5a4a\",\"3a0fc2619fdc9039\",\"149bda2fb292ae27\",\"58999a035a4373ab\",\"bb0ab225d024b7ac\",\"e96606ad8262e741\",\"16f47edfe95b985e\",\"845767705f22dec4\",\"e632cc74c239ab6d\",\"5eb31823120452e5\",\"bc57c2f6e7f7ffa3\",\"b9bb58048978991a\",\"de76e87578f781ec\",\"3e2e79dd5d8fc8f1\",\"1e740d4316999523\",\"ea06b88a65c6803a\",\"b83d464b04419a3b\",\"cbfe39edac2dcd05\",\"413e0ed4d5c11fd2\",\"ac750a739a7a6550\",\"a07692cf80ba56f2\",\"fe573334dc2e08a5\",\"45a229d57d35d935\",\"d0960501f8971be8\",\"9b776b8b8b8f07b7\",\"61ad4a8d1e45f706\"]"
   },
   {
     "hex": "d0960501f8971be8",
@@ -181,10 +181,10 @@
     "path": "portal",
     "area": "portal",
     "description": "A small local web app on Jerry's PC (the hub) showing every Phoenix machine, its links and services, plus an Actions tab per machine that drives that machine's hands. Opens from any Phoenix machine at `precision.phx:8470`. Python standard library only.",
-    "key_fact": "Every machine opens this page instead of installing a dashboard. No per-dir doc yet.",
+    "key_fact": "Every machine opens this page instead of installing a dashboard.",
     "source_file": "CONNECTIONS.md, portal/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"072fcfbdebc62d00\",\"4d526f236b2b1fc3\",\"ae2002a7528b058d\",\"f58a9b91f140cf3f\",\"66fc6c5f5d72ca89\",\"9cc94ace07120ab1\",\"fd7b6960c41f89c7\",\"f16fd0862bf963ba\",\"a8fc9443f9fc8bac\",\"45a229d57d35d935\",\"2d87f9e76d5dbf11\"]"
+    "links": "[\"072fcfbdebc62d00\",\"4d526f236b2b1fc3\",\"ae2002a7528b058d\",\"8c910aaa10efed1f\",\"78cf4842afe41dcb\",\"45a229d57d35d935\",\"b9bb58048978991a\",\"31f3b2f7b1210b44\",\"f58a9b91f140cf3f\",\"66fc6c5f5d72ca89\",\"9cc94ace07120ab1\",\"fd7b6960c41f89c7\",\"f16fd0862bf963ba\",\"a8fc9443f9fc8bac\",\"2d87f9e76d5dbf11\"]"
   },
   {
     "hex": "45a229d57d35d935",
@@ -192,21 +192,65 @@
     "path": "hands",
     "area": "hands",
     "description": "The small helper on each Phoenix machine that does the jobs a web page can't. The Phoenix Console (click) and H.L.K (voice) drive the same fixed list of tools, under the CLAUDE.md permission tiers: base (runs), ask (needs a real yes), never (not a tool at all). Standard library only; every call is logged to `~/.unitedsys/logs/hands.jsonl`.",
-    "key_fact": "Every call logged to `~/.unitedsys/logs/hands.jsonl`. No per-dir doc yet.",
+    "key_fact": "Every call logged to `~/.unitedsys/logs/hands.jsonl`.",
     "source_file": "CONNECTIONS.md, hands/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"76fbad2417f34f2a\",\"4d526f236b2b1fc3\",\"f58a9b91f140cf3f\",\"d0960501f8971be8\",\"6eae94abb8eb34c5\",\"193a5ba7340ab1b9\",\"d7eb9845a2bed8d6\",\"37fb0cf218c493ef\"]"
+    "links": "[\"76fbad2417f34f2a\",\"4d526f236b2b1fc3\",\"d0960501f8971be8\",\"78cf4842afe41dcb\",\"260fc5cbcd411a08\",\"31f3b2f7b1210b44\",\"f58a9b91f140cf3f\",\"3feedc5391c7ad02\",\"193a5ba7340ab1b9\",\"d7eb9845a2bed8d6\",\"37fb0cf218c493ef\"]"
   },
   {
     "hex": "3bc6703ce8243bba",
     "name": "press-room",
     "path": "press-room",
     "area": "press-room",
-    "description": "Blog posts, outreach and legal drafts, social calendar (text only)",
-    "key_fact": "No code. No per-dir doc yet.",
+    "description": "Plain-text writing for PBM Consulting Service: blog posts, a B2B outreach email, a legal disclaimer for a lawyer to start from, and the social media calendar. There is no code here and nothing in this folder is published or sent automatically; every file is a draft waiting for a person to review it and post it somewhere by hand.",
+    "key_fact": "No code.",
+    "source_file": "CONNECTIONS.md, press-room/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"1f1b292d6f7bbdb0\",\"dbaa4daffea73238\",\"7902a9146ed48e7e\",\"3fce2c84c37eb15e\",\"0f04912579cf027c\",\"b333fc50a366d02e\",\"b3d5999ef35a86bc\",\"56cc318b711082fb\",\"66ff7c78b9507f6b\",\"c3f44338c7e9ea1a\",\"90e054e32f683a92\"]"
+  },
+  {
+    "hex": "50d51a233d8ff488",
+    "name": "install.ps1",
+    "path": "install.ps1",
+    "area": "install.ps1",
+    "description": "Windows installer: bare Windows box to working Phoenix in one script (PS7 + Git if missing, repo location, secrets from the vault, env vars, `~/.phoenix/phoenix.env`, PS7 profile hook for `usys`/`clone`/`.lol`/`.phx`, clone pool junction, global commands, Helix and dashboard autostart)",
+    "key_fact": "Start here on a new Windows machine: `pwsh -ExecutionPolicy Bypass -File .\\install.ps1`. Calls `tools/poc/install-helix-autostart.ps1` and `sector3/services/install-dashboard-windows.ps1`.",
     "source_file": "CONNECTIONS.md",
     "state": "white",
-    "links": "[]"
+    "links": "[\"51a1f05af85e342e\",\"333c04dd151a2a68\",\"8c5967fd8486f344\",\"74c05e2f9190b4c2\",\"4363aaa08e4f1bd2\",\"ae2002a7528b058d\",\"76abc3d0044d6fb1\",\"f9d35d43770d3909\"]"
+  },
+  {
+    "hex": "043df5bdbf6639d7",
+    "name": "install.sh",
+    "path": "install.sh",
+    "area": "install.sh",
+    "description": "Linux/macOS installer: Phoenix, global commands, environment setup",
+    "key_fact": "Start here on a new Linux box: `bash install.sh`. No longer clones the old standalone package-handler repo; the pipeline is in `sector2/package-handler/`.",
+    "source_file": "CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"51a1f05af85e342e\",\"333c04dd151a2a68\"]"
+  },
+  {
+    "hex": "3b1bdfa4bc550b65",
+    "name": "status.sh",
+    "path": "status.sh",
+    "area": "status.sh",
+    "description": "Quick repo-wide status check for the start of a session (49 lines)",
+    "key_fact": "Older than `usys status` (`scripts/usys.ps1`), which is the fuller check.",
+    "source_file": "CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"bbb127e4be86c6ff\",\"51a1f05af85e342e\"]"
+  },
+  {
+    "hex": "6ebdb617a8104a77",
+    "name": "CLAUDE.md",
+    "path": "CLAUDE.md",
+    "area": "CLAUDE.md",
+    "description": "The project's rulebook and current state: who, why (Life First for Laurie), the four sectors, critical rules, AI safety rules, build status, next session",
+    "key_fact": "Read first, every session, by any person or AI. History lives in `docs/history/`.",
+    "source_file": "CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"22f76ec3a4b5747d\",\"46b42b4229cd7a39\"]"
   },
   {
     "hex": "61ad4a8d1e45f706",
@@ -217,7 +261,7 @@
     "key_fact": null,
     "source_file": "bin/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"51a1f05af85e342e\",\"8c5967fd8486f344\",\"57b94356302c8571\"]"
+    "links": "[\"51a1f05af85e342e\",\"8c5967fd8486f344\",\"57b94356302c8571\",\"b9bb58048978991a\",\"31f3b2f7b1210b44\"]"
   },
   {
     "hex": "57b94356302c8571",
@@ -261,7 +305,7 @@
     "key_fact": null,
     "source_file": "bin/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"51a1f05af85e342e\"]"
+    "links": "[\"51a1f05af85e342e\",\"3b1bdfa4bc550b65\"]"
   },
   {
     "hex": "d9fa231292757a7e",
@@ -283,7 +327,7 @@
     "key_fact": null,
     "source_file": "bin/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"51a1f05af85e342e\",\"f9d35d43770d3909\",\"b76d381fb0346d50\",\"de4b5d40759ef20b\"]"
+    "links": "[\"51a1f05af85e342e\",\"f9d35d43770d3909\",\"de4b5d40759ef20b\"]"
   },
   {
     "hex": "927c3acb453a3ded",
@@ -385,9 +429,9 @@
     "links": "[\"333c04dd151a2a68\"]"
   },
   {
-    "hex": "30883d1df2fc62f5",
-    "name": "deploy.sh",
-    "path": "deploy.sh",
+    "hex": "7f981588473fbc31",
+    "name": "deploy/deploy.sh",
+    "path": "deploy/deploy.sh",
     "area": "deploy",
     "description": "24-line local script: `sudo cp`s `sector3/translator/translator.sh` to `/etc/systemd/system/translator.sh` (sector3) and `/etc/systemd/translator.sh` (sector2 backup), `chmod +x`, prints a check. Runs on the box it is invoked on; no rsync, no ssh, no remote host, no dashboard.",
     "key_fact": null,
@@ -547,7 +591,7 @@
     "key_fact": null,
     "source_file": "docs/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"46b42b4229cd7a39\",\"829768ca64b1b6f0\"]"
+    "links": "[\"46b42b4229cd7a39\"]"
   },
   {
     "hex": "22f76ec3a4b5747d",
@@ -558,7 +602,7 @@
     "key_fact": null,
     "source_file": "docs/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"46b42b4229cd7a39\"]"
+    "links": "[\"46b42b4229cd7a39\",\"6ebdb617a8104a77\"]"
   },
   {
     "hex": "90e054e32f683a92",
@@ -569,7 +613,7 @@
     "key_fact": null,
     "source_file": "docs/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"46b42b4229cd7a39\"]"
+    "links": "[\"46b42b4229cd7a39\",\"1f1b292d6f7bbdb0\",\"3bc6703ce8243bba\"]"
   },
   {
     "hex": "2a674a24d53ebb21",
@@ -723,7 +767,7 @@
     "key_fact": null,
     "source_file": "phoenix-core/CONNECTIONS.md",
     "state": "grey",
-    "links": "[\"829768ca64b1b6f0\",\"5a4c098eb82ff3a2\",\"f9d35d43770d3909\",\"8c5967fd8486f344\",\"74c05e2f9190b4c2\",\"c9361ee760a0a611\"]"
+    "links": "[\"829768ca64b1b6f0\",\"5a4c098eb82ff3a2\",\"74c05e2f9190b4c2\",\"8c5967fd8486f344\",\"c9361ee760a0a611\"]"
   },
   {
     "hex": "7a1cdbc9d77fe434",
@@ -745,7 +789,7 @@
     "key_fact": null,
     "source_file": "scripts/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"8c5967fd8486f344\",\"74c05e2f9190b4c2\",\"5a4c098eb82ff3a2\",\"971da9a789ab199d\",\"0149ab52b4c96671\",\"8355d66a7c20229d\",\"8dff57dd9caf1201\",\"c9361ee760a0a611\",\"7070b92178a0489b\",\"f9d35d43770d3909\"]"
+    "links": "[\"8c5967fd8486f344\",\"74c05e2f9190b4c2\",\"5a4c098eb82ff3a2\",\"971da9a789ab199d\",\"0149ab52b4c96671\",\"8355d66a7c20229d\",\"8dff57dd9caf1201\",\"c9361ee760a0a611\",\"7070b92178a0489b\",\"f9d35d43770d3909\",\"b9bb58048978991a\",\"31f3b2f7b1210b44\"]"
   },
   {
     "hex": "0149ab52b4c96671",
@@ -822,7 +866,7 @@
     "key_fact": null,
     "source_file": "sector1/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"971da9a789ab199d\",\"8355d66a7c20229d\"]"
+    "links": "[\"971da9a789ab199d\",\"8355d66a7c20229d\",\"2a738fdab54826a0\",\"31f3b2f7b1210b44\"]"
   },
   {
     "hex": "1462bf4284baafce",
@@ -833,7 +877,7 @@
     "key_fact": null,
     "source_file": "sector1/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"971da9a789ab199d\"]"
+    "links": "[\"971da9a789ab199d\",\"51dda0aaa75cca7f\",\"74c05e2f9190b4c2\"]"
   },
   {
     "hex": "d03c76fc5584c3dd",
@@ -844,7 +888,7 @@
     "key_fact": null,
     "source_file": "sector1/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"971da9a789ab199d\",\"f7ac2afbc9927964\",\"a1aba4936f8f8fd2\"]"
+    "links": "[\"971da9a789ab199d\",\"f7ac2afbc9927964\",\"a1aba4936f8f8fd2\",\"8355d66a7c20229d\"]"
   },
   {
     "hex": "f7ac2afbc9927964",
@@ -877,7 +921,40 @@
     "key_fact": null,
     "source_file": "sector1/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"971da9a789ab199d\",\"d03c76fc5584c3dd\",\"5a4c098eb82ff3a2\",\"ae2002a7528b058d\",\"4363aaa08e4f1bd2\",\"4a23e3f77d4c268d\"]"
+    "links": "[\"971da9a789ab199d\",\"d03c76fc5584c3dd\",\"5a4c098eb82ff3a2\",\"0f773c9134b2e8df\",\"2f1a6d5e516b8031\",\"ae2002a7528b058d\",\"4a23e3f77d4c268d\"]"
+  },
+  {
+    "hex": "0f773c9134b2e8df",
+    "name": "kernels/helix_boot.sh",
+    "path": "sector1/kernels/helix_boot.sh",
+    "area": "sector1",
+    "description": "brings the kernel Helix up and down: loads `helix.ko` + both Frank3 slots, builds the dm-helix device over her origin disk, mounts it. `helix_boot.sh start|stop|status` is the single Helix (device `helix`, settings `/etc/default/helix`); `helix_boot.sh start|stop|status <name>` is a named instance (device `helix-<name>`, settings `/etc/default/helix-<name>`, its own origin partlabel, Strand B image and mount). Since 2026-09-29 several instances share one `helix.ko`; a lock stops two instances racing at boot, and the modules unload only when the last one goes down. `HELIX_WARM_WRITE=1` turns on warm_write for that instance. Never formats anything. Live on pbm-compaq since 2026-09-29 as the road-test pair: helix@ingress (Seagate origin, warm_write on) and helix@egress (Toshiba origin), 3584 MiB Strand A each (plan: docs/plans/compaq-road-test-plan.md).",
+    "key_fact": null,
+    "source_file": "sector1/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"971da9a789ab199d\",\"ae2002a7528b058d\",\"a1aba4936f8f8fd2\",\"4363aaa08e4f1bd2\",\"e60e0b27cdddfd28\",\"df9dd9b48f5ba743\"]"
+  },
+  {
+    "hex": "2f1a6d5e516b8031",
+    "name": "kernels/dm_helix.c",
+    "path": "sector1/kernels/dm_helix.c",
+    "area": "sector1",
+    "description": "the dm-helix device-mapper target (double strand: Strand A in RAM, Strand B on the fastest disk, write-through to the origin). Each device keeps its own state, so named instances run side by side. Optional `warm_write` table keyword (2026-09-29): blocks written through her are read back into Strand A so what came in is warm on first use — used on the ingress instance only. `/proc/helix` and the stats ioctl now publish one combined Dandelion across every live instance (hottest heat, hottest state, deepest compression); per-instance numbers stay in `dmsetup status`.",
+    "key_fact": null,
+    "source_file": "sector1/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"971da9a789ab199d\",\"a1aba4936f8f8fd2\",\"ae2002a7528b058d\"]"
+  },
+  {
+    "hex": "eb06cca118444289",
+    "name": "kernels/helix_bigset.sh",
+    "path": "sector1/kernels/helix_bigset.sh",
+    "area": "sector1",
+    "description": "benchmark: a working set 1.5x the machine's RAM, run once on Helix (`helix_bigset.sh helix [/srv/helix-ingress]`) and once on the plain disk with the normal Linux page cache (`helix_bigset.sh standard <dir>`), fio, caches dropped each pass; results in `~/bigset-<label>-<date>/`. This is the road-test \"Helix vs standard caching\" test. New on disk 2026-09-30 and not yet committed.",
+    "key_fact": null,
+    "source_file": "sector1/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"971da9a789ab199d\"]"
   },
   {
     "hex": "8355d66a7c20229d",
@@ -888,7 +965,7 @@
     "key_fact": null,
     "source_file": "sector1/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"971da9a789ab199d\",\"d6aa039866df21ee\",\"a07692cf80ba56f2\",\"9b776b8b8b8f07b7\"]"
+    "links": "[\"971da9a789ab199d\",\"d6aa039866df21ee\",\"d03c76fc5584c3dd\",\"a07692cf80ba56f2\",\"9b776b8b8b8f07b7\"]"
   },
   {
     "hex": "4257a5404f3c1eec",
@@ -921,29 +998,62 @@
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"8803e04d8fb22978\",\"56cc318b711082fb\"]"
   },
   {
     "hex": "8dff57dd9caf1201",
     "name": "package-handler/intake.sh",
     "path": "sector2/package-handler/intake.sh",
     "area": "sector2",
-    "description": "intake/clone/prune CLI: hex, sidecar, T1-T4 pool, D1 custody, R2 current + per-version bytes, SHA3-512/BLAKE2b gate.",
+    "description": "intake/clone/prune CLI (version 1.7.0): hex, sidecar, T1-T4 pool, D1 custody, R2 current + per-version bytes, SHA3-512/BLAKE2b gate. Added 2026-09-29: files over ~95 MB go to R2 in 64 MB pieces through the worker's multipart routes (before that, anything over 100 MB was never uploaded); a version whose bytes are already in R2 is copied inside R2 instead of uploaded again; `intake clone` of a directory works on a machine with no local copy (pulled from R2, checked against D1); a local copy that is out-of-date against D1 is refreshed from R2 on clone (Phoenix stays the authority); directory files are pulled and verified 8 at a time (`INTAKE_PARALLEL`); a re-intaked directory keeps its unchanged files in the snapshot and manifest.",
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"f9d35d43770d3909\",\"9b776b8b8b8f07b7\",\"4fd9c8a3d43a9294\",\"66cd9688a2ae0682\",\"ae2002a7528b058d\",\"2d87f9e76d5dbf11\",\"0e8f689408bbeece\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"f9d35d43770d3909\",\"9b776b8b8b8f07b7\",\"4fd9c8a3d43a9294\",\"66cd9688a2ae0682\",\"ae2002a7528b058d\",\"2d87f9e76d5dbf11\",\"63388ec43c164af1\",\"66be75bfcbbf72f0\",\"2e44e0b3b6d84943\",\"df9dd9b48f5ba743\",\"0e8f689408bbeece\"]"
   },
   {
     "hex": "2d87f9e76d5dbf11",
     "name": "package-handler/worker/",
     "path": "sector2/package-handler/worker",
     "area": "sector2",
-    "description": "packages-worker (D1 `phoenix_dev_db` + R2 `phoenix-clonepool`): clonepool, custody, glossary, versions, deps, connections (Atlas), peer review, `/stats`.",
+    "description": "packages-worker (D1 `phoenix_dev_db` + R2 `phoenix-clonepool`): clonepool, custody, glossary, versions, deps, connections (Atlas), peer review, `/stats`. Version 3.6.0 (`index.js`), live since 2026-09-29 per `docs/plans/day-by-day-2026-09.md` (Jerry deployed it): adds the `/clonepool/<key>/mpu` routes (multipart upload for big objects) and `POST /clonepool/<key>/copy` (copy a version key inside R2, no re-upload).",
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"15b92ac2b6f12ca6\",\"ae2002a7528b058d\",\"8dff57dd9caf1201\",\"f58a9b91f140cf3f\",\"d0960501f8971be8\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"15b92ac2b6f12ca6\",\"8dff57dd9caf1201\",\"3f0096497d3ac9a2\",\"dbb1e1de35f8a1d4\",\"aff88c6662579906\",\"3aaeac3b672c2c29\",\"ae2002a7528b058d\",\"f58a9b91f140cf3f\",\"d0960501f8971be8\"]"
+  },
+  {
+    "hex": "3aaeac3b672c2c29",
+    "name": "package-handler/worker/schema-d1.sql",
+    "path": "sector2/package-handler/worker/schema-d1.sql",
+    "area": "sector2",
+    "description": "the custody database's structure only, no data (50 tables, 35 indexes, exported from phoenix_dev_db 2026-09-29). Used to stand up a fresh data plane on another Cloudflare account; re-export after any live schema change so it stays the truth.",
+    "key_fact": null,
+    "source_file": "sector2/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"74c05e2f9190b4c2\",\"ae2002a7528b058d\",\"2d87f9e76d5dbf11\"]"
+  },
+  {
+    "hex": "3f0096497d3ac9a2",
+    "name": "package-handler/backfill-versions.py",
+    "path": "sector2/package-handler/backfill-versions.py",
+    "area": "sector2",
+    "description": "one-time repair: finds the exact bytes of every old version that had a D1 `versions` row but no bytes in R2 (searches the local clone pools on D:, E:, F: and every blob in this repo's git history, LF and CRLF), and sends only bytes whose SHA3-512 matches D1. `python backfill-versions.py` = dry run, `--upload` = send. Needs `PHOENIX_WORKER_URL`, `PHOENIX_AUTH`, `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`. Run 2026-09-29: 408 version keys restored.",
+    "key_fact": null,
+    "source_file": "sector2/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"74c05e2f9190b4c2\",\"2d87f9e76d5dbf11\"]"
+  },
+  {
+    "hex": "dbb1e1de35f8a1d4",
+    "name": "package-handler/pool-tidy.py",
+    "path": "sector2/package-handler/pool-tidy.py",
+    "area": "sector2",
+    "description": "keeps the local clone pool small: R2 is the home, a local copy stays only if it is pinned (e.g. a VM image a program must read from disk). `python pool-tidy.py audit` (what would go and why), `tidy [--apply]` (removes local copies only after proving their exact bytes are in R2; dry run without `--apply`), `pin|unpin <name|hex>`, `pins`. Anything it cannot prove is kept. Only reads from the worker; deletes only local files.",
+    "key_fact": null,
+    "source_file": "sector2/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"74c05e2f9190b4c2\",\"2d87f9e76d5dbf11\"]"
   },
   {
     "hex": "15b92ac2b6f12ca6",
@@ -998,7 +1108,7 @@
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"66ff7c78b9507f6b\",\"31f3b2f7b1210b44\",\"b9bb58048978991a\"]"
   },
   {
     "hex": "eaae18e72d174fc6",
@@ -1016,18 +1126,18 @@
     "name": "frank/",
     "path": "sector2/frank",
     "area": "sector2",
-    "description": "dormant: `frank_save.py` drive-pressure tiering (`best_drive()`, `drive_pressure()`) that nothing calls, plus `frank_helix.py`, `frank_http.py`, `frank_client.js`. Audited 2026-09-28: Debian-VM-shaped, no working wiring on Windows (keep or retire is Jerry's call, S2CORE-F38).",
+    "description": "dormant (nothing runs it; re-checked 2026-09-30). Frank3's older Python side: `frank_save.py` (Office save scheduler: picks a drive by pressure with `best_drive()`/`drive_pressure()` across `/mnt/d` to `/mnt/g`, writes to the vault CLONEPOOL), `frank_http.py` (small HTTP bridge on port 7347: `/status`, `/save`, `/catalog`), `frank_client.js` (browser-side poller for that bridge, meant for Office), `frank_helix.py` (RAM-pressure daemon, L1/L2/L3 tiers at 60/75/88 %, ZMQ). Debian-VM-shaped, no working wiring on Windows; keep or retire is Jerry's call (S2CORE-F38). The road test copies the folder to worker boxes as files, but nothing there runs it.",
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "grey",
-    "links": "[\"74c05e2f9190b4c2\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"ae2002a7528b058d\",\"1462bf4284baafce\"]"
   },
   {
     "hex": "33d485653f8a5612",
     "name": "propagator/",
     "path": "sector2/propagator",
     "area": "sector2",
-    "description": "dormant: `propagator.py`/`dispatch.json`/`propcoms.sh` (`propcoms.sh relay` is a stub); same audit, same open call (S2CORE-F38).",
+    "description": "dormant (nothing runs it). `propagator.py` is a signal router meant to pass messages down the COM4 to COM1 chain and out to every target in `dispatch.json` (vault, sqlite, D1, Frank3, peer, Windows); `propcoms.sh` is the shell side (`propcoms.sh relay` is a stub). Same audit, same open call (S2CORE-F38).",
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "grey",
@@ -1038,10 +1148,32 @@
     "name": "ring0/",
     "path": "sector2/ring0",
     "area": "sector2",
-    "description": "dormant: `frankenhelix.py` (COM router self-loop, needs zmq/psutil); same open call.",
+    "description": "dormant (nothing runs it). `frankenhelix.py` is the original Frank bridge: a ring0 listener with COM1-4 prefetch routing over the four physical breach_coms drives at `/media/<user>/breach_coms1-4` (needs zmq/psutil). Same open call.",
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "grey",
+    "links": "[\"74c05e2f9190b4c2\"]"
+  },
+  {
+    "hex": "7170da25dc303b71",
+    "name": "apps/game/",
+    "path": "sector2/apps/game",
+    "area": "sector2",
+    "description": "`COMPANION_VOICE.md` only: a draft of the game companion's voice and persona (2026-09-12). Notes, no code.",
+    "key_fact": null,
+    "source_file": "sector2/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"74c05e2f9190b4c2\"]"
+  },
+  {
+    "hex": "5430311e56708256",
+    "name": "assets/",
+    "path": "sector2/assets",
+    "area": "sector2",
+    "description": "`phoenix-logo.png`. Nothing in the code points at this copy (the dashboard and phoenix-office each use their own `assets/phoenix-logo.png`).",
+    "key_fact": null,
+    "source_file": "sector2/CONNECTIONS.md",
+    "state": "white",
     "links": "[\"74c05e2f9190b4c2\"]"
   },
   {
@@ -1082,7 +1214,7 @@
     "name": "mesh-worker/schema.sql",
     "path": "sector3/phoenix-net/mesh-worker/schema.sql",
     "area": "sector3",
-    "description": "its D1 schema (devices, links).",
+    "description": "its D1 schema (`mesh_devices`, `mesh_link_health`).",
     "key_fact": null,
     "source_file": "sector3/phoenix-net/CONNECTIONS.md",
     "state": "white",
@@ -1119,7 +1251,7 @@
     "key_fact": null,
     "source_file": "sector3/phoenix-net/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"4d526f236b2b1fc3\",\"072fcfbdebc62d00\",\"45a229d57d35d935\",\"6eae94abb8eb34c5\"]"
+    "links": "[\"4d526f236b2b1fc3\",\"072fcfbdebc62d00\",\"45a229d57d35d935\",\"ae2002a7528b058d\",\"3feedc5391c7ad02\"]"
   },
   {
     "hex": "7ce61151bc0bb3f9",
@@ -1148,7 +1280,7 @@
     "name": "phoenix-net.py",
     "path": "sector3/phoenix-net/phoenix-net.py",
     "area": "sector3",
-    "description": "admin tool run on Jerry's PC: `enroll` (Linux box over SSH), `enroll-local`, `enroll-phone`, `list`, `links`, `health`, `revoke`.",
+    "description": "admin tool run on Jerry's PC: `enroll` (Linux box over SSH), `enroll-local`, `enroll-phone`, `forget-qr` (deletes the phone's QR/config file, which holds its private key, once scanned), `list`, `links`, `health`, `revoke`.",
     "key_fact": null,
     "source_file": "sector3/phoenix-net/CONNECTIONS.md",
     "state": "white",
@@ -1185,18 +1317,183 @@
     "key_fact": null,
     "source_file": "sector3/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"ae2002a7528b058d\",\"30883d1df2fc62f5\",\"5fd2e93c6bc16ed3\"]"
+    "links": "[\"ae2002a7528b058d\",\"7f981588473fbc31\",\"5fd2e93c6bc16ed3\"]"
   },
   {
     "hex": "4363aaa08e4f1bd2",
     "name": "services/",
     "path": "sector3/services",
     "area": "sector3",
-    "description": "19 systemd `.service`/`.target` files, `install-units.sh` (explicit allow-list), and the dashboard deploy scripts (`deploy-dashboard.sh`, `push-dashboard.ps1`/`.sh`, `install-dashboard-windows.ps1`, `scout-ubuntu.sh`).",
+    "description": "20 systemd unit files (17 `.service` incl. the `helix@.service` template, 3 `.target`), `install-units.sh` (explicit allow-list), and the dashboard deploy scripts (`deploy-dashboard.sh`, `push-dashboard.ps1`/`.sh`, `install-dashboard-windows.ps1`, `scout-ubuntu.sh`).",
     "key_fact": null,
     "source_file": "sector3/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"ae2002a7528b058d\",\"66cd9688a2ae0682\",\"5a4c098eb82ff3a2\",\"a1aba4936f8f8fd2\",\"4a23e3f77d4c268d\",\"76abc3d0044d6fb1\",\"f9d35d43770d3909\"]"
+    "links": "[\"ae2002a7528b058d\",\"66cd9688a2ae0682\",\"50d51a233d8ff488\",\"5a4c098eb82ff3a2\",\"0f773c9134b2e8df\",\"ab31d986b71e6749\",\"4a23e3f77d4c268d\",\"76abc3d0044d6fb1\",\"f9d35d43770d3909\"]"
+  },
+  {
+    "hex": "e60e0b27cdddfd28",
+    "name": "services/helix@.service",
+    "path": "sector3/services/helix@.service",
+    "area": "sector3",
+    "description": "one named kernel Helix per instance (`helix@ingress`, `helix@egress`): runs `helix_boot.sh start|stop <instance>`, settings in `/etc/default/helix-<instance>`; conflicts with the single `helix.service`, so a box uses one layout or the other.",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"0f773c9134b2e8df\",\"fd90f1c00d77a35e\",\"ab31d986b71e6749\",\"5a4c098eb82ff3a2\"]"
+  },
+  {
+    "hex": "ab31d986b71e6749",
+    "name": "services/phoenix-paging.service",
+    "path": "sector3/services/phoenix-paging.service",
+    "area": "sector3",
+    "description": "the paging manager (`sector4/paging.py`); ordered after either Helix layout but no longer pulls `helix.service` up (that used to stop the ingress/egress pair, 2026-09-29).",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"5a4c098eb82ff3a2\",\"fd90f1c00d77a35e\",\"4363aaa08e4f1bd2\",\"e60e0b27cdddfd28\"]"
+  },
+  {
+    "hex": "a877e61bd6a80203",
+    "name": "worker-up/",
+    "path": "sector3/worker-up",
+    "area": "sector3",
+    "description": "the road test, \"Phoenix from the cloud, a worker on the ground\" (plan: `docs/plans/compaq-road-test-plan.md`): scripts that put Phoenix into R2 + D1 on another Cloudflare account and turn a blank Linux box (first one: pbm-compaq) into a worker that pulls it down. Run by hand today, one step per script; a single `usys worker up/down` entry point is planned, not built.",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\"]"
+  },
+  {
+    "hex": "aff88c6662579906",
+    "name": "worker-up/dataplane-up.sh",
+    "path": "sector3/worker-up/dataplane-up.sh",
+    "area": "sector3",
+    "description": "stands up (or with `check`, only verifies) a Phoenix data plane on a Cloudflare account: an R2 bucket, a D1 database loaded with the custody schema, and packages-worker deployed under its own name with its own PHOENIX_AUTH, then proves `/health` 200 and `/stats` 401 without the key. Re-runnable; redeploys only when the worker code changed.",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"2d87f9e76d5dbf11\"]"
+  },
+  {
+    "hex": "33a2b7b4aec981b8",
+    "name": "worker-up/seed-dataplane.sh",
+    "path": "sector3/worker-up/seed-dataplane.sh",
+    "area": "sector3",
+    "description": "fills a data plane with the operations set through the import method (intake.sh), from the committed bytes (git archive, so no Windows CRLF leaks to Linux), in a sandbox (own home, catalog, logs, pool) so our own Phoenix is untouched. Refuses if the listed files have uncommitted changes.",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"63388ec43c164af1\"]"
+  },
+  {
+    "hex": "63388ec43c164af1",
+    "name": "worker-up/operations-set.txt",
+    "path": "sector3/worker-up/operations-set.txt",
+    "area": "sector3",
+    "description": "the list of what a worker needs from Phoenix: Helix kernel + userspace, the CoPES security guardians, Frank, the paging manager, the systemd units, intake.sh itself, and H.L.K. The engine team travels together (AI Safety Rule 6).",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"33a2b7b4aec981b8\",\"8dff57dd9caf1201\",\"4a23e3f77d4c268d\",\"5a4c098eb82ff3a2\"]"
+  },
+  {
+    "hex": "66be75bfcbbf72f0",
+    "name": "worker-up/worker-bootstrap.sh",
+    "path": "sector3/worker-up/worker-bootstrap.sh",
+    "area": "sector3",
+    "description": "the only file a blank box needs: pulls intake.sh from R2, checks it against its SHA3-512 in D1, then uses it to clone each named item; writes nanosecond timings to `bootstrap.jsonl` (measurement M1). Box key lives in `~/.phoenix-worker/` on the box.",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"8dff57dd9caf1201\"]"
+  },
+  {
+    "hex": "fd90f1c00d77a35e",
+    "name": "worker-up/helix-pair-up.sh",
+    "path": "sector3/worker-up/helix-pair-up.sh",
+    "area": "sector3",
+    "description": "run as root on the box: turns its single Helix into an ingress/egress pair (ingress over the existing `helix-origin` partition with warm-on-write on, egress over a second disk it partitions only if blank), picks disks by serial, never touches the OS disk or udev/modprobe settings. Live on pbm-compaq since 2026-09-29.",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"e60e0b27cdddfd28\",\"ab31d986b71e6749\"]"
+  },
+  {
+    "hex": "8c34e0996cfb53db",
+    "name": "worker-up/hlk-up.sh",
+    "path": "sector3/worker-up/hlk-up.sh",
+    "area": "sector3",
+    "description": "run as root: installs and starts H.L.K as `phoenix-hlk.service` on the box, listening on 127.0.0.1 and the box's mesh address (port 8472), with one allowed remote caller.",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"df9dd9b48f5ba743\"]"
+  },
+  {
+    "hex": "37e28d2dd0e159eb",
+    "name": "worker-up/model-up.sh",
+    "path": "sector3/worker-up/model-up.sh",
+    "area": "sector3",
+    "description": "run as root: gives H.L.K a local model from archives the box already imported from Phoenix (no internet model library, no paid API) — unpacks the Ollama CPU runtime + model, runs it as a box-level `phoenix-ollama.service` on 127.0.0.1:11434 with the model pinned in memory, and switches H.L.K to it. On pbm-compaq: llama3.2:3b.",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"df9dd9b48f5ba743\"]"
+  },
+  {
+    "hex": "05beb4f4c9ec1016",
+    "name": "worker-up/net-tune.sh",
+    "path": "sector3/worker-up/net-tune.sh",
+    "area": "sector3",
+    "description": "run as root: sets BBR congestion control + fq, persisted in `/etc/sysctl.d/90-phoenix-bbr.conf`; `revert` undoes it. Fixed pbm-compaq's lossy uplink (a 16 MiB push went 289 s → 20.7 s).",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\"]"
+  },
+  {
+    "hex": "2e44e0b3b6d84943",
+    "name": "worker-up/roadtest-measure.sh",
+    "path": "sector3/worker-up/roadtest-measure.sh",
+    "area": "sector3",
+    "description": "measurements M2–M6 on the worker: pull from R2 into ingress (cold and warm re-read), push through egress Helix-managed vs not, small-object latency, a tamper check (altered R2 bytes must be refused), and both Helix instances' counters; results in `<workdir>/measure/results.json`.",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"8dff57dd9caf1201\"]"
+  },
+  {
+    "hex": "df9dd9b48f5ba743",
+    "name": "hlk/hlk.py",
+    "path": "sector3/hlk/hlk.py",
+    "area": "sector3",
+    "description": "H.L.K on a worker box (0.2.2), the third of the triplet with ingress and egress Helix: a small HTTP server with declared tools — status, warm, pull, prefetch, jobs, verify, stage run without asking; push (R2 + D1 receipt) waits for an explicit yes on `/confirm`. Keeps one shared index of what the box holds, reads both Helix counters, logs every call to `audit.jsonl`. Every tool works with no model; a model (local Ollama, or the Anthropic API if configured) drives the same tools through `/chat`. Token-gated.",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"8c34e0996cfb53db\",\"37e28d2dd0e159eb\",\"8dff57dd9caf1201\",\"0f773c9134b2e8df\",\"384bcaaae67367ab\",\"69b19065a543212d\"]"
+  },
+  {
+    "hex": "69b19065a543212d",
+    "name": "hlk/test_hlk.py",
+    "path": "sector3/hlk/test_hlk.py",
+    "area": "sector3",
+    "description": "H.L.K's own tests with intake/dmsetup stood in (tiers, pull safety, names, index, status parsing, token gate); 26/26 passing on 2026-09-30.",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"df9dd9b48f5ba743\"]"
+  },
+  {
+    "hex": "384bcaaae67367ab",
+    "name": "hlk/eval_models.py",
+    "path": "sector3/hlk/eval_models.py",
+    "area": "sector3",
+    "description": "read-only check of which local Ollama model can drive H.L.K's tools on a box: speed and whether it picks the right tool for six sample requests.",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"df9dd9b48f5ba743\"]"
   },
   {
     "hex": "b7826bfbd998a94f",
@@ -1225,11 +1522,11 @@
     "name": "paging.py",
     "path": "sector4/paging.py",
     "area": "sector4",
-    "description": "Linux AI paging manager (swapfiles via swapon/swapoff, predictive engine, loopback-only control API, kernel-Helix attach via libhelix) with the Doppelganger port, live-tested on pbm-compaq 2026-09-28.",
+    "description": "Linux AI paging manager (swapfiles via swapon/swapoff, predictive engine, loopback-only control API, kernel-Helix attach via libhelix) with the Doppelganger port, live-tested on pbm-compaq 2026-09-28. With the two named Helix instances on pbm-compaq (helix@ingress + helix@egress, since 2026-09-29) it reads them as one: libhelix adds up every live dm-helix device, and `/proc/helix` shows the hottest of the two.",
     "key_fact": null,
     "source_file": "sector4/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"5a4c098eb82ff3a2\",\"4363aaa08e4f1bd2\",\"a1aba4936f8f8fd2\",\"76abc3d0044d6fb1\",\"f9d35d43770d3909\"]"
+    "links": "[\"5a4c098eb82ff3a2\",\"4363aaa08e4f1bd2\",\"a1aba4936f8f8fd2\",\"63388ec43c164af1\",\"76abc3d0044d6fb1\",\"f9d35d43770d3909\"]"
   },
   {
     "hex": "79efd15e5339e7b2",
@@ -1306,7 +1603,7 @@
     "key_fact": null,
     "source_file": "tools/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"f9d35d43770d3909\",\"d9fa231292757a7e\",\"745d592e109d6f02\"]"
+    "links": "[\"f9d35d43770d3909\",\"d9fa231292757a7e\"]"
   },
   {
     "hex": "de4b5d40759ef20b",
@@ -1379,11 +1676,11 @@
     "name": "driver-updater/driver-updater.ps1",
     "path": "tools/driver-updater/driver-updater.ps1",
     "area": "tools",
-    "description": "Windows driver updates via PSWindowsUpdate (UTF-8 with BOM, parses under 5.1 and 7).",
+    "description": "Windows driver updater. Part 1 checks Windows Update's own signed driver catalog through the PSWindowsUpdate module (installs it from the PowerShell Gallery on first run) and installs nothing without a yes; Part 2 names hardware Windows Update doesn't cover by its USB/PCI vendor ID and points at that vendor's own support page (nothing downloaded for you). Flags: `-WhatIfOnly` (report only), `-InstallAll`, `-ListCurrent`, `-SkipVendorScan`. Needs admin. UTF-8 with BOM, parses under PowerShell 5.1 and 7. Explained in `driver-updater/README.md`. Launched from the dashboard's DRIVER UPDATES button (new 2026-09-30) or run by hand.",
     "key_fact": null,
     "source_file": "tools/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"f9d35d43770d3909\"]"
+    "links": "[\"f9d35d43770d3909\",\"66cd9688a2ae0682\"]"
   },
   {
     "hex": "ca629317e6f339c3",
@@ -1397,6 +1694,39 @@
     "links": "[\"f9d35d43770d3909\"]"
   },
   {
+    "hex": "ef8e461421e00936",
+    "name": "video/record-voice.ps1",
+    "path": "tools/video/record-voice.ps1",
+    "area": "tools",
+    "description": "records Jerry's voice from the V8S sound card for a video (the phone records the picture); press Q to stop; files land in E:\\Phoenix\\video\\raw.",
+    "key_fact": null,
+    "source_file": "tools/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"f9d35d43770d3909\"]"
+  },
+  {
+    "hex": "a75084716ee29b00",
+    "name": "video/setup-obs.py",
+    "path": "tools/video/setup-obs.py",
+    "area": "tools",
+    "description": "adds a \"Phoenix\" profile and scene collection to OBS Studio (screen + webcam, V8S mic, 1080p30 MP4, CPU x264 per the no-GPU rule). Run with OBS closed.",
+    "key_fact": null,
+    "source_file": "tools/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"f9d35d43770d3909\"]"
+  },
+  {
+    "hex": "c89e6f33153d830e",
+    "name": "video/pbm-channel-art.py",
+    "path": "tools/video/pbm-channel-art.py",
+    "area": "tools",
+    "description": "draws the PBM Consulting Service YouTube banner and profile picture in the website's colours and fonts (`python tools/video/pbm-channel-art.py [--out DIR]`, default E:\\Phoenix\\video\\brand). Since 2026-09-30 `--logo <path>` also writes the website's stamp-and-name logo as a transparent PNG.",
+    "key_fact": null,
+    "source_file": "tools/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"f9d35d43770d3909\",\"56cc318b711082fb\"]"
+  },
+  {
     "hex": "76abc3d0044d6fb1",
     "name": "poc/",
     "path": "tools/poc",
@@ -1405,7 +1735,876 @@
     "key_fact": null,
     "source_file": "tools/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"f9d35d43770d3909\",\"f7ac2afbc9927964\",\"4a23e3f77d4c268d\",\"4363aaa08e4f1bd2\"]"
+    "links": "[\"f9d35d43770d3909\",\"f7ac2afbc9927964\",\"4a23e3f77d4c268d\",\"50d51a233d8ff488\",\"4363aaa08e4f1bd2\"]"
+  },
+  {
+    "hex": "32d20391e963e3c0",
+    "name": "MainWindow.xaml",
+    "path": "hud/MainWindow.xaml",
+    "area": "hud",
+    "description": "the overlay: Live Monitor, H.L.K-10 chat pane, CLAUDE CODE pane, the KITT scanner bar. Saves the screen frame and both transcripts to `E:\\Phoenix\\hud-live-monitor\\` (`current.png`, `chat-log.txt`, `claude-code-log.txt`) so any Claude session can read them.",
+    "key_fact": null,
+    "source_file": "hud/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"78cf4842afe41dcb\"]"
+  },
+  {
+    "hex": "53ecd135ccf90968",
+    "name": "MainWindow.xaml.cs",
+    "path": "hud/MainWindow.xaml.cs",
+    "area": "hud",
+    "description": "the overlay: Live Monitor, H.L.K-10 chat pane, CLAUDE CODE pane, the KITT scanner bar. Saves the screen frame and both transcripts to `E:\\Phoenix\\hud-live-monitor\\` (`current.png`, `chat-log.txt`, `claude-code-log.txt`) so any Claude session can read them.",
+    "key_fact": null,
+    "source_file": "hud/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"78cf4842afe41dcb\"]"
+  },
+  {
+    "hex": "46262755af4fe0fe",
+    "name": "AiChatService.cs",
+    "path": "hud/AiChatService.cs",
+    "area": "hud",
+    "description": "H.L.K-10's brain: the provider chain helpdesk → Ollama → Claude CLI → subscription, read from `~/.phoenix/ai_auth.json` + `~/.phoenix/phoenix.env` (same files and order as the dashboard). The Ollama path uses a fixed JSON reply shape so a local model can't invent results.",
+    "key_fact": null,
+    "source_file": "hud/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"78cf4842afe41dcb\",\"66cd9688a2ae0682\"]"
+  },
+  {
+    "hex": "8c910aaa10efed1f",
+    "name": "HandsClient.cs",
+    "path": "hud/HandsClient.cs",
+    "area": "hud",
+    "description": "H.L.K-10's hands: fetches the tool list from the Phoenix Console (`/api/hands`, refreshed in the background every minute) and runs one `ACTION` at a time; ask-tier tools only run on the user's own yes.",
+    "key_fact": null,
+    "source_file": "hud/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"78cf4842afe41dcb\",\"d0960501f8971be8\"]"
+  },
+  {
+    "hex": "07e6a85027a55492",
+    "name": "ClaudeCodeSession.cs",
+    "path": "hud/ClaudeCodeSession.cs",
+    "area": "hud",
+    "description": "the CLAUDE CODE pane: full Claude Code (`claude -p`, stream-json, `--resume`), subscription only.",
+    "key_fact": null,
+    "source_file": "hud/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"78cf4842afe41dcb\"]"
+  },
+  {
+    "hex": "9d7595cda71006c5",
+    "name": "ScreenCaptureService.cs",
+    "path": "hud/ScreenCaptureService.cs",
+    "area": "hud",
+    "description": "the Live Monitor screen capture.",
+    "key_fact": null,
+    "source_file": "hud/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"78cf4842afe41dcb\"]"
+  },
+  {
+    "hex": "b02ebca497051114",
+    "name": "Voice/",
+    "path": "hud/Voice",
+    "area": "hud",
+    "description": "push-to-talk (Right Ctrl, `PushToTalkHotkey.cs`), microphone (`MicrophoneCapture.cs`), local Whisper speech-to-text on CPU (`WhisperTranscriber.cs`), local Piper voice (`PiperTextToSpeech.cs`), text cleanup before speaking (`SpeechTextSanitizer.cs`), barge-in and state (`VoiceController.cs`), model checks (`VoiceSetup.cs`).",
+    "key_fact": null,
+    "source_file": "hud/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"78cf4842afe41dcb\"]"
+  },
+  {
+    "hex": "8b29c660b3dd87e8",
+    "name": "Controls/KnightRiderBar.xaml",
+    "path": "hud/Controls/KnightRiderBar.xaml",
+    "area": "hud",
+    "description": "the scanner bar: red listening, amber thinking, cyan speaking.",
+    "key_fact": null,
+    "source_file": "hud/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"78cf4842afe41dcb\"]"
+  },
+  {
+    "hex": "be67d8148fae257b",
+    "name": "VOICE_SETUP.md",
+    "path": "hud/VOICE_SETUP.md",
+    "area": "hud",
+    "description": "one-time install of the Whisper and Piper models to `E:\\Phoenix\\voice-models\\` (not in the repo).",
+    "key_fact": null,
+    "source_file": "hud/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"78cf4842afe41dcb\"]"
+  },
+  {
+    "hex": "0ce975886b4e7d20",
+    "name": "setup-voice.ps1",
+    "path": "hud/setup-voice.ps1",
+    "area": "hud",
+    "description": "one-time install of the Whisper and Piper models to `E:\\Phoenix\\voice-models\\` (not in the repo).",
+    "key_fact": null,
+    "source_file": "hud/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"78cf4842afe41dcb\"]"
+  },
+  {
+    "hex": "e6ed39928c3f6372",
+    "name": "hud.checks/Program.cs",
+    "path": "hud.checks/Program.cs",
+    "area": "hud",
+    "description": "the check harness: `dotnet run --project hud.checks -- --live` runs the live checks (Claude subscription + Ollama).",
+    "key_fact": null,
+    "source_file": "hud/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"78cf4842afe41dcb\"]"
+  },
+  {
+    "hex": "260fc5cbcd411a08",
+    "name": "main.js",
+    "path": "phoenix-office/main.js",
+    "area": "phoenix-office",
+    "description": "the Electron main process: splash then main window, every `office:*` IPC handler, local autosave, sealing signed documents to the worker, browse/pull/history, legal hold, saved jobs, Project Assist, PDF export, file conversion, the read-only Claude CLI \"Suggestions\" call, and the Secretariat agent session. Reads `PHOENIX_OFFICE_WORKER_URL`, `PHOENIX_OFFICE_AUTH`, `PHOENIX_OFFICE_GOOGLE_CLIENT_ID` / `_SECRET` from the environment at launch.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"4ae649edb410e720\",\"b9bb58048978991a\",\"91d95c5b8bf53d63\",\"c3f44338c7e9ea1a\",\"ab4e0b97e15e10b0\",\"45a229d57d35d935\"]"
+  },
+  {
+    "hex": "4ae649edb410e720",
+    "name": "preload.js",
+    "path": "phoenix-office/preload.js",
+    "area": "phoenix-office",
+    "description": "the narrow bridge between the page and `main.js`: only the allow-listed `office:*` channels get through (the page itself has no Node access).",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"9b9e17eb01627f83\",\"260fc5cbcd411a08\"]"
+  },
+  {
+    "hex": "9b9e17eb01627f83",
+    "name": "index.html",
+    "path": "phoenix-office/index.html",
+    "area": "phoenix-office",
+    "description": "the whole app UI in one file: dual-pane document view, workspace pane (browse sealed documents, legal holds, saved jobs, projects), Secretariat pane with the KITT bar, signing consent, About page.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"4ae649edb410e720\"]"
+  },
+  {
+    "hex": "3aba1b7fbe22b9d2",
+    "name": "splash.html",
+    "path": "phoenix-office/splash.html",
+    "area": "phoenix-office",
+    "description": "the branded start-up screen (shows `assets/phoenix-logo.png`).",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "7762df2d2962e649",
+    "name": "brand.json",
+    "path": "phoenix-office/brand.json",
+    "area": "phoenix-office",
+    "description": "optional letterhead for exported documents (business name, address, logo file). This copy is set to PBM Consulting Service; delete it and exports go out unbranded.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"89e618331791995c\"]"
+  },
+  {
+    "hex": "04c0dd0a7e77bf98",
+    "name": "brand-logo.svg",
+    "path": "phoenix-office/brand-logo.svg",
+    "area": "phoenix-office",
+    "description": "the letterhead logo that `brand.json` points at.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "5d43c5d95636d817",
+    "name": "assets/phoenix-logo.png",
+    "path": "phoenix-office/assets/phoenix-logo.png",
+    "area": "phoenix-office",
+    "description": "the phoenix bird art used by the splash screen and as the source for the app icon.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "7526bcc474911f3b",
+    "name": "build/icon.png",
+    "path": "phoenix-office/build/icon.png",
+    "area": "phoenix-office",
+    "description": "the 1024x1024 app icon (made from the bird art by `scripts/build-icon.js`); `build/icon.ico` is the Windows icon electron-builder uses.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "7d7c8f5cff322bac",
+    "name": "package.json",
+    "path": "phoenix-office/package.json",
+    "area": "phoenix-office",
+    "description": "npm scripts (start, test, build-win/mac/linux) and the electron-builder installer settings (NSIS installer + portable exe on Windows, output to `dist/`).",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "485679e1137a8f3a",
+    "name": "package-lock.json",
+    "path": "phoenix-office/package-lock.json",
+    "area": "phoenix-office",
+    "description": "exact versions of Electron and electron-builder.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "7332ee30419b8ca0",
+    "name": "README.md",
+    "path": "phoenix-office/README.md",
+    "area": "phoenix-office",
+    "description": "the product's own explanation: how to run, configure and build it, and why it is a separate product from Phoenix.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "66ff7c78b9507f6b",
+    "name": "lib/document.js",
+    "path": "phoenix-office/lib/document.js",
+    "area": "phoenix-office",
+    "description": "the document engine: fill-once fields, the DRAFT → PENDING_REVIEW → SIGNED state machine, content hashes, integrity check, change orders. No network.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"2a738fdab54826a0\",\"fe573334dc2e08a5\",\"dbaa4daffea73238\",\"3bc6703ce8243bba\"]"
+  },
+  {
+    "hex": "b2832f4873d97d1b",
+    "name": "lib/file-format.js",
+    "path": "phoenix-office/lib/file-format.js",
+    "area": "phoenix-office",
+    "description": "saves and loads a document as a `.office` file with header QR (before hashing) and footer QR (after signing), and computes the document's identity hash used as its storage key.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "71d1a675f3dc6eab",
+    "name": "lib/hash.js",
+    "path": "phoenix-office/lib/hash.js",
+    "area": "phoenix-office",
+    "description": "SHA3-512 and BLAKE2b-512. Uses Node's own crypto when it has them; falls back to the copied-in noble-hashes code inside Electron, whose crypto lacks both.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"485c4368eaf8b7b3\"]"
+  },
+  {
+    "hex": "485c4368eaf8b7b3",
+    "name": "lib/vendor/noble-hashes/",
+    "path": "phoenix-office/lib/vendor/noble-hashes",
+    "area": "phoenix-office",
+    "description": "a committed copy of @noble/hashes 1.7.1 (MIT, `LICENSE` inside), used by `lib/hash.js`. Not installed by npm on purpose.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"71d1a675f3dc6eab\"]"
+  },
+  {
+    "hex": "2a738fdab54826a0",
+    "name": "lib/fingerprint.js",
+    "path": "phoenix-office/lib/fingerprint.js",
+    "area": "phoenix-office",
+    "description": "the machine's hardware fingerprint (same double-hash recipe as Phoenix's `sector1/auth/phoenix_auth.py`, with Windows signals added); memoized so it is only gathered once.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"66ff7c78b9507f6b\",\"a07692cf80ba56f2\"]"
+  },
+  {
+    "hex": "671da7162a844221",
+    "name": "lib/identity.js",
+    "path": "phoenix-office/lib/identity.js",
+    "area": "phoenix-office",
+    "description": "who the author is: hardware fingerprint, Windows account, or Google sign-in (device-code flow, no embedded browser), all resolved to one author id.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "925079247bb3ae40",
+    "name": "lib/notify.js",
+    "path": "phoenix-office/lib/notify.js",
+    "area": "phoenix-office",
+    "description": "builds the \"this signed document was altered\" message and works out who to send it to (email, or text through a phone carrier's email gateway); sends through the worker's `/notify` route.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"b9bb58048978991a\"]"
+  },
+  {
+    "hex": "5cf1d27d771cd9c1",
+    "name": "lib/tamper-guard.js",
+    "path": "phoenix-office/lib/tamper-guard.js",
+    "area": "phoenix-office",
+    "description": "joins the two: checks a signed document and, only if it was altered, sends the notice through `lib/notify.js`.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"b9bb58048978991a\"]"
+  },
+  {
+    "hex": "c90c07d20f3c95c7",
+    "name": "lib/libreoffice.js",
+    "path": "phoenix-office/lib/libreoffice.js",
+    "area": "phoenix-office",
+    "description": "PDF export and general file conversion by running LibreOffice headless. Uses an installed LibreOffice first; the download of a portable copy from the worker is switched off until its SHA-256 is pinned. Also the list of LibreOffice apps the user can launch.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"b9bb58048978991a\"]"
+  },
+  {
+    "hex": "19f4271c6043f12b",
+    "name": "lib/document-html.js",
+    "path": "phoenix-office/lib/document-html.js",
+    "area": "phoenix-office",
+    "description": "turns a document into the plain printable HTML page LibreOffice converts to PDF (with letterhead and, for a schedule, the chart).",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"89e618331791995c\",\"8f3d4357e4bea58d\",\"a0cc17baa64a96c3\"]"
+  },
+  {
+    "hex": "89e618331791995c",
+    "name": "lib/brand.js",
+    "path": "phoenix-office/lib/brand.js",
+    "area": "phoenix-office",
+    "description": "reads `brand.json`; a missing or broken file just means no letterhead.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"19f4271c6043f12b\",\"7762df2d2962e649\"]"
+  },
+  {
+    "hex": "8f3d4357e4bea58d",
+    "name": "lib/schedule-gantt.js",
+    "path": "phoenix-office/lib/schedule-gantt.js",
+    "area": "phoenix-office",
+    "description": "draws the Master schedule document's `phase_breakdown` field as a schedule chart (one row per trade, green / yellow / red), for both the live view and the PDF.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"c3f44338c7e9ea1a\",\"19f4271c6043f12b\"]"
+  },
+  {
+    "hex": "371be1248e09810b",
+    "name": "lib/project.js",
+    "path": "phoenix-office/lib/project.js",
+    "area": "phoenix-office",
+    "description": "Project Assist objects: projects, the standard phase list (based on PMI/PMBOK), phase status. No network; the worker stores them.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"ea06b88a65c6803a\"]"
+  },
+  {
+    "hex": "ec4257ea40ffc22b",
+    "name": "lib/bid-factors.js",
+    "path": "phoenix-office/lib/bid-factors.js",
+    "area": "phoenix-office",
+    "description": "the one ordered list of bid questions (size, setting, season, labor and so on) shared by the form and the Secretariat's `set_bid_factor` tool.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"c3f44338c7e9ea1a\"]"
+  },
+  {
+    "hex": "a0cc17baa64a96c3",
+    "name": "lib/phase-html.js",
+    "path": "phoenix-office/lib/phase-html.js",
+    "area": "phoenix-office",
+    "description": "turns a finished project phase, with its checklist decisions, into a printable page for PDF.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"19f4271c6043f12b\"]"
+  },
+  {
+    "hex": "ab4e0b97e15e10b0",
+    "name": "lib/ai-provider.js",
+    "path": "phoenix-office/lib/ai-provider.js",
+    "area": "phoenix-office",
+    "description": "plain text answers for Secretariat, tried in this order: local Ollama, then an Anthropic API key, then the Claude CLI (developer machine only). No tool or file access is ever given to any of them.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"260fc5cbcd411a08\"]"
+  },
+  {
+    "hex": "c3f44338c7e9ea1a",
+    "name": "lib/agent-tools.js",
+    "path": "phoenix-office/lib/agent-tools.js",
+    "area": "phoenix-office",
+    "description": "Secretariat's fixed tool list and tiers. Base (runs at once): search, templates, new document, draft/fill field, export PDF, project tools, checklist search and rationale, print phase. Deviation (needs the user's Approve): hand to client, sign, advance phase, set checklist item, award project.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"91d95c5b8bf53d63\",\"260fc5cbcd411a08\",\"ec4257ea40ffc22b\",\"8f3d4357e4bea58d\",\"7902a9146ed48e7e\",\"3bc6703ce8243bba\"]"
+  },
+  {
+    "hex": "91d95c5b8bf53d63",
+    "name": "lib/agent-loop.js",
+    "path": "phoenix-office/lib/agent-loop.js",
+    "area": "phoenix-office",
+    "description": "the Secretariat loop: the model must answer with one JSON tool call or a final answer; base tools run, deviation tools wait for the user's decision.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"260fc5cbcd411a08\",\"c3f44338c7e9ea1a\"]"
+  },
+  {
+    "hex": "b9482ac83d5bd79a",
+    "name": "templates/blank.json",
+    "path": "phoenix-office/templates/blank.json",
+    "area": "phoenix-office",
+    "description": "empty template; the user names their own fields.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "02351d50f2ee5a4a",
+    "name": "templates/work-order.json",
+    "path": "phoenix-office/templates/work-order.json",
+    "area": "phoenix-office",
+    "description": "work order fields.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "3a0fc2619fdc9039",
+    "name": "templates/invoice.json",
+    "path": "phoenix-office/templates/invoice.json",
+    "area": "phoenix-office",
+    "description": "invoice fields.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "149bda2fb292ae27",
+    "name": "templates/inspection.json",
+    "path": "phoenix-office/templates/inspection.json",
+    "area": "phoenix-office",
+    "description": "field inspection fields.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "58999a035a4373ab",
+    "name": "templates/change-order.json",
+    "path": "phoenix-office/templates/change-order.json",
+    "area": "phoenix-office",
+    "description": "change order fields (points back at the document it corrects).",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "bb0ab225d024b7ac",
+    "name": "templates/proposal.json",
+    "path": "phoenix-office/templates/proposal.json",
+    "area": "phoenix-office",
+    "description": "proposal / bid fields for steel work.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "e96606ad8262e741",
+    "name": "templates/safety-plan.json",
+    "path": "phoenix-office/templates/safety-plan.json",
+    "area": "phoenix-office",
+    "description": "site safety plan fields (OSHA 1926 references, fall protection, lift plan).",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "16f47edfe95b985e",
+    "name": "templates/schedule.json",
+    "path": "phoenix-office/templates/schedule.json",
+    "area": "phoenix-office",
+    "description": "Master schedule fields; `phase_breakdown` feeds the schedule chart.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "845767705f22dec4",
+    "name": "scripts/fix-electron.js",
+    "path": "phoenix-office/scripts/fix-electron.js",
+    "area": "phoenix-office",
+    "description": "runs after every `npm install` and repairs the Electron program if its own installer failed to unpack it.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "e632cc74c239ab6d",
+    "name": "scripts/build-icon.js",
+    "path": "phoenix-office/scripts/build-icon.js",
+    "area": "phoenix-office",
+    "description": "one-off: crops the bird art into `build/icon.png` (run with Electron, not plain node).",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "5eb31823120452e5",
+    "name": "test/test.js",
+    "path": "phoenix-office/test/test.js",
+    "area": "phoenix-office",
+    "description": "engine tests (document, file format, fingerprint, notify, tamper guard, identity, hash).",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "bc57c2f6e7f7ffa3",
+    "name": "test/test-agent.js",
+    "path": "phoenix-office/test/test-agent.js",
+    "area": "phoenix-office",
+    "description": "Secretariat and Project Assist tests (provider, tool list, loop, bid factors, project) with mocked models.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "b9bb58048978991a",
+    "name": "worker/index.js",
+    "path": "phoenix-office/worker/index.js",
+    "area": "phoenix-office",
+    "description": "the product's Cloudflare Worker (`phoenix-office-worker`): `/health`, `/whoami`, `/notify` and `/ack/:token` (tamper notices, re-sent every minute by the cron until acknowledged, sent by email through Resend), `/author/*`, `/jobs`, `/runtime/:name`, `/documents` (write-once store by hash, browse, history chain, legal hold), `/legal-holds`, `/checklist-catalog`, `/projects/*` (phases, checklist items, decisions).",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"260fc5cbcd411a08\",\"5cf1d27d771cd9c1\",\"925079247bb3ae40\",\"c90c07d20f3c95c7\",\"fe573334dc2e08a5\",\"3e2e79dd5d8fc8f1\",\"b83d464b04419a3b\",\"d0960501f8971be8\",\"9b776b8b8b8f07b7\",\"61ad4a8d1e45f706\"]"
+  },
+  {
+    "hex": "de76e87578f781ec",
+    "name": "worker/wrangler.jsonc",
+    "path": "phoenix-office/worker/wrangler.jsonc",
+    "area": "phoenix-office",
+    "description": "worker settings: D1 binding `OFFICE_DB` (`phoenix_office_db`), R2 `OFFICE_DOCS` (`phoenix-office-documents`) and `OFFICE_RUNTIME` (`phoenix-office-runtime`), one-minute cron; secrets `OFFICE_AUTH` and `RESEND_API_KEY` are set with wrangler, not in the file.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "3e2e79dd5d8fc8f1",
+    "name": "worker/schema.sql",
+    "path": "phoenix-office/worker/schema.sql",
+    "area": "phoenix-office",
+    "description": "every D1 table: authors, documents, legal holds, notifications, jobs, projects, phases, checklist catalog, phase checklist items, checklist decisions. Safe to re-run.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"b9bb58048978991a\"]"
+  },
+  {
+    "hex": "1e740d4316999523",
+    "name": "worker/migrations/001-office-documents-project-columns.sql",
+    "path": "phoenix-office/worker/migrations/001-office-documents-project-columns.sql",
+    "area": "phoenix-office",
+    "description": "adds project_id / phase_id / doc_role to an older documents table; only for a database made before 2026-09-28 (the live one already has them).",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "ea06b88a65c6803a",
+    "name": "worker/seed-checklist-catalog.sql",
+    "path": "phoenix-office/worker/seed-checklist-catalog.sql",
+    "area": "phoenix-office",
+    "description": "the starting checklist catalog (OSHA steel erection and fall protection, Oklahoma licensing, PM practice), one set per phase plus \"general\". Safe to re-run.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"371be1248e09810b\"]"
+  },
+  {
+    "hex": "b83d464b04419a3b",
+    "name": "worker/test.mjs",
+    "path": "phoenix-office/worker/test.mjs",
+    "area": "phoenix-office",
+    "description": "worker tests with a fake D1 and R2, driving the real request handler.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\",\"b9bb58048978991a\"]"
+  },
+  {
+    "hex": "cbfe39edac2dcd05",
+    "name": "worker/package.json",
+    "path": "phoenix-office/worker/package.json",
+    "area": "phoenix-office",
+    "description": "marks the worker as an ES module.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "413e0ed4d5c11fd2",
+    "name": "worker/.gitignore",
+    "path": "phoenix-office/worker/.gitignore",
+    "area": "phoenix-office",
+    "description": "keeps the 300 MB LibreOffice zip and wrangler's local folder out of git.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "ac750a739a7a6550",
+    "name": "worker/README.md",
+    "path": "phoenix-office/worker/README.md",
+    "area": "phoenix-office",
+    "description": "worker routes, first-time deploy steps, why it is separate from Phoenix's workers.",
+    "key_fact": null,
+    "source_file": "phoenix-office/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"31f3b2f7b1210b44\"]"
+  },
+  {
+    "hex": "1f1b292d6f7bbdb0",
+    "name": "blog/blog-post-1-origin.md",
+    "path": "press-room/blog/blog-post-1-origin.md",
+    "area": "press-room",
+    "description": "\"Why We Rebuilt Everything From Vendor Zero\": the Firebase credits story and why Phoenix depends on no single vendor. Also the voice reference for the social posts.",
+    "key_fact": null,
+    "source_file": "press-room/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"3bc6703ce8243bba\",\"b333fc50a366d02e\",\"90e054e32f683a92\"]"
+  },
+  {
+    "hex": "dbaa4daffea73238",
+    "name": "blog/blog-post-2-tamper-evident.md",
+    "path": "press-room/blog/blog-post-2-tamper-evident.md",
+    "area": "press-room",
+    "description": "\"Documents That Can't Lie\": Phoenix Office's lock-on-fill, sign-and-freeze, tamper-notice design, for trades businesses.",
+    "key_fact": null,
+    "source_file": "press-room/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"3bc6703ce8243bba\",\"66ff7c78b9507f6b\"]"
+  },
+  {
+    "hex": "7902a9146ed48e7e",
+    "name": "blog/blog-post-3-secretariat.md",
+    "path": "press-room/blog/blog-post-3-secretariat.md",
+    "area": "press-room",
+    "description": "\"Meet Secretariat\": the Phoenix Office AI helper that acts through a fixed tool list and asks before anything that leaves the draft.",
+    "key_fact": null,
+    "source_file": "press-room/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"3bc6703ce8243bba\",\"c3f44338c7e9ea1a\"]"
+  },
+  {
+    "hex": "3fce2c84c37eb15e",
+    "name": "outreach/pbm-b2b-outreach-draft.md",
+    "path": "press-room/outreach/pbm-b2b-outreach-draft.md",
+    "area": "press-room",
+    "description": "draft cold email about federal set-aside contracts (HUBZone, 8(a), WOSB), signed as PBM Consulting Service, with subject line options; not yet entered into HubSpot or sent.",
+    "key_fact": null,
+    "source_file": "press-room/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"3bc6703ce8243bba\"]"
+  },
+  {
+    "hex": "0f04912579cf027c",
+    "name": "legal-drafts/pbm-liability-disclaimer-draft.md",
+    "path": "press-room/legal-drafts/pbm-liability-disclaimer-draft.md",
+    "area": "press-room",
+    "description": "draft terms-of-service and liability wording for the paid hosted Phoenix Office tier. Marked \"not legal advice, not reviewed by an attorney\".",
+    "key_fact": null,
+    "source_file": "press-room/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"3bc6703ce8243bba\"]"
+  },
+  {
+    "hex": "b333fc50a366d02e",
+    "name": "social/content-calendar.md",
+    "path": "press-room/social/content-calendar.md",
+    "area": "press-room",
+    "description": "the standing social media calendar: voice notes, posts planned and their status, and what comes next. Extend it, don't rebuild it.",
+    "key_fact": null,
+    "source_file": "press-room/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"3bc6703ce8243bba\",\"1f1b292d6f7bbdb0\",\"56cc318b711082fb\",\"b3d5999ef35a86bc\"]"
+  },
+  {
+    "hex": "b3d5999ef35a86bc",
+    "name": "social/2026-09-24-poll.csv",
+    "path": "press-room/social/2026-09-24-poll.csv",
+    "area": "press-room",
+    "description": "the 2026-09-24 \"office headaches\" poll for LinkedIn, Facebook, Twitter and Instagram, in a form a scheduling tool (Buffer, Later) can import.",
+    "key_fact": null,
+    "source_file": "press-room/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"3bc6703ce8243bba\",\"b333fc50a366d02e\"]"
+  },
+  {
+    "hex": "5e5c124f3acd3d68",
+    "name": "index.html",
+    "path": "pbm-consulting-website/index.html",
+    "area": "pbm-consulting-website",
+    "description": "the public site at pbmconsultingservice.com (Workers static assets, `wrangler.jsonc`, name `pbm-consulting-website`).",
+    "key_fact": null,
+    "source_file": "pbm-consulting-website/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"56cc318b711082fb\"]"
+  },
+  {
+    "hex": "0eac6a39f90aaf3e",
+    "name": "story.html",
+    "path": "pbm-consulting-website/story.html",
+    "area": "pbm-consulting-website",
+    "description": "the public site at pbmconsultingservice.com (Workers static assets, `wrangler.jsonc`, name `pbm-consulting-website`).",
+    "key_fact": null,
+    "source_file": "pbm-consulting-website/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"56cc318b711082fb\"]"
+  },
+  {
+    "hex": "c602db001fc8920d",
+    "name": "privacy.html",
+    "path": "pbm-consulting-website/privacy.html",
+    "area": "pbm-consulting-website",
+    "description": "the public site at pbmconsultingservice.com (Workers static assets, `wrangler.jsonc`, name `pbm-consulting-website`).",
+    "key_fact": null,
+    "source_file": "pbm-consulting-website/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"56cc318b711082fb\"]"
+  },
+  {
+    "hex": "8306e648d5635ba0",
+    "name": "terms.html",
+    "path": "pbm-consulting-website/terms.html",
+    "area": "pbm-consulting-website",
+    "description": "the public site at pbmconsultingservice.com (Workers static assets, `wrangler.jsonc`, name `pbm-consulting-website`).",
+    "key_fact": null,
+    "source_file": "pbm-consulting-website/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"56cc318b711082fb\"]"
+  },
+  {
+    "hex": "bac45ef88d3f85a4",
+    "name": "styles.css",
+    "path": "pbm-consulting-website/styles.css",
+    "area": "pbm-consulting-website",
+    "description": "the public site at pbmconsultingservice.com (Workers static assets, `wrangler.jsonc`, name `pbm-consulting-website`).",
+    "key_fact": null,
+    "source_file": "pbm-consulting-website/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"56cc318b711082fb\"]"
+  },
+  {
+    "hex": "b28b84e92c3f9ffa",
+    "name": "app.js",
+    "path": "pbm-consulting-website/app.js",
+    "area": "pbm-consulting-website",
+    "description": "the public site at pbmconsultingservice.com (Workers static assets, `wrangler.jsonc`, name `pbm-consulting-website`).",
+    "key_fact": null,
+    "source_file": "pbm-consulting-website/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"56cc318b711082fb\",\"fb95aa1057effbfe\"]"
+  },
+  {
+    "hex": "1abddcde66808aca",
+    "name": "radar.html",
+    "path": "pbm-consulting-website/radar.html",
+    "area": "pbm-consulting-website",
+    "description": "the Set-Aside Radar sign-up page (pbmconsultingservice.com/radar): application form with a Turnstile bot check and an email code.",
+    "key_fact": null,
+    "source_file": "pbm-consulting-website/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"56cc318b711082fb\"]"
+  },
+  {
+    "hex": "da270506a3b64ec7",
+    "name": "radar.js",
+    "path": "pbm-consulting-website/radar.js",
+    "area": "pbm-consulting-website",
+    "description": "the Set-Aside Radar sign-up page (pbmconsultingservice.com/radar): application form with a Turnstile bot check and an email code.",
+    "key_fact": null,
+    "source_file": "pbm-consulting-website/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"56cc318b711082fb\",\"8803e04d8fb22978\"]"
+  },
+  {
+    "hex": "fb95aa1057effbfe",
+    "name": "worker/",
+    "path": "pbm-consulting-website/worker",
+    "area": "pbm-consulting-website",
+    "description": "`pbm-leads-worker`: the site's contact/lead form (Turnstile, email code, D1).",
+    "key_fact": null,
+    "source_file": "pbm-consulting-website/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"56cc318b711082fb\",\"b28b84e92c3f9ffa\"]"
+  },
+  {
+    "hex": "8803e04d8fb22978",
+    "name": "radar-worker/",
+    "path": "pbm-consulting-website/radar-worker",
+    "area": "pbm-consulting-website",
+    "description": "`pbm-radar-worker`, Set-Aside Radar: every morning (cron `0 11 * * *`) pulls new SAM.gov set-aside contracts, matches them to each subscriber's work codes, certifications and states, and emails a short digest. Applications are approved by hand (Laurie/Jerry get a one-click review link). Billing: $9.99/month through a Stripe Payment Link + signed webhook; nobody is charged without being asked first (`POST /subscribers/ask-to-pay`). D1 `pbm_radar_db`. Routes and secrets in `radar-worker/README.md`.",
+    "key_fact": null,
+    "source_file": "pbm-consulting-website/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"56cc318b711082fb\",\"da270506a3b64ec7\",\"a32affab459eef1a\"]"
+  },
+  {
+    "hex": "8268a9e73cf9904f",
+    "name": "radar-worker/stripe-setup.sh",
+    "path": "pbm-consulting-website/radar-worker/stripe-setup.sh",
+    "area": "pbm-consulting-website",
+    "description": "makes the Stripe product, price, payment link and webhook and deploys (`test` or `live`; Git Bash, key read from the vault, never printed).",
+    "key_fact": null,
+    "source_file": "pbm-consulting-website/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"56cc318b711082fb\"]"
   },
   {
     "hex": "f58a9b91f140cf3f",
@@ -1416,7 +2615,7 @@
     "key_fact": null,
     "source_file": "portal/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"d0960501f8971be8\",\"072fcfbdebc62d00\",\"45a229d57d35d935\",\"2d87f9e76d5dbf11\",\"9cc94ace07120ab1\",\"6eae94abb8eb34c5\"]"
+    "links": "[\"d0960501f8971be8\",\"072fcfbdebc62d00\",\"45a229d57d35d935\",\"2d87f9e76d5dbf11\",\"9cc94ace07120ab1\",\"3feedc5391c7ad02\"]"
   },
   {
     "hex": "66fc6c5f5d72ca89",
@@ -1474,9 +2673,9 @@
     "links": "[\"d0960501f8971be8\"]"
   },
   {
-    "hex": "6eae94abb8eb34c5",
-    "name": "hands.py",
-    "path": "hands.py",
+    "hex": "3feedc5391c7ad02",
+    "name": "hands/hands.py",
+    "path": "hands/hands.py",
     "area": "hands",
     "description": "the helper. Windows tools: status, open_app (allow-list), screenshot, restart_pc, cancel_restart. Linux tools: status, services, restart_service (mesh agent / Ollama only), restart_pc, cancel_restart. HTTP `GET /tools`, `GET /log`, `POST /run`; token-gated; `--mesh --allow-from` for boxes; self-update from the hub's clone-pool relay, SHA3-checked and compile-checked, atomic swap.",
     "key_fact": null,

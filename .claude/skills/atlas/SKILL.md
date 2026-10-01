@@ -1,6 +1,6 @@
 ---
 name: atlas
-description: Look up any Phoenix component, file, or feature and answer with what it is plus exactly 8 related things nearby — a bounded "snow globe" view sourced from the real CONNECTIONS.md-derived relationship graph, not a random or popularity-based pick. Use whenever asked "what's near X", "what touches X", "what else is in this area", or when a lookup should surface adjacent features someone didn't know existed. This is the same role Claude already plays as "the glossary" in the HUD chat — no separate UI panel, Claude IS the atlas.
+description: Look up any Phoenix component, file, or feature and answer in plain English with what it is plus the things it really connects to — a bounded "snow globe" view sourced from the real CONNECTIONS.md-derived relationship graph, never random filler. Use whenever asked "what's near X", "what touches X", "what else is in this area", or when a lookup should surface adjacent features someone didn't know existed. This is the same role Claude already plays as "the glossary" in the HUD chat — no separate UI panel, Claude IS the atlas.
 ---
 
 # Atlas — Phoenix's connections library
@@ -34,15 +34,36 @@ questions: no coded UI panel exists or is needed.
    The lookup is fuzzy (exact hex/name/path match first, then a LIKE fallback
    picking the shortest/most-specific match) — you don't need the query to be
    an exact stored path.
-2. The response is the "snow globe": `center` (the direct hit) plus `related`
-   — **always exactly 8** neighbors (fewer only if the whole graph is smaller
-   than that), each with its own real `description`.
-3. Present it as: the direct answer first, then the 8 related items each with
-   a one-line description — framed as "you may not know these exist," not as
-   a flat list. Bounded to that one area; don't pull in the rest of the repo.
+   If it 404s or the `center` is clearly not what was asked (e.g. "radar" lands
+   on an unrelated folder), run `GET /connections?q=<query>` and use the best hit
+   as the center instead.
+2. The response is the "snow globe": `center` (the direct hit) plus up to 8
+   `related`, each tagged `via`: `edge` = a real documented connection, `area`
+   = lives in the same folder, `backfill` = random filler to reach 8.
+3. **Answer in plain English for a person, not a data dump** (Jerry, 2026-09-30:
+   "it needs a human readable resolution"):
+   - Start with the thing itself: its plain name and one sentence on what it does,
+     in everyday words (rewrite the stored `description`, don't paste it).
+   - **Works with:** every `edge` neighbor — plain name + what the connection *is*
+     ("Office's save goes through it"), one line each.
+   - **Also in the same place:** `area` neighbors, only if they help; at most 3.
+   - **Never show `backfill`.** If there are few real connections, say so in one
+     line ("Nothing else is directly connected.") instead of padding.
+   - No hex ids, no `source_file`/`state`/`updated_at`, no raw JSON. A file path
+     only in backticks after a plain name, and only when someone would need it
+     to find the thing.
+   - If the entry has a `key_fact` that matters (legacy, not live, test mode),
+     say it in plain words.
+   Example:
+   > **Dashboard** — the old Phoenix Command Center app (kept running, not
+   > developed; the Console is the front door now).
+   > **Works with:** • **Intake** — Office "save" goes through it
+   > • **usys** (`scripts/usys.ps1`) — what its RUN and CODES boxes run
+   > • **packages-worker** — where it reads the glossary from
+   > Nothing else is directly connected.
 4. If `GET /connections?q=<term>` (no `/related`) is more appropriate — the
    user wants a broader search, not one center + neighbors — use that instead
-   and summarize the matches with their descriptions.
+   and summarize the matches the same plain way.
 
 ## Keeping it current
 
@@ -56,8 +77,8 @@ lookup surfaces something obviously stale.
 
 - The graph is only as rich as `CONNECTIONS.md` prose — some nodes have 0
   explicit edges yet, and the "snow globe" backfills those with same-area
-  entries, then (if still short) truly unrelated entries just to reach 8.
-  Don't present a random backfill entry as if it were a real relationship.
+  entries, then (if still short) truly unrelated entries just to reach 8
+  (`via: backfill`). Never show those (see step 3).
 - Nodes are directories/subsystems, not individual files — this is not a
   replacement for the file-level `glossary` table. Use `glossary` for "what
   is this specific file," `connections` for "what's near this area."

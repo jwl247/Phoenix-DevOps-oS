@@ -1,6 +1,7 @@
 # phoenix-core — standalone C intake engine
 
-Written 2026-09-12; refreshed 2026-09-29 against the 2026-09-28 Round 2 audit (S1 + CONN).
+Written 2026-09-12; refreshed 2026-09-29 against the 2026-09-28 Round 2 audit (S1 + CONN);
+re-checked 2026-09-30 (no code change here since; the tray no longer uses tools/intake.py).
 Verify against current code before trusting a specific line number.
 
 ## What it is
@@ -32,14 +33,15 @@ C toolchain (gcc/make) + **libcurl** dev headers (`-lcurl` in `Makefile:49,57`;
 
 ## Connects to / connected from
 - `phoenix-core/src/helix_http.c` → `sector2/package-handler/worker/index.js` (packages-worker `/clonepool`, `/custody` routes).
-- `sector4/intake/intake.sh` → `phoenix-core/tools/intake.py` (live wrapper on the deprecated path, `intake.sh:21-28`).
-- `tools/phoenix-tray.py` → `phoenix-core/tools/intake.py` (tray intake still uses the deprecated path — S34OPS-F25).
-- `dashboard/main.js` → `phoenix-core` (the `helix` slot maps to this dir, `main.js:170`).
-- `scripts/usys.ps1` no longer calls `tools/intake.py` — its four former call sites go through `Invoke-UsysIntakeFile` / `intake.sh` since 2026-09-21 (only comments remain).
+- `sector4/intake/intake.sh` → `phoenix-core/tools/intake.py` (live wrapper on the deprecated path; it looks for intake.py under PHOENIX_ROOT, then the Phoenix-DevOps-oS checkout in the home folder, then repo-relative, near the top of the script). This is now the only code caller.
+- `sector2/package-handler/intake.sh` → `phoenix-core/tools/intake.py` (logic copy, not a call: its QR Base58 matches intake.py's _base58(); `sector2/apps/office/lib/file-format.js` ports the same function).
+- `dashboard/main.js` → `phoenix-core` (the helix slot maps to this dir, main.js line 170).
+- `scripts/usys.ps1` no longer calls `tools/intake.py` — its four former call sites go through `Invoke-UsysIntakeFile` / `sector2/package-handler/intake.sh` since 2026-09-21 (only comments remain).
 - `dashboard/manual/PHOENIX_MANUAL.md` documents `make intake` and "do not mix Python intake and C phoenix-core" (~lines 353/431).
 
 ## Known issues (verified, not guessed)
-- `tools/intake.py` has **no R2 upload, no integrity baseline, and a stub QR sidecar** (`qr:sha3:` placeholder) — anything intaked through it (via `sector4/intake/intake.sh` or the tray) lacks the custody guarantees of `sector2/package-handler/intake.sh`.
+- Correction 2026-09-30: the tray app (tools/phoenix-tray.py) no longer uses tools/intake.py. Since the 2026-09-29 fix (S34OPS-F25) it intakes through scripts/hsf-intake.sh into the canonical sector2 intake.sh.
+- `tools/intake.py` has **no R2 upload, no integrity baseline, and a stub QR sidecar** (`qr:sha3:` placeholder) — anything intaked through it (via `sector4/intake/intake.sh`) lacks the custody guarantees of `sector2/package-handler/intake.sh`.
 - `hex_id` is SHA-256 of file *content*; canonical `intake.sh` uses `to_hex(basename)` and the TAV spec says SHA3-512 — the same file gets different IDs/D1 rows depending on path. `hash_sha3` is a placeholder copy of the SHA-256. Decision for Jerry: first-class path or lab (audit S1-F29).
 - A failed R2 byte PUT is non-fatal in `helix_ingress.c` — intake can still return `HELIX_OK` with a D1 row and no bytes (S1-F22; the CF-Access header part is fixed, needs a pbm3 rebuild to verify).
 - Bounded prefetch (egress step 4) is not implemented; ingress never writes `<cache>/<id>/content`, so the cache is seeded only by an egress R2 fetch.

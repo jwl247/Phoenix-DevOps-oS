@@ -1,14 +1,15 @@
 # sector4 — vault intake, paging brain, PCS
 
-Rewritten 2026-09-29 (Round 2 fix pass: S34OPS-F22/F26/F30, CONN-F07/F08). Verify against
-current code before trusting a specific line number.
+Rewritten 2026-09-29 (Round 2 fix pass: S34OPS-F22/F26/F30, CONN-F07/F08); re-checked
+2026-09-30 against the code since (paging alongside the Helix ingress/egress pair). Verify
+against current code before trusting a specific line number.
 
 ## What it is
 Much thinner on disk than the architecture map in root `CLAUDE.md` implies (that map lists
 `helix/` and `frank/` subdirectories here that do not exist; an older copy lives in the
 2026-08-19 consolidation snapshot under `archive/`). Actual contents:
 - `intake/intake.sh` — Sector 4 vault intake (`intake.sh file|dir …`): checks the breach_coms4 mount, then calls `phoenix-core/tools/intake.py` per file. Bash (`#!/usr/bin/env bash` since 2026-09-29); the zsh-only glob was replaced by `find -print0` on 2026-09-21.
-- `paging.py` — Linux AI paging manager (swapfiles via swapon/swapoff, predictive engine, loopback-only control API, kernel-Helix attach via libhelix) with the Doppelganger port, live-tested on pbm-compaq 2026-09-28.
+- `paging.py` — Linux AI paging manager (swapfiles via swapon/swapoff, predictive engine, loopback-only control API, kernel-Helix attach via libhelix) with the Doppelganger port, live-tested on pbm-compaq 2026-09-28. With the two named Helix instances on pbm-compaq (helix@ingress + helix@egress, since 2026-09-29) it reads them as one: libhelix adds up every live dm-helix device, and `/proc/helix` shows the hottest of the two.
 - `paging_windows.py` — Windows pagefile twin (WMI; admin-only; not live-tested).
 - `pcs.py` — Proximity Control String model (prefetch address/probability manifest, zipcodes, snap_clone).
 - `vault/download.sh` — download URLs/packages into the vault CLONEPOOL (catalog-logged, SQL-escaped).
@@ -35,7 +36,9 @@ for swap operations.
 - `sector4/vault/download.sh` → `sector2/unitedsys/core/us.py` (package seeding; resolved from `PHOENIX_ROOT` or the repo).
 - `sector4/pcs.py` → `sector2/unitedsys` (`core.catalog`, repo-relative).
 - `sector3/services/phoenix-paging.service` and `sector3/services/phoenix-helix-kernel.service` → `sector4/paging.py`.
-- `sector4/paging.py` → `sector1/kernels/libhelix/helix.py` (kernel Helix state).
+- `sector4/paging.py` → `sector1/kernels/libhelix/helix.py` (kernel Helix state, summed over every live dm-helix device).
+- `sector3/services/phoenix-paging.service` → `sector3/services/helix@.service` (ordering only: paging starts after the Helix units, single or pair, but no longer pulls any of them in — changed 2026-09-29, because pulling in the single Helix stopped the ingress/egress pair).
+- `sector3/worker-up/operations-set.txt` → `sector4/paging.py` (the road test ships it to a worker box with the rest of the Helix team).
 
 ## Known issues (verified, not guessed)
 - **Two breach_coms mount conventions** (S34OPS-F22, needs Jerry): `intake.sh`, `download.sh`,

@@ -1,12 +1,18 @@
 # dashboard — Electron desktop command center
 
-Written 2026-09-12. Verify against current code before trusting a specific line number.
+Written 2026-09-12; buttons section updated 2026-09-30. Verify against current code before
+trusting a specific line number.
 
 ## What it is
-The Phoenix "Command Center" Electron app: real terminal (SHELL pane via `terminal-pty.js`),
-a Claude Code hotline (CLAUDE pane), sector file browser, clonepool browser, HUD-mode glass
-overlay, Office/ScriptForge launchers, Config Centralizer (Settings tab), Live Monitor
-screen capture. Main files: `main.js` (Electron main process), `preload.js`, `index.html`,
+The Phoenix "Command Center" Electron app. Legacy: kept running, not developed; the
+Phoenix Console (`portal/`) is the front door and `hud/` is the HUD (decided 2026-09-26).
+Buttons cut that day (HUD MODE, TELEMETRY, DEBIAN ENGINE, HELIX STATUS, PHORONIX, WATCH/INTAKE
+DOWNLOADS, PHOENIX GUIDE, VENV, CLONEPOOL; MAP, SECTOR MAP, task/report stubs, CLAUDE and
+GUIDE tabs) were removed 2026-09-30; sector switches, THROUGHPUT, YOU WERE HERE and the
+meters are hidden. What's left: AI CHAT, HELP CHAT, SETTINGS (Config Centralizer), CODES
+(CLI + RUNIT), SHELL (real terminal via `terminal-pty.js`), GLOSSARY; right column GOOGLE,
+STEAM, SCRIPTFORGE, OFFICE, RUN, OPEN PS7, OPEN FILE EXPLORER, DRIVER UPDATES (opens Windows
+Update's driver list; the user picks), SCREENSHOT, LIVE MONITOR. Main files: `main.js` (Electron main process), `preload.js`, `index.html`,
 `dashboard.js`, `hud-*.js/.css`, `button-generator.js`/`action-buttons.js`,
 `config-centralizer.js`, launchers (`office-launcher.js`, `scriptforge-launcher.js`,
 `google-launcher.js`, `steam-launcher.js`), `manual/PHOENIX_MANUAL.md` +
@@ -36,6 +42,9 @@ project, NOT governed by any repo-root package.json (there isn't one).
   not repo-scoped.
 - Reads `~/.phoenix/phoenix.env` for `PHOENIX_ROOT`, `CLONEPOOL_DIR`, etc. — shares config
   surface with `scripts/usys.ps1` but no direct file import.
+- `office-launcher.js` → `sector2/package-handler/intake.sh` (Office "save" goes through intake).
+- `main.js` → `scripts/usys.ps1` (the CODES CLI and RUN only accept `help`, `usys …`, `intake …`).
+- `main.js` → `sector2/package-handler/worker/index.js` (glossary/custody reads, CF Access headers).
 
 ## Known issues (verified, not guessed)
 - `ps7-shell.js` is dead code — superseded by `terminal-pty.js` (2026-08-30) but still
