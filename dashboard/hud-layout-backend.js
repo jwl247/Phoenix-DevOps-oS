@@ -262,6 +262,30 @@ function register({ ipcMain, spawn, dialog }) {
         }
     });
 
+    // ── Atlas — one thing + what it really connects to (docs/ATLAS.md) ──
+    // /connections/<q>/related first; if that misses, search with ?q= and
+    // use the best hit, same order the atlas skill uses.
+    ipcMain.handle('get-atlas', async (event, { q } = {}) => {
+        const workerUrl = process.env.PHOENIX_WORKER_URL || 'https://packages-worker.phoenix-jwl.workers.dev';
+        const term = String(q || '').trim();
+        if (!term) return { success: false, error: 'Type what you want to look up.' };
+        try {
+            let res = await workerGet(`${workerUrl}/connections/${encodeURIComponent(term)}/related`);
+            if (res.status === 404) {
+                const s = await workerGet(`${workerUrl}/connections?q=${encodeURIComponent(term)}`);
+                if (!s.ok) return { success: false, error: `Worker returned ${s.status} for /connections` };
+                const hits = (await s.json()).connections || [];
+                if (!hits.length) return { success: false, error: `Atlas has nothing called "${term}".` };
+                hits.sort((a, b) => a.path.length - b.path.length);
+                res = await workerGet(`${workerUrl}/connections/${encodeURIComponent(hits[0].path)}/related`);
+            }
+            if (!res.ok) return { success: false, error: `Worker returned ${res.status} for /connections` };
+            return { success: true, ...(await res.json()) };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
     ipcMain.handle('get-custody', async (event, { hex, limit } = {}) => {
         const workerUrl = process.env.PHOENIX_WORKER_URL || 'https://packages-worker.phoenix-jwl.workers.dev';
         const params = new URLSearchParams();

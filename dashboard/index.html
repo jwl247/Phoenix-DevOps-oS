@@ -16,8 +16,8 @@
             <div class="hud-left-column">
                 <div class="hud-status-strip" id="hud-status-strip">
                     <div class="status-line">YOU ARE HERE: <span class="status-value" id="status-you-are-here">— no active slot —</span></div>
-                    <div class="status-line">YOU WERE HERE: <span class="status-value" id="status-you-were-here">—</span></div>
-                    <div class="hud-status-expand" id="hud-status-expand">
+                    <div class="status-line" hidden>YOU WERE HERE: <span class="status-value" id="status-you-were-here">—</span></div>
+                    <div class="hud-status-expand" id="hud-status-expand" hidden>
                         <button type="button" class="sector-btn" id="expand-cli">PHOENIX CLI</button>
                         <!-- Original sector switches — kept fully functional, class
                              added by hud-layout.js converts their visual style only. -->
@@ -132,7 +132,7 @@
                             </div>
                             <div class="hud-reticle-label">PHOENIX COMMAND</div>
                             <div class="hud-info hud-info-right">
-                                <div class="hud-item">THROUGHPUT: <span id="throughput">-- ops/sec</span></div>
+                                <div class="hud-item" hidden>THROUGHPUT: <span id="throughput">-- ops/sec</span></div>
                                 <div class="hud-item">AI: <span id="helpdesk-status" class="status-ok">CHECKING</span></div>
                             </div>
                         </div>
@@ -320,6 +320,16 @@
                                 <div class="term-host" id="term-host-claude"></div>
                             </div><!-- /CLAUDE -->
 
+                            <!-- ATLAS — one thing + what it really connects to (docs/ATLAS.md) -->
+                            <div class="hud-nav-pane" id="hud-pane-atlas" data-hud-nav="atlas">
+                                <div class="hud-pane-title">ATLAS</div>
+                                <div class="glossary-toolbar">
+                                    <input type="text" id="atlas-search" class="glossary-search" placeholder="what do you want to know about? (hud, radar, intake...)" autocomplete="off">
+                                    <button type="button" class="drawer-btn secondary" id="atlas-go">LOOK UP</button>
+                                </div>
+                                <div class="glossary-list" id="atlas-result"><div class="place-loading">Type a name and press Enter.</div></div>
+                            </div><!-- /ATLAS -->
+
                             <!-- GLOSSARY — searchable TOC/index over the clonepool + D1 -->
                             <div class="hud-nav-pane" id="hud-pane-glossary" data-hud-nav="glossary">
                                 <div class="hud-pane-title">GLOSSARY</div>
@@ -347,17 +357,11 @@
                 <nav class="phoenix-desktop-dock" id="hud-nav-bar" aria-label="Phoenix desktop">
                     <button type="button" class="hud-nav-btn active" data-hud-nav="ai-chat"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">AI CHAT</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="help-chat"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">HELP CHAT</span></button>
-                    <button type="button" class="hud-nav-btn" data-hud-nav="map"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">MAP</span></button>
-                    <button type="button" class="hud-nav-btn" data-hud-nav="sector-map"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">SECTOR MAP</span></button>
-                    <button type="button" class="hud-nav-btn coming-soon" data-hud-nav="prev-task"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">PREV. TASK</span><span class="soon-tag">soon</span></button>
-                    <button type="button" class="hud-nav-btn coming-soon" data-hud-nav="next-task"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">NEXT TASK</span><span class="soon-tag">soon</span></button>
-                    <button type="button" class="hud-nav-btn coming-soon" data-hud-nav="reports"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">REPORTS</span><span class="soon-tag">soon</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="settings"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">SETTINGS</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="codes"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">CODES</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="shell"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">SHELL</span></button>
-                    <button type="button" class="hud-nav-btn" data-hud-nav="claude"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">CLAUDE</span></button>
                     <button type="button" class="hud-nav-btn" data-hud-nav="glossary"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">GLOSSARY</span></button>
-                    <button type="button" class="hud-nav-btn" data-hud-nav="guide"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">GUIDE</span></button>
+                    <button type="button" class="hud-nav-btn" data-hud-nav="atlas"><span class="hud-nav-icon">▣</span><span class="hud-nav-label">ATLAS</span></button>
                 </nav>
                 <div class="hud-zone-boundary" title="HUD boundary"></div>
             </div><!-- /.hud-zone -->
@@ -372,7 +376,7 @@
             <!-- Original metrics — now toggled by the TELEMETRY button above
                  instead of always visible. IDs unchanged, so updateMetrics()
                  in dashboard.js keeps working without modification. -->
-            <div class="hud-telemetry-hidden" style="display:contents;">
+            <div class="hud-telemetry-hidden" style="display:none;">
                 <div class="metric-display">
                     <div class="metric-label">CPU</div>
                     <div class="metric-value" id="cpu-usage">--</div>

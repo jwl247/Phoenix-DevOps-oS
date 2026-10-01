@@ -395,6 +395,50 @@
     document.getElementById('glossary-state')?.addEventListener('change', loadGlossaryResults);
     document.getElementById('glossary-refresh')?.addEventListener('click', loadGlossaryResults);
 
+    // ── Atlas — plain answer: what it is + what it really works with ──────
+    // Same rules as .claude/skills/atlas/SKILL.md: real connections (`edge`)
+    // first, at most 3 same-folder neighbours (`area`), never the random
+    // `backfill`, no ids or raw fields.
+    const atlasName = c => (c.name || c.path || '').replace(/\/$/, '').split('/').pop();
+    const firstSentence = s => {
+        const t = String(s || '').replace(/`/g, '').trim();
+        const m = t.match(/^(.{20,220}?[.!?])(\s|$)/);
+        return m ? m[1] : t.slice(0, 220);
+    };
+
+    async function loadAtlas() {
+        const out = document.getElementById('atlas-result');
+        const q = document.getElementById('atlas-search')?.value.trim();
+        if (!out || !q) return;
+        out.innerHTML = '<div class="place-loading">looking it up...</div>';
+        const r = await invoke('get-atlas', { q }).catch(e => ({ success: false, error: e.message }));
+        if (!r.success || !r.center) {
+            out.innerHTML = `<div class="place-loading">${escapeHtml(r.error || 'Nothing found.')}</div>`;
+            return;
+        }
+        const c = r.center;
+        const related = r.related || [];
+        const works = related.filter(x => x.via === 'edge');
+        const near = related.filter(x => x.via === 'area').slice(0, 3);
+        const line = x => `<div class="glossary-entry-desc">&bull; <b>${escapeHtml(atlasName(x))}</b> — ${escapeHtml(firstSentence(x.description))}</div>`;
+        out.innerHTML = `
+            <div class="glossary-entry">
+                <div class="glossary-entry-head"><span class="glossary-entry-name">${escapeHtml(atlasName(c))}</span></div>
+                <div class="glossary-entry-desc">${escapeHtml(String(c.description || '').replace(/`/g, ''))}</div>
+                ${c.key_fact ? `<div class="glossary-entry-meta">${escapeHtml(String(c.key_fact).replace(/`/g, ''))}</div>` : ''}
+                <div class="glossary-entry-location">&#x1f4c1; ${escapeHtml(c.path)}</div>
+                <div class="glossary-entry-connections"><b>Works with:</b></div>
+                ${works.length ? works.map(line).join('') : '<div class="glossary-entry-desc">Nothing else is directly connected.</div>'}
+                ${near.length ? `<div class="glossary-entry-connections"><b>Also in the same place:</b></div>${near.map(line).join('')}` : ''}
+            </div>`;
+    }
+
+    document.getElementById('atlas-go')?.addEventListener('click', loadAtlas);
+    document.getElementById('atlas-search')?.addEventListener('keydown', e => { if (e.key === 'Enter') loadAtlas(); });
+    document.querySelector('.hud-nav-btn[data-hud-nav="atlas"]')?.addEventListener('click', () => {
+        setTimeout(() => document.getElementById('atlas-search')?.focus(), 0);
+    });
+
     // ── Boot ──────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', () => {
         loadSlots().then(mountGeneratedButtons);

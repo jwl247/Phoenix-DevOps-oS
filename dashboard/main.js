@@ -228,6 +228,19 @@ ipcMain.handle('open-path', async (event, targetPath) => {
     return err ? { success: false, error: err } : { success: true, path: targetPath };
 });
 
+// Phoenix's own driver updater (tools/driver-updater): Microsoft's signed
+// catalog only, reports first, asks before installing. It needs admin and is
+// interactive, so it gets its own window with a UAC prompt (admin per action).
+// Fixed script path, no arguments from the page.
+ipcMain.handle('open-driver-updates', async () => {
+    if (process.platform !== 'win32') return { success: false, error: 'Windows only' };
+    const script = path.join(__dirname, '..', 'tools', 'driver-updater', 'driver-updater.ps1');
+    if (!fs.existsSync(script)) return { success: false, error: `Not found: ${script}` };
+    const ps = `Start-Process pwsh.exe -Verb RunAs -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-File','${script.replace(/'/g, "''")}'`;
+    spawn('pwsh.exe', ['-NoProfile', '-Command', ps], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    return { success: true };
+});
+
 function isAllowedPhoenixCommand(command) {
     if (typeof command !== 'string' || !command.trim()) return false;
     if (/[\r\n;&|`$<>()[\]{}]/.test(command)) return false;
