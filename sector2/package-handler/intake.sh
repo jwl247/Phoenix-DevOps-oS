@@ -872,11 +872,33 @@ self_register() {
   [[ -f "${existing}/${SCRIPT_HEX}.sidecar.json" ]] && { log "INFO" "self: already registered"; return 0; }
   local dir="${CLONEPOOL_DIR}/T1/${SCRIPT_HEX}"
   local sidecar="${dir}/${SCRIPT_HEX}.sidecar.json"
-  log "INFO" "self: first run — registering intake into clonepool"
-  mkdir -p "${dir}"
   local self_path; self_path=$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${0}")
   local size; size=$(get_size "${self_path}")
   local checksum; checksum=$(get_checksum "${self_path}")
+
+  # A new machine (empty pool) whose Phoenix already knows intake.sh: set up
+  # the local bucket only. Never POST /clonepool, R2 or glossary from here —
+  # that overwrote the live row's version and pool_path on 2026-09-30. The
+  # running copy goes in only if it IS Phoenix's current intake.sh.
+  if [[ -n "${PHOENIX_AUTH}" ]]; then
+    local meta d1_sha3
+    meta=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${SCRIPT_HEX}?meta=true" 2>/dev/null)
+    d1_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+    if [[ -n "${d1_sha3}" ]]; then
+      mkdir -p "${dir}"
+      local self_sha3; self_sha3=$(openssl dgst -sha3-512 -r "${self_path}" 2>/dev/null | awk '{print $1}')
+      [[ "${self_sha3}" == "${d1_sha3}" ]] && cp "${self_path}" "${dir}/v1_${SCRIPT_NAME}"
+      write_sidecar_basic "${sidecar}" \
+        "${SCRIPT_HEX}" "${SCRIPT_NAME}" "v1" \
+        "script:shell" "73637269707473" "${size}" "self" \
+        "intake script — local bucket for a Phoenix that already has it (D1 not changed)" "${checksum}"
+      log "INFO" "self: Phoenix already has intake.sh — local bucket only, D1 untouched"
+      return 0
+    fi
+  fi
+
+  log "INFO" "self: first run — registering intake into clonepool"
+  mkdir -p "${dir}"
   cp "${self_path}" "${dir}/v1_${SCRIPT_NAME}"
   write_sidecar_basic "${dir}/${SCRIPT_HEX}.sidecar.json" \
     "${SCRIPT_HEX}" "${SCRIPT_NAME}" "v1" \
@@ -1125,6 +1147,69 @@ fetch_r2_fallback() {
   return 0
 }
 
+# OUT — one specific version, by its D1 ledger label (`intake clone x v2`).
+# The ledger row gives the exact sha3. Any local copy with that exact hash is
+# used (whatever its local vN_ number); otherwise the bytes come from R2's
+# immutable <hex>/versions/<sha3[0:16]> key into a temp file, never into the
+# pool's vN_ names. Nothing is cloned unless the result hashes to the row.
+intake_clone_ledger_version() {
+  local name="$1" hex="$2" pool_dir="$3" label="$4"
+  local vrow; vrow=$(version_row_for_label "${hex}" "${name}" "${label}")
+  if [[ -z "${vrow}" ]]; then
+    echo "[intake:MISS] Version '${label}' of '${name}' is not in the D1 version ledger"
+    echo "  Recorded versions:"
+    fetch_versions_json "${name}" | grep -o '"version": "[^"]*"' | sed -E 's/.*: "(.*)"/    \1/' | sort -uV
+    return 1
+  fi
+  local store_path="${vrow%% *}" want="${vrow#* }"
+
+  local src="" f
+  if [[ -d "${pool_dir}" ]]; then
+    for f in "${pool_dir}"/v*_"${name}"; do
+      [[ -f "${f}" ]] || continue
+      if [[ "$(openssl dgst -sha3-512 -r "${f}" 2>/dev/null | awk '{print $1}')" == "${want}" ]]; then
+        src="${f}"; break
+      fi
+    done
+  fi
+
+  local tmp=""
+  if [[ -z "${src}" ]]; then
+    tmp=$(mktemp "${TMPDIR:-/tmp}/intake-clone.XXXXXX")
+    local code
+    code=$(curl -s -o "${tmp}" -w "%{http_code}" -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${store_path}" 2>/dev/null)
+    if [[ "${code}" != "200" ]]; then
+      rm -f "${tmp}"
+      echo "[intake:MISS] ${name} ${label}: no local copy with its hash, and R2 returned ${code:-no answer}"
+      return 1
+    fi
+    src="${tmp}"
+  fi
+
+  local got; got=$(openssl dgst -sha3-512 -r "${src}" 2>/dev/null | awk '{print $1}')
+  if [[ "${got}" != "${want}" ]]; then
+    [[ -n "${tmp}" ]] && rm -f "${tmp}"
+    echo ""
+    echo " ⚠  INTEGRITY FAILURE — '${name}' ${label} does not match its recorded hash."
+    echo " ⚠  Refusing to clone it."
+    echo ""
+    log "WARN" "clone out BLOCKED (ledger hash mismatch): ${name} ${label}"
+    return 1
+  fi
+
+  local dest="${PWD}/${name}"
+  [[ -f "${dest}" ]] && echo "[intake:WARN] '${name}' already exists here — overwriting with ${label}"
+  cp "${src}" "${dest}"
+  [[ -n "${tmp}" ]] && rm -f "${tmp}"
+  echo "[intake:OK] Integrity verified — matches D1 ledger ${label} (sha3 ${want:0:16}…)"
+  log "INFO" "clone out: ${name} ${label} → ${dest}"
+  custody_log_local "${hex}" "${name}" "clone_out" "${label}" \
+    "${WORKER_URL}/clonepool/${store_path}" "${dest}" "white" "user"
+  report_custody "${hex}" "${name}" "clone_out" "white" "user"
+  echo "[intake:OK] ${name} ${label} → ${PWD}/"
+  echo "[intake:OK] Version ${label} restored"
+}
+
 # ══════════════════════════════════════════════════════════════
 # OUT — clone latest version to current working directory
 # ══════════════════════════════════════════════════════════════
@@ -1144,6 +1229,15 @@ intake_clone() {
   local hex; hex=$(to_hex "${name}")
   local pool_dir; pool_dir=$(resolve_pool_dir "${hex}")
 
+  # A specific version is the D1 ledger's version (what /versions lists and
+  # what a fresh machine sees), checked byte-for-byte against that row's hash.
+  # Local vN_ numbers are a per-machine counter and can mean different bytes
+  # (2026-09-30: `clone intake.sh v1` returned the current file and said OK).
+  if [[ "${req_version}" != "latest" && -n "${PHOENIX_AUTH}" ]]; then
+    intake_clone_ledger_version "${name}" "${hex}" "${pool_dir}" "${req_version}"
+    return $?
+  fi
+
   if [[ ! -d "${pool_dir}" ]]; then
     if fetch_r2_fallback "${name}" "${hex}" "${req_version}"; then
       pool_dir=$(resolve_pool_dir "${hex}")
@@ -1157,7 +1251,10 @@ intake_clone() {
   # Resolve the target file — latest or specific version
   local target
   if [[ "${req_version}" == "latest" ]]; then
-    target=$(get_latest_file "${pool_dir}" "${name}")
+    target=$(get_latest_file "${pool_dir}" "${name}") || target=""   # empty bucket: ls fails under pipefail
+    if [[ -z "${target}" ]] && fetch_r2_fallback "${name}" "${hex}" "latest" >/dev/null && [[ -f "${LAST_R2_FETCHED}" ]]; then
+      target="${LAST_R2_FETCHED}"   # bucket exists (sidecar only) but holds no copy yet
+    fi
     if [[ -z "${target}" ]]; then
       echo "[intake:MISS] No versioned files found for '${name}' in clonepool"
       return 1
