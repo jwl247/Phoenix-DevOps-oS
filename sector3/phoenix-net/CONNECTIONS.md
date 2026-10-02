@@ -14,7 +14,7 @@ a Cloudflare Worker only coordinates (family registry, endpoints, link health). 
 - `mesh-worker/test.mjs` — worker tests against real SQLite (`node:sqlite`), 12/12.
 - `meshd/meshd.py` — the per-machine agent (Linux or Windows): makes the WireGuard keypair on the device, heartbeats endpoints, writes the WireGuard config, measures links, keeps `<name>.phx` in the hosts file.
 - `meshd/phoenix-meshd.service` — systemd unit, `python3 /opt/phoenix-mesh/meshd.py run --every 30`.
-- `meshd/test_meshd.py` — agent tests, 9/9.
+- `meshd/test_meshd.py` — agent tests, 12/12.
 - `phoenix-net.py` — admin tool run on Jerry's PC: `enroll` (Linux box over SSH), `enroll-local`, `enroll-phone`, `forget-qr` (deletes the phone's QR/config file, which holds its private key, once scanned), `list`, `links`, `health`, `revoke`.
 
 ## Dependencies
@@ -36,6 +36,17 @@ or `PHOENIX_SECRETS`), never the command line.
 - `sector3/worker-up/hlk-up.sh` → `sector3/phoenix-net/meshd/meshd.py` (H.L.K on a worker box listens on the mesh address the agent wrote into the box's WireGuard config).
 
 ## Known issues (verified, not guessed)
-- `mesh-worker/index.js`'s header points at `../README.md` for the tunnel fallback; there is no
-  `sector3/phoenix-net/README.md` in the repo.
+- `mesh_link_health` is never pruned: ~64k rows / 10 MB in the first 6 days (a powered-off member
+  still logs `down` every 30 s from each peer). ~600 MB/year against D1's 10 GB: not urgent; a
+  retention cron needs a worker deploy (Jerry).
+
+## Fixed 2026-10-02 (agent; boxes pick it up on the next `phoenix-net.py enroll` / copy)
+- Linux boxes bring `wg-phx` up from the last config on disk at agent start, BEFORE asking the
+  switchboard: a reboot while Cloudflare/the internet is unreachable no longer means no mesh.
+  (Windows already survived this: its tunnel service is persistent.)
+- The interface is repaired every cycle (exists, has its address, is up): a cycle that died between
+  `ip link add` and `ip address add` used to leave it addressless forever.
+- The hosts file is written write-then-rename (no truncated `/etc/hosts` on a crash).
+- `hands/hands.py` and `sector3/hlk/hlk.py` bind the mesh address with IP_FREEBIND: no more
+  Errno 99 restart loop at boot (pentest A2-N6).
 - The planned switchboard move to its own Cloudflare account is still open (CLAUDE.md NEXT SESSION).

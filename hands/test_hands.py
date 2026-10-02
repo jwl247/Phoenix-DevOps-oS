@@ -130,6 +130,20 @@ def import_from_pool_is_checked():
         srv.shutdown()
 
 
+def binds_mesh_address_before_it_exists():
+    """A2-N6: an address not on any interface yet (the mesh still coming up)."""
+    import http.server
+    if not (hasattr(os, "uname") and os.uname().sysname == "Linux"):
+        return                                            # IP_FREEBIND is Linux-only; Windows binds 127.0.0.1 only
+    addr = ("10.47.0.254", 0)
+    try:
+        http.server.ThreadingHTTPServer(addr, http.server.BaseHTTPRequestHandler).server_close()
+        raise AssertionError("10.47.0.254 is local here; the test needs an address that isn't")
+    except OSError as e:
+        assert e.errno == 99, e                           # what the boxes hit at boot
+    hands.MeshServer(addr, http.server.BaseHTTPRequestHandler).server_close()
+
+
 t("base tier runs without asking", base_runs_without_asking)
 t("import from the pool: fingerprint + compile checked, atomic swap", import_from_pool_is_checked)
 t("ask tier runs only after a real yes (JSON true)", ask_tier_needs_a_real_yes)
@@ -137,5 +151,6 @@ t("only the declared tools exist; none is tier never", only_declared_tools)
 t("bad arguments are refused", bad_args_refused)
 t("every call lands in the audit log", every_call_is_logged)
 t("open_app only opens apps on its list", open_app_allowlist)
+t("binds the mesh address before WireGuard has it (A2-N6)", binds_mesh_address_before_it_exists)
 print(f"\n{ran - fails} passing, {fails} failing")
 sys.exit(1 if fails else 0)

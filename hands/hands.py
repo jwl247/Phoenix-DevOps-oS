@@ -461,6 +461,19 @@ def update_loop(url, token):
         time.sleep(UPDATE_EVERY_S)
 
 
+class MeshServer(http.server.ThreadingHTTPServer):
+    """Binds a mesh address even before WireGuard has put it on the interface
+    (Linux IP_FREEBIND): the socket starts answering the moment the address
+    appears. Before, a boot that ran us ahead of the mesh agent restart-looped
+    ~11 times on Errno 99 (pentest A2-N6). Callers are still checked by the
+    allow-list; nothing listens wider than the one address asked for."""
+
+    def server_bind(self):
+        if hasattr(os, "uname") and os.uname().sysname == "Linux":
+            self.socket.setsockopt(socket.IPPROTO_IP, getattr(socket, "IP_FREEBIND", 15), 1)
+        super().server_bind()
+
+
 def mesh_ip():
     """This machine's 10.47.0.x from the mesh agent's WireGuard config (root-readable on Linux)."""
     conf = (os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "PhoenixMesh", "wg-phx.conf")
@@ -496,11 +509,11 @@ def main():
             time.sleep(10)
         addrs.append(mesh_ip())
     for addr in addrs[:-1]:
-        srv = http.server.ThreadingHTTPServer((addr, a.port), handler)
+        srv = MeshServer((addr, a.port), handler)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         print(f"hands: http://{addr}:{a.port}", flush=True)
     print(f"hands: http://{addrs[-1]}:{a.port}" + (f" (callers: {', '.join(allow)})" if allow else ""), flush=True)
-    http.server.ThreadingHTTPServer((addrs[-1], a.port), handler).serve_forever()
+    MeshServer((addrs[-1], a.port), handler).serve_forever()
 
 
 if __name__ == "__main__":

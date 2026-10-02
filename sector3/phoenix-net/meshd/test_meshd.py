@@ -131,6 +131,56 @@ def relayed_peer_rides_the_hub_in_config():
         assert "PublicKey = PBM3" not in s and "AllowedIPs = 10.47.0.2/32, 10.47.0.1/32" in s, s
 
 
+def _stub_ip(addr_out, iface_exists):
+    cmds = []
+    def fake_run(args, input_text=None, check=True):
+        cmds.append(" ".join(args))
+        return addr_out if args[:3] == ["ip", "-o", "-4"] else ""
+    meshd.run, meshd.iface_up = fake_run, (lambda: iface_exists)
+    return cmds
+
+
+def iface_gets_its_address_back():
+    # half-built from an earlier crash: link exists, no address -> address added, link up
+    cmds = _stub_ip("", True)
+    meshd.ensure_linux_iface("10.47.0.3")
+    assert "ip link add wg-phx type wireguard" not in cmds, cmds
+    assert "ip address replace 10.47.0.3/24 dev wg-phx" in cmds and "ip link set wg-phx up" in cmds, cmds
+    # healthy: nothing re-added
+    cmds = _stub_ip("7: wg-phx    inet 10.47.0.3/24 scope global wg-phx", True)
+    meshd.ensure_linux_iface("10.47.0.3")
+    assert not any("address replace" in c for c in cmds), cmds
+    # fresh: link created first
+    cmds = _stub_ip("", False)
+    meshd.ensure_linux_iface("10.47.0.3")
+    assert cmds[0] == "ip link add wg-phx type wireguard", cmds
+
+
+def restore_brings_mesh_up_without_the_switchboard():
+    real_win = meshd.IS_WIN
+    meshd.IS_WIN = False
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            meshd.WG_FULL_CONF, meshd.WG_SYNC_CONF = os.path.join(d, "f.conf"), os.path.join(d, "s.conf")
+            cmds = _stub_ip("", False)
+            assert meshd.restore_last_config() is False and cmds == []      # never enrolled: nothing to restore
+            open(meshd.WG_FULL_CONF, "w").write("[Interface]\nListenPort = 51820\nAddress = 10.47.0.3/24\n")
+            open(meshd.WG_SYNC_CONF, "w").write("[Interface]\nListenPort = 51820\n")
+            assert meshd.saved_mesh_ip() == "10.47.0.3"
+            assert meshd.restore_last_config() is True
+            assert "ip address replace 10.47.0.3/24 dev wg-phx" in cmds and cmds[-1].endswith(f"syncconf wg-phx {meshd.WG_SYNC_CONF}"), cmds
+    finally:
+        meshd.IS_WIN = real_win
+
+
+def hosts_written_whole_or_not_at_all():
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "hosts")
+        open(path, "w").write("127.0.0.1 localhost\n")
+        meshd.write_file_safely(path, "127.0.0.1 localhost\n10.47.0.2\tprecision.phx\n")
+        assert open(path).read().endswith("precision.phx\n") and os.listdir(d) == ["hosts"]
+
+
 t("relay after two failures, retry direct after 10 min", relay_after_two_failures_then_retry)
 t("relay retries only when a direct path is possible, with backoff", relay_retries_only_when_direct_is_possible)
 t("a relayed peer rides the hub in the config", relayed_peer_rides_the_hub_in_config)
@@ -140,5 +190,8 @@ t("public IPv6 when not on the same LAN", ipv6_when_not_same_lan)
 t("no direct path -> None (Cloudflare fallback)", none_means_fallback)
 t("hosts block: managed, idempotent, user lines kept", hosts_block_is_managed_and_idempotent)
 t("hosts: LAN address when the direct link is down", hosts_uses_lan_address_when_direct_is_down)
+t("half-built interface gets its address back", iface_gets_its_address_back)
+t("restore: mesh comes up from the last config, no switchboard", restore_brings_mesh_up_without_the_switchboard)
+t("hosts file written whole or not at all", hosts_written_whole_or_not_at_all)
 print(f"\n{ran - fails} passing, {fails} failing")
 sys.exit(1 if fails else 0)

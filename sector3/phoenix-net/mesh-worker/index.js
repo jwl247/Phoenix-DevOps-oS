@@ -6,7 +6,7 @@
 // UDP, so it never relays). It keeps the family registry — name, owner,
 // WireGuard PUBLIC key, mesh address, current endpoints — and the per-link
 // health log. When two devices can't link directly, they fall back to the
-// phoenix-net Cloudflare tunnel (see ../README.md).
+// phoenix-net Cloudflare tunnel (see ../CONNECTIONS.md).
 //
 // Auth:
 //   admin  — Bearer MESH_ADMIN (its own secret, not PHOENIX_AUTH): enroll,

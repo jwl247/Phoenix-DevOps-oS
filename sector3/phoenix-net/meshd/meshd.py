@@ -234,19 +234,62 @@ def iface_up():
     return r.returncode == 0
 
 
-def apply_wireguard(self_view):
+def ensure_linux_iface(mesh_ip):
+    """The interface exists, carries its mesh address and is up. Idempotent:
+    a cycle that died between `ip link add` and `ip address add` used to leave
+    wg-phx with no address for good (later cycles only ran syncconf), and
+    everything bound to the mesh address (hands, H.L.K) failed with Errno 99."""
     if not iface_up():
-        if IS_WIN:
+        run(["ip", "link", "add", IFACE, "type", "wireguard"])
+    have = run(["ip", "-o", "-4", "addr", "show", "dev", IFACE], check=False)
+    if f" {mesh_ip}/" not in have:
+        run(["ip", "address", "replace", f"{mesh_ip}/24", "dev", IFACE])
+    run(["ip", "link", "set", IFACE, "up"])
+
+
+def apply_wireguard(self_view):
+    if IS_WIN:
+        if not iface_up():
             exe = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "WireGuard", "wireguard.exe")
             run([exe, "/installtunnelservice", WG_FULL_CONF])
             time.sleep(3)
-        else:
-            run(["ip", "link", "add", IFACE, "type", "wireguard"])
-            run(["ip", "address", "add", f"{self_view['mesh_ip']}/24", "dev", IFACE])
-            run([wg_bin(), "setconf", IFACE, WG_SYNC_CONF])
-            run(["ip", "link", "set", IFACE, "up"])
-            return
+    else:
+        ensure_linux_iface(self_view["mesh_ip"])
     run([wg_bin(), "syncconf", IFACE, WG_SYNC_CONF])
+
+
+def saved_mesh_ip(path=None):
+    """This machine's mesh address from the last config the agent wrote."""
+    try:
+        with open(path or WG_FULL_CONF, encoding="utf-8") as f:
+            for line in f:
+                k, _, v = line.partition("=")
+                if k.strip() == "Address" and v.strip():
+                    return v.strip().split("/")[0]
+    except OSError:
+        pass
+    return None
+
+
+def restore_last_config():
+    """Bring the mesh up from the last config on disk BEFORE talking to the
+    switchboard. WireGuard needs nothing from Cloudflare once the peers are
+    known: without this, a Linux box rebooted while the switchboard (or the
+    internet) was unreachable had no mesh at all until it came back. Windows
+    doesn't need it: its tunnel service is persistent and starts at boot."""
+    if IS_WIN:
+        return False
+    ip = saved_mesh_ip()
+    if not ip or not os.path.exists(WG_SYNC_CONF):
+        return False
+    try:
+        ensure_linux_iface(ip)
+        run([wg_bin(), "syncconf", IFACE, WG_SYNC_CONF])
+        log(f"restored {IFACE} {ip} from the last config")
+        return True
+    except RuntimeError as e:
+        log(f"restore: {e}")
+        return False
 
 
 # ── health: every link, ingress and egress ─────────────────────────────────
@@ -335,8 +378,29 @@ def write_hosts(names, peers, links, my_v4=()):
     cur = re.sub(re.escape(HOSTS_BEGIN) + r".*?" + re.escape(HOSTS_END) + r"\n?", "", cur, flags=re.S)
     new = cur.rstrip("\n") + "\n" + "\n".join(lines) + "\n"
     if new != cur:
-        with open(HOSTS, "w", encoding="utf-8") as f:
-            f.write(new)
+        write_file_safely(HOSTS, new)
+
+
+def write_file_safely(path, text):
+    """Write-then-rename, so a crash mid-write never leaves a truncated hosts
+    file. Falls back to a plain write where rename can't replace it (a
+    bind-mounted /etc/hosts in a container, Windows file locks)."""
+    tmp = path + ".phx-tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        if not IS_WIN:
+            os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
 
 
 # ── commands ────────────────────────────────────────────────────────────────
@@ -454,6 +518,7 @@ def cmd_run(a):
     dev = load_device()
     if not dev.get("token"):
         sys.exit("not enrolled yet (no token)")
+    restore_last_config()
     while True:
         try:
             cycle(dev)
