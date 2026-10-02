@@ -6,8 +6,8 @@ current code before trusting a specific line number.
 ## What it is
 The master PowerShell 7 CLI for the whole project plus the scripts that feed the clone pool.
 - `usys.ps1` — ~120 KB / ~2 730 lines. clone/intake, suite run (QEMU distros, PoC binaries) behind the suite-execution gate, search, pull/open (SHA3-512-verified against D1 custody since 2026-09-29), shared-filesystem import/export, doctor/status.
-- `phx-kernel.ps1` — the universal kernel for a PS7 profile (2026-10-02). Standalone: no repo, no usys, no Python. A command you type that this machine lacks is looked up in the clone pool by hex id (`<name>.ps1/.exe/.py/.js/.sh`), pulled from R2, SHA3-512-checked against D1 custody, asked once, cached under `~/.phoenix/kernel`, then run from cache offline while the hash still matches. Built-in portable SHA3 for OS builds without it. `phxk status|list|forget|refresh|log|update`; `pwsh -File phx-kernel.ps1 install`.
-- `phx-kernel.Tests.ps1` — standalone kernel tests against a stand-in pool, 32/32.
+- `phx-kernel.ps1` — the universal kernel for a PS7 profile (2026-10-02). Standalone: no repo, no usys, no Python. A command you type that this machine lacks is looked up in the clone pool by hex id (`<name>.ps1/.exe/.py/.js/.sh`), pulled from R2, SHA3-512-checked against D1 custody, asked once, cached under `~/.phoenix/kernel`, then run from cache offline while the hash still matches. Built-in portable SHA3 for OS builds without it. `bingo status|list|forget|refresh|log|update`; `pwsh -File phx-kernel.ps1 install`.
+- `phx-kernel.Tests.ps1` — standalone kernel tests against a stand-in pool, 35/35.
 - `usys.cmd` — thin Windows cmd shim (`-File usys.ps1 %*`, never `-Command`).
 - `usys-suite-gate.Tests.ps1` — standalone (no Pester) execution-gate tests, 18/18 passing.
 - `hsf-intake.sh` — non-interactive intake of files/folders straight into `sector2/package-handler/intake.sh`; resolves PHOENIX_AUTH / PHOENIX_WORKER_URL / CLONEPOOL_DIR / CF-Access from the Windows User environment. CLAUDE.md's named intake path.

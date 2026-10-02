@@ -26,9 +26,9 @@
     CF_ACCESS_CLIENT_SECRET; Windows User scope is read too) or a KEY=VALUE file
     at ~/.phoenix/kernel.env (chmod 600 on Linux).
 
-    phxk                 status       phxk list          what's cached + approved
-    phxk forget <name>   drop it      phxk refresh <name> re-pull (asks again if it changed)
-    phxk log             audit trail  phxk update        pull a new phx-kernel.ps1 from the pool
+    bingo                  status        bingo list           what's cached + approved
+    bingo forget <name>    drop it       bingo refresh <name> re-pull (asks again if it changed)
+    bingo log              audit trail   bingo update         pull a new phx-kernel.ps1 from the pool
 
 .NOTES
     UnitedSys — United Systems | jwl247 | GPL-3.0 | Sector 2 (clone pool, consumer side)
@@ -278,8 +278,8 @@ $ExecutionContext.InvokeCommand.CommandNotFoundAction = {
     }
 }
 
-# ── phxk: look after it ────────────────────────────────────────────────────
-function global:phxk {
+# ── bingo: look after it ────────────────────────────────────────────────────
+function global:bingo {
     param([Parameter(Position = 0)][string]$Do = 'status', [Parameter(Position = 1)][string]$Name)
     switch ($Do) {
         'status' {
@@ -299,7 +299,7 @@ function global:phxk {
             }
             Save-PhxKApproved $a
         }
-        'refresh' { phxk forget $Name; $global:PhxK.Misses.Remove($Name); $h = Find-PhxKRemote $Name; if ($h) { Invoke-PhxKCommand $h @() } else { Write-Host "  the pool has no $Name" } }
+        'refresh' { bingo forget $Name; $global:PhxK.Misses.Remove($Name); $h = Find-PhxKRemote $Name; if ($h) { Invoke-PhxKCommand $h @() } else { Write-Host "  the pool has no $Name" } }
         'log'     { if (Test-Path -LiteralPath $global:PhxK.Log) { Get-Content -LiteralPath $global:PhxK.Log -Tail 30 } }
         'update'  {
             $h = Find-PhxKRemote 'phx-kernel'
@@ -314,7 +314,7 @@ function global:phxk {
             Write-PhxKLog @{ event = 'self_update'; sha3 = $h.sha3.Substring(0, 16) }
             Write-Host '  updated; open a new terminal to use it'
         }
-        default   { Write-Host '  phxk [status|list|forget <name>|refresh <name>|log|update]' }
+        default   { Write-Host '  bingo [status|list|forget <name>|refresh <name>|log|update]' }
     }
 }
 
@@ -329,5 +329,5 @@ if ($MyInvocation.InvocationName -ne '.' -and $args[0] -eq 'install') {
     if ($cur -notmatch 'Phoenix universal kernel') { Add-Content -LiteralPath $profilePath -Value "`n$line" }
     Write-Host "  installed: $dest"
     Write-Host "  profile  : $profilePath"
-    Write-Host '  open a new terminal, then: phxk'
+    Write-Host '  open a new terminal, then: bingo'
 }

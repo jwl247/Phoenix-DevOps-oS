@@ -128,6 +128,13 @@ if ($py) {
     ok ($out -eq 'py says a b') "a .py runs with this machine's Python: '$out'"
 }
 
+# ── 10. bingo ──────────────────────────────────────────────────────────────
+ok ((Get-Command bingo -ErrorAction SilentlyContinue).CommandType -eq 'Function') 'bingo is the management command'
+$listed = bingo list
+ok (($listed -join "`n") -match 'hello-phx\.ps1') "bingo list shows what's approved"
+bingo forget hello-phx | Out-Null
+ok (-not (Get-PhxKApproved).ContainsKey('hello-phx.ps1')) 'bingo forget drops the approval and the cache'
+
 Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host "`n$p passing, $f failing"
 exit ([int]($f -gt 0))
