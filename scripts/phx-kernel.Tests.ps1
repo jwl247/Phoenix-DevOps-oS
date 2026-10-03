@@ -135,6 +135,26 @@ ok (($listed -join "`n") -match 'hello-phx\.ps1') "bingo list shows what's appro
 bingo forget hello-phx | Out-Null
 ok (-not (Get-PhxKApproved).ContainsKey('hello-phx.ps1')) 'bingo forget drops the approval and the cache'
 
+# ── 11. the closet: preload, then nothing is fetched at use time ──────────
+$global:offline = $false; $global:PhxK.Misses.Clear()
+Add-PoolFile 'suit-a.ps1' '"suit A ready"'
+Add-PoolFile 'suit-b.ps1' '"suit B ready"'
+Add-PoolFile 'suit-bad.ps1' '"tampered"' -RecordedSha3 ('f' * 128)
+Reset-Calls
+$r = Invoke-PhxKPreload @('suit-a', 'suit-b', 'suit-bad', 'not-in-pool', 'bingo')
+ok ($global:asked -eq 1) 'preload asks once for the whole batch'
+ok (($r.pulled -join ',') -eq 'suit-a.ps1,suit-b.ps1') "preload pulled and verified the good ones: $($r.pulled -join ', ')"
+ok (($r.refused -join ',') -eq 'suit-bad.ps1' -and -not (Get-PhxKApproved).ContainsKey('suit-bad.ps1')) 'a bad file in the batch is refused and not approved'
+ok (($r.missing -join ',') -eq 'not-in-pool' -and ($r.ready -contains 'bingo')) 'reports what the pool lacks and what is already here'
+$global:offline = $true; Reset-Calls
+$outA = Invoke-PhxKCommand (Resolve-PhxKCommand 'suit-a' 'Runspace') @()
+$outB = Invoke-PhxKCommand (Resolve-PhxKCommand 'suit-b' 'Runspace') @()
+ok ($outA -eq 'suit A ready' -and $outB -eq 'suit B ready' -and $global:calls.Count -eq 0 -and $global:asked -eq 0) 'after preload: both run offline, no network, no question'
+Reset-Calls
+$r2 = Invoke-PhxKPreload @('suit-a', 'suit-b')
+ok ($global:asked -eq 0 -and $global:calls.Count -eq 0 -and $r2.ready.Count -eq 2) 'preloading again: already in the closet, nothing fetched'
+$global:offline = $false
+
 Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host "`n$p passing, $f failing"
 exit ([int]($f -gt 0))

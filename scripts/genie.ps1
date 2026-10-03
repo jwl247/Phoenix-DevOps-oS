@@ -9,6 +9,7 @@
     genie learn <name> "<what it does>" <command> [args...] [-Ask]
                                        add a tool to the library ("build a library")
     genie library                      list the tools it can use
+    genie preload                      load the closet: pull + verify every tool's program now
     genie forget <name>                take a tool out of the library
     genie log                          what it was asked and what it did
 
@@ -179,7 +180,7 @@ function global:genie {
     $words = @($args | ForEach-Object { "$_" })
     $first = if ($words.Count) { $words[0] } else { '' }
     switch ($first) {
-        '' { Write-Host '  genie <what you want, in plain words>   ·   genie learn | library | forget | log' }
+        '' { Write-Host '  genie <what you want, in plain words>   ·   genie learn | library | preload | forget | log' }
         'library' {
             $lib = Get-PhxGenieLibrary
             foreach ($k in $lib.Keys) { '{0,-18} {1,-5} {2}' -f $k, $lib[$k].tier, $lib[$k].says }
@@ -201,6 +202,12 @@ function global:genie {
             $mine = Get-PhxGenieMine
             if ($words.Count -ge 2 -and $mine.ContainsKey($words[1])) { $mine.Remove($words[1]); Save-PhxGenieLibrary $mine; Write-Host "  genie: forgot $($words[1])" }
             else { Write-Host "  genie: '$($words[1])' isn't one you taught it (the built-in ones stay)" }
+        }
+        'preload' {
+            # Load the closet first (the original H.L.K Process Library): every tool's
+            # program pulled and verified now, so asking later fetches nothing.
+            if (-not (Get-Command bingo -ErrorAction SilentlyContinue)) { Write-Host '  genie: the universal kernel (phx-kernel.ps1) is not loaded'; return }
+            bingo preload
         }
         'log' { if (Test-Path -LiteralPath $global:PhxGenie.Log) { Get-Content -LiteralPath $global:PhxGenie.Log -Tail 20 } }
         default { Invoke-PhxGenie ($words -join ' ') }

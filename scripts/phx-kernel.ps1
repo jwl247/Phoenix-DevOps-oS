@@ -29,6 +29,7 @@
     bingo                  status        bingo list           what's cached + approved
     bingo forget <name>    drop it       bingo refresh <name> re-pull (asks again if it changed)
     bingo log              audit trail   bingo update         pull a new phx-kernel.ps1 from the pool
+    bingo preload [names]  pull + verify ahead of time (the closet); with the genie loaded, its whole library
 
 .NOTES
     UnitedSys — United Systems | jwl247 | GPL-3.0 | Sector 2 (clone pool, consumer side)
@@ -235,6 +236,40 @@ function global:Get-PhxKRunner([string]$File) {
     return @{ exe = $null; need = 'a runtime' }
 }
 
+function global:Add-PhxKApproval([hashtable]$Hit) {
+    $a = Get-PhxKApproved; $a[$Hit.name] = @{ hex = $Hit.hex; sha3 = $Hit.sha3; version = $Hit.version; at = [DateTime]::UtcNow.ToString('o') }
+    Save-PhxKApproved $a
+    Write-PhxKLog @{ event = 'approved'; name = $Hit.name; sha3 = $Hit.sha3.Substring(0, 16) }
+}
+
+# The closet (the original H.L.K Process Library: "pre-loaded ... nothing fetched at
+# runtime ... the suit is already there"). Pull and verify everything named NOW, with
+# one yes for the whole batch, so using any of it later fetches nothing, even offline.
+# -> @{ ready; pulled; refused; missing } (names)
+function global:Invoke-PhxKPreload([string[]]$Names) {
+    $r = @{ ready = @(); pulled = @(); refused = @(); missing = @() }
+    $want = @()
+    foreach ($n in @($Names | Where-Object { $_ } | Select-Object -Unique)) {
+        if (Get-Command $n -CommandType Function, Cmdlet, Alias, Application -ErrorAction SilentlyContinue) { $r.ready += $n; continue }
+        if (Find-PhxKCached $n) { $r.ready += $n; continue }
+        $global:PhxK.Misses.Remove($n)
+        $h = Find-PhxKRemote $n
+        if ($h) { $want += $h } else { $r.missing += $n }
+    }
+    if ($r.ready)   { Write-Host "  already in the closet: $($r.ready -join ', ')" -ForegroundColor DarkGray }
+    if ($r.missing) { Write-Host "  not in the clone pool: $($r.missing -join ', ')" -ForegroundColor Yellow }
+    if (-not $want) { return $r }
+    Write-Host "  to pull and verify now:"
+    foreach ($h in $want) { Write-Host ("    {0,-28} {1,-5} SHA3 {2}..." -f $h.name, $h.version, $h.sha3.Substring(0, 12)) }
+    if ((Read-Host "  Pull, verify and keep all $($want.Count)? [y/N]") -notmatch '^[Yy]') { Write-PhxKLog @{ event = 'preload_declined'; count = $want.Count }; return $r }
+    foreach ($h in $want) {
+        if (Save-PhxKFromPool $h) { Add-PhxKApproval $h; $r.pulled += $h.name } else { $r.refused += $h.name }
+    }
+    Write-PhxKLog @{ event = 'preload'; pulled = $r.pulled.Count; refused = $r.refused.Count; missing = $r.missing.Count }
+    Write-Host "  closet: $($r.pulled.Count) pulled, $($r.refused.Count) refused, $($r.missing.Count) not in the pool"
+    return $r
+}
+
 function global:Invoke-PhxKCommand([hashtable]$Hit, [object[]]$Arguments) {
     if (-not $Hit.approved) {
         Write-Host "  phx: Phoenix has " -NoNewline; Write-Host $Hit.name -ForegroundColor Cyan -NoNewline
@@ -242,9 +277,7 @@ function global:Invoke-PhxKCommand([hashtable]$Hit, [object[]]$Arguments) {
         if ((Read-Host '  Pull, verify and run it? [y/N]') -notmatch '^[Yy]') { Write-PhxKLog @{ event = 'declined'; name = $Hit.name }; return }
         $file = Save-PhxKFromPool $Hit
         if (-not $file) { return }
-        $a = Get-PhxKApproved; $a[$Hit.name] = @{ hex = $Hit.hex; sha3 = $Hit.sha3; version = $Hit.version; at = [DateTime]::UtcNow.ToString('o') }
-        Save-PhxKApproved $a
-        Write-PhxKLog @{ event = 'approved'; name = $Hit.name; sha3 = $Hit.sha3.Substring(0, 16) }
+        Add-PhxKApproval $Hit
         $Hit.file = $file
     }
     $run = Get-PhxKRunner $Hit.file
@@ -280,7 +313,8 @@ $ExecutionContext.InvokeCommand.CommandNotFoundAction = {
 
 # ── bingo: look after it ────────────────────────────────────────────────────
 function global:bingo {
-    param([Parameter(Position = 0)][string]$Do = 'status', [Parameter(Position = 1)][string]$Name)
+    param([Parameter(Position = 0)][string]$Do = 'status', [Parameter(Position = 1)][string]$Name,
+          [Parameter(Position = 2, ValueFromRemainingArguments)][string[]]$More)
     switch ($Do) {
         'status' {
             $url = Get-PhxKKey 'PHOENIX_WORKER_URL'
@@ -301,6 +335,14 @@ function global:bingo {
         }
         'refresh' { bingo forget $Name; $global:PhxK.Misses.Remove($Name); $h = Find-PhxKRemote $Name; if ($h) { Invoke-PhxKCommand $h @() } else { Write-Host "  the pool has no $Name" } }
         'log'     { if (Test-Path -LiteralPath $global:PhxK.Log) { Get-Content -LiteralPath $global:PhxK.Log -Tail 30 } }
+        'preload' {
+            $names = @(@($Name) + @($More) | Where-Object { $_ })
+            if (-not $names -and (Get-Command Get-PhxGenieLibrary -ErrorAction SilentlyContinue)) {
+                $lib = Get-PhxGenieLibrary; $names = @($lib.Keys | ForEach-Object { $lib[$_].command })
+            }
+            if (-not $names) { Write-Host '  bingo preload <name> [name ...]   (with the genie loaded: its whole library)'; return }
+            $null = Invoke-PhxKPreload $names
+        }
         'update'  {
             $h = Find-PhxKRemote 'phx-kernel'
             if (-not $h -or $h.name -ne 'phx-kernel.ps1') { Write-Host '  phx-kernel.ps1 is not in the pool yet (intake it first)'; return }
@@ -314,7 +356,7 @@ function global:bingo {
             Write-PhxKLog @{ event = 'self_update'; sha3 = $h.sha3.Substring(0, 16) }
             Write-Host '  updated; open a new terminal to use it'
         }
-        default   { Write-Host '  bingo [status|list|forget <name>|refresh <name>|log|update]' }
+        default   { Write-Host '  bingo [status|list|preload [names]|forget <name>|refresh <name>|log|update]' }
     }
 }
 
