@@ -69,6 +69,14 @@ anyone edits the worker** (the cloud session was stopped for it), then Jerry dep
 Jerry copied the full vault env file onto the Compaq: keep it 0600 and out of the repo, and
 once the read-only key exists the box should hold only that key.
 
+## 1d. The genie (built 10/3 night, `scripts/genie.ps1`, tests 17/17 with a stand-in model)
+
+Try it on this box against the real local llama3.2:3b (already here for H.L.K): load the kernel,
+`. scripts/genie.ps1`, then `genie learn mesh-status "show this box's mesh links" python3 /opt/phoenix-mesh/meshd.py status`
+and ask `genie how are the mesh links`. Record: right tool or not, seconds per answer (H.L.K got
+4-6 s on this box). Never tested against a real model yet — that's this step.
+Then intake `scripts/genie.ps1` + `scripts/phx-kernel.ps1` from the Precision so `genie` can be pulled anywhere.
+
 ## 2. Deploy today's fixes to this box (Jerry's go for each restart)
 
 - **meshd** (not self-updating): copy `sector3/phoenix-net/meshd/meshd.py` →
