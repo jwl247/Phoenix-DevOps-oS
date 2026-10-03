@@ -68,7 +68,7 @@ ok ($global:ran.Count -eq 0 -and $global:asked -eq 0) 'no model + a word that fi
 Reset; $global:modelDown = $true
 genie learn read-note "read the note on the desktop" phx-test-echo note | Out-Null
 genie read the note | Out-Null
-ok ($global:asked -eq 1) 'no model: even an auto tool asks first (a word match is a guess)'
+ok ($global:asked -eq 0 -and @($global:ran | Where-Object { $_[0] -eq 'note' }).Count -eq 1) 'no model + a clear match on a read-only tool: it just runs, no question'
 
 # ── 5. building the library ────────────────────────────────────────────────
 $lib = Get-PhxGenieLibrary

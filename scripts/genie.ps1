@@ -18,7 +18,7 @@
     with a tool name from the library or "none", in a fixed JSON shape
     (constrained decoding, the trick that took small models from 1-3/6 to 6/6
     in H.L.K, sector3/hlk/hlk.py). With no model running, it falls back to
-    matching words and always asks first.
+    matching words: a clear match on a read-only tool runs, anything else asks.
 
     A tool's command runs through the universal kernel (scripts/phx-kernel.ps1):
     if this machine doesn't have it, the kernel pulls it from the clone pool,
@@ -169,7 +169,9 @@ function global:Invoke-PhxGenie([string]$Ask) {
         Write-PhxGenieLog @{ ask = $Ask; how = $d.how; tool = $d.tool; outcome = 'missing detail' }; return
     }
     $show = (@($tool.command) + $argv) -join ' '
-    if ($tool.tier -ne 'auto' -or $d.how -ne 'model') {                       # ask-tier, or a guess from words: always ask
+    # Ask-tier tools always wait for a yes. Auto (read-only) tools just run, model or not:
+    # without a model, Resolve-PhxGenieAsk only returns a tool on a clear word match.
+    if ($tool.tier -ne 'auto') {
         if ((Read-Host "  Run '$show'? [y/N]") -notmatch '^[Yy]') { Write-PhxGenieLog @{ ask = $Ask; how = $d.how; tool = $d.tool; run = $show; outcome = 'declined' }; return }
     } else {
         Write-Host "  genie: running $show" -ForegroundColor DarkGray

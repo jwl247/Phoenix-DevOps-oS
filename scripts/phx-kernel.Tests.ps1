@@ -153,6 +153,11 @@ ok ($outA -eq 'suit A ready' -and $outB -eq 'suit B ready' -and $global:calls.Co
 Reset-Calls
 $r2 = Invoke-PhxKPreload @('suit-a', 'suit-b')
 ok ($global:asked -eq 0 -and $global:calls.Count -eq 0 -and $r2.ready.Count -eq 2) 'preloading again: already in the closet, nothing fetched'
+Add-PoolFile 'suit-c.ps1' '"suit C ready"'
+$global:offline = $false; Reset-Calls
+$r3 = Invoke-PhxKPreload @('suit-c', 'suit-bad') -Yes
+ok ($global:asked -eq 0 -and ($r3.pulled -join ',') -eq 'suit-c.ps1') 'preload -Yes: no question, good file pulled'
+ok (($r3.refused -join ',') -eq 'suit-bad.ps1') 'preload -Yes still refuses a file that fails its SHA3 check'
 $global:offline = $false
 
 Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

@@ -29,7 +29,7 @@
     bingo                  status        bingo list           what's cached + approved
     bingo forget <name>    drop it       bingo refresh <name> re-pull (asks again if it changed)
     bingo log              audit trail   bingo update         pull a new phx-kernel.ps1 from the pool
-    bingo preload [names]  pull + verify ahead of time (the closet); with the genie loaded, its whole library
+    bingo preload [names] [-Yes]  pull + verify ahead of time (the closet); -Yes = no question (still SHA3-checked)
 
 .NOTES
     UnitedSys — United Systems | jwl247 | GPL-3.0 | Sector 2 (clone pool, consumer side)
@@ -246,7 +246,7 @@ function global:Add-PhxKApproval([hashtable]$Hit) {
 # runtime ... the suit is already there"). Pull and verify everything named NOW, with
 # one yes for the whole batch, so using any of it later fetches nothing, even offline.
 # -> @{ ready; pulled; refused; missing } (names)
-function global:Invoke-PhxKPreload([string[]]$Names) {
+function global:Invoke-PhxKPreload([string[]]$Names, [switch]$Yes) {
     $r = @{ ready = @(); pulled = @(); refused = @(); missing = @() }
     $want = @()
     foreach ($n in @($Names | Where-Object { $_ } | Select-Object -Unique)) {
@@ -261,7 +261,9 @@ function global:Invoke-PhxKPreload([string[]]$Names) {
     if (-not $want) { return $r }
     Write-Host "  to pull and verify now:"
     foreach ($h in $want) { Write-Host ("    {0,-28} {1,-5} SHA3 {2}..." -f $h.name, $h.version, $h.sha3.Substring(0, 12)) }
-    if ((Read-Host "  Pull, verify and keep all $($want.Count)? [y/N]") -notmatch '^[Yy]') { Write-PhxKLog @{ event = 'preload_declined'; count = $want.Count }; return $r }
+    # -Yes: the decision was made up front (an unattended box building itself). Only the
+    # human question is skipped; every file is still SHA3-checked and a mismatch is refused.
+    if (-not $Yes -and (Read-Host "  Pull, verify and keep all $($want.Count)? [y/N]") -notmatch '^[Yy]') { Write-PhxKLog @{ event = 'preload_declined'; count = $want.Count }; return $r }
     foreach ($h in $want) {
         if (Save-PhxKFromPool $h) { Add-PhxKApproval $h; $r.pulled += $h.name } else { $r.refused += $h.name }
     }
@@ -314,7 +316,7 @@ $ExecutionContext.InvokeCommand.CommandNotFoundAction = {
 # ── bingo: look after it ────────────────────────────────────────────────────
 function global:bingo {
     param([Parameter(Position = 0)][string]$Do = 'status', [Parameter(Position = 1)][string]$Name,
-          [Parameter(Position = 2, ValueFromRemainingArguments)][string[]]$More)
+          [Parameter(Position = 2, ValueFromRemainingArguments)][string[]]$More, [switch]$Yes)
     switch ($Do) {
         'status' {
             $url = Get-PhxKKey 'PHOENIX_WORKER_URL'
@@ -341,7 +343,7 @@ function global:bingo {
                 $lib = Get-PhxGenieLibrary; $names = @($lib.Keys | ForEach-Object { $lib[$_].command })
             }
             if (-not $names) { Write-Host '  bingo preload <name> [name ...]   (with the genie loaded: its whole library)'; return }
-            $null = Invoke-PhxKPreload $names
+            $null = Invoke-PhxKPreload $names -Yes:$Yes
         }
         'update'  {
             $h = Find-PhxKRemote 'phx-kernel'
@@ -356,7 +358,7 @@ function global:bingo {
             Write-PhxKLog @{ event = 'self_update'; sha3 = $h.sha3.Substring(0, 16) }
             Write-Host '  updated; open a new terminal to use it'
         }
-        default   { Write-Host '  bingo [status|list|preload [names]|forget <name>|refresh <name>|log|update]' }
+        default   { Write-Host '  bingo [status|list|preload [names] [-Yes]|forget <name>|refresh <name>|log|update]' }
     }
 }
 
