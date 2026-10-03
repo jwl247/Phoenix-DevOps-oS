@@ -8,6 +8,16 @@ Jerry says **Helix is repaired on the Compaq.** Confirm that first, in his terms
 building on it (`sudo -n dmsetup status`, `systemctl status 'helix@*'`), and write down
 what "repaired" means in the session log.
 
+## 00. Which box (Jerry, 10/3 night)
+
+Jerry would rather test on the **HP (pbm3)**: hard-wired to the Precision (better than the
+Compaq's 10/100 port). His rule: "if you can't reach it, it's dead." At 2026-10-03 04:42 UTC
+the mesh had precision + compaq checking in live and **pbm3 last seen 2026-09-27 22:03** (no
+direct link since). So: Jerry powers it on; if `meshd` checks in within a minute
+(`phoenix-net.py list`), set it up as the test box (PS7, keys in a 0600 kernel.env, repo pull,
+kernel + genie + radar install, then let the kernel build the rest from the pool — that IS the
+test). If it doesn't come up, it's hardware: the Compaq stays the test box.
+
 ## 0. Get the work
 
 ```bash
