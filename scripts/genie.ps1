@@ -10,6 +10,7 @@
                                        add a tool to the library ("build a library")
     genie library                      list the tools it can use
     genie preload                      load the closet: pull + verify every tool's program now
+    genie install                      load genie + radar in every PS7 window; teach it the Radar tools
     genie forget <name>                take a tool out of the library
     genie log                          what it was asked and what it did
 
@@ -39,6 +40,7 @@ $global:PhxGenie = @{
     Url   = if ($env:PHX_GENIE_OLLAMA) { $env:PHX_GENIE_OLLAMA } else { 'http://127.0.0.1:11434' }
 }
 $global:PhxGenie.Library = Join-Path $global:PhxGenie.Home 'library.json'
+$global:PhxGenie.ScriptDir = $PSScriptRoot
 $global:PhxGenie.Log     = Join-Path $global:PhxGenie.Home 'log.jsonl'
 
 # Tools every genie starts with: they only read and report, so they run without asking.
@@ -180,7 +182,7 @@ function global:genie {
     $words = @($args | ForEach-Object { "$_" })
     $first = if ($words.Count) { $words[0] } else { '' }
     switch ($first) {
-        '' { Write-Host '  genie <what you want, in plain words>   ·   genie learn | library | preload | forget | log' }
+        '' { Write-Host '  genie <what you want, in plain words>   ·   genie learn | library | preload | install | forget | log' }
         'library' {
             $lib = Get-PhxGenieLibrary
             foreach ($k in $lib.Keys) { '{0,-18} {1,-5} {2}' -f $k, $lib[$k].tier, $lib[$k].says }
@@ -208,6 +210,34 @@ function global:genie {
             # program pulled and verified now, so asking later fetches nothing.
             if (-not (Get-Command bingo -ErrorAction SilentlyContinue)) { Write-Host '  genie: the universal kernel (phx-kernel.ps1) is not loaded'; return }
             bingo preload
+        }
+        'install' {
+            # Next to the profile, beside the kernel: genie + radar load in every PS7 window,
+            # and the genie learns the Radar tools (read-only, so they run without asking).
+            $dir = Split-Path $PROFILE.CurrentUserAllHosts
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            $lines = @()
+            foreach ($f in 'radar.ps1', 'genie.ps1') {
+                $src = Join-Path $global:PhxGenie.ScriptDir $f
+                if (-not (Test-Path -LiteralPath $src)) { continue }
+                $dst = Join-Path $dir $f
+                if ($src -ne $dst) { Copy-Item -LiteralPath $src -Destination $dst -Force }
+                $lines += ". `"$dst`"   # Phoenix $($f -replace '\.ps1$','')"
+            }
+            $cur = if (Test-Path -LiteralPath $PROFILE.CurrentUserAllHosts) { Get-Content -LiteralPath $PROFILE.CurrentUserAllHosts -Raw } else { '' }
+            foreach ($l in $lines) { if ($cur -notmatch [regex]::Escape($l)) { Add-Content -LiteralPath $PROFILE.CurrentUserAllHosts -Value $l } }
+            $mine = Get-PhxGenieMine
+            $teach = [ordered]@{
+                'radar-new'     = @{ says = "show the new set-aside bids from this morning's Radar email"; command = 'radar'; argv = @('new'); tier = 'auto' }
+                'radar-client'  = @{ says = 'show the last week of set-aside bids for one Radar client by name'; command = 'radar'; argv = @('week', '{client}'); tier = 'auto' }
+                'radar-clients' = @{ says = 'list the Radar subscribers: who, NAICS codes, states, billing'; command = 'radar'; argv = @('clients'); tier = 'auto' }
+                'radar-runs'    = @{ says = "check whether Radar's daily run went out and what it found"; command = 'radar'; argv = @('runs'); tier = 'auto' }
+            }
+            foreach ($k in $teach.Keys) { if (-not $mine.ContainsKey($k)) { $mine[$k] = $teach[$k] } }
+            Save-PhxGenieLibrary $mine
+            Write-Host "  installed next to your profile: $(($lines | ForEach-Object { ($_ -split '"')[1] }) -join ', ')"
+            Write-Host '  the genie learned: radar-new, radar-client, radar-clients, radar-runs'
+            Write-Host '  open a new PS7 window, then try:  genie any new bids this morning'
         }
         'log' { if (Test-Path -LiteralPath $global:PhxGenie.Log) { Get-Content -LiteralPath $global:PhxGenie.Log -Tail 20 } }
         default { Invoke-PhxGenie ($words -join ' ') }

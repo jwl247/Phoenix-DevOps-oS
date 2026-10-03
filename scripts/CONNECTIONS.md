@@ -9,7 +9,9 @@ The master PowerShell 7 CLI for the whole project plus the scripts that feed the
 - `phx-kernel.ps1` — the universal kernel for a PS7 profile (2026-10-02). Standalone: no repo, no usys, no Python. A command you type that this machine lacks is looked up in the clone pool by hex id (`<name>.ps1/.exe/.py/.js/.sh`), pulled from R2, SHA3-512-checked against D1 custody, asked once, cached under `~/.phoenix/kernel`, then run from cache offline while the hash still matches. Built-in portable SHA3 for OS builds without it. `bingo status|list|forget|refresh|log|update`; `pwsh -File phx-kernel.ps1 install`.
 - `phx-kernel.Tests.ps1` — standalone kernel tests against a stand-in pool, 41/41 (incl. the preload closet).
 - `genie.ps1` — plain English in, one tool from a library out (2026-10-03). Local Ollama (llama3.2:3b) answers only in a fixed JSON shape with the tool limited to the library (H.L.K's constrained-decoding trick); auto tools run, ask tools wait for a yes; no model = word match + always asks. Commands run through the universal kernel (pulled + SHA3-checked if missing). `genie learn|library|forget|log`. Named `genie` so the kernel can pull it from the pool by typing `genie`.
-- `genie.Tests.ps1` — stand-in model, 17/17.
+- `genie.Tests.ps1` — stand-in model, 17/17. `genie install` puts kernel-adjacent copies of genie + radar in the PS7 profile and teaches the four Radar tools.
+- `radar.ps1` — Set-Aside Radar from the desktop/CLI (2026-10-03): `radar new|week [client]|clients|runs`, read-only, over the live worker's admin routes (`/subscribers`, `/preview`, `/runs`) with PHOENIX_AUTH from env or `~/.phoenix/kernel.env`.
+- `radar.Tests.ps1` — stand-in worker fed rows copied from the live `pbm_radar_db`, 7/7.
 - `usys.cmd` — thin Windows cmd shim (`-File usys.ps1 %*`, never `-Command`).
 - `usys-suite-gate.Tests.ps1` — standalone (no Pester) execution-gate tests, 18/18 passing.
 - `hsf-intake.sh` — non-interactive intake of files/folders straight into `sector2/package-handler/intake.sh`; resolves PHOENIX_AUTH / PHOENIX_WORKER_URL / CLONEPOOL_DIR / CF-Access from the Windows User environment. CLAUDE.md's named intake path.
@@ -43,6 +45,7 @@ Bash side: `bash scripts/hsf-intake.sh <path> [<path> ...]`.
 - `tools/phoenix-tray.py` → `scripts/hsf-intake.sh` (tray intake, since 2026-09-29).
 - `scripts/usys.ps1` → `sector2/package-handler/worker/index.js` (`/clonepool` GETs for search/pull, `?meta=true` for the custody hash).
 - `scripts/genie.ps1` → `scripts/phx-kernel.ps1` (runs a tool's command through the kernel) and → Ollama `127.0.0.1:11434/api/chat` (local model only).
+- `scripts/radar.ps1` → `pbm-consulting-website/radar-worker/index.js` (admin GET routes only; never sends, changes or charges).
 - `scripts/phx-kernel.ps1` → `sector2/package-handler/worker/index.js` (`GET /clonepool/<hex>?meta=true` for the custody row, `GET /clonepool/<hex>` for the R2 bytes; read-only, never writes).
 - `scripts/usys.ps1` → `sector1/security/` (CoPES guardian events on gate refusals).
 - `bin/usys`, `bin/run`, `bin/clone.cmd`, `scripts/usys.cmd` → `scripts/usys.ps1` (`-File`).
