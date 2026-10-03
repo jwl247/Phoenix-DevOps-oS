@@ -5,6 +5,7 @@
 # plays R2 (bytes) + D1 (meta rows). Nothing outside a temp folder is touched.
 
 $ErrorActionPreference = 'Stop'
+$env:PHOENIX_AUTH = 'test-key-do-not-use'
 . (Join-Path $PSScriptRoot 'phx-kernel.ps1')
 $ErrorActionPreference = 'Continue'
 $WarningPreference = 'SilentlyContinue'
@@ -127,6 +128,28 @@ if ($py) {
     $out = Invoke-PhxKCommand (Resolve-PhxKCommand 'py-phx' 'Runspace') @('a', 'b')
     ok ($out -eq 'py says a b') "a .py runs with this machine's Python: '$out'"
 }
+
+# ── 9b. signed approvals ──────────────────────────────────────────────────
+$a = Get-PhxKApproved
+ok ($a['hello-phx.ps1'].stamp -match '^[0-9a-f]{64}$') 'an approval carries an HMAC stamp'
+$global:offline = $true; $global:PhxK.Misses.Clear(); Reset-Calls
+Add-PoolFile 'forged-phx.ps1' '"I should never run"'
+$fhex = ConvertTo-PhxKHex 'forged-phx.ps1'; $fdir = Join-Path $global:PhxK.Cache $fhex
+New-Item -ItemType Directory -Path $fdir -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $pool $fhex) -Destination (Join-Path $fdir 'forged-phx.ps1')
+$a['forged-phx.ps1'] = @{ hex = $fhex; sha3 = (Get-PhxKSha3 (Join-Path $fdir 'forged-phx.ps1')); version = 'v1'; stamp = ('0' * 64) }
+Save-PhxKApproved $a
+ok ($null -eq (Resolve-PhxKCommand 'forged-phx' 'Runspace')) 'a hand-written approval with a wrong stamp never runs (offline: nothing at all)'
+$a['forged-phx.ps1'].Remove('stamp'); Save-PhxKApproved $a
+ok ($null -eq (Resolve-PhxKCommand 'forged-phx' 'Runspace')) 'an approval with no stamp never runs'
+$global:offline = $false; $global:PhxK.Misses.Clear(); $global:answer = 'y'
+Add-PoolFile 'signed-phx.ps1' '"signed and ready"'
+$null = Invoke-PhxKCommand (Resolve-PhxKCommand 'signed-phx' 'Runspace') @()
+$real = $env:PHOENIX_AUTH; $env:PHOENIX_AUTH = 'some-other-machines-key'
+ok ($null -eq (Find-PhxKCached 'signed-phx')) "an approval copied from another machine (different key) doesn't run here"
+$env:PHOENIX_AUTH = $real
+ok ($null -ne (Find-PhxKCached 'signed-phx')) 'the real approval still runs with the right key'
+$global:offline = $false
 
 # ── 10. bingo ──────────────────────────────────────────────────────────────
 ok ((Get-Command bingo -ErrorAction SilentlyContinue).CommandType -eq 'Function') 'bingo is the management command'

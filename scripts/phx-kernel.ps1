@@ -18,6 +18,7 @@
       - only commands YOU type at the prompt (never a script's typo),
       - nothing runs unless SHA3-512 matches D1 custody,
       - the first run of anything asks (the "deviation" tier), every run logged,
+      - every approval is signed (HMAC, this machine's Phoenix key): a forged one never runs,
       - no listener, no port, nothing touches the network until a command is missing.
 
     Install (copies this file next to your profile and adds one line):
@@ -169,6 +170,10 @@ function global:Find-PhxKCached([string]$Command) {
     foreach ($ext in $global:PhxK.Exts) {
         $name = "$Command.$ext"; $a = $approved[$name]
         if (-not $a) { continue }
+        $want = Get-PhxKStamp $name $a.hex $a.sha3
+        if (-not $want -or $a.stamp -ne $want) {                    # forged, copied from another machine, or no key here
+            Write-PhxKLog @{ event = 'stamp_invalid'; name = $name }; continue
+        }
         $file = Join-Path $global:PhxK.Cache (Join-Path $a.hex $name)
         if ((Test-Path -LiteralPath $file) -and (Get-PhxKSha3 $file) -eq $a.sha3) {
             return @{ name = $name; hex = $a.hex; sha3 = $a.sha3; file = $file; approved = $true }
@@ -236,8 +241,21 @@ function global:Get-PhxKRunner([string]$File) {
     return @{ exe = $null; need = 'a runtime' }
 }
 
+# Signed approvals (the same rule as usys's suite trust stamps): each approval
+# carries an HMAC-SHA256 over name + hex + SHA3, keyed by this machine's Phoenix key.
+# Editing approved.json (or swapping a cached file and its recorded hash) can't make
+# anything run without that key; no key, or a wrong stamp, means "ask again".
+function global:Get-PhxKStamp([string]$Name, [string]$Hex, [string]$Sha3) {
+    $key = Get-PhxKKey 'PHOENIX_AUTH'
+    if (-not $key) { return $null }
+    $h = [System.Security.Cryptography.HMACSHA256]::new([Text.Encoding]::UTF8.GetBytes($key))
+    try { return [Convert]::ToHexString($h.ComputeHash([Text.Encoding]::UTF8.GetBytes("phoenix-kernel-trust-v1`n$Name`n$Hex`n$Sha3"))).ToLowerInvariant() }
+    finally { $h.Dispose() }
+}
+
 function global:Add-PhxKApproval([hashtable]$Hit) {
-    $a = Get-PhxKApproved; $a[$Hit.name] = @{ hex = $Hit.hex; sha3 = $Hit.sha3; version = $Hit.version; at = [DateTime]::UtcNow.ToString('o') }
+    $a = Get-PhxKApproved; $a[$Hit.name] = @{ hex = $Hit.hex; sha3 = $Hit.sha3; version = $Hit.version; at = [DateTime]::UtcNow.ToString('o')
+                                              stamp = (Get-PhxKStamp $Hit.name $Hit.hex $Hit.sha3) }
     Save-PhxKApproved $a
     Write-PhxKLog @{ event = 'approved'; name = $Hit.name; sha3 = $Hit.sha3.Substring(0, 16) }
 }
@@ -324,7 +342,7 @@ function global:bingo {
             Write-Host "  pool      : $(if ($url) { $url } else { 'NOT SET (PHOENIX_WORKER_URL)' })"
             Write-Host "  keys      : $(if ((Get-PhxKHeaders).Count -ge 4) { 'all present' } else { 'MISSING (see the header of this file)' })"
             Write-Host "  sha3      : $(if ([Security.Cryptography.SHA3_512]::IsSupported) { 'native' } else { 'built-in (portable)' })"
-            Write-Host "  approved  : $((Get-PhxKApproved).Count) command(s)   cache: $($global:PhxK.Cache)"
+            Write-Host "  approved  : $((Get-PhxKApproved).Count) command(s), every one signed with this machine's key   cache: $($global:PhxK.Cache)"
         }
         'list'    { (Get-PhxKApproved).GetEnumerator() | Sort-Object Key | ForEach-Object { '{0,-28} {1,-5} {2}...' -f $_.Key, $_.Value.version, $_.Value.sha3.Substring(0, 16) } }
         'forget'  {
