@@ -1,0 +1,69 @@
+PHOENIX HLK ON YOUR PHONE - TERMUX COMMANDS
+Copy each command, paste it into Termux, press Enter. Wait for each one to finish.
+
+--------------------------------------------------------------
+STEP 1 - ONE TIME SETUP (does everything, takes a few minutes, use Wi-Fi)
+--------------------------------------------------------------
+
+curl -fsSLO https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/claude/youthful-ritchie-f42a4a/scripts/phone/termux-hlk-setup.sh
+
+bash termux-hlk-setup.sh
+
+
+--------------------------------------------------------------
+STEP 2 - START HLK (every time you want it)
+--------------------------------------------------------------
+
+hlk
+
+
+--------------------------------------------------------------
+STEP 3 - TRY IT (type these at the PS prompt after "hlk")
+--------------------------------------------------------------
+
+bingo
+
+genie library
+
+genie
+
+exit
+
+
+--------------------------------------------------------------
+UPDATE HLK LATER (gets the newest scripts, safe to re-run)
+--------------------------------------------------------------
+
+bash termux-hlk-setup.sh
+
+
+--------------------------------------------------------------
+IF SOMETHING BREAKS
+--------------------------------------------------------------
+
+Copy the last few lines Termux printed and paste them to Claude.
+
+Start Debian by hand:
+proot-distro login debian
+
+Check PowerShell is there (inside Debian):
+pwsh -v
+
+
+--------------------------------------------------------------
+KEYS - READ BEFORE ADDING ANY
+--------------------------------------------------------------
+
+The phone starts with NO keys on purpose. Phones get lost.
+Do not put the full PHOENIX_AUTH on the phone.
+Wait for the read-only key, then add it inside Debian with:
+
+mkdir -p ~/.phoenix
+nano ~/.phoenix/kernel.env
+chmod 600 ~/.phoenix/kernel.env
+
+(kernel.env holds lines like:  PHOENIX_WORKER_URL=https://...   PHOENIX_AUTH=...)
+
+
+Termux must come from F-Droid (f-droid.org), not the Play Store.
+PBM Consulting Service / Phoenix DevOps OS - jwl247 - GPL v3
