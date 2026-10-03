@@ -50,6 +50,13 @@ intaked **2026-06-14** — that may be OLDER than the repo's canonical `sector1/
 real finding: re-intake the canonical file. `test_helix_vram.py` hex
 `746573745f68656c69785f7672616d2e7079`, v1, 2026-09-28. Both have SHA3 rows.
 
+## 1b. THE TEST — "Debian from the cloud" (Jerry named it)
+
+The Debian PoC never went to the cloud plane. Full plan: `docs/plans/test-debian-from-the-cloud.md`
+(pool consistency → a Linux QEMU → seed the plane → cold pull + boot + SSH on this box).
+Two blockers found live: `debian.suite.json` D1 ≠ R2 ≠ repo (a verified pull is refused), and the
+pooled QEMU is the Windows build.
+
 ## 2. Deploy today's fixes to this box (Jerry's go for each restart)
 
 - **meshd** (not self-updating): copy `sector3/phoenix-net/meshd/meshd.py` →
