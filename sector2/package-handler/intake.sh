@@ -60,6 +60,27 @@ PHOENIX_AUTH="${PHOENIX_AUTH:-}"
 CF_ACCESS_CLIENT_ID="${CF_ACCESS_CLIENT_ID:-}"
 CF_ACCESS_CLIENT_SECRET="${CF_ACCESS_CLIENT_SECRET:-}"
 
+# ── Auth headers stay off the command line (pentest A2-N1) ────
+# A key on curl's argv is readable by any local user through
+# /proc/<pid>/cmdline while the request runs; that is how A2-03 leaked a
+# token. The headers go into a 0600 file once, curl reads them with
+# `-H @file` (curl 7.55+), and the file is removed when this script exits.
+# printf is a shell builtin, so writing the file puts nothing on an argv.
+# Git Bash's curl is a native Windows program, so it gets a C:/ path.
+AUTH_HDR_FILE=/dev/null
+_auth_hdr_cleanup() { [[ "${AUTH_HDR_FILE}" != /dev/null ]] && rm -f "${AUTH_HDR_FILE}"; return 0; }
+if [[ -n "${PHOENIX_AUTH}${CF_ACCESS_CLIENT_ID}${CF_ACCESS_CLIENT_SECRET}" ]]; then
+  AUTH_HDR_FILE="$(umask 077 && mktemp "${TMPDIR:-/tmp}/phx-hdr.XXXXXXXX")"
+  command -v cygpath &>/dev/null && AUTH_HDR_FILE="$(cygpath -m "${AUTH_HDR_FILE}")"
+  trap _auth_hdr_cleanup EXIT
+  {
+    [[ -n "${PHOENIX_AUTH}" ]]            && printf 'Authorization: Bearer %s\n' "${PHOENIX_AUTH}"
+    [[ -n "${CF_ACCESS_CLIENT_ID}" ]]     && printf 'CF-Access-Client-Id: %s\n' "${CF_ACCESS_CLIENT_ID}"
+    [[ -n "${CF_ACCESS_CLIENT_SECRET}" ]] && printf 'CF-Access-Client-Secret: %s\n' "${CF_ACCESS_CLIENT_SECRET}"
+    true
+  } > "${AUTH_HDR_FILE}"
+fi
+
 # ── Python detection ──────────────────────────────────────────
 _find_python() {
   # `command -v` only proves a name resolves in PATH — on Windows, the
@@ -476,7 +497,7 @@ SQL
 check_whoami() {
   local url="$1"
   curl -s -o /dev/null -w "%{http_code}" \
-    -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
+    -H "@${AUTH_HDR_FILE}" \
     "${url}/whoami" 2>/dev/null
 }
 
@@ -509,7 +530,7 @@ post_to_d1() {
   response=$(curl -s -w "\n%{http_code}" \
     -X POST \
     -H "Content-Type: application/json" \
-    -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
+    -H "@${AUTH_HDR_FILE}" \
     -d "${payload}" \
     "${WORKER_URL}${endpoint}" 2>/dev/null)
   http_code=$(echo "${response}" | tail -1)
@@ -533,7 +554,7 @@ R2_SINGLE_MAX=$((95 * 1024 * 1024))
 R2_PART=$((64 * 1024 * 1024))
 _auth_hdrs=()
 _r2_auth() {
-  _auth_hdrs=(-H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}")
+  _auth_hdrs=(-H "@${AUTH_HDR_FILE}")
 }
 
 # r2_put <key> <file> <sha3> — 0 on success. The sha3 is recorded on the object
@@ -762,9 +783,9 @@ verify_clonepool_copy() {
   local hex="$1" filepath="$2" name="${3:-}"
   [[ -z "${PHOENIX_AUTH}" || ! -f "${filepath}" ]] && { echo "no_baseline"; return; }
   local meta
-  meta=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
+  meta=$(curl -s -H "@${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
   local baseline_sha3
-  baseline_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+  baseline_sha3=$(echo "${meta}" | { grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' || true; } | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
   [[ -z "${baseline_sha3}" ]] && { echo "no_baseline"; return; }
 
   local actual_sha3
@@ -775,7 +796,7 @@ verify_clonepool_copy() {
     # sha3 alone flipped qr_valid to 0 on every successful verification.
     local actual_blake2
     actual_blake2=$(openssl dgst -blake2b512 -r "${filepath}" 2>/dev/null | awk '{print $1}')
-    curl -s -o /dev/null -X POST -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" -H "Content-Type: application/json" \
+    curl -s -o /dev/null -X POST -H "@${AUTH_HDR_FILE}" -H "Content-Type: application/json" \
       -d "{\"hash_sha3\":\"${actual_sha3}\",\"hash_blake2\":\"${actual_blake2}\"}" "${WORKER_URL}/clonepool/${hex}/validate" 2>/dev/null
     echo "valid"
   elif [[ -n "${actual_sha3}" && -n "${name}" ]] && version_hash_recorded "${hex}" "${name}" "${actual_sha3}"; then
@@ -791,7 +812,7 @@ verify_clonepool_copy() {
 fetch_versions_json() {
   local name="$1"
   local enc_name; enc_name=$(url_encode "${name}")
-  curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
+  curl -s -H "@${AUTH_HDR_FILE}" \
     "${WORKER_URL}/versions?package=${enc_name}&limit=1000" 2>/dev/null
 }
 
@@ -882,8 +903,8 @@ self_register() {
   # running copy goes in only if it IS Phoenix's current intake.sh.
   if [[ -n "${PHOENIX_AUTH}" ]]; then
     local meta d1_sha3
-    meta=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${SCRIPT_HEX}?meta=true" 2>/dev/null)
-    d1_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+    meta=$(curl -s -H "@${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${SCRIPT_HEX}?meta=true" 2>/dev/null)
+    d1_sha3=$(echo "${meta}" | { grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' || true; } | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
     if [[ -n "${d1_sha3}" ]]; then
       mkdir -p "${dir}"
       local self_sha3; self_sha3=$(openssl dgst -sha3-512 -r "${self_path}" 2>/dev/null | awk '{print $1}')
@@ -1091,14 +1112,14 @@ fetch_r2_fallback() {
   [[ -z "${PHOENIX_AUTH}" ]] && return 1
 
   local meta
-  meta=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
+  meta=$(curl -s -H "@${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
   [[ -z "${meta}" ]] && return 1
 
   local remote_version
-  remote_version=$(echo "${meta}" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+  remote_version=$(echo "${meta}" | { grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' || true; } | head -1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
   [[ -z "${remote_version}" ]] && return 1
   local baseline_sha3
-  baseline_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+  baseline_sha3=$(echo "${meta}" | { grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' || true; } | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
 
   # Current version -> the overwritten "current" key (<hex>). Any other
   # version -> its immutable per-content key (<hex>/versions/<sha3[0:16]>),
@@ -1121,7 +1142,7 @@ fetch_r2_fallback() {
   remote_version="${fetched_version}"
 
   local http_code
-  http_code=$(curl -s -o "${tmp}" -w "%{http_code}" -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${r2_key}" 2>/dev/null)
+  http_code=$(curl -s -o "${tmp}" -w "%{http_code}" -H "@${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${r2_key}" 2>/dev/null)
   if [[ "${http_code}" != "200" ]]; then
     rm -f "${tmp}"
     rmdir "${pool_dir}" 2>/dev/null || true   # don't leave an empty bucket that hides R2 next time
@@ -1177,7 +1198,7 @@ intake_clone_ledger_version() {
   if [[ -z "${src}" ]]; then
     tmp=$(mktemp "${TMPDIR:-/tmp}/intake-clone.XXXXXX")
     local code
-    code=$(curl -s -o "${tmp}" -w "%{http_code}" -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${store_path}" 2>/dev/null)
+    code=$(curl -s -o "${tmp}" -w "%{http_code}" -H "@${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${store_path}" 2>/dev/null)
     if [[ "${code}" != "200" ]]; then
       rm -f "${tmp}"
       echo "[intake:MISS] ${name} ${label}: no local copy with its hash, and R2 returned ${code:-no answer}"
@@ -1450,7 +1471,7 @@ rotate_clonepool_tiers() {
         mv "${entry_dir%/}" "${dest_root}/${hex}"
         log "INFO" "tier rotate: ${hex} T${from_num} -> T${to_num} (${age_days}d old)"
         [[ -n "${PHOENIX_AUTH}" ]] && curl -s -o /dev/null -X PATCH \
-          -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" -H "Content-Type: application/json" \
+          -H "@${AUTH_HDR_FILE}" -H "Content-Type: application/json" \
           -d "{\"tier\":${to_num},\"pool_path\":\"$(json_escape "${dest_root}/${hex}")\"}" \
           "${WORKER_URL}/clonepool/${hex}/tier" 2>/dev/null
         (( moved++ )) || true
@@ -1458,7 +1479,7 @@ rotate_clonepool_tiers() {
         rm -rf "${entry_dir%/}"
         log "INFO" "tier evict: ${hex} (${age_days}d old, past ${total_window}-day window) — local copy cleared, D1 flagged black"
         [[ -n "${PHOENIX_AUTH}" ]] && curl -s -o /dev/null -X PATCH \
-          -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" -H "Content-Type: application/json" \
+          -H "@${AUTH_HDR_FILE}" -H "Content-Type: application/json" \
           -d '{"tier":4,"pool_path":"evicted","state":"black"}' \
           "${WORKER_URL}/clonepool/${hex}/tier" 2>/dev/null
         (( evicted++ )) || true
@@ -1977,7 +1998,7 @@ DIRSIDECAR
 fetch_dir_r2_fallback() {
   local name="$1" hex="$2" version="$3"
   [[ -z "${PHOENIX_AUTH}" || "${version}" != "latest" ]] && return 1
-  local auth=(-H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}")
+  local auth=(-H "@${AUTH_HDR_FILE}")
   # Probe the first bytes only: a manifest opens with "type": "directory", and
   # anything else (every plain file) must not cost a second full download.
   local probe
@@ -1985,7 +2006,7 @@ fetch_dir_r2_fallback() {
   grep -q '"type": "directory"' <<<"${probe}" || return 1
   local meta want
   meta=$(curl -s "${auth[@]}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
-  want=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
+  want=$(echo "${meta}" | { grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' || true; } | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
   [[ ${#want} -lt 64 ]] && return 1        # no manifest hash in D1: nothing to trust
   local tmp code got
   tmp=$(mktemp)
@@ -2058,7 +2079,7 @@ intake_clone_directory() {
   if [[ -f "${sidecar}" && "${version}" == "latest" && -n "${PHOENIX_AUTH}" ]] \
      && grep -q '"type": "directory"' "${sidecar}" 2>/dev/null; then
     local d1_manifest local_manifest
-    d1_manifest=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
+    d1_manifest=$(curl -s -H "@${AUTH_HDR_FILE}" \
                   "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null \
                   | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[0-9a-f]*"' | head -1 | grep -o '[0-9a-f]\{64,\}' || true)
     local_manifest=$(openssl dgst -sha3-512 -r "${sidecar}" 2>/dev/null | awk '{print $1}')
