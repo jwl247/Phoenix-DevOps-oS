@@ -57,6 +57,18 @@ The Debian PoC never went to the cloud plane. Full plan: `docs/plans/test-debian
 Two blockers found live: `debian.suite.json` D1 ≠ R2 ≠ repo (a verified pull is refused), and the
 pooled QEMU is the Windows build.
 
+## 1c. Open decision (Jerry): a read-only pool key instead of a second plane
+
+Jerry, 10/3: "we don't chop up that system to make a new one." Proposed: packages-worker 3.7.0
+accepts a second secret `PHOENIX_READ_AUTH` for GET/HEAD only (one change in `isAuthorized`,
+constant-time compare, `/whoami` reports the key's role; every route checked: no GET writes).
+Worker boxes then pull from the real pool with a key that can't write or delete, and THE TEST
+pulls Debian from our pool directly (no 2.9 GB re-upload). **Needs Jerry's explicit yes before
+anyone edits the worker** (the cloud session was stopped for it), then Jerry deploys
+(`npx.cmd wrangler secret put PHOENIX_READ_AUTH`, `npx.cmd wrangler deploy`).
+Jerry copied the full vault env file onto the Compaq: keep it 0600 and out of the repo, and
+once the read-only key exists the box should hold only that key.
+
 ## 2. Deploy today's fixes to this box (Jerry's go for each restart)
 
 - **meshd** (not self-updating): copy `sector3/phoenix-net/meshd/meshd.py` →
