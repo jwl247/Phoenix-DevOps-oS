@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { route } from '../index.mjs';
 import { sha3_512 } from '../sha3.mjs';
+import { zxyToTileId } from '../pmtiles.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 let pass = 0, fail = 0;
@@ -40,7 +41,20 @@ class D1 {
 }
 
 const TOKEN = 'f'.repeat(48);
-const fresh = () => ({ DB: new D1(), FRANK_TOKEN: TOKEN, MAPTILER_API_KEY: 'test-key' });
+const fresh = () => ({ DB: new D1(), FRANK_TOKEN: TOKEN });
+
+// An R2 bucket over one in-memory object (range reads, etag) — what MAPS looks like.
+function fakeBucket(bytes, etag = 'e1') {
+  return {
+    async head(key) { return bytes ? { etag } : null; },
+    async get(key, opts = {}) {
+      if (!bytes) return null;
+      const { offset = 0, length = bytes.length - offset } = opts.range || {};
+      const part = bytes.slice(offset, offset + length);
+      return { etag, async arrayBuffer() { return part.buffer.slice(part.byteOffset, part.byteOffset + part.byteLength); } };
+    },
+  };
+}
 const call = (env, method, path, body, auth = TOKEN) => route(new Request(`https://w${path}`, {
   method, body: body ? JSON.stringify(body) : undefined,
   headers: auth ? { Authorization: `Bearer ${auth}` } : {},
@@ -131,30 +145,35 @@ const NG = (id, kind, replaced = []) => ({ type: 'named_ground', ground_id: id, 
   ok('rolled back — history still 3', h.history === 3);
 }
 
-// ── tiles ──
+// ── tiles: our own PMTiles archive in R2 ──
 {
+  ok('tile ids follow the spec', [[0,0,0],[1,0,0],[1,0,1],[1,1,1],[1,1,0],[2,0,0]]
+     .map(([z, x, y]) => zxyToTileId(z, x, y)).join() === '0,1,2,3,4,5');
   const env = fresh();
-  const realFetch = globalThis.fetch;
-  let asked = '';
-  globalThis.fetch = async (u) => { asked = String(u); return new Response(new Uint8Array([137, 80, 78, 71]), { status: 200 }); };
-  const r = await call(env, 'GET', '/tiles/5/16/10.png', null, null);
-  ok('tile proxied', r.status === 200 && r.headers.get('Content-Type') === 'image/png');
-  ok('key added server-side', asked.includes('key=test-key') && asked.includes('/256/5/16/10.png'));
-  ok('out-of-range tile 404', (await call(env, 'GET', '/tiles/2/9/0.png', null, null)).status === 404);
-  globalThis.fetch = async () => new Response('denied key=test-key', { status: 403 });
-  const bad = await call(env, 'GET', '/tiles/5/16/10.png', null, null);
-  const badBody = await bad.text();
-  ok('upstream failure hides the key, shows the status', bad.status === 502 && !badBody.includes('test-key')
-     && JSON.parse(badBody).upstream_status === 403);
-  globalThis.fetch = async (u) => { asked = String(u); return new Response(new Uint8Array([1]), { status: 200 }); };
-  await call({ ...env, MAPTILER_API_KEY: '  test-key\r\n' }, 'GET', '/tiles/5/16/10.png', null, null);
-  ok('key trimmed', asked.includes('key=test-key&') || asked.endsWith('key=test-key'));
-  ok('no key configured → 503', (await call({ ...env, MAPTILER_API_KEY: '' }, 'GET', '/tiles/1/0/0.png', null, null)).status === 503);
-  globalThis.fetch = realFetch;
+  ok('no MAPS binding → 503', (await call(env, 'GET', '/tiles/1/0/0.mvt', null, null)).status === 503);
+  ok('archive missing → 503', (await call({ ...env, MAPS: fakeBucket(null) }, 'GET', '/tiles/1/0/0.mvt', null, null)).status === 503);
+  ok('out-of-range tile 404', (await call({ ...env, MAPS: fakeBucket(null) }, 'GET', '/tiles/2/9/0.mvt', null, null)).status === 404);
+  ok('old .png route gone', (await call(env, 'GET', '/tiles/5/16/10.png', null, null)).status === 404);
 }
 
 // ── cross-language: a chain written by Python's WorldHistory ──
-if (process.argv[2]) {
+// ── cross-language: a map archive written by Python's pmtiles.py ──
+const mapsAt = process.argv.indexOf('--maps');
+if (mapsAt > 0) {
+  const m = JSON.parse(readFileSync(process.argv[mapsAt + 1], 'utf8'));
+  const env = { ...fresh(), MAPS: fakeBucket(new Uint8Array(readFileSync(m.archive))) };
+  for (const p of m.picks) {
+    const r = await call(env, 'GET', `/tiles/${p.z}/${p.x}/${p.y}.mvt`, null, null);
+    const body = new Uint8Array(await r.arrayBuffer());
+    ok(`tile ${p.z}/${p.x}/${p.y} byte-identical to Python's`, r.status === 200 && sha3_512(body) === p.sha3
+       && r.headers.get('Content-Encoding') === 'gzip'
+       && r.headers.get('Content-Type') === 'application/vnd.mapbox-vector-tile');
+  }
+  const empty = await call(env, 'GET', '/tiles/8/0/0.mvt', null, null);
+  ok('tile outside the theaters → 204', empty.status === 204);
+}
+
+if (process.argv[2] && process.argv[2] !== '--maps') {
   const fixture = JSON.parse(readFileSync(process.argv[2], 'utf8'));
   const env = fresh();
   const r = await call(env, 'POST', '/history', { entries: fixture.rows });

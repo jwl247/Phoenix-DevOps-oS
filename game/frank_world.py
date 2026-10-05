@@ -1047,6 +1047,9 @@ class FrankWorld(VehicleWorldMixin):
     def theater_snapshot(self, theater: str, out, source=None, width: int = 1024, height: int = 768):
         """Frank's strategic overview PNG. Returns (path, sha3-512); intake it to keep it."""
         aos, grounds, kings = self._theater_layers(theater)
+        if source is None:
+            archive = os.environ.get("PHOENIX_MAP_ARCHIVE")
+            source = theater_map.ArchiveSource(Path(archive)) if archive else theater_map.WorkerSource()
         return theater_map.snapshot(aos, grounds, kings, out, source, width, height,
                                     title=f"{theater} — strategic overview")
 

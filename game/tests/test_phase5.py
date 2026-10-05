@@ -50,7 +50,6 @@ class WorldCase(unittest.TestCase):
             "PHOENIX_ARCHIVE_ROOT":   str(t / "archive"),
             "PHOENIX_FRANK_KEY_FILE": str(t / "frank_world.key"),
             "PHOENIX_WORLD_HISTORY":  str(t / "world_history.jsonl"),
-            "MAPTILER_API_KEY":       "SENTINEL-KEY-must-never-leak",
         }
         self._saved = {k: os.environ.get(k) for k in self._env}
         os.environ.update(self._env)
@@ -357,13 +356,6 @@ class TestNamedGround(WorldCase):
 # Theater map
 # ---------------------------------------------------------------------------
 
-def solid_tile(_url: str) -> bytes:
-    from PIL import Image
-    buf = io.BytesIO()
-    Image.new("RGB", (256, 256), (90, 110, 80)).save(buf, "PNG")
-    return buf.getvalue()
-
-
 class TestTheaterMap(WorldCase):
     def setUp(self):
         super().setUp()
@@ -375,47 +367,31 @@ class TestTheaterMap(WorldCase):
         b = self.w.open_battle("AO-1", "Fight", lt.player_id)
         self.w.battle_casualty(b.battle_id, lt.player_id, "held", holding=True, lon=6.0, lat=49.9)
 
-    def test_payload_is_key_free_geojson(self):
+    def test_payload_is_our_own_tiles_plus_geojson(self):
         p = self.w.map_payload("Ardennes", worker_url="https://sacrifice.example")
-        blob = json.dumps(p)
-        self.assertNotIn("SENTINEL-KEY", blob)
-        self.assertEqual(p["tiles"], "https://sacrifice.example/tiles/{z}/{x}/{y}.png")
+        self.assertEqual(p["tiles"], "https://sacrifice.example/tiles/{z}/{x}/{y}.mvt")
         kinds = sorted(f["properties"]["kind"] for f in p["geojson"]["features"])
         self.assertEqual(kinds, ["ao", "ao", "king", "named_ground"])
-        self.assertIn("OpenStreetMap", p["attribution"])
+        self.assertEqual(p["attribution"], "© OpenStreetMap contributors")
         self.assertEqual(p["bbox"], [5.9, 49.8, 6.3, 50.0])
 
-    def test_snapshot_renders_and_caches_tiles(self):
-        calls = []
-
-        def fetch(url):
-            calls.append(url)
-            return solid_tile(url)
-
-        src = tm.TileSource(cache_dir=Path(self._tmp) / "tiles", fetch=fetch, key="k")
-        out, sha3 = self.w.theater_snapshot("Ardennes", Path(self._tmp) / "snap.png", src, 640, 480)
+    def test_snapshot_from_the_map_archive(self):
+        sys.path.insert(0, str(REPO_ROOT / "game" / "tests"))
+        from test_maps import build_archive
+        archive = Path(self._tmp) / "world.pmtiles"
+        build_archive(archive, (5.6, 49.6, 6.6, 50.3), range(0, 12))
+        with patch.dict(os.environ, {"PHOENIX_MAP_ARCHIVE": str(archive)}):
+            out, sha3 = self.w.theater_snapshot("Ardennes", Path(self._tmp) / "snap.png", width=640, height=480)
         from PIL import Image
         with Image.open(out) as img:
             self.assertEqual(img.size, (640, 480))
         self.assertEqual(len(sha3), 128)
-        first = len(calls)
-        self.assertGreater(first, 0)
-        self.w.theater_snapshot("Ardennes", Path(self._tmp) / "snap2.png", src, 640, 480)
-        self.assertEqual(len(calls), first)                                 # all from the disk cache
 
     def test_mercator_and_zoom(self):
         x, y = tm.world_px(0, 0, 0)
         self.assertAlmostEqual(x, 128)
         self.assertAlmostEqual(y, 128)
         self.assertGreater(tm.fit_zoom((5.9, 49.8, 6.3, 50.0), 1024, 768), 6)
-
-    def test_key_from_vault_file_when_env_is_empty(self):
-        vault = Path(self._tmp) / "vault"
-        vault.mkdir()
-        (vault / "maptiler.env").write_text("# comment\nMAPTILER_API_KEY=from-vault\n", encoding="utf-8")
-        with patch.dict(os.environ, {"MAPTILER_API_KEY": "", "PHOENIX_MAPTILER_KEY": "",
-                                     "PHOENIX_VAULT_SECRETS": str(vault)}):
-            self.assertEqual(tm.load_maptiler_key(), "from-vault")
 
 
 # ---------------------------------------------------------------------------

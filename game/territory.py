@@ -4,7 +4,7 @@ territory.py — Areas of Operation, control, and battles
 Sacrifice | Phoenix DevOps OS | jwl247 | GPL v3
 
 An AO is real ground: a polygon of [lon, lat] points the theater map draws
-(MapTiler, via theater_map.py). It is NEUTRAL, HELD by a player, or
+(our own OpenStreetMap tiles, via theater_map.py). It is NEUTRAL, HELD by a player, or
 CONTESTED while a challenger fights for it. Control changes hands only by
 battle or by an accord that staked the AO (territory_stake = ao_id).
 

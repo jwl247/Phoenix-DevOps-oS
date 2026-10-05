@@ -7,19 +7,21 @@
 //   GET  /history?since=&type=&theater=&limit=   the permanent record (public, GDD §11.2)
 //   GET  /named-ground?theater=        active named ground (public)
 //   GET  /territory?theater=           AO boundaries + control (public)
-//   GET  /tiles/{z}/{x}/{y}.png        map tiles, proxied — the MapTiler key
-//                                      never reaches a client, and the tile
-//                                      vendor can change without a client update
+//   GET  /tiles/{z}/{x}/{y}.mvt        map tiles — our own OpenStreetMap vector
+//                                      tiles, read from one PMTiles file in the
+//                                      sacrifice-maps bucket. No map vendor.
 //   POST /history                      Frank only (Bearer FRANK_TOKEN): append
 //                                      chained rows; every hash and link is
 //                                      re-checked here, then again by D1 triggers
 //
-// Bindings: DB (D1 sacrifice_world). Secrets: FRANK_TOKEN, MAPTILER_API_KEY.
-// Vars: MAPTILER_MAP (default outdoor-v2).
+// Bindings: DB (D1 sacrifice_world), MAPS (R2 sacrifice-maps — maps only, never
+// the clone pool). Secret: FRANK_TOKEN. Var: MAP_KEY (default sacrifice-world.pmtiles).
+// Map data © OpenStreetMap contributors, ODbL.
 
 import { sha3_512 } from './sha3.mjs';
+import { getTile } from './pmtiles.mjs';
 
-export const VERSION = '1.0.1';
+export const VERSION = '1.1.0';
 const GENESIS = '0'.repeat(128);
 const MAX_BODY = 1 << 20;          // 1 MiB per POST
 const MAX_ROWS = 500;
@@ -62,7 +64,7 @@ export async function route(req, env, ctx) {
   }
   if (path === '/named-ground' && req.method === 'GET') return getNamedGround(url, env);
   if (path === '/territory' && req.method === 'GET') return getTerritory(url, env);
-  const t = path.match(/^\/tiles\/(\d{1,2})\/(\d{1,7})\/(\d{1,7})\.png$/);
+  const t = path.match(/^\/tiles\/(\d{1,2})\/(\d{1,8})\/(\d{1,8})\.mvt$/);
   if (t && req.method === 'GET') return tile(+t[1], +t[2], +t[3], env, ctx, url);
   return err('not found', 404);
 }
@@ -224,29 +226,26 @@ export async function getTerritory(url, env) {
   }, 200, { 'Cache-Control': 'public, max-age=10' });
 }
 
-// ── tiles ───────────────────────────────────────────────────────────────────
+// ── tiles: our own OSM vector tiles ─────────────────────────────────────────
 
 export async function tile(z, x, y, env, ctx, url) {
-  if (z > 20 || x >= 2 ** z || y >= 2 ** z) return err('no such tile', 404);
-  const key = (env.MAPTILER_API_KEY || '').trim();
-  if (!key) return err('map tiles are not configured', 503);
+  if (z > 22 || x >= 2 ** z || y >= 2 ** z) return err('no such tile', 404);
+  if (!env.MAPS) return err('maps are not configured', 503);
+  const key = env.MAP_KEY || 'sacrifice-world.pmtiles';
   const cache = globalThis.caches && caches.default;
-  const cacheKey = new Request(`${url.origin}/tiles/${z}/${x}/${y}.png`);
+  const head = await env.MAPS.head(key);
+  if (!head) return err('map archive missing', 503);
+  const cacheKey = new Request(`${url.origin}/tiles/${z}/${x}/${y}.mvt?v=${head.etag}`);
   if (cache) {
     const hit = await cache.match(cacheKey);
     if (hit) return hit;
   }
-  const map = env.MAPTILER_MAP || 'outdoor-v2';
-  const upstream = await fetch(
-    `https://api.maptiler.com/maps/${encodeURIComponent(map)}/256/${z}/${x}/${y}.png?key=${encodeURIComponent(key)}`,
-    { headers: { 'User-Agent': 'phoenix-sacrifice-worker/1.0' } });
-  if (!upstream.ok) {                       // status code only — never the upstream URL or body (key in URL)
-    console.error(`tile upstream ${upstream.status} for ${z}/${x}/${y}`);
-    return json({ error: 'tile source unavailable', upstream_status: upstream.status }, 502);
-  }
-  const res = new Response(upstream.body, {
-    headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800', ...CORS },
-  });
+  const { header, bytes } = await getTile(env.MAPS, key, z, x, y);
+  const base = { ...CORS, 'Cache-Control': 'public, max-age=86400', 'X-Map-Data': '(c) OpenStreetMap contributors, ODbL' };
+  if (!bytes) return new Response(null, { status: 204, headers: base });   // open sea / outside the theaters
+  const headers = { ...base, 'Content-Type': 'application/vnd.mapbox-vector-tile' };
+  if (header.tileCompression === 2) headers['Content-Encoding'] = 'gzip';
+  const res = new Response(bytes, { headers, encodeBody: 'manual' });     // already gzip — send as is
   if (cache && ctx) ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
 }

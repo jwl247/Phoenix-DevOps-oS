@@ -23,13 +23,23 @@
     }
   ],
 
+  // ── R2 Binding ─────────────────────────────────────────────────────────────
+  // MAPS → sacrifice-maps: ONLY the map archive (our own OpenStreetMap extract).
+  // Deliberately not the clone pool — an R2 binding can write, and this worker
+  // must never be able to touch the vault. The custody copy goes through intake.
+  "r2_buckets": [
+    {
+      "binding":     "MAPS",
+      "bucket_name": "sacrifice-maps"
+    }
+  ],
+
   // ── Vars ───────────────────────────────────────────────────────────────────
-  // MAPTILER_MAP: which MapTiler raster map the /tiles proxy serves.
+  // MAP_KEY: the archive's object key in sacrifice-maps.
   "vars": {
-    "MAPTILER_MAP": "outdoor-v2"
+    "MAP_KEY": "sacrifice-world.pmtiles"
   }
 
   // ── Secrets (never in this file) ──────────────────────────────────────────
-  // FRANK_TOKEN       — ≥ 32 chars; only Frank may append to world history
-  // MAPTILER_API_KEY  — from the vault's maptiler.env; stays server-side
+  // FRANK_TOKEN  — ≥ 32 chars; only Frank may append to world history
 }

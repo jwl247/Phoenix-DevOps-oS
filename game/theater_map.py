@@ -3,36 +3,37 @@
 theater_map.py — The theater map: what Godot draws, and Frank's own snapshot
 Sacrifice | Phoenix DevOps OS | jwl247 | GPL v3
 
+Maps are our own (JW, 2026-10-05): OpenStreetMap vector tiles in a PMTiles
+archive we cut from the Protomaps planet build (pmtiles.py), kept in the clone
+pool, served from our R2 by the sacrifice-worker. No map vendor, no key, no
+terms but ODbL's: credit "© OpenStreetMap contributors".
+
 Two outputs:
 
-1. map_payload()  — the live map for the Godot client: a key-free tile URL
-   (the sacrifice-worker proxies tiles, so the MapTiler key never leaves the
-   server and the tile vendor can be swapped without touching the client)
-   plus GeoJSON for AO boundaries, named ground and King of Theater markers.
+1. map_payload()  — the live map for the Godot client: our vector-tile URL
+   (/tiles/{z}/{x}/{y}.mvt) plus GeoJSON for AO boundaries, named ground and
+   King of Theater markers.
 
-2. snapshot()     — the strategic overview as a PNG, built here: raster tiles
-   stitched in Web Mercator and Frank's layers drawn on top. No static-map
-   API needed (the MapTiler plan doesn't include one, and any XYZ tile
-   source works). Tiles are cached on disk — fetched once, drawn many times.
-   The PNG goes to the clone pool through Frank's import method.
-
-The key: MAPTILER_API_KEY / PHOENIX_MAPTILER_KEY in the environment, else
-the vault file (PHOENIX_VAULT_SECRETS, default F:\\Phoenix\\Vault\\secrets\\maptiler.env).
-Never logged, never written into a payload, never in the repo.
+2. snapshot()     — Frank's strategic overview PNG, drawn here from the same
+   vector tiles in a theater style (terrain, water, roads, places) with the
+   game's layers on top. Tiles come from a local archive or the worker and may
+   be cached freely — the data is ours.
 """
 
 from __future__ import annotations
 
 import hashlib
-import io
 import math
 import os
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Callable, Iterable, Optional
+from typing import Iterable, Optional, Protocol
 
-ATTRIBUTION = "© MapTiler © OpenStreetMap contributors"
+from . import mvt
+from .pmtiles import Reader, FileSource, lonlat_to_tile
+
+ATTRIBUTION = "© OpenStreetMap contributors"
 TILE_SIZE = 256
 USER_AGENT = "phoenix-sacrifice/1.0"
 
@@ -45,68 +46,28 @@ OFFICER_GOLD  = (241, 196, 15, 255)
 PLAYER_WHITE  = (236, 240, 241, 255)
 KING_RED      = (192, 57, 43, 255)
 
-
-# ---------------------------------------------------------------------------
-# Key and tile source
-# ---------------------------------------------------------------------------
-
-def load_maptiler_key() -> str:
-    for var in ("MAPTILER_API_KEY", "PHOENIX_MAPTILER_KEY"):
-        if os.environ.get(var):
-            return os.environ[var].strip()
-    vault = Path(os.environ.get("PHOENIX_VAULT_SECRETS", r"F:\Phoenix\Vault\secrets")) / "maptiler.env"
-    if vault.exists():
-        for line in vault.read_text(encoding="utf-8-sig").splitlines():
-            if "=" in line and not line.lstrip().startswith("#"):
-                k, v = line.split("=", 1)
-                if k.strip() in ("MAPTILER_API_KEY", "PHOENIX_MAPTILER_KEY"):
-                    return v.strip().strip('"').strip("'")
-    raise RuntimeError("MapTiler key not found (env MAPTILER_API_KEY or the vault's maptiler.env)")
-
-
-class TileSource:
-    """XYZ raster tiles with a disk cache. Default: MapTiler, key from the vault."""
-
-    def __init__(
-        self,
-        template:  Optional[str] = None,          # with {z} {x} {y}; may include {key}
-        cache_dir: Optional[Path] = None,
-        fetch:     Optional[Callable[[str], bytes]] = None,
-        key:       Optional[str] = None,
-        map_id:    str = "outdoor-v2",
-    ):
-        self.template  = template or f"https://api.maptiler.com/maps/{map_id}/256/{{z}}/{{x}}/{{y}}.png?key={{key}}"
-        self.cache_dir = Path(cache_dir) if cache_dir else None
-        self._fetch    = fetch or _http_get
-        self._key      = key
-        self.cache_id  = hashlib.sha256(self.template.encode()).hexdigest()[:12]
-
-    def _url(self, z: int, x: int, y: int) -> str:
-        if "{key}" in self.template and self._key is None:
-            self._key = load_maptiler_key()
-        return self.template.format(z=z, x=x, y=y, key=self._key or "")
-
-    def tile(self, z: int, x: int, y: int) -> bytes:
-        n = 2 ** z
-        x %= n
-        if not (0 <= y < n):
-            raise ValueError(f"Tile y={y} outside zoom {z}")
-        path = self.cache_dir / self.cache_id / str(z) / str(x) / f"{y}.png" if self.cache_dir else None
-        if path and path.exists():
-            return path.read_bytes()
-        data = self._fetch(self._url(z, x, y))
-        if path:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_suffix(".tmp")
-            tmp.write_bytes(data)
-            tmp.replace(path)
-        return data
-
-
-def _http_get(url: str) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return r.read()
+# Theater style — muted topo palette, readable under the game's overlays.
+EARTH = (233, 228, 212)
+FILL = {
+    "forest": (176, 200, 158), "wood": (176, 200, 158), "nature_reserve": (190, 210, 170),
+    "scrub": (200, 210, 172), "heath": (210, 208, 175), "grass": (214, 226, 184),
+    "meadow": (218, 228, 186), "park": (200, 222, 176), "farmland": (238, 232, 196),
+    "orchard": (214, 226, 184), "vineyard": (220, 220, 180), "residential": (222, 214, 204),
+    "urban_area": (218, 210, 200), "industrial": (214, 206, 214), "commercial": (226, 210, 206),
+    "military": (226, 190, 180), "quarry": (210, 200, 190), "cemetery": (200, 212, 190),
+    "barren": (226, 220, 206), "sand": (236, 226, 190), "glacier": (240, 246, 250),
+}
+WATER = (156, 192, 221)
+ROADS = {   # kind → (casing, fill, width at z12)
+    "highway":    ((120, 70, 40), (214, 120, 70), 3.2),
+    "major_road": ((130, 110, 80), (240, 196, 110), 2.4),
+    "minor_road": ((150, 145, 135), (255, 255, 255), 1.4),
+    "path":       (None, (150, 120, 90), 0.8),
+    "other":      (None, (170, 165, 155), 0.8),
+}
+RAIL = (90, 90, 90)
+BOUNDARY = (140, 90, 160)
+BUILDING = (200, 190, 180)
 
 
 def _font(size: int):
@@ -119,6 +80,55 @@ def _font(size: int):
         except OSError:
             continue
     return ImageFont.load_default(size=size)
+
+
+# ---------------------------------------------------------------------------
+# Tile sources — all ours
+# ---------------------------------------------------------------------------
+
+class VectorSource(Protocol):
+    max_zoom: int
+
+    def tile(self, z: int, x: int, y: int) -> Optional[bytes]: ...
+
+
+class ArchiveSource:
+    """A local PMTiles archive (e.g. the theater extract before it goes to R2)."""
+
+    def __init__(self, path: Path):
+        self.reader = Reader(FileSource(path))
+        self.max_zoom = self.reader.header.max_zoom
+
+    def tile(self, z, x, y):
+        return self.reader.tile(z, x, y)
+
+
+class WorkerSource:
+    """Tiles from the sacrifice-worker, cached on disk (our own data — caching is fine)."""
+
+    def __init__(self, base_url: Optional[str] = None, cache_dir: Optional[Path] = None, max_zoom: int = 15):
+        self.base = (base_url or os.environ.get("SACRIFICE_WORKER_URL", "")).rstrip("/")
+        if not self.base:
+            raise RuntimeError("SACRIFICE_WORKER_URL is not set")
+        self.cache_dir = Path(cache_dir) if cache_dir else None
+        self.max_zoom = max_zoom
+
+    def tile(self, z, x, y):
+        path = self.cache_dir / str(z) / str(x) / f"{y}.mvt" if self.cache_dir else None
+        if path and path.exists():
+            return path.read_bytes() or None
+        req = urllib.request.Request(f"{self.base}/tiles/{z}/{x}/{y}.mvt", headers={"User-Agent": USER_AGENT})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                data = r.read()
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+            data = b""
+        if path:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        return data or None
 
 
 # ---------------------------------------------------------------------------
@@ -166,14 +176,16 @@ def feature_collection(aos: Iterable, grounds: Iterable, kings: Iterable) -> dic
 
 
 def map_payload(theater: str, aos: list, grounds: list, kings: list,
-                worker_url: Optional[str] = None) -> dict:
+                worker_url: Optional[str] = None, max_zoom: int = 15) -> dict:
     base = (worker_url or os.environ.get("SACRIFICE_WORKER_URL", "")).rstrip("/")
     lons = [p[0] for a in aos for p in a.polygon]
     lats = [p[1] for a in aos for p in a.polygon]
     return {
         "theater": theater,
-        "tiles": f"{base}/tiles/{{z}}/{{x}}/{{y}}.png",     # key-free: the worker proxies
-        "tile_size": TILE_SIZE,
+        "tiles": f"{base}/tiles/{{z}}/{{x}}/{{y}}.mvt",   # our own OSM vector tiles
+        "tile_format": "mvt",
+        "tile_compression": "gzip",
+        "max_zoom": max_zoom,
         "attribution": ATTRIBUTION,
         "bbox": [min(lons), min(lats), max(lons), max(lats)] if aos else None,
         "geojson": feature_collection(aos, grounds, kings),
@@ -181,43 +193,136 @@ def map_payload(theater: str, aos: list, grounds: list, kings: list,
 
 
 # ---------------------------------------------------------------------------
-# Frank's snapshot
+# Frank's snapshot — drawn from our vector tiles
 # ---------------------------------------------------------------------------
+
+def _signed_area(ring) -> float:
+    return sum(x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in zip(ring, ring[1:]))
+
+
+def _draw_base(d, layers_by_tile, to_px, z: int, scale: float, f_place) -> None:
+    """Paint the OSM layers in map order across every tile, then the place labels."""
+    def polys(feature):
+        for ring in feature.rings:
+            if len(ring) >= 3:
+                yield ring, _signed_area(ring) > 0      # MVT: exterior rings are clockwise (positive here)
+
+    def each(name):
+        for key, layers in layers_by_tile:
+            layer = layers.get(name)
+            if layer:
+                for f in layer.features:
+                    yield key, layer.extent, f
+
+    # landcover then landuse fills
+    for name in ("landcover", "landuse"):
+        for key, ext, f in each(name):
+            color = FILL.get(f.props.get("kind"))
+            if color and f.type == mvt.POLYGON:
+                for ring, outer in polys(f):
+                    d.polygon([to_px(key, ext, p) for p in ring], fill=color if outer else EARTH)
+    # water
+    for key, ext, f in each("water"):
+        if f.type == mvt.POLYGON:
+            for ring, outer in polys(f):
+                d.polygon([to_px(key, ext, p) for p in ring], fill=WATER if outer else EARTH)
+        elif f.type == mvt.LINESTRING and z >= 10:
+            w = 2.0 if f.props.get("kind") == "river" else 1.0
+            for ring in f.rings:
+                d.line([to_px(key, ext, p) for p in ring], fill=WATER, width=max(1, int(w * scale)))
+    if z >= 14:
+        for key, ext, f in each("buildings"):
+            for ring, outer in polys(f):
+                if outer:
+                    d.polygon([to_px(key, ext, p) for p in ring], fill=BUILDING)
+    for key, ext, f in each("boundaries"):
+        if f.props.get("kind") in ("country", "region"):
+            for ring in f.rings:
+                d.line([to_px(key, ext, p) for p in ring], fill=BOUNDARY, width=max(1, int(2 * scale)))
+    # roads: all casings, then all fills, minor first
+    order = ["other", "path", "minor_road", "major_road", "highway"]
+    roads = sorted((x for x in each("roads") if x[2].type == mvt.LINESTRING),
+                   key=lambda t: order.index(t[2].props.get("kind")) if t[2].props.get("kind") in order else 0)
+    for casing_pass in (True, False):
+        for key, ext, f in roads:
+            kind = f.props.get("kind")
+            if kind == "rail":
+                if not casing_pass:
+                    for ring in f.rings:
+                        d.line([to_px(key, ext, p) for p in ring], fill=RAIL, width=max(1, int(scale)))
+                continue
+            casing, fill, w = ROADS.get(kind, ROADS["other"])
+            if kind in ("path", "other") and z < 12:
+                continue
+            width = max(1, int(round(w * scale)))
+            for ring in f.rings:
+                pts = [to_px(key, ext, p) for p in ring]
+                if casing_pass and casing:
+                    d.line(pts, fill=casing, width=width + 2)
+                elif not casing_pass:
+                    d.line(pts, fill=fill, width=width)
+    # place names, biggest first, no duplicates or overlaps
+    seen, boxes = set(), []
+    places = [x for x in each("places") if x[2].props.get("name") and x[2].type == mvt.POINT
+              and (x[2].props.get("min_zoom") or 0) < z]            # one level in hand: towns first, villages as you zoom
+    places.sort(key=lambda t: (t[2].props.get("population_rank") or 0), reverse=True)
+    for key, ext, f in places:
+        name = f.props["name"]
+        if name in seen:
+            continue
+        x, y = to_px(key, ext, f.rings[0][0])
+        b = d.textbbox((x, y), name, font=f_place, anchor="mm")
+        box = (b[0] - 6, b[1] - 4, b[2] + 6, b[3] + 4)                 # breathing room
+        if any(not (box[2] < b[0] or box[0] > b[2] or box[3] < b[1] or box[1] > b[3]) for b in boxes):
+            continue
+        seen.add(name)
+        boxes.append(box)
+        d.text((x, y), name, font=f_place, anchor="mm", fill=(60, 55, 50),
+               stroke_width=2, stroke_fill=(255, 255, 255))
+
 
 def snapshot(
     aos:     list,
     grounds: list,
     kings:   list,
     out:     Path,
-    source:  Optional[TileSource] = None,
+    source:  VectorSource,
     width:   int = 1024,
     height:  int = 768,
     title:   Optional[str] = None,
 ) -> tuple[Path, str]:
-    """Render the theater overview to PNG. Returns (path, sha3-512)."""
+    """Render the theater overview to PNG from our own vector tiles. Returns (path, sha3-512)."""
     from PIL import Image, ImageDraw
 
     if not aos:
         raise ValueError("No AOs to draw")
-    source = source or TileSource()
     lons = [p[0] for a in aos for p in a.polygon]
     lats = [p[1] for a in aos for p in a.polygon]
-    z = fit_zoom((min(lons), min(lats), max(lons), max(lats)), width, height)
-    cx, cy = world_px((min(lons) + max(lons)) / 2, (min(lats) + max(lats)) / 2, z)
-    ox, oy = cx - width / 2, cy - height / 2                       # world px of image origin
+    view_z = fit_zoom((min(lons), min(lats), max(lons), max(lats)), width, height)
+    z = min(view_z, source.max_zoom)                  # data zoom; drawn scaled up beyond it
+    scale = 2 ** (view_z - z)
+    cx, cy = world_px((min(lons) + max(lons)) / 2, (min(lats) + max(lats)) / 2, view_z)
+    ox, oy = cx - width / 2, cy - height / 2
 
-    base = Image.new("RGBA", (width, height), (40, 44, 52, 255))
-    need = [(tx, ty)
-            for ty in range(int(oy // TILE_SIZE), int((oy + height) // TILE_SIZE) + 1) if 0 <= ty < 2 ** z
-            for tx in range(int(ox // TILE_SIZE), int((ox + width) // TILE_SIZE) + 1)]
-    with ThreadPoolExecutor(max_workers=8) as pool:            # fetch in parallel, paste in order
-        tiles = list(pool.map(lambda t: source.tile(z, t[0], t[1]), need))
-    for (tx, ty), data in zip(need, tiles):
-        tile = Image.open(io.BytesIO(data)).convert("RGBA")
-        base.paste(tile, (int(tx * TILE_SIZE - ox), int(ty * TILE_SIZE - oy)))
+    t0x, t0y = int(ox / scale // TILE_SIZE), int(oy / scale // TILE_SIZE)
+    t1x, t1y = int((ox + width) / scale // TILE_SIZE), int((oy + height) / scale // TILE_SIZE)
+    need = [(tx, ty) for ty in range(t0y, t1y + 1) if 0 <= ty < 2 ** z
+            for tx in range(t0x, t1x + 1)]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        raw = list(pool.map(lambda t: source.tile(z, t[0] % (2 ** z), t[1]), need))
+    layers_by_tile = [((tx, ty), mvt.decode(b)) for (tx, ty), b in zip(need, raw) if b]
+
+    def to_px(key, extent, p):
+        tx, ty = key
+        return ((tx + p[0] / extent) * TILE_SIZE * scale - ox,
+                (ty + p[1] / extent) * TILE_SIZE * scale - oy)
+
+    base = Image.new("RGB", (width, height), EARTH)
+    _draw_base(ImageDraw.Draw(base), layers_by_tile, to_px, view_z, max(1.0, scale ** 0.5), _font(12))
+    base = base.convert("RGBA")
 
     def px(lon, lat):
-        x, y = world_px(lon, lat, z)
+        x, y = world_px(lon, lat, view_z)
         return (x - ox, y - oy)
 
     layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))

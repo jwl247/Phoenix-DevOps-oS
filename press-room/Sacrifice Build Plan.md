@@ -127,7 +127,7 @@ Status: **COMPLETE** (Oct 5) — `vehicle.py`, `equipment.py`, `vehicle_world.py
 
 ## Phase 5 — Living World
 
-Status: **COMPLETE** (Oct 5) — `world_history.py`, `territory.py`, `named_ground.py`, `theater_map.py`, wired through FrankWorld; `game/worker/` (sacrifice-worker + D1 schema). Tests: `test_phase5.py` 23/23 (incl. a Python-built chain accepted by the worker), `worker.test.mjs` 26/26, earlier phases still green. Live check: a real Ardennes theater rendered from MapTiler tiles with the vault key (1.6 s, parallel fetch + disk cache).
+Status: **COMPLETE** (Oct 5) — `world_history.py`, `territory.py`, `named_ground.py`, `theater_map.py`, wired through FrankWorld; `game/worker/` (sacrifice-worker + D1 schema). Tests: `test_phase5.py` 23/23 (incl. a Python-built chain accepted by the worker), `worker.test.mjs` 26/26, earlier phases still green. Live check: a real Ardennes theater drawn by Frank from our own OSM extract.
 
 **JW's rulings (Oct 5):**
 - **Named ground — GDD on top, player naming under it.** An officer (Second Lieutenant and up) who dies holding a position inside the AO names that ground automatically and permanently (GDD §11.1/§8.2). It is never renamed and it supersedes any player-given name there. Otherwise, after a closed battle, one player who fought in it may name ground inside the AO. One name per battle. Only a bigger battle (more fallen) renames a player-given name. Nothing is deleted; superseded names stay in history.
@@ -137,13 +137,13 @@ Status: **COMPLETE** (Oct 5) — `world_history.py`, `territory.py`, `named_grou
 - **World history** is a hash chain like the custody chain: append-only, numbered, each entry SHA3-512 over its exact bytes and linked to the one before. It is written to a local JSONL first (fsynced, re-verified on every start, so the world survives restarts and runs offline), then synced to D1. The worker re-checks every hash and link, and D1's own triggers refuse UPDATE, DELETE, a gap or a fork.
 - **Territory:** AOs are real polygons (lon/lat). Control is NEUTRAL, HELD or CONTESTED. A contest is settled by a battle: the challenger takes the ground only by winning. An accord that stakes an AO moves it, but only from a loser who actually held it. A holder's death leaves the ground neutral (or to the contest).
 - **Battles:** the organizer is field commander (GDD §8.1). Closing a battle writes it into every participant's jacket, and those battles count toward earned gear (Phase 4).
-- **Map:** Godot gets a key-free tile URL. The worker proxies MapTiler tiles, so the key never reaches a client and the tile vendor can change without a client update. Godot also gets GeoJSON for AOs, named ground and Kings. Frank's strategic overview PNG is drawn here (stitched tiles + layers), because the MapTiler plan has no static-map API and this way any tile source works.
+- **Map:** our own OpenStreetMap vector tiles (see Maps below). Godot gets the tile URL plus GeoJSON for AOs, named ground and Kings; Frank draws his own overview from the same tiles.
 
-The world is persistent and player-shaped. Ground gets named. Events enter the permanent record. MapTiler powers the theater map.
+The world is persistent and player-shaped. Ground gets named. Events enter the permanent record. Our own OpenStreetMap tiles power the theater map.
 
 | File | What it does |
 | --- | --- |
-| `named_ground.py` | Any player can name ground after a battle: the name is permanent world history in D1. Frank registers it. MapTiler renders the label on the theater map. |
+| `named_ground.py` | Any player can name ground after a battle: the name is permanent world history in D1. Frank registers it. The theater map renders the label on the theater map. |
 | `world_history.py` | Permanent event log: battles, accords concluded, named ground, legends added, kings crowned. Immutable append-only, backed by D1. |
 | `theater_map.py` | Map payload for Godot (key-free tiles via the worker + GeoJSON) and Frank's own strategic-overview PNG (stitched tiles, disk-cached, parallel fetch). |
 | `territory.py` | AO ownership and control system: capture, hold, contest mechanics. Territory at stake in accords and King of Theater. |
@@ -153,7 +153,7 @@ The world is persistent and player-shaped. Ground gets named. Events enter the p
 - Any player can name ground after a significant battle in that AO
 - The name is submitted to Frank, Frank registers it in D1
 - A named ground entry carries: player\_id, callsign, battle\_id, ground\_name, ts, theater coordinates
-- MapTiler renders the name on the map permanently
+- The theater map renders the name permanently
 - Names can never be removed — only overwritten by a larger battle in the same AO (Frank determines significance by casualty count and accord outcomes)
 
 ## Phase 6 — Player-Run World
@@ -181,34 +181,28 @@ Players run the world. The tribunal decides life and death. King of Theater is e
 
 **Disruptor role:** A player who holds the disruptor token can break any accord in their AO — once, per accord cycle. The disruptor is named in world history. They lose the token after use.
 
-## MapTiler Integration
+## Maps — our own OpenStreetMap (MapTiler dropped Oct 5)
 
-Status: **WIRED** (Oct 5) — key is in the vault (`maptiler.env`); raster tiles verified live; the plan has no Static Maps API (403), so snapshots are rendered by Frank instead. Godot draws tiles through the worker's `/tiles` proxy.
+Status: **BUILT** (Oct 5). Deploy step 6 in `game/worker/DEPLOY.md` switches the live worker over.
 
-MapTiler powers the theater map, named ground labels, AO boundaries, and strategic overview. The key goes into the Phoenix vault (`F:\Phoenix\Vault\secrets\`) and is pulled by `theater_map.py` at runtime — never hardcoded, never in the repo.
+**Why MapTiler is out:** its terms forbid what Phoenix needs. They forbid serving tiles through our own
+server (the key-hiding proxy), caching them server-side, and making static images from them (Frank's
+snapshots). The worker's requests were refused (403) for exactly that reason. JW: self-host. Same
+lesson as Firebase: no single vendor's terms sit under the game.
 
-| Feature | MapTiler endpoint | Phoenix hook |
+**What replaced it (no vendor, no key):**
+
+| Piece | File | What it does |
 | --- | --- | --- |
-| Theater base map | Maps API — GL JS | `theater_map.py` render call |
-| AO boundaries | GeoJSON overlay | `territory.py` serializes to GeoJSON |
-| Named ground labels | Custom style layer | `named_ground.py` → D1 → MapTiler style |
-| King of Theater marker | Point overlay | `king_theater.py` broadcasts via Helix-E |
-| Strategic overview | Static map export | Session snapshot, stored in R2 |
+| Map data | OpenStreetMap via the Protomaps daily planet build | © OpenStreetMap contributors, ODbL: credit only |
+| Theater cut | `game/map_extract.py`, `game/pmtiles.py` | Reads only the theater boxes (+25 % margin) by HTTP range requests, writes one PMTiles archive. The Ardennes test theater was 32 MB read of a 138 GB planet in 12.6 s, tiles byte-identical |
+| Custody | `hsf-intake.sh` | The archive goes through Frank's import method like everything else |
+| Serving | `game/worker/pmtiles.mjs` | sacrifice-worker reads tiles from its own `sacrifice-maps` bucket (never the clone pool: an R2 binding can write) |
+| Godot | `/tiles/{z}/{x}/{y}.mvt` | OSM vector tiles, zoom 0–15. The client draws them in its own style |
+| Frank's overview | `game/theater_map.py`, `game/mvt.py` | Draws the theater from our vector tiles (terrain, water, roads, towns, then villages as you zoom) with the game layers on top, in about 3 s |
 
-**Key storage protocol:**
-
-1. JW puts `MAPTILER_API_KEY` into the vault at `F:\Phoenix\Vault\secrets\maptiler.env`
-2. Frank loads it from the vault at runtime — same pattern as `STRIPE_SECRET_KEY_LIVE`
-3. `theater_map.py` reads it from the environment, never from a config file in the repo
-4. Rotate: update the vault file, Frank picks it up on next load
-
-**Named ground write flow:**
-
-1. Battle ends in an AO, player submits a name
-2. Frank validates: was there a real battle here? (checks jacket entries and accord history for the AO)
-3. Frank writes to D1: `named_ground` table with coordinates, name, player\_id, battle\_id
-4. `theater_map.py` pulls the D1 record and issues a MapTiler style update — the label appears on the map for all players
-5. The name is permanent. Frank never deletes it.
+**Adding a theater:** re-run the extract with every theater's `--bbox`, intake it, `r2 object put`. The worker picks
+the new file up by its etag; no redeploy.
 
 ## Revenue Model and Funding
 
@@ -249,7 +243,7 @@ The game is the second funding leg — deliberately earmarked toward API-tier AI
 | Persistence | D1 (Cloudflare) | Custody chain for all game state — append-only immutable ledger |
 | Asset storage | R2 (Cloudflare) | Vehicle photos, world snapshots, footage clips |
 | Game state API | Cloudflare Worker | Exposes D1 game state to the front end over HTTPS |
-| Map layer | MapTiler API | Theater map, named ground, AO boundaries |
+| Map layer | Our own OpenStreetMap tiles (PMTiles in R2) | Theater map, named ground, AO boundaries |
 | AI layer | Three-tier (subscription / API / Ollama-local) | Companion AI, MOS assessment, tribunal assist |
 
 **Front end — Godot:**
