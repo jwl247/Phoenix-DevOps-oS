@@ -9,6 +9,8 @@
 #   raw     — the plain disk image (loop, direct I/O)
 #   helix   — dm-helix in front of it, governor normal
 #   norelief— dm-helix with the governor's relief (compression / Strand B moves) switched off
+#   linear  — a do-nothing device-mapper layer (dm-linear): the fair control for "is it Helix,
+#             or just being stacked under device-mapper?"   (MODES="raw linear helix norelief")
 # and, at the highest client count, a CPU profile of the Helix run (perf), so the hot code shows.
 # Absolute numbers on old hardware mean little; the RATIOS on the same box are the evidence.
 set -u
@@ -44,11 +46,19 @@ helix_up() {   # $1 = relief 1/0
   sudo dmsetup create helix0 --table "0 $SZ helix $LOOP $RAM_MB"
 }
 helix_down() { sudo dmsetup remove helix0; sudo rmmod helix; }
+MODES=${MODES:-"raw helix norelief"}
+has() { [[ " $MODES " == *" $1 "* ]]; }
 
 echo "host: $(hostname) cpu: $(nproc)x $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs) ram: $(free -g | awk '/Mem:/{print $2}')G" | tee "$OUT/summary.txt"
 TOP=$(echo $CLIENTS | tr ' ' '\n' | sort -n | tail -1)
 for c in $CLIENTS; do
-  run_dbench "$LOOP" raw "$c"
+  has raw && run_dbench "$LOOP" raw "$c"
+  if has linear; then
+    sudo dmsetup create linear0 --table "0 $SZ linear $LOOP 0"
+    run_dbench /dev/mapper/linear0 linear "$c"
+    sudo dmsetup remove linear0
+  fi
+  has helix || continue
   helix_up 1
   if [ "$c" = "$TOP" ] && command -v perf >/dev/null; then
     ( sleep $((SECS/3)); sudo perf record -a -g -o "$OUT/perf-helix-$c.data" -- sleep 15 >/dev/null 2>&1 ) &

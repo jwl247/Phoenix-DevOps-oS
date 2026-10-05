@@ -51,6 +51,24 @@ Not diagnosed yet. The candidates: per-I/O Dandelion and lane locking (`b_lock` 
    - every repair logged
    - compliance notes for availability (A1.2), integrity (SI), audit (AU)
 
+## Added 2026-10-05 evening (tuning on pbmIII, BENCHMARKS.md §5c)
+
+- **Opened up, the 48-client wound mostly closes: 0.26× → 0.87×.** It was starvation (256 MiB) on weak
+  hardware. Relief (compression / Strand B moves) costs nothing measurable.
+- **She has been tested half-equipped.** Single strand only (no Strand B), and without her paging manager.
+  The kernel Helix reads memory pressure herself (`helix_mem_pressure_pct`). The Doppelganger pager
+  (`sector4/paging_helix.py`, uncommitted from 10/3) is written for the userspace `helix_vram` and **never
+  wired to the kernel module**. The Linux swap manager (`sector4/paging.py`) isn't on pbmIII.
+- **New step 1b: wire the pager to the kernel Helix** through her stats/control channel (`/proc/helix`,
+  GET_STATS ioctl). It reads her tiers and grows or shrinks Strand B (Doppelgangers) by velocity.
+  Then **test her whole**: double strand (Strand B on a second image) + pager, same harness
+  (`helix_tune.sh`), vs raw and vs a do-nothing `dm-linear` layer (the fair control for device-mapper stacking).
+- Her write path is already write-around (writes go to the origin; the cache is only invalidated;
+  `warm_write` is opt-in). The remaining gap on write-heavy loads is per-write invalidation plus stacking.
+  The dm-linear control tells us how much is which.
+- Box rules (JW): pbmIII keeps its desktop. Its numbers are ratios, not absolutes. The final verdict runs
+  on modern hardware (rented for an hour or two, with JW's OK).
+
 ## What the game actually needs from Helix, and when
 
 - **Now (slice):** the event ring. Done. The game server's state is the world-history chain plus D1, so it
