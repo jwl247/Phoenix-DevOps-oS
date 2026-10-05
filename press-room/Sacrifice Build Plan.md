@@ -174,6 +174,25 @@ Phase 6 resumes once the slice is played.
 | 5 | Companion v0 (K.I.T.T.) | A text companion that reads the world through declared tools and surfaces the one decision that matters ("Reaper challenges you for Hill 400, sign?"). **Ollama-local first**, API tier optional |
 | 6 | One theater, invite-only | The Ardennes, up to ~20 players: JW's son and friends first |
 
+**Built to expand and patch (JW, Oct 5).** Every piece of the slice follows these rules:
+
+- **Actions are plug-ins.** Each player action (enlist, propose accord, open battle…) is one declared
+  action with a name, a version, an input schema, a permission tier and a handler. Adding a feature
+  means registering a new action, not editing the server. Clients learn the action list from the server.
+- **Versioned everywhere.** API, actions, saved state and the client protocol each carry a version. Old
+  clients get a clear "update needed", never broken state.
+- **Patches are data first.** Rules and numbers (stats, costs, requirements, map theaters, motor pool) live
+  in versioned content packs, not code, so most balance changes ship with no code change at all.
+- **Patches go through Frank.** Code and content packs are intaked like everything else (hex identity,
+  custody in D1, bytes in R2). A server picks up a new pack by its hash, and a bad patch rolls back to
+  the previous version in one step.
+- **State survives patches.** The world is an append-only event log plus snapshots; a patch never edits
+  history. Migrations are written, versioned and tested before a patch ships.
+- **Hot where safe.** Content packs reload without a restart. Code patches swap in between ticks with
+  players' sessions kept.
+- **The client patches the same way.** Godot loads game content as packs from our R2, checked against D1,
+  so most updates are a small pack download, not a reinstall.
+
 **Not in the slice (later, on purpose):** real-time battlefield simulation, air and naval, the deep MOS training
 sim, payments, Red Baron, Sacrifice, Head & Shoulders (Phase 6), more theaters.
 
