@@ -193,6 +193,10 @@ def render(cfg: dict, name: str, pki_dir: str, sep: str) -> str:
     - port: any
       proto: any
       group: servers"""
+    elif linux:
+        inbound = """    - port: 22
+      proto: tcp
+      group: jerry"""
     else:
         inbound = """    - port: 3389
       proto: tcp
@@ -220,9 +224,9 @@ punchy:
   respond: true
 
 relay:
-  am_relay: {str(is_lh).lower()}
+  am_relay: {str(is_lh or bool(h.get("relay"))).lower()}
   use_relays: true
-  relays: {json.dumps([] if is_lh else lh_ips)}
+  relays: {json.dumps([ip for ip in h.get("relays", lh_ips) if ip != h["ip"]])}
 
 tun:
   dev: {"nebula1" if linux else "PhoenixMesh"}
@@ -459,19 +463,30 @@ sudo /usr/local/bin/nebula -test -config /etc/nebula/config.yml
 sudo systemctl daemon-reload
 sudo systemctl enable nebula >/dev/null 2>&1
 sudo systemctl enable --now phoenix-mesh-heal.timer >/dev/null 2>&1
-sudo systemctl restart nebula
-sleep 2
-systemctl is-active nebula
-ip -br addr show nebula1 | awk '{print $1, $3}'
+__RESTART__
 echo "heal timer: $(systemctl is-active phoenix-mesh-heal.timer)"
 echo "version: $(sudo cat /etc/nebula/VERSION)"
 cd ~ && rm -rf ~/phoenix-mesh-stage
 """
+    over_mesh = h["ssh"].split("@", 1)[1].startswith("10.42.")
+    if over_mesh:
+        script = script.replace("__RESTART__\n", "sudo systemd-run --quiet --on-active=3 --unit=phoenix-nebula-restart-$RANDOM "
+                                "systemctl restart nebula\necho restart-scheduled\n")
+    else:
+        script = script.replace("__RESTART__\n", "sudo systemctl restart nebula\nsleep 2\nsystemctl is-active nebula\n"
+                                "ip -br addr show nebula1 | awk '{print $1, $3}'\n")
     # Send bytes with LF line endings only. Text mode on Windows would send CRLF,
     # and every remote command fails (a stray CR on each line).
     r = subprocess.run(_ssh(h) + ["bash -s"], input=script.encode(), capture_output=True)
     out = r.stdout.decode(errors="replace").strip()
     print(out)
+    if over_mesh and r.returncode == 0 and "restart-scheduled" in out:
+        import time
+        time.sleep(12)                                       # restart happens, mesh re-handshakes
+        v = subprocess.run(_ssh(h) + ["systemctl is-active nebula; ip -br addr show nebula1 | awk '{print $1, $3}'"],
+                           capture_output=True)
+        out = v.stdout.decode(errors="replace").strip()
+        print(out)
     if r.returncode or "active" not in out.splitlines() or "nebula1" not in out:
         print(r.stderr.decode(errors="replace").strip())
         raise SystemExit(f"{a.host}: install FAILED — nebula is not running")

@@ -3,10 +3,10 @@
   "network": "10.42.0.0/16",
   "port": 4242,
   "lighthouses": {
-    "pbmiii": [
+    "awslh": [
       "mesh-lh1.authenticcoder.com:4242",
-      "[2605:59ca:531b:9008:d685:64ff:fea3:84ed]:4242",
-      "192.168.1.190:4242"
+      "44.195.192.107:4242",
+      "[2600:1f18:2861:6e00:d144:4764:7c8b:8034]:4242"
     ]
   },
   "hosts": {
@@ -23,12 +23,13 @@
       "ip": "10.42.0.10",
       "groups": [
         "servers",
-        "lighthouse"
+        "relay"
       ],
       "os": "linux",
-      "note": "HP - home Starlink router (192.168.1.190; Starlink = CGNAT, no IPv4 inbound/port forward) - lighthouse over public IPv6 (mesh-lh1 AAAA) + relay",
+      "note": "HP - home Starlink router 192.168.1.190. Starlink = CGNAT and filters inbound IPv6, so it can't be a lighthouse; it dials out to awslh and relays for the Compaq on the home side",
       "ssh": "a@192.168.1.190",
-      "ssh_key": "phoenix_third_debian_ed25519"
+      "ssh_key": "phoenix_third_debian_ed25519",
+      "relay": true
     },
     "compaq": {
       "ip": "10.42.0.11",
@@ -36,7 +37,21 @@
         "servers"
       ],
       "os": "linux",
-      "note": "home server \u2014 reaches the mesh through pbmiii"
+      "note": "home server \u2014 reaches the mesh through pbmiii",
+      "relays": [
+        "10.42.0.10",
+        "10.42.0.2"
+      ]
+    },
+    "awslh": {
+      "ip": "10.42.0.2",
+      "groups": [
+        "lighthouse"
+      ],
+      "os": "linux",
+      "note": "AWS Lightsail us-east-1 nano ($5/mo), static IPv4 44.195.192.107 + IPv6 - always-reachable lighthouse + relay (works through Starlink CGNAT and hotel NAT)",
+      "ssh": "admin@10.42.0.2",
+      "ssh_key": "phoenix_lighthouse_aws_ed25519"
     }
   }
 }
