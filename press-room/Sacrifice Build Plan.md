@@ -8,7 +8,7 @@ Every phase is finished before the next one opens. No exceptions, no "we'll come
 
 Done means: all files in the phase are written, tested, wired into Frank, committed to the repo, and passing. When the phase is done, it is done. We move and we do not return.
 
-Current position: Phase 3 DONE (Oct 5). Phase 4 is next — vehicles and equipment. All four files, fully delivered, before Phase 5 opens.
+Current position: Phase 4 DONE (Oct 5). Phase 5 is next — living world (needs the MapTiler key in the vault).
 
 ## Vision and Covenant
 
@@ -84,7 +84,19 @@ Status: **COMPLETE** (Oct 5) — all four modules approved, wired through the Fr
 
 ## Phase 4 — Vehicles and Equipment
 
-Status: **NOT STARTED** — design complete, art pipeline defined.
+Status: **COMPLETE** (Oct 5) — `vehicle.py`, `equipment.py`, `vehicle_world.py` (FrankWorld mixin), `asset_intake.py`; `game/tests/test_phase4.py` 24/24, Phase 3 + Helix suites still green.
+
+**Upgrades (JW: "make them upgradeable") — built to GDD §4.3, quality vs power enforced by structure:**
+
+- POWER upgrades (armor, engine, weapons, cargo — 3 tiers) are **earned only**: the commander's jacket must meet the rank/battles/commendations/honour requirement. Paying for one is refused.
+- QUALITY upgrades (optics, comms — reliability, repair rate) are earned **or** paid (receipt required). The registry refuses any upgrade that mixes the two.
+- One per slot, tiers climb in order, an engineer (92A) installs from theater supply. The jacket records earned vs paid. Lose the vehicle, lose its upgrades; a captured vehicle keeps them.
+- Personal gear works the same way: STANDARD issued to everyone, IMPROVED/SUPERIOR earned or paid, item power identical at every quality.
+- Paid gear and paid upgrades are written into every accord's `pay_advantages_disclosed` by Frank before signing (GDD §7.4).
+
+**Art is upgradeable too:** every model starts on a placeholder. `python -m game.asset_intake add <model> <photo>` stages the photo under a content name (avoids intake's basename collision), intakes it, checks the pool's hash, and adds it as a new art version; the local rembg cutout becomes LIVE. No rembg → the photo waits as pending (`promote <model> <v>`) or `--no-cutout` uses it as shot. Old versions are never deleted. `list` shows every model's art.
+
+**Motor pool (generic names until JW's photos):** mbt, ifv, apc, attack_helo, lift_helo, recon_drone, patrol_boat, howitzer, supply_truck, recovery. Supply chain: depots per theater; fielding, repair and upgrades draw supply; logistics vehicles haul it between theaters.
 
 **Vehicle art — real photography:** JW shoots real vehicles. Photos intake through Frank's import method: `intake.sh` → hex identity → sidecar.json → clone pool (R2) → D1 custody receipt. The asset lives at its TAV address. The game engine pulls it by address — no manual asset management. Background removal and edge cleanup as a post-intake step before the asset is marked live.
 
@@ -111,7 +123,7 @@ Status: **NOT STARTED** — design complete, art pipeline defined.
 3. Hex ID generated, sidecar.json written, R2 upload
 4. D1 custody receipt: asset is now addressable
 5. `asset_intake.py` links the TAV address to a vehicle type in the registry
-6. Background removal pass (Adobe Firefly API or local rembg) marks asset live
+6. Background removal pass (local rembg — no vendor) marks asset live
 
 ## Phase 5 — Living World
 
@@ -240,7 +252,7 @@ JW shoots photo
   → intake.sh → hex identity + sidecar.json
   → R2 (clone pool) + D1 custody receipt
   → asset_intake.py registers TAV address in vehicle registry
-  → background removal pass (rembg or Adobe Firefly API)
+  → background removal pass (local rembg)
   → asset marked live in D1
   → Godot client loads asset from R2 by TAV address
 ```

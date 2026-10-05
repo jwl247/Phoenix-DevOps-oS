@@ -25,6 +25,7 @@ Integration points:
   - game.hospital for wound management
   - game.archive for permadeath
   - game.jacket for service records
+  Phase 4: game.vehicle_world (mixin) — vehicles, upgrades, equipment, supply
   Phase 3:
   - game.accord / game.tribunal / game.king_theater / game.footage —
     every accord, verdict, crown and clip passes through this gate, lands in
@@ -60,6 +61,8 @@ from .tribunal    import (
     execute_sentence, world_history_entry as tribunal_history,
 )
 from . import king_theater as kt
+from .vehicle_world import VehicleWorldMixin
+from .vehicle import VehicleRegistry
 from .footage     import (
     FootageClip, FootageType, AOKillBoard, record_footage, set_r2_key,
     try_flag_top_kill, jacket_entry as footage_jacket,
@@ -134,7 +137,7 @@ def _side_outcome(outcome: AccordOutcome, role: str) -> str:
 # FrankWorld — the one gate to game state
 # ---------------------------------------------------------------------------
 
-class FrankWorld:
+class FrankWorld(VehicleWorldMixin):
     """
     The Phoenix world orchestrator.
     All game state changes go through here.
@@ -154,6 +157,7 @@ class FrankWorld:
         frank=None,             # franken5.Frank5 instance (optional — late-bind)
         archive: Optional[Archive] = None,
         frank_key: Optional[bytes] = None,   # Frank's own signing key (compelled accords)
+        registry: Optional[VehicleRegistry] = None,   # Phase 4 motor pool
     ):
         self._frank   = frank
         self._archive = archive or Archive()
@@ -175,6 +179,9 @@ class FrankWorld:
         self._clips:       dict[str, FootageClip]    = {}
         self._kill_boards: dict[str, AOKillBoard]    = {}
         self._history:     list[dict]                = []   # append-only world history
+
+        # Phase 4
+        self._init_vehicle_world(registry)
 
         log.info("FrankWorld online — Frank witnesses all")
 
@@ -333,6 +340,7 @@ class FrankWorld:
         )
         self._wound_history[card.card_id] = history
 
+        self._leave_vehicles(card)
         if severity == WoundSeverity.WOUNDED:
             card.wound("wound")
         else:
@@ -396,6 +404,7 @@ class FrankWorld:
         log.info(f"KIA: {card.callsign} — {cause} (honour={honour:.2f})")
         self._broadcast_event("KIA", card, {"cause": cause, "honour": honour})
         self._fall_from_thrones(card)
+        self._vehicle_fallout(card)
         return entry
 
     # -----------------------------------------------------------------------
@@ -503,6 +512,13 @@ class FrankWorld:
             raise ValueError(f"{terms.accord_type.value} accords are issued by Frank, not proposed")
         challenger = self._live_card(derive_player_id(challenger_key), "Challenger")
         defender   = self._live_card(defender_id, "Defender")
+        # Transparency Covenant (GDD §7.4): Frank writes every paid advantage
+        # either side holds into the terms before they are hashed and signed.
+        disclosed = dict(terms.pay_advantages_disclosed)
+        for role, card in (("challenger", challenger), ("defender", defender)):
+            for k, val in self.paid_advantages(card.player_id).items():
+                disclosed[f"{role}:{card.callsign}:{k}"] = val
+        terms.pay_advantages_disclosed = disclosed
         accord = propose_accord(
             challenger.player_id, challenger.card_id, challenger_key,
             defender.player_id, defender.card_id, terms,

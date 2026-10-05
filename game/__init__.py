@@ -85,4 +85,20 @@ __all__ = [
     "record_footage", "set_r2_key", "try_flag_top_kill",
     "get_top_kills", "kill_rank",
     "footage_jacket_entry", "footage_history_entry",
+    # Phase 4
+    "Provenance", "Quality", "ServiceRequirement", "ItemSpec", "ItemCategory",
+    "Item", "Loadout", "default_items",
+    "VehicleClass", "VehicleModel", "VehicleRegistry", "Vehicle", "VehicleStatus",
+    "UpgradeSpec", "UpgradeSlot", "UpgradeKind", "AssetSlot", "AssetStatus",
+    "default_registry",
 ]
+
+# Phase 4
+from .equipment import (
+    Provenance, Quality, ServiceRequirement, ItemSpec, ItemCategory, Item, Loadout,
+    default_items,
+)
+from .vehicle import (
+    VehicleClass, VehicleModel, VehicleRegistry, Vehicle, VehicleStatus,
+    UpgradeSpec, UpgradeSlot, UpgradeKind, AssetSlot, AssetStatus, default_registry,
+)
