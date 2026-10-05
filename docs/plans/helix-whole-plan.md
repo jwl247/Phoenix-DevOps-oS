@@ -84,3 +84,12 @@ Not diagnosed yet. The candidates: per-I/O Dandelion and lane locking (`b_lock` 
 - Go or no-go on steps 1–4 (consolidation; touches the 10/3 uncommitted Helix work, which should be committed or
   reviewed first).
 - **The Compaq on the network** for step 5. dm-helix lives there.
+
+## Open design question (JW, 2026-10-05): don't split her strands across RAM and disk
+
+JW disagrees with the current kernel design, where Strand A lives in RAM and Strand B on a separate disk device.
+Reading of the original intent (to confirm with JW): Helix is a **double-strand memory engine**. Both strands
+live in memory, twinned (single-pass, peer-optimized), with zlib 5 to fit more. Disk is not one of her strands:
+the **paging manager owns the disk side**, and his Doppelgangers are the temporary disk extension while he clears
+and feeds her. If confirmed, that becomes the target, and the kernel's "Strand B on a device" moves to the
+paging manager. No rebuild until JW confirms.
