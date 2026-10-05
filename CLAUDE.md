@@ -205,7 +205,10 @@ sector4/
 ### Helix — double strand memory engine
 - 600–687k ops/s governed Phoronix run (pre-2026-03-03); dm-helix 177,699 IOPS warm on pbm3 — 100% hit rate only when the working set fits her tiers (41.7% under forced pressure); see docs/helix/BENCHMARKS.md
 - Quadralingual — speaks 4 languages simultaneously
-- Twin single-pass, peer-optimized
+- Twin single-pass, peer-optimized. **JW's design, said more than once:** her two strands run side by side
+  (wider hallway), NOT RAM/disk tiers. Placement is deterministic, so nothing tracks blocks inside her.
+  Track at the doors (in before it arrives, out after it leaves). The paging manager clears and feeds her and owns
+  the disk side (Doppelgangers); he is not her governor. Plan: `docs/plans/helix-whole-plan.md`
 - zlib level 5 compression, 4GB of 8GB RAM (thermal limited)
 
 ### Frank — environment orchestrator
