@@ -8,7 +8,7 @@ Every phase is finished before the next one opens. No exceptions, no "we'll come
 
 Done means: all files in the phase are written, tested, wired into Frank, committed to the repo, and passing. When the phase is done, it is done. We move and we do not return.
 
-Current position: Phase 5 DONE (Oct 5) — the sacrifice-worker is built and tested but waits on JW's deploy (`game/worker/DEPLOY.md`). Phase 6 is next — player-run world. Client engine: **Godot 4.7.2** (downloaded Oct 5).
+Current position: Phase 5 DONE and LIVE (Oct 5): sacrifice-worker deployed, our own OpenStreetMap maps serving. **Next: the First Playable Slice** (below), then Phase 6. Client engine: **Godot 4.7.2**.
 
 ## Vision and Covenant
 
@@ -155,6 +155,33 @@ The world is persistent and player-shaped. Ground gets named. Events enter the p
 - A named ground entry carries: player\_id, callsign, battle\_id, ground\_name, ts, theater coordinates
 - The theater map renders the name permanently
 - Names can never be removed — only overwritten by a larger battle in the same AO (Frank determines significance by casualty count and accord outcomes)
+
+## First Playable Slice — next, before Phase 6
+
+Added Oct 5 (JW). Two people can't ship the whole GDD at once. Two people *can* ship a sharp core and grow it.
+The slice is the smallest game that puts real people in the world and shows what makes Sacrifice
+different: a permanent world where your name, your word (accords) and your death mean something.
+Phase 6 resumes once the slice is played.
+
+**In the slice:**
+
+| # | Piece | What it is |
+| --- | --- | --- |
+| 1 | Frank game server | FrankWorld as a long-running service on our own hardware: an authenticated action API (enlist, accord, battle, tribunal, crown, name ground), every state change persisted so a restart loses nothing, world history synced to the live worker |
+| 2 | Player identity | Draft card from a master key that stays on the player's device; every action signed with it (the accord signing already works this way) |
+| 3 | Godot client v0 | The strategic map on our own OSM tiles: AOs and control, Kings, named ground, the world-history feed, the jacket viewer, and the accord flow (name it, set the rules, sign, see the outcome) |
+| 4 | Battles v0 | Squad-sized, top-down on the real map, resolved by Frank on a tick, not real-time. Casualties, an officer holding ground naming it, and AO control changing hands all run through what is already built |
+| 5 | Companion v0 (K.I.T.T.) | A text companion that reads the world through declared tools and surfaces the one decision that matters ("Reaper challenges you for Hill 400, sign?"). **Ollama-local first**, API tier optional |
+| 6 | One theater, invite-only | The Ardennes, up to ~20 players: JW's son and friends first |
+
+**Not in the slice (later, on purpose):** real-time battlefield simulation, air and naval, the deep MOS training
+sim, payments, Red Baron, Sacrifice, Head & Shoulders (Phase 6), more theaters.
+
+**Done means:** five real people enlist from the Godot client, fight for an AO, sign and conclude an accord, run
+a tribunal, and see it all in world history. Then the server restarts and the world is exactly where they left it.
+
+**Why this order:** the server, persistence and rules are mostly built (Phases 1–5). The slice adds the parts
+that let a person *touch* them. Everything after it gets designed from what real players actually do.
 
 ## Phase 6 — Player-Run World
 
