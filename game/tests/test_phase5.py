@@ -395,8 +395,8 @@ class TestTheaterMap(WorldCase):
         src = tm.TileSource(cache_dir=Path(self._tmp) / "tiles", fetch=fetch, key="k")
         out, sha3 = self.w.theater_snapshot("Ardennes", Path(self._tmp) / "snap.png", src, 640, 480)
         from PIL import Image
-        img = Image.open(out)
-        self.assertEqual(img.size, (640, 480))
+        with Image.open(out) as img:
+            self.assertEqual(img.size, (640, 480))
         self.assertEqual(len(sha3), 128)
         first = len(calls)
         self.assertGreater(first, 0)
