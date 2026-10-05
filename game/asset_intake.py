@@ -99,21 +99,53 @@ def registry_path() -> Path:
     return Path(os.environ.get("PHOENIX_VEHICLE_REGISTRY", str(_game_root() / "vehicle_registry.json")))
 
 
+MAX_EDGE = 4096   # long edge in pixels — plenty for the game, keeps assets lean
+
+
+def _open_photo(src: Path):
+    from PIL import Image
+    if src.suffix.lower() in (".heic", ".heif"):
+        try:
+            import pillow_heif
+            pillow_heif.register_heif_opener()
+        except ImportError:
+            raise ValueError(f"{src.name}: iPhone HEIC photo — set Camera → Formats → "
+                             "'Most Compatible' (JPEG), or convert it first") from None
+    try:
+        return Image.open(src)
+    except Exception as e:
+        raise ValueError(f"{src.name}: not a readable photo ({e})") from None
+
+
 def stage_photo(src: Path, model_id: str, suffix: str = "") -> tuple[Path, str]:
-    """Copy into staging under a content name. Returns (staged path, sha3-512)."""
+    """
+    Clean a phone photo and stage it under a content name. Returns (staged
+    path, sha3-512 of the ORIGINAL file — so the same shot is recognised again).
+
+    Phone photos are cleaned before anything leaves this machine:
+      - turned the right way up (phones store a rotate flag Godot ignores)
+      - every bit of metadata dropped — GPS position, phone model, time
+      - long edge capped at MAX_EDGE, saved as a high-quality JPEG
+    """
+    from PIL import ImageOps
     src = Path(src)
     if not src.is_file():
         raise FileNotFoundError(f"Photo not found: {src}")
-    ext = src.suffix.lower()
-    if ext not in PHOTO_EXTS:
+    if src.suffix.lower() not in PHOTO_EXTS:
         raise ValueError(f"{src.name}: not a photo ({sorted(PHOTO_EXTS)})")
     if not model_id.replace("_", "").isalnum():
         raise ValueError(f"Bad model id: {model_id!r}")
     sha3 = _digest(src, "sha3_512")
-    out = staging_dir() / f"{sha3[:16]}_{model_id}{suffix}{ext}"
+    out = staging_dir() / f"{sha3[:16]}_{model_id}{suffix}.jpg"
     out.parent.mkdir(parents=True, exist_ok=True)
     if not out.exists():
-        shutil.copy2(src, out)
+        with _open_photo(src) as im:
+            im = ImageOps.exif_transpose(im).convert("RGB")      # upright, no alpha
+            im.thumbnail((MAX_EDGE, MAX_EDGE))
+            clean = im.copy()                                      # pixels only — no info/exif carried
+        tmp = out.with_suffix(".tmp")
+        clean.save(tmp, "JPEG", quality=95, optimize=True, exif=b"")
+        tmp.replace(out)
     return out, sha3
 
 
@@ -232,27 +264,34 @@ def add_vehicle_photo(
     intaker:      Optional[Intaker] = None,
     cutter:       Optional[Cutter]  = None,
     no_cutout:    bool = False,
+    make_live:    bool = True,
 ) -> PhotoResult:
-    """Photo → intake → new art version → (cutout → intake → LIVE)."""
+    """
+    Photo → clean → intake → new art version → (cutout → intake → LIVE).
+    make_live=False files it as a pending alternate (`promote` picks it later).
+    """
     model   = registry.model(model_id)
     intaker = intaker or HsfIntaker()
     cutter  = cutter or RembgCutter()
 
-    staged, sha3 = stage_photo(photo, model_id)
+    staged, src_sha3 = stage_photo(photo, model_id)
     for v in model.asset.versions:
-        if v.sha3_512 == sha3 and v.source == "photo":
+        if v.source_sha3 == src_sha3 and v.source == "photo":
             raise ValueError(f"That photo is already version {v.version} of {model_id}")
     rec = intaker.intake(staged)
-    if rec.sha3_512 != sha3:
+    if rec.sha3_512 != _digest(staged, "sha3_512"):
         raise RuntimeError("Intake receipt does not match the staged photo")
+    ids = dict(tav=rec.tav, hex_id=rec.hex_id, sha3_512=rec.sha3_512,
+               filename=rec.filename, source_sha3=src_sha3)
 
+    if not make_live:
+        pv = model.asset.add(AssetStatus.PENDING_CUTOUT, "photo", **ids)
+        return PhotoResult(model_id, pv, None, model.asset.live(), f"alternate kept as v{pv.version}")
     if no_cutout:
-        pv = model.asset.add(AssetStatus.LIVE, "photo", tav=rec.tav, hex_id=rec.hex_id,
-                             sha3_512=sha3, filename=rec.filename)
+        pv = model.asset.add(AssetStatus.LIVE, "photo", **ids)
         return PhotoResult(model_id, pv, None, pv, "photo live as shot (no cutout)")
 
-    pv = model.asset.add(AssetStatus.PENDING_CUTOUT, "photo", tav=rec.tav, hex_id=rec.hex_id,
-                         sha3_512=sha3, filename=rec.filename)
+    pv = model.asset.add(AssetStatus.PENDING_CUTOUT, "photo", **ids)
     cut_path = staged.with_name(f"{staged.stem}_cutout.png")
     try:
         cutter.cut(staged, cut_path)
@@ -266,6 +305,42 @@ def add_vehicle_photo(
     cv = model.asset.add(AssetStatus.LIVE, "cutout", tav=crec.tav, hex_id=crec.hex_id,
                          sha3_512=crec.sha3_512, filename=crec.filename, derived_from=pv.version)
     return PhotoResult(model_id, pv, cv, cv, f"cutout live as v{cv.version}")
+
+
+def photos_in(path: Path) -> list[Path]:
+    """One photo, or every photo in a folder (a whole phone burst), oldest first."""
+    path = Path(path)
+    if path.is_dir():
+        found = [p for p in path.iterdir() if p.is_file() and p.suffix.lower() in PHOTO_EXTS]
+        return sorted(found, key=lambda p: (p.stat().st_mtime, p.name))
+    return [path]
+
+
+def add_vehicle_photos(
+    registry:  VehicleRegistry,
+    model_id:  str,
+    path:      Path,
+    intaker:   Optional[Intaker] = None,
+    cutter:    Optional[Cutter]  = None,
+    no_cutout: bool = False,
+) -> tuple[list[PhotoResult], list[str]]:
+    """
+    A folder of shots for one vehicle. The first new photo becomes the art;
+    the rest are kept as alternates — `list` shows them, `promote` picks one.
+    Shots already in the pool are skipped. Returns (results, skipped names).
+    """
+    results, skipped = [], []
+    for p in photos_in(path):
+        try:
+            r = add_vehicle_photo(registry, model_id, p, intaker, cutter, no_cutout,
+                                  make_live=not results)
+            results.append(r)
+        except ValueError as e:
+            if "already version" in str(e):
+                skipped.append(p.name)
+            else:
+                raise
+    return results, skipped
 
 
 # ---------------------------------------------------------------------------
@@ -283,9 +358,9 @@ def main(argv: Optional[list[str]] = None) -> int:
                                  description="Vehicle photos → Frank import → game art")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list", help="art status for every vehicle model")
-    a = sub.add_parser("add", help="intake a photo as a model's new art version")
+    a = sub.add_parser("add", help="intake a photo — or a folder of them — as a model's art")
     a.add_argument("model_id")
-    a.add_argument("photo", type=Path)
+    a.add_argument("photo", type=Path, help="a photo, or a folder of photos (a phone burst)")
     a.add_argument("--no-cutout", action="store_true", help="use the photo as shot")
     p = sub.add_parser("promote", help="make a pending photo version live")
     p.add_argument("model_id")
@@ -310,9 +385,14 @@ def _run(args) -> int:
                   f"{live.tav or '-':<12} pending={pend or '-'}")
         return 0
     if args.cmd == "add":
-        res = add_vehicle_photo(reg, args.model_id, args.photo, no_cutout=args.no_cutout)
+        results, skipped = add_vehicle_photos(reg, args.model_id, args.photo, no_cutout=args.no_cutout)
         reg.save(path)
-        print(f"{res.model_id}: {res.note} (photo TAV {res.photo.tav})")
+        for r in results:
+            print(f"{r.model_id}: {r.note} (photo TAV {r.photo.tav})")
+        if skipped:
+            print(f"skipped {len(skipped)} already in the pool: {', '.join(skipped)}")
+        if not results and not skipped:
+            print("no photos found")
         return 0
     if args.cmd == "promote":
         v = reg.model(args.model_id).asset.promote(args.version)

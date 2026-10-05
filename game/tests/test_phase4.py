@@ -337,9 +337,68 @@ class NoCutter:
 
 class TestArt(WorldCase):
     def photo(self, name, data):
+        """A real image file; its colour comes from `data`, so different data = different photo."""
+        from PIL import Image
         p = Path(self._tmp) / name
-        p.write_bytes(data)
+        fmt = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG"}.get(p.suffix.lower())
+        if fmt is None:
+            p.write_bytes(data)
+            return p
+        h = __import__("hashlib").sha256(data).digest()
+        Image.new("RGB", (64, 48), (h[0], h[1], h[2])).save(p, fmt)
         return p
+
+    def test_phone_photo_is_upright_and_carries_no_location(self):
+        from PIL import Image
+        src = Path(self._tmp) / "IMG_0001.jpg"
+        im = Image.new("RGB", (400, 300), (10, 120, 40))
+        exif = Image.Exif()
+        exif[0x0112] = 6                                    # "rotate 90° to view" — what phones write
+        exif[0x0110] = "Phone Model X"
+        exif[0x8825] = {1: "N", 2: (49.0, 54.0, 0.0), 3: "E", 4: (6.0, 10.0, 0.0)}   # GPS
+        im.save(src, "JPEG", exif=exif)
+        self.assertIn(0x8825, Image.open(src).getexif())    # the original really has GPS
+        staged, _ = ai.stage_photo(src, "mbt")
+        with Image.open(staged) as out:
+            self.assertEqual(out.size, (300, 400))           # turned upright
+            self.assertEqual(len(out.getexif()), 0)          # no GPS, no model, nothing
+            self.assertNotIn("exif", out.info)
+        self.assertNotIn(b"Phone Model X", staged.read_bytes())
+
+    def test_burst_folder_first_live_rest_alternates_rerun_skips(self):
+        import time as _t
+        burst = Path(self._tmp) / "burst"
+        burst.mkdir()
+        for i, name in enumerate(("IMG_1.jpg", "IMG_2.jpg", "IMG_3.jpg")):
+            p = self.photo(f"burst/{name}", f"shot {i}".encode())
+            os.utime(p, (1_700_000_000 + i, 1_700_000_000 + i))      # shot order
+        (burst / "notes.txt").write_text("not a photo")
+        reg = self.w.registry
+        results, skipped = ai.add_vehicle_photos(reg, "apc", burst, FakeIntaker(), FakeCutter())
+        self.assertEqual(len(results), 3)
+        self.assertEqual(results[0].live.source, "cutout")
+        statuses = [r.photo.status for r in results[1:]]
+        self.assertEqual(statuses, [AssetStatus.PENDING_CUTOUT] * 2)
+        self.assertEqual(self.w.vehicle_art("apc")["derived_from"], results[0].photo.version)
+        again, skipped = ai.add_vehicle_photos(reg, "apc", burst, FakeIntaker(), FakeCutter())
+        self.assertEqual((again, sorted(skipped)), ([], ["IMG_1.jpg", "IMG_2.jpg", "IMG_3.jpg"]))
+        reg.model("apc").asset.promote(results[2].photo.version)       # JW picks the best shot
+        self.assertEqual(self.w.vehicle_art("apc")["version"], results[2].photo.version)
+
+    def test_heic_without_support_says_what_to_do(self):
+        p = Path(self._tmp) / "IMG_0002.heic"
+        p.write_bytes(b"\x00\x00\x00\x18ftypheic")
+        with self.assertRaises(ValueError) as cm:
+            ai.stage_photo(p, "mbt")
+        self.assertIn("Most Compatible", str(cm.exception))
+
+    def test_huge_photo_is_capped(self):
+        from PIL import Image
+        src = Path(self._tmp) / "big.jpg"
+        Image.new("RGB", (6000, 4000), (1, 2, 3)).save(src, "JPEG")
+        staged, _ = ai.stage_photo(src, "mbt")
+        with Image.open(staged) as out:
+            self.assertEqual(max(out.size), ai.MAX_EDGE)
 
     def test_placeholder_until_photo_then_upgrade_keeps_history(self):
         reg = self.w.registry

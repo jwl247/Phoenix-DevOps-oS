@@ -96,6 +96,7 @@ class AssetVersion:
     sha3_512:     Optional[str] = None
     filename:     Optional[str] = None
     derived_from: Optional[int] = None    # cutout → the photo version it came from
+    source_sha3:  Optional[str] = None    # the phone's original file — same shot is recognised again
     ts:           float = field(default_factory=time.time)
 
     def to_dict(self) -> dict:
