@@ -178,6 +178,35 @@ empty dm layer at 6 and 12 clients and beats it at 48. The earlier "0.26× at 48
 design. She was also tested single-strand and without her paging manager (which clears and feeds her), so this is
 a floor.
 
+## 5d. Helix + her paging manager (he clears and feeds her): pbmIII, 2026-10-05
+
+A **model of her ingress job**. The origin is far: each read is delayed 10 ms by dm-delay, standing in for a
+network/R2 fetch. Strand B is local (SSD image, 512 MiB base, 4 GiB device). Strand A is 256 MiB. fio uses
+direct I/O and 40 s per run. Monitors were off for the run (heal timers paused, no profiler).
+Harness: `sector1/kernels/helix_pair_test.sh`. Pager: `sector4/paging_kernel_helix.py`.
+
+| Workload | Far origin | Helix alone | **Helix + paging manager** |
+|---|---|---|---|
+| Stream (8 readers, front to back, 64 KiB) | 41.7 MB/s, 12.0 ms | 41.4 MB/s, 12.1 ms | **62.4 MB/s (+51%), 8.0 ms (−34%)** |
+| Re-reads (random 4 KiB, zipf 1.1 over 3 GiB) | 2.6 MB/s, 12.0 ms | **7.2 MB/s (2.8×), 4.3 ms** | 7.1 MB/s, 4.4 ms |
+
+- **Streams: he makes the difference.** Alone she had 5 hits in 40 s. With him she was fed 574,104 blocks
+  (≈2.2 GiB) ahead of demand (271,309 warmed into her). He learned the patterns from her misses; no
+  hard-coded ranges.
+- **He's still capped by her intake.** Every stream's learned lead hit the 10 s maximum, so he was still behind.
+  Her warm path is one worker, one origin trip at a time (batched today: 512 KiB per trip, ~40× faster
+  than the old one-block path). Next: parallel warm lanes.
+- **Re-reads: he correctly stayed out.** No pattern, no prefetch (0 blocks fed, 0 wasted). Strand B never filled,
+  so no Doppelganger was needed. Helix alone gives 2.8× here.
+- **Doppelganger:** one spawn, +3,584 MiB up to the real 4 GiB device ceiling, no spam (ceiling bug fixed).
+
+Kernel changes behind this (dm_helix.c, target v3.1.0):
+- a control channel (`b_budget`, `prefetch`, `misses`)
+- a lock-free miss ring
+- batched warm reads (`HX_WARM_BATCH` 128)
+- teardown that abandons the warm queue instead of draining it (a full queue had hung `dmsetup remove`
+  for ~20 min; removal now takes 0.09 s)
+
 ## 6. Why older numbers understate her
 
 Her real configuration is L1 256 MB / L2 1024 MB / L3 3072 MB (about half the

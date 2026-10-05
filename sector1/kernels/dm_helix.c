@@ -73,6 +73,7 @@
 #define HX_B_WRITE_BATCH    64           /* B writer: blocks per lane per pass */
 #define HX_READ_WORKERS     8            /* parallel Strand B / slow-path readers */
 #define HX_PEAK_FLOOR       200          /* ops/s: never calibrate below this */
+#define HX_MISS_RING        4096         /* recent misses her paging manager reads (power of 2) */
 
 static unsigned int dandelion_ops_ref;     /* 0 = she calibrates herself */
 module_param(dandelion_ops_ref, uint, 0644);
@@ -148,12 +149,19 @@ struct hx_cache {
 	atomic64_t wgen;            /* bumped on every write issue + completion */
 	atomic64_t vgen;            /* entry versions */
 	atomic64_t hits, zhits, misses, inserts, evictions, invalidations, bypass;
+	/* What she was asked for and didn't have: her paging manager reads this to
+	 * predict what's next. Lock-free ring; entry = (blocks << 48) | first block. */
+	u64 *miss_ring;
+	struct page **warm_pgs;      /* HX_WARM_BATCH pages for one batched warm read */
+	bool warm_stopping;          /* teardown: drop the warm queue, don't drain it */
+	atomic64_t miss_seq;
 	atomic64_t compressed, zfail, cooled_bytes;
 
 	/* Strand B (double only) */
 	struct dm_dev *bdev;
 	unsigned int b_mb;
-	unsigned long b_slots;
+	unsigned long b_slots;      /* Strand B working budget (her paging manager may move it) */
+	unsigned long b_cap_slots;  /* the whole Strand B device: the most a Doppelganger can grow her to */
 	unsigned long *b_map;
 	unsigned long b_hint, b_used;
 	spinlock_t b_lock;          /* nests inside a lane lock; irqsave outside one */
@@ -615,6 +623,35 @@ static int hx_sync_io(struct block_device *bdev, blk_opf_t op, sector_t sector,
 	return ret;
 }
 
+/* One origin trip for n contiguous blocks — feeding her through a pipe, not a straw.
+ * With a far origin every trip costs a round-trip; one block per trip capped prefetch
+ * at ~400 KiB/s at 10 ms. */
+static int hx_sync_read_batch(struct block_device *bdev, sector_t sector,
+			      struct page **pgs, unsigned int n)
+{
+	struct bio *bio = bio_alloc(bdev, n, REQ_OP_READ, GFP_NOIO);
+	unsigned int i;
+	int ret;
+
+	bio->bi_iter.bi_sector = sector;
+	for (i = 0; i < n; i++)
+		__bio_add_page(bio, pgs[i], HX_BLOCK, 0);
+	ret = submit_bio_wait(bio);
+	bio_put(bio);
+	return ret;
+}
+
+static inline void hx_note_miss(struct hx_cache *hc, unsigned long idx, unsigned int n)
+{
+	u64 s;
+
+	if (!hc->miss_ring)
+		return;
+	s = atomic64_inc_return(&hc->miss_seq) - 1;
+	WRITE_ONCE(hc->miss_ring[s & (HX_MISS_RING - 1)],
+		   ((u64)min_t(unsigned int, n, 0xffff) << 48) | ((u64)idx & ((1ULL << 48) - 1)));
+}
+
 /* ── Strand B: slot allocation (process context, no lane lock held) ─────── */
 static long hx_b_alloc(struct hx_cache *hc)
 {
@@ -851,6 +888,7 @@ static int hx_block_for_read(struct hx_cache *hc, unsigned long idx, u8 *out)
 	memcpy(out, p, HX_BLOCK);
 	kunmap_local(p);
 	atomic64_inc(&hc->misses);
+	hx_note_miss(hc, idx, 1);
 	hx_insert(hc, idx, pg, gen);                    /* takes our reference */
 	return 0;
 }
@@ -1010,6 +1048,7 @@ struct hx_warm {
 };
 
 #define HX_WARM_MAX_PENDING  (1UL << 17)     /* 512 MiB of blocks queued, then drop */
+#define HX_WARM_BATCH        128             /* blocks per origin trip when feeding her (512 KiB) */
 #define HX_WARM_TRIES        50              /* x 100 ms: wait out a write burst */
 
 /* Read written blocks back from the origin into Strand A. hx_insert refuses a
@@ -1030,26 +1069,57 @@ static void hx_warm_worker(struct work_struct *w)
 		spin_unlock_irqrestore(&hc->warm_lock, flags);
 		if (!wr)
 			break;
-		for (i = 0; i < wr->n; i++) {
+		if (READ_ONCE(hc->warm_stopping)) {      /* prefetch is only ever "nice to have" */
+			kfree(wr);
+			continue;
+		}
+		for (i = 0; i < wr->n && !READ_ONCE(hc->warm_stopping); ) {
 			unsigned long idx = wr->first + i;
-			u64 gen = atomic64_read(&hc->wgen);
-			struct page *pg;
+			struct page **pg = hc->warm_pgs;
+			unsigned int n = 0, k;
+			u64 gen;
 
-			if (xa_load(&hc->blocks, idx))
-				continue;                        /* already on her strands */
-			pg = alloc_page(GFP_NOIO | __GFP_NOWARN);
+			if (xa_load(&hc->blocks, idx)) {
+				i++;                             /* already on her strands */
+				continue;
+			}
+			/* gather the contiguous blocks she doesn't hold: one origin trip */
+			while (n < HX_WARM_BATCH && i + n < wr->n && !xa_load(&hc->blocks, idx + n))
+				n++;
 			if (!pg)
+				n = min(n, 1u);
+			for (k = 0; k < n; k++) {
+				struct page *p = alloc_page(GFP_NOIO | __GFP_NOWARN);
+
+				if (!p)
+					break;
+				if (pg)
+					pg[k] = p;
+				else
+					put_page(p);
+			}
+			if (!pg || k < n) {                      /* no memory for a batch: try later */
+				while (pg && k--)
+					put_page(pg[k]);
 				break;
-			if (hx_sync_io(hc->dev->bdev, REQ_OP_READ, (sector_t)idx << HX_SECT_SHIFT, pg)) {
-				put_page(pg);
+			}
+			gen = atomic64_read(&hc->wgen);
+			if (hx_sync_read_batch(hc->dev->bdev, (sector_t)idx << HX_SECT_SHIFT, pg, n)) {
+				for (k = 0; k < n; k++)
+					put_page(pg[k]);
+				i += n;
 				continue;
 			}
 			if (atomic64_read(&hc->wgen) != gen) {  /* a write raced: retry later */
-				put_page(pg);
+				for (k = 0; k < n; k++)
+					put_page(pg[k]);
 				break;
 			}
-			hx_insert(hc, idx, pg, gen);
-			atomic64_inc(&hc->warmed);
+			for (k = 0; k < n; k++) {
+				hx_insert(hc, idx + k, pg[k], gen);   /* takes each reference */
+				atomic64_inc(&hc->warmed);
+			}
+			i += n;
 		}
 		if (i < wr->n && ++wr->tries < HX_WARM_TRIES) {
 			wr->first += i;                     /* keep what's left, try again */
@@ -1237,6 +1307,8 @@ static int hx_map(struct dm_target *ti, struct bio *bio)
 			break;
 		}
 		atomic64_inc(&hc->misses);
+		hx_note_miss(hc, rel >> HX_SECT_SHIFT,
+			     max_t(unsigned int, 1, bio->bi_iter.bi_size >> (HX_SECT_SHIFT + 9)));
 		pb->iter = bio->bi_iter;
 		pb->gen = atomic64_read(&hc->wgen);
 		pb->fill = true;
@@ -1295,6 +1367,8 @@ static void hx_destroy(struct dm_target *ti, struct hx_cache *hc)
 	if (hc->dev)
 		dm_put_device(ti, hc->dev);
 	hx_free_ws(hc);
+	kvfree(hc->miss_ring);
+	kfree(hc->warm_pgs);
 	kfree(hc);
 }
 
@@ -1374,7 +1448,10 @@ static int hx_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		}
 		hc->b_mb = b_mb;
 		hc->b_slots = ((u64)b_mb << 20) / HX_BLOCK;
-		hc->b_map = bitmap_zalloc(hc->b_slots, GFP_KERNEL);
+		/* the map covers the whole B device, so her paging manager can grow
+		 * her budget at runtime (Doppelgangers) without reallocating */
+		hc->b_cap_slots = dev_bytes / HX_BLOCK;
+		hc->b_map = bitmap_zalloc(hc->b_cap_slots, GFP_KERNEL);
 		r = -ENOMEM;
 		if (!hc->b_map) {
 			ti->error = "out of memory (strand B map)";
@@ -1387,6 +1464,8 @@ static int hx_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		ti->error = "out of memory (workqueue)";
 		goto bad;
 	}
+	hc->miss_ring = kvcalloc(HX_MISS_RING, sizeof(u64), GFP_KERNEL);   /* optional: no ring, no record */
+	hc->warm_pgs = kcalloc(HX_WARM_BATCH, sizeof(struct page *), GFP_KERNEL);
 	spin_lock_init(&hc->b_lock);
 	spin_lock_init(&hc->defer_lock);
 	hc->warm_write = warm_write;
@@ -1446,6 +1525,7 @@ static void hx_dtr(struct dm_target *ti)
 	list_del(&hc->node);
 	mutex_unlock(&hx_instances_lock);
 	hc->warm_write = false;
+	WRITE_ONCE(hc->warm_stopping, true);    /* the running pass stops within one origin trip */
 	cancel_delayed_work_sync(&hc->warm_work);
 	while (!list_empty(&hc->warm_q)) {
 		struct hx_warm *wr = list_first_entry(&hc->warm_q, struct hx_warm, node);
@@ -1505,7 +1585,7 @@ static void hx_status(struct dm_target *ti, status_type_t type, unsigned int fla
 		       "entries %lu temps frozen %u cold %u warm %u hot %u blazing %u "
 		       "hits %lld zhits %lld misses %lld inserts %lld evictions %lld "
 		       "invalidations %lld compressed %lld cooled_bytes %lld zfail %lld bypass %lld "
-		       "warm_write %d warmed %lld warm_dropped %lld",
+		       "warm_write %d warmed %lld warm_dropped %lld b_cap_slots %lu",
 		       hc->bdev ? "double" : "single",
 		       hc->heat / 1000, hc->heat % 1000, hx_state_names[hc->state],
 		       hc->compression / 1000, hc->compression % 1000, HX_LANES,
@@ -1521,7 +1601,7 @@ static void hx_status(struct dm_target *ti, status_type_t type, unsigned int fla
 		       atomic64_read(&hc->compressed), atomic64_read(&hc->cooled_bytes),
 		       atomic64_read(&hc->zfail), atomic64_read(&hc->bypass),
 		       hc->warm_write ? 1 : 0, atomic64_read(&hc->warmed),
-		       atomic64_read(&hc->warm_dropped));
+		       atomic64_read(&hc->warm_dropped), hc->b_cap_slots);
 		break;
 	case STATUSTYPE_TABLE:
 		if (hc->bdev)
@@ -1544,15 +1624,98 @@ static int hx_iterate_devices(struct dm_target *ti, iterate_devices_callout_fn f
 	return fn(ti, hc->dev, 0, ti->len, data);
 }
 
+/* ── control channel for her paging manager (he clears and feeds her) ──────
+ * `dmsetup message <dev> 0 <command>`:
+ *   b_budget <mb>            Doppelganger: set Strand B's working budget. Never above
+ *                            the whole Strand B device, never below her configured b_mb
+ *                            or what she already holds.
+ *   prefetch <sector> <n>    feed her: warm n sectors from <sector> (target-relative)
+ *                            ahead of demand, through her own bounded warm queue.
+ *   misses <since>           what she was asked for and didn't have since sequence <since>,
+ *                            merged into runs "start:len" (4 KiB blocks). He predicts from it.
+ */
+static int hx_message(struct dm_target *ti, unsigned int argc, char **argv,
+		      char *result, unsigned int maxlen)
+{
+	struct hx_cache *hc = ti->private;
+	unsigned long flags;
+
+	if (argc == 2 && !strcasecmp(argv[0], "b_budget")) {
+		unsigned long want, floor;
+		unsigned int mb;
+
+		if (!hc->bdev) {
+			DMWARN("helix: b_budget needs a double helix (Strand B)");
+			return -EINVAL;
+		}
+		if (kstrtouint(argv[1], 10, &mb))
+			return -EINVAL;
+		want = ((u64)mb << 20) / HX_BLOCK;
+		spin_lock_irqsave(&hc->b_lock, flags);
+		floor = max_t(unsigned long, ((u64)hc->b_mb << 20) / HX_BLOCK, READ_ONCE(hc->b_used));
+		hc->b_slots = clamp(want, floor, hc->b_cap_slots);
+		spin_unlock_irqrestore(&hc->b_lock, flags);
+		return 0;
+	}
+	if (argc == 3 && !strcasecmp(argv[0], "prefetch")) {
+		u64 sector;
+		unsigned int n;
+
+		if (kstrtou64(argv[1], 10, &sector) || kstrtouint(argv[2], 10, &n) || !n)
+			return -EINVAL;
+		if (sector >= ti->len)
+			return -EINVAL;
+		n = (unsigned int)min_t(u64, n, ti->len - sector);
+		hx_warm_queue(hc, (sector_t)sector, n);
+		return 0;
+	}
+	if (argc == 2 && !strcasecmp(argv[0], "misses")) {
+		u64 since, cur, from, i, run_start = 0, run_len = 0;
+		unsigned int sz = 0;
+
+		if (kstrtou64(argv[1], 10, &since) || !hc->miss_ring)
+			return -EINVAL;
+		cur = atomic64_read(&hc->miss_seq);
+		from = since;
+		if (cur > HX_MISS_RING && from < cur - HX_MISS_RING)
+			from = cur - HX_MISS_RING;
+		if (from > cur)
+			from = cur;
+		sz += scnprintf(result + sz, maxlen - sz, "seq %llu lost %llu runs", cur, from - min(since, from));
+		/* merge consecutive misses into runs: start:len (in 4 KiB blocks) */
+		for (i = from; i < cur && sz + 48 < maxlen; i++) {
+			u64 e = READ_ONCE(hc->miss_ring[i & (HX_MISS_RING - 1)]);
+			u64 idx = e & ((1ULL << 48) - 1), n = e >> 48;
+
+			if (run_len && idx == run_start + run_len) {
+				run_len += n;
+				continue;
+			}
+			if (run_len)
+				sz += scnprintf(result + sz, maxlen - sz, " %llu:%llu", run_start, run_len);
+			run_start = idx;
+			run_len = n;
+		}
+		if (run_len && sz + 48 < maxlen)
+			sz += scnprintf(result + sz, maxlen - sz, " %llu:%llu", run_start, run_len);
+		if (i < cur)   /* buffer full: tell him where we stopped so he can ask again */
+			scnprintf(result + sz, maxlen - sz, " more %llu", i);
+		return 1;      /* result filled */
+	}
+	DMWARN("helix: unknown message (b_budget <mb> | prefetch <sector> <sectors> | misses <since>)");
+	return -EINVAL;
+}
+
 static struct target_type helix_target = {
 	.name            = "helix",
-	.version         = {3, 0, 0},
+	.version         = {3, 1, 0},
 	.module          = THIS_MODULE,
 	.ctr             = hx_ctr,
 	.dtr             = hx_dtr,
 	.map             = hx_map,
 	.end_io          = hx_end_io,
 	.status          = hx_status,
+	.message         = hx_message,
 	.iterate_devices = hx_iterate_devices,
 };
 
