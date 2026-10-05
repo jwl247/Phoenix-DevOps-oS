@@ -91,6 +91,8 @@ def _make_tmp_env(prefix: str) -> tuple[str, dict]:
         "PHOENIX_AUDIT": str(Path(d) / "phoenix_audit.log"),
         "PHOENIX_ARCHIVE_ROOT":   str(Path(d) / "archive"),
         "PHOENIX_FRANK_KEY_FILE": str(Path(d) / "frank_world.key"),
+        "PHOENIX_EVENT_RING":     str(Path(d) / "helix_events.ring"),
+        "PHOENIX_WORLD_HISTORY":  str(Path(d) / "world_history.jsonl"),
     }
 
 
@@ -395,6 +397,7 @@ class TestFrankWorldHelixFlow(unittest.TestCase):
         self.helix_i._fire_interrupt = self.bridge.fire
         self.helix_e  = HelixE(self.frank)
         self.world    = FrankWorld(self.frank)
+        self.cursor   = self.world._ring.cursor_at_end()
 
         self._events: list[dict] = []
 
@@ -413,12 +416,10 @@ class TestFrankWorldHelixFlow(unittest.TestCase):
         self.helix_e.on_output(capture)
 
     def _drain(self):
-        """Read whatever FrankWorld wrote to bus slot 4, emit via Helix-E ch5."""
-        raw = self.helix_e.bus.read_stage(4)
-        if raw:
-            stripped = raw.rstrip(b"\x00")
-            if stripped:
-                self.helix_e.emit(5, stripped, target_lang="raw")
+        """Hand every event FrankWorld published on the ring (ch5) to Helix-E — none lost."""
+        self.world._ring.drain_to(self.cursor, lambda ch, data: self.helix_e.emit(ch, data, target_lang="raw"),
+                                  channel=5)
+        self.assertEqual(self.cursor.missed, 0, "events were lost on the ring")
 
     def tearDown(self):
         self.helix_i.stop()
@@ -468,10 +469,9 @@ class TestFrankWorldHelixFlow(unittest.TestCase):
             self.world.kill(card, "WOUNDS")
             self._drain()
             mock_kill.assert_not_called()
-        self.assertTrue(
-            any(t in self._types() for t in ("enlistment", "wounded", "KIA")),
-            f"No game events reached Helix-E output: {self._events}",
-        )
+        # ALL of them, in order — the slot bus used to pass this while losing 2 of 3
+        types = [t for t in self._types() if t in ("enlistment", "wounded", "KIA")]
+        self.assertEqual(types, ["enlistment", "wounded", "KIA"], f"events lost: {self._events}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

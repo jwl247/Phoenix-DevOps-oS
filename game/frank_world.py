@@ -126,6 +126,26 @@ def _load_frank_key() -> bytes:
         return key
 
 
+def _helix_lightning():
+    """Helix-Lightning lives in sector1/helix-lightning (not a package); make it importable."""
+    import sys
+    p = str(Path(__file__).resolve().parents[1] / "sector1" / "helix-lightning")
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+
+def _open_event_ring():
+    _helix_lightning()
+    from helix_ring import HelixRing, default_ring_path
+    return HelixRing(Path(os.environ.get("PHOENIX_EVENT_RING", str(default_ring_path()))))
+
+
+def _ring_frank(ring):
+    _helix_lightning()
+    from helix_ring import RingFrank
+    return RingFrank(ring)
+
+
 def _side_outcome(outcome: AccordOutcome, role: str) -> str:
     """One party's view of an accord outcome, for their jacket."""
     if outcome in (AccordOutcome.DRAW, AccordOutcome.DISRUPTED):
@@ -164,8 +184,17 @@ class FrankWorld(VehicleWorldMixin):
         frank_key: Optional[bytes] = None,   # Frank's own signing key (compelled accords)
         registry: Optional[VehicleRegistry] = None,   # Phase 4 motor pool
         history:  Optional[WorldHistory] = None,      # Phase 5 permanent record
+        ring=None,              # helix_ring.HelixRing — the lossless event path (made if a Frank is attached)
     ):
-        self._frank   = frank
+        # Every game event goes out through Helix's lossless event ring, never the
+        # single-slot bus (last-writer-wins there lost events under load). The game
+        # modules call `frank.bus.write_stage(...)`; RingFrank turns that into an
+        # append on the ring. The real kernel stays reachable as self._kernel.
+        self._kernel = frank
+        if ring is None and frank is not None:
+            ring = _open_event_ring()
+        self._ring  = ring
+        self._frank = _ring_frank(ring) if ring is not None else None
         self._archive = archive or Archive()
         self._frank_key = frank_key or _load_frank_key()
 
