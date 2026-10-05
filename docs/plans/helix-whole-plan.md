@@ -56,11 +56,14 @@ Not diagnosed yet. The candidates: per-I/O Dandelion and lane locking (`b_lock` 
 - **Opened up, the 48-client wound mostly closes: 0.26× → 0.87×.** It was starvation (256 MiB) on weak
   hardware. Relief (compression / Strand B moves) costs nothing measurable.
 - **She has been tested half-equipped.** Single strand only (no Strand B), and without her paging manager.
+  Roles (JW): the **paging manager clears and feeds her**: it clears what she no longer needs and feeds her what
+  she's about to need. It is **not** her governor; the governor (Dandelion) is her own self-regulation.
   The kernel Helix reads memory pressure herself (`helix_mem_pressure_pct`). The Doppelganger pager
   (`sector4/paging_helix.py`, uncommitted from 10/3) is written for the userspace `helix_vram` and **never
   wired to the kernel module**. The Linux swap manager (`sector4/paging.py`) isn't on pbmIII.
-- **New step 1b: wire the pager to the kernel Helix** through her stats/control channel (`/proc/helix`,
-  GET_STATS ioctl). It reads her tiers and grows or shrinks Strand B (Doppelgangers) by velocity.
+- **New step 1b: wire the paging manager to the kernel Helix** through her stats/control channel (`/proc/helix`,
+  GET_STATS ioctl), so it can clear her and feed her. It reads her tiers, clears what's done, and feeds what's
+  next (Strand B / Doppelgangers by velocity).
   Then **test her whole**: double strand (Strand B on a second image) + pager, same harness
   (`helix_tune.sh`), vs raw and vs a do-nothing `dm-linear` layer (the fair control for device-mapper stacking).
 - Her write path is already write-around (writes go to the origin; the cache is only invalidated;
