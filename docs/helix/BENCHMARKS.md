@@ -164,6 +164,20 @@ What it shows:
 - The desktop (Xorg/Thunar/XFCE) used about 15% of the CPU during the run. Servers should boot without it.
 - Lesson: `kptr_restrict=2` (hardening) hides kernel symbols from `perf`. Profile with it lowered, then restore.
 
+**The control that settles it (same day, `MODES="raw linear"`):** a do-nothing device-mapper layer (`dm-linear`)
+on the same loop image.
+
+| Clients | Raw | dm-linear (does nothing) | Helix |
+|---|---|---|---|
+| 6  | 166.12 | 66.93  | 67.33 |
+| 12 | 159.84 | 120.65 | 117.52 |
+| 48 | 478.31 | 379.37 | **430.23 (+13% over linear)** |
+
+**The whole gap vs raw is the device-mapper stacking cost of this test setup, not Helix.** Helix matches an
+empty dm layer at 6 and 12 clients and beats it at 48. The earlier "0.26× at 48 clients" was starvation, not her
+design. She was also tested single-strand and without her paging manager (which clears and feeds her), so this is
+a floor.
+
 ## 6. Why older numbers understate her
 
 Her real configuration is L1 256 MB / L2 1024 MB / L3 3072 MB (about half the
