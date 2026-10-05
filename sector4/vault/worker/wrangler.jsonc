@@ -1,0 +1,20 @@
+{
+  // phoenix-vault-worker — hands out the ENCRYPTED vault to boxes that know the passphrase
+  // Phoenix DevOps OS | jwl247 | GPL v3
+  // Setup: sector4/vault/vault-setup.ps1 (bucket, deploy, first push)
+
+  "name": "phoenix-vault-worker",
+  "main": "index.mjs",
+  "compatibility_date": "2025-01-01",
+  "workers_dev": true,
+  "preview_urls": false,
+
+  // VAULT → phoenix-vault: the encrypted vault + the pull tool. Nothing else.
+  // Its own bucket — this worker can't reach the clone pool, the maps or the game.
+  "r2_buckets": [
+    { "binding": "VAULT", "bucket_name": "phoenix-vault" }
+  ]
+
+  // Secret (never in this file): FETCH_HASH = sha256(fetch token), set by
+  // `phoenix_vault.py push` through stdin.
+}
