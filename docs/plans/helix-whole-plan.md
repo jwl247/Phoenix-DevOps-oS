@@ -93,3 +93,22 @@ live in memory, twinned (single-pass, peer-optimized), with zlib 5 to fit more. 
 the **paging manager owns the disk side**, and his Doppelgangers are the temporary disk extension while he clears
 and feeds her. If confirmed, that becomes the target, and the kernel's "Strand B on a device" moves to the
 paging manager. No rebuild until JW confirms.
+
+### JW's strand design, stated (2026-10-05)
+
+"Her strands complement each other, with the same effect as widening the hallway to get more speed. Splitting
+them means she has to track them. There is no tracking in the system on normal processes that move data."
+
+What that means for the build:
+- **Two strands side by side, not tiers.** Both carry data at once (like dual-channel memory or striping), which
+  doubles her parallel paths. Neither strand is the other's overflow.
+- **Deterministic placement, no tracking.** Which strand a block lives on is computed from its address, never
+  looked up or migrated. No pending/B lists, no slot maps or rungs for strand placement, no per-move bookkeeping.
+- **Disk belongs to the paging manager.** He clears and feeds her, and his Doppelgangers are the disk extension
+  (see the open question above).
+- **Fewer things to watch.** Much of her per-tick census walks today's tier-tracking state; this design removes
+  most of it.
+- **To test it, the same harness** (`helix_tune.sh`, `helix_pair_test.sh`): split-tier (today) vs twin
+  deterministic strands, raw and paired with the paging manager.
+
+Status: JW's stated design; build after JW's go.
