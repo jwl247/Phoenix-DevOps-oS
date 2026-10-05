@@ -1,0 +1,13 @@
+{
+  "_about": "Phoenix Mesh (Nebula). No secrets in this file — certs/keys live in the vault. Edit, then: python sector3/mesh/phoenix_net.py sign <host>; config/install.",
+  "network": "10.42.0.0/16",
+  "port": 4242,
+  "lighthouses": {
+    "pbmiii": ["192.168.137.172:4242"]
+  },
+  "hosts": {
+    "pbmii":  { "ip": "10.42.0.1",  "groups": ["jerry", "admin"],         "os": "windows", "note": "Jerry's PC — travels" },
+    "pbmiii": { "ip": "10.42.0.10", "groups": ["servers", "lighthouse"],  "os": "linux",   "note": "HP — home, internet, lighthouse + relay", "ssh": "a@fe80::d685:64ff:fea3:84ed%15", "ssh_key": "phoenix_third_debian_ed25519" },
+    "compaq": { "ip": "10.42.0.11", "groups": ["servers"],                "os": "linux",   "note": "home server — reaches the mesh through pbmiii" }
+  }
+}
