@@ -19,7 +19,7 @@
 
 import { sha3_512 } from './sha3.mjs';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.0.1';
 const GENESIS = '0'.repeat(128);
 const MAX_BODY = 1 << 20;          // 1 MiB per POST
 const MAX_ROWS = 500;
@@ -228,7 +228,8 @@ export async function getTerritory(url, env) {
 
 export async function tile(z, x, y, env, ctx, url) {
   if (z > 20 || x >= 2 ** z || y >= 2 ** z) return err('no such tile', 404);
-  if (!env.MAPTILER_API_KEY) return err('map tiles are not configured', 503);
+  const key = (env.MAPTILER_API_KEY || '').trim();
+  if (!key) return err('map tiles are not configured', 503);
   const cache = globalThis.caches && caches.default;
   const cacheKey = new Request(`${url.origin}/tiles/${z}/${x}/${y}.png`);
   if (cache) {
@@ -237,9 +238,12 @@ export async function tile(z, x, y, env, ctx, url) {
   }
   const map = env.MAPTILER_MAP || 'outdoor-v2';
   const upstream = await fetch(
-    `https://api.maptiler.com/maps/${encodeURIComponent(map)}/256/${z}/${x}/${y}.png?key=${encodeURIComponent(env.MAPTILER_API_KEY)}`,
+    `https://api.maptiler.com/maps/${encodeURIComponent(map)}/256/${z}/${x}/${y}.png?key=${encodeURIComponent(key)}`,
     { headers: { 'User-Agent': 'phoenix-sacrifice-worker/1.0' } });
-  if (!upstream.ok) return err('tile source unavailable', 502);           // never echo upstream (key in URL)
+  if (!upstream.ok) {                       // status code only — never the upstream URL or body (key in URL)
+    console.error(`tile upstream ${upstream.status} for ${z}/${x}/${y}`);
+    return json({ error: 'tile source unavailable', upstream_status: upstream.status }, 502);
+  }
   const res = new Response(upstream.body, {
     headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800', ...CORS },
   });

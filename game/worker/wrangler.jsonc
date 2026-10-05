@@ -8,6 +8,8 @@
   "name": "sacrifice-worker",
   "main": "index.mjs",
   "compatibility_date": "2025-01-01",
+  "workers_dev": true,       // served at sacrifice-worker.phoenix-jwl.workers.dev
+  "preview_urls": false,     // no extra public URLs for unreviewed versions
 
   // ── D1 Binding ─────────────────────────────────────────────────────────────
   // DB → sacrifice_world: world_history (append-only chain), named_ground,
