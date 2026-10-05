@@ -147,8 +147,7 @@ const NG = (id, kind, replaced = []) => ({ type: 'named_ground', ground_id: id, 
   ok('upstream failure hides the key, shows the status', bad.status === 502 && !badBody.includes('test-key')
      && JSON.parse(badBody).upstream_status === 403);
   globalThis.fetch = async (u) => { asked = String(u); return new Response(new Uint8Array([1]), { status: 200 }); };
-  await call({ ...env, MAPTILER_API_KEY: '  test-key
-' }, 'GET', '/tiles/5/16/10.png', null, null);
+  await call({ ...env, MAPTILER_API_KEY: '  test-key\r\n' }, 'GET', '/tiles/5/16/10.png', null, null);
   ok('key trimmed', asked.includes('key=test-key&') || asked.endsWith('key=test-key'));
   ok('no key configured → 503', (await call({ ...env, MAPTILER_API_KEY: '' }, 'GET', '/tiles/1/0/0.png', null, null)).status === 503);
   globalThis.fetch = realFetch;
