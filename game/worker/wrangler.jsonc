@@ -1,0 +1,33 @@
+{
+  // sacrifice-worker — the Sacrifice game state API
+  // Phoenix DevOps OS | jwl247 | GPL v3
+  // First deploy: follow DEPLOY.md (create the D1 database, apply schema.sql,
+  // set the two secrets) — then: npx wrangler deploy
+  // Tail: npx wrangler tail
+
+  "name": "sacrifice-worker",
+  "main": "index.mjs",
+  "compatibility_date": "2025-01-01",
+
+  // ── D1 Binding ─────────────────────────────────────────────────────────────
+  // DB → sacrifice_world: world_history (append-only chain), named_ground,
+  // territory. Its own database — game state never shares phoenix_dev_db.
+  // database_id: paste the id printed by `wrangler d1 create sacrifice_world`.
+  "d1_databases": [
+    {
+      "binding":       "DB",
+      "database_name": "sacrifice_world",
+      "database_id":   "REPLACE_WITH_ID_FROM_d1_create"
+    }
+  ],
+
+  // ── Vars ───────────────────────────────────────────────────────────────────
+  // MAPTILER_MAP: which MapTiler raster map the /tiles proxy serves.
+  "vars": {
+    "MAPTILER_MAP": "outdoor-v2"
+  }
+
+  // ── Secrets (never in this file) ──────────────────────────────────────────
+  // FRANK_TOKEN       — ≥ 32 chars; only Frank may append to world history
+  // MAPTILER_API_KEY  — from the vault's maptiler.env; stays server-side
+}

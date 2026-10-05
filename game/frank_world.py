@@ -63,6 +63,11 @@ from .tribunal    import (
 from . import king_theater as kt
 from .vehicle_world import VehicleWorldMixin
 from .vehicle import VehicleRegistry
+from .world_history import WorldHistory, default_history_path
+from . import territory as terr
+from .territory import AO, AOControl, Battle, BattleStatus
+from .named_ground import NamedGroundRegistry, GroundKind
+from . import theater_map
 from .footage     import (
     FootageClip, FootageType, AOKillBoard, record_footage, set_r2_key,
     try_flag_top_kill, jacket_entry as footage_jacket,
@@ -158,6 +163,7 @@ class FrankWorld(VehicleWorldMixin):
         archive: Optional[Archive] = None,
         frank_key: Optional[bytes] = None,   # Frank's own signing key (compelled accords)
         registry: Optional[VehicleRegistry] = None,   # Phase 4 motor pool
+        history:  Optional[WorldHistory] = None,      # Phase 5 permanent record
     ):
         self._frank   = frank
         self._archive = archive or Archive()
@@ -178,10 +184,15 @@ class FrankWorld(VehicleWorldMixin):
         self._kings:       dict[str, kt.KingTheaterState] = {}   # ao_id → state
         self._clips:       dict[str, FootageClip]    = {}
         self._kill_boards: dict[str, AOKillBoard]    = {}
-        self._history:     list[dict]                = []   # append-only world history
+        self._history:     WorldHistory              = history or WorldHistory(default_history_path())
 
         # Phase 4
         self._init_vehicle_world(registry)
+
+        # Phase 5
+        self._aos:     dict[str, AO]     = {}
+        self._battles: dict[str, Battle] = {}
+        self._grounds = NamedGroundRegistry()
 
         log.info("FrankWorld online — Frank witnesses all")
 
@@ -428,7 +439,7 @@ class FrankWorld(VehicleWorldMixin):
 
     def world_history(self) -> list[dict]:
         """Permanent world history, oldest first. A copy — the record is append-only."""
-        return [dict(e) for e in self._history]
+        return self._history.entries()
 
     def accord(self, accord_id: str) -> Optional[Accord]:
         return self._accords.get(accord_id)
@@ -468,9 +479,8 @@ class FrankWorld(VehicleWorldMixin):
 
     def _history_append(self, entry: dict) -> None:
         """Append to world history and fire it down Helix-E. Never rewritten."""
-        entry = {**entry, "recorded_ts": time.time()}
-        self._history.append(entry)
-        self._emit({"event": f"history:{entry['type']}", **entry})
+        rec = self._history.append(entry)
+        self._emit({"event": f"history:{rec['type']}", **rec})
 
     def _emit(self, payload: dict) -> None:
         if self._frank is None:
@@ -576,6 +586,7 @@ class FrankWorld(VehicleWorldMixin):
             conclude_accord(accord, outcome, detail, self._frank)
         self._record_accord_jackets(accord)
         self._history_append(accord_history(accord))
+        self._settle_territory_stake(accord)
         return accord
 
     def sweep_expired(self) -> list[Accord]:
@@ -790,6 +801,16 @@ class FrankWorld(VehicleWorldMixin):
             elif pid == accord.defender_id:
                 self.conclude(accord.accord_id, AccordOutcome.FORFEIT_DEFENDER, f"{card.callsign} KIA")
 
+        for ao in self._aos.values():
+            if ao.controller_id != pid:
+                continue
+            if ao.control == AOControl.CONTESTED:     # the contest decides it now
+                ao.controller_id = ao.controller_callsign = ao.held_since = None
+            else:
+                terr.vacate(ao)
+            self._history_append({"type": "territory", "event": "holder_fell", **ao.state(),
+                                  "fallen": card.callsign})
+
         for state in self._kings.values():
             if state.king_id == pid:     # no challenge left open — forfeits settled above
                 kt.dethrone(state, f"{card.callsign} KIA", self._frank)
@@ -842,6 +863,192 @@ class FrankWorld(VehicleWorldMixin):
 
     def attach_r2(self, clip_id: str, r2_key: str) -> FootageClip:
         return set_r2_key(self._get(self._clips, clip_id, "footage clip"), r2_key)
+
+    # -----------------------------------------------------------------------
+    # Phase 5 — Territory, battles, named ground (GDD §11), the map
+    # -----------------------------------------------------------------------
+
+    OFFICER_MIN_RANK = Rank.LIEUTENANT
+
+    def ao(self, ao_id: str) -> Optional[AO]:
+        return self._aos.get(ao_id)
+
+    def battle(self, battle_id: str) -> Optional[Battle]:
+        return self._battles.get(battle_id)
+
+    def named_ground(self, theater: Optional[str] = None) -> list:
+        return self._grounds.active(theater)
+
+    def define_ao(self, ao_id: str, theater: str, name: str, polygon: list) -> AO:
+        """World building: an Area of Operations on real ground."""
+        if ao_id in self._aos:
+            raise ValueError(f"AO {ao_id} already exists — ground is not redrawn")
+        a = AO(ao_id, theater, name, polygon)
+        self._aos[ao_id] = a
+        self._history_append({"type": "territory", "event": "ao_defined", **a.state(),
+                              "polygon": a.polygon})
+        return a
+
+    def take_ground(self, ao_id: str, player_id: str) -> AO:
+        """Unheld ground goes to whoever holds it first."""
+        a = self._get(self._aos, ao_id, "AO")
+        card = self._live_card(player_id, "Soldier")
+        if card.theater != a.theater:
+            raise ValueError(f"{card.callsign} is not in {a.theater}")
+        terr.take_neutral(a, card.player_id, card.callsign)
+        self._history_append({"type": "territory", "event": "taken", **a.state()})
+        return a
+
+    def open_battle(self, ao_id: str, name: str, organizer_id: str, contest: bool = False) -> Battle:
+        """
+        GDD §8.1 — whoever organizes a battle is its field commander. contest=True
+        means the organizer is fighting for held ground: the AO goes CONTESTED.
+        """
+        a = self._get(self._aos, ao_id, "AO")
+        org = self._live_card(organizer_id, "Organizer")
+        if org.theater != a.theater:
+            raise ValueError(f"{org.callsign} is not in {a.theater}")
+        if any(b.ao_id == ao_id and b.status == BattleStatus.OPEN for b in self._battles.values()):
+            raise ValueError(f"A battle is already being fought in {ao_id}")
+        b = terr.new_battle(a, name, org.player_id)
+        if contest:
+            terr.contest(a, org.player_id, b.battle_id)
+            self._history_append({"type": "territory", "event": "contested", **a.state(),
+                                  "battle_id": b.battle_id})
+        self._battles[b.battle_id] = b
+        self._emit({"event": "battle_opened", **b.to_dict()})
+        return b
+
+    def join_battle(self, battle_id: str, player_id: str) -> Battle:
+        b = self._get(self._battles, battle_id, "battle")
+        if b.status != BattleStatus.OPEN:
+            raise ValueError("That battle is over")
+        card = self._live_card(player_id, "Soldier")
+        if card.theater != b.theater:
+            raise ValueError(f"{card.callsign} is not in {b.theater}")
+        if player_id not in b.participants:
+            b.participants.append(player_id)
+        return b
+
+    def battle_casualty(
+        self,
+        battle_id: str,
+        player_id: str,
+        cause:     str,
+        holding:   bool = False,
+        lon:       Optional[float] = None,
+        lat:       Optional[float] = None,
+    ):
+        """
+        A soldier falls in battle. An officer who dies holding a field position
+        gives that ground their name — automatically, permanently (GDD §11.1).
+        """
+        b = self._get(self._battles, battle_id, "battle")
+        if b.status != BattleStatus.OPEN:
+            raise ValueError("That battle is over")
+        if player_id not in b.participants:
+            raise ValueError("Only those who fought in the battle fall in it")
+        card = self.card_of(player_id)
+        rank = self._rank_records[card.card_id].rank
+        a = self._aos[b.ao_id]
+        names_ground = holding and rank >= self.OFFICER_MIN_RANK
+        if names_ground:
+            if lon is None or lat is None:
+                raise ValueError("An officer holding ground needs the ground's position")
+            if not a.contains(lon, lat):
+                raise ValueError(f"({lon}, {lat}) is not inside {a.name}")
+        b.casualties += 1
+        b.fallen.append(player_id)
+        entry = self.kill(card, cause)
+        if names_ground:
+            b.officers_fallen_holding.append(player_id)
+            g, replaced = self._grounds.name_fallen_officer(
+                a.ao_id, a.theater, lon, lat, card.player_id, card.callsign,
+                rank_display(rank), b.battle_id, b.casualties)
+            self._history_append({"type": "named_ground", **g.to_dict(),
+                                  "replaced": [r.ground_id for r in replaced]})
+        return entry
+
+    def close_battle(self, battle_id: str, winner_id: Optional[str] = None, outcome: str = "") -> Battle:
+        """
+        The battle enters every participant's jacket (it counts toward earned
+        gear) and world history. A contest is settled: the challenger takes the
+        ground only by winning it.
+        """
+        b = self._get(self._battles, battle_id, "battle")
+        if b.status != BattleStatus.OPEN:
+            raise ValueError("That battle is already closed")
+        if winner_id and winner_id not in b.participants:
+            raise ValueError("The winner must have fought in the battle")
+        b.status, b.winner_id, b.outcome, b.closed_ts = BattleStatus.CLOSED, winner_id, outcome, time.time()
+        for pid in b.participants:
+            j = self._jacket_of_player(pid)
+            if j:
+                result = ("fell" if pid in b.fallen else
+                          "won" if pid == winner_id else "fought")
+                j.record_battle(b.theater, b.name, result,
+                                {"battle_id": b.battle_id, "ao_id": b.ao_id, "casualties": b.casualties})
+        a = self._aos[b.ao_id]
+        if a.control == AOControl.CONTESTED and a.contest_battle_id == b.battle_id:
+            w = self.card_of(winner_id) if winner_id else None
+            alive = w is not None and w.status not in (CardStatus.KIA, CardStatus.ARCHIVED)
+            terr.resolve(a, winner_id if alive else None, w.callsign if alive else None)
+            self._history_append({"type": "territory", "event": "contest_settled", **a.state(),
+                                  "battle_id": b.battle_id})
+        self._history_append({"type": "battle", **b.to_dict()})
+        return b
+
+    def name_ground(self, player_id: str, battle_id: str, name: str, lon: float, lat: float):
+        """After a real battle, one who fought in it may name ground in that AO."""
+        b = self._get(self._battles, battle_id, "battle")
+        if b.status != BattleStatus.CLOSED:
+            raise ValueError("Ground is named after the battle, not during it")
+        if player_id not in b.participants:
+            raise ValueError("Only those who fought there may name the ground")
+        card = self._live_card(player_id, "Soldier")
+        a = self._aos[b.ao_id]
+        if not a.contains(lon, lat):
+            raise ValueError(f"({lon}, {lat}) is not inside {a.name}")
+        g, replaced = self._grounds.name_by_player(
+            a.ao_id, a.theater, lon, lat, card.player_id, card.callsign, name,
+            b.battle_id, b.casualties)
+        self._history_append({"type": "named_ground", **g.to_dict(),
+                              "replaced": [r.ground_id for r in replaced]})
+        return g
+
+    def _settle_territory_stake(self, accord: Accord) -> None:
+        """An accord that staked an AO moves it — but only what the loser actually held."""
+        a = self._aos.get(accord.terms.territory_stake or "")
+        if a is None or accord.outcome is None:
+            return
+        if accord.outcome in (AccordOutcome.CHALLENGER_VICTORY, AccordOutcome.FORFEIT_DEFENDER):
+            winner, loser = accord.challenger_id, accord.defender_id
+        elif accord.outcome in (AccordOutcome.DEFENDER_VICTORY, AccordOutcome.FORFEIT_CHALLENGER):
+            winner, loser = accord.defender_id, accord.challenger_id
+        else:
+            return
+        w = self.card_of(winner)
+        if a.controller_id != loser or w is None or w.status in (CardStatus.KIA, CardStatus.ARCHIVED):
+            return
+        terr.transfer(a, winner, w.callsign)
+        self._history_append({"type": "territory", "event": "won_by_accord", **a.state(),
+                              "accord_id": accord.accord_id, "accord_name": accord.accord_name})
+
+    def _theater_layers(self, theater: str):
+        aos = [a for a in self._aos.values() if a.theater == theater]
+        kings = [(s, self._aos[s.ao_id]) for s in self._kings.values()
+                 if s.king_id and s.ao_id in self._aos and self._aos[s.ao_id].theater == theater]
+        return aos, self._grounds.active(theater), kings
+
+    def map_payload(self, theater: str, worker_url: Optional[str] = None) -> dict:
+        """What the Godot client draws for a theater."""
+        return theater_map.map_payload(theater, *self._theater_layers(theater), worker_url=worker_url)
+
+    def theater_snapshot(self, theater: str, out, source=None, width: int = 1024, height: int = 768):
+        """Frank's strategic overview PNG. Returns (path, sha3-512); intake it to keep it."""
+        aos, grounds, kings = self._theater_layers(theater)
+        return theater_map.snapshot(aos, grounds, kings, out, source, width, height,
+                                    title=f"{theater} — strategic overview")
 
     # -----------------------------------------------------------------------
     # Events → Helix-E (broadcast to world)

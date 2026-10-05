@@ -8,7 +8,7 @@ Every phase is finished before the next one opens. No exceptions, no "we'll come
 
 Done means: all files in the phase are written, tested, wired into Frank, committed to the repo, and passing. When the phase is done, it is done. We move and we do not return.
 
-Current position: Phase 4 DONE (Oct 5). Phase 5 is next — living world (needs the MapTiler key in the vault).
+Current position: Phase 5 DONE (Oct 5) — the sacrifice-worker is built and tested but waits on JW's deploy (`game/worker/DEPLOY.md`). Phase 6 is next — player-run world. Client engine: **Godot 4.7.2** (downloaded Oct 5).
 
 ## Vision and Covenant
 
@@ -30,7 +30,7 @@ Status: **COMPLETE** — game/ directory standing, Frank kernel wired, Helix eve
 | Frank world gate | `game/frank_world.py` | Done |
 | Frank bus slot 4 | `FrankWorld._broadcast_event()` | Done |
 | Helix-E egress | `frank.bus.write_stage(4, msg)` | Done |
-| D1 custody | schema wired via packages-worker | Done |
+| D1 game state | ~~schema wired via packages-worker~~ — corrected Oct 5: no game tables existed. Built in Phase 5 as its own database `sacrifice_world` behind `sacrifice-worker` | Phase 5 |
 | R2 world snapshots | clone pool ready | Done |
 
 All game events emit to Helix-E channel 5 (Frank bus slot 4). Translation happens at the sector3 boundary — the game itself stays quadralingual throughout. Frank witnesses and archives every state change; nothing happens that Frank doesn't log.
@@ -127,7 +127,17 @@ Status: **COMPLETE** (Oct 5) — `vehicle.py`, `equipment.py`, `vehicle_world.py
 
 ## Phase 5 — Living World
 
-Status: **NOT STARTED** — depends on MapTiler API key (JW getting it) and Phase 3 complete.
+Status: **COMPLETE** (Oct 5) — `world_history.py`, `territory.py`, `named_ground.py`, `theater_map.py`, wired through FrankWorld; `game/worker/` (sacrifice-worker + D1 schema). Tests: `test_phase5.py` 23/23 (incl. a Python-built chain accepted by the worker), `worker.test.mjs` 26/26, earlier phases still green. Live check: a real Ardennes theater rendered from MapTiler tiles with the vault key (1.6 s, parallel fetch + disk cache).
+
+**JW's rulings (Oct 5):**
+- **Named ground — GDD on top, player naming under it.** An officer (Second Lieutenant and up) who dies holding a position inside the AO names that ground automatically and permanently (GDD §11.1/§8.2). It is never renamed and it supersedes any player-given name there. Otherwise, after a closed battle, one player who fought in it may name ground inside the AO. One name per battle. Only a bigger battle (more fallen) renames a player-given name. Nothing is deleted; superseded names stay in history.
+- **Scope — follow the build sheet.** Red Baron and Sacrifice stay in Phase 6; Head & Shoulders was added to Phase 6 so it isn't lost.
+
+**What was built:**
+- **World history** is a hash chain like the custody chain: append-only, numbered, each entry SHA3-512 over its exact bytes and linked to the one before. It is written to a local JSONL first (fsynced, re-verified on every start, so the world survives restarts and runs offline), then synced to D1. The worker re-checks every hash and link, and D1's own triggers refuse UPDATE, DELETE, a gap or a fork.
+- **Territory:** AOs are real polygons (lon/lat). Control is NEUTRAL, HELD or CONTESTED. A contest is settled by a battle: the challenger takes the ground only by winning. An accord that stakes an AO moves it, but only from a loser who actually held it. A holder's death leaves the ground neutral (or to the contest).
+- **Battles:** the organizer is field commander (GDD §8.1). Closing a battle writes it into every participant's jacket, and those battles count toward earned gear (Phase 4).
+- **Map:** Godot gets a key-free tile URL. The worker proxies MapTiler tiles, so the key never reaches a client and the tile vendor can change without a client update. Godot also gets GeoJSON for AOs, named ground and Kings. Frank's strategic overview PNG is drawn here (stitched tiles + layers), because the MapTiler plan has no static-map API and this way any tile source works.
 
 The world is persistent and player-shaped. Ground gets named. Events enter the permanent record. MapTiler powers the theater map.
 
@@ -135,7 +145,7 @@ The world is persistent and player-shaped. Ground gets named. Events enter the p
 | --- | --- |
 | `named_ground.py` | Any player can name ground after a battle: the name is permanent world history in D1. Frank registers it. MapTiler renders the label on the theater map. |
 | `world_history.py` | Permanent event log: battles, accords concluded, named ground, legends added, kings crowned. Immutable append-only, backed by D1. |
-| `theater_map.py` | MapTiler API wrapper: render AO boundaries, named ground labels, King of Theater markers, strategic overview. |
+| `theater_map.py` | Map payload for Godot (key-free tiles via the worker + GeoJSON) and Frank's own strategic-overview PNG (stitched tiles, disk-cached, parallel fetch). |
 | `territory.py` | AO ownership and control system: capture, hold, contest mechanics. Territory at stake in accords and King of Theater. |
 
 **Named ground rules (GDD §6):**
@@ -157,6 +167,7 @@ Players run the world. The tribunal decides life and death. King of Theater is e
 | `tribunal.py` | **Delivered in Phase 3.** Player-run tribunal: charges filed, witnesses called, verdict (guilty/not), sentence (execution, tribunal duel, dishonour). Frank presides. Verdict immutable. Dishonour entry in jacket is permanent. |
 | `king_theater.py` | **Delivered in Phase 3.** King of Theater: current holder, challenge mechanics, disruptor role, auto-issued KingTheater accord. King controls territory spawn rules in their AO. |
 | `red_baron.py` | Red Baron Protocol: the player with the highest confirmed kill streak in an AO gets the Red Baron flag. Frank tracks, world history records, every player can see. Becomes a target. |
+| `head_shoulders.py` | Head & Shoulders prestige (GDD §9.3) — moved here from GDD Phase 5 by JW Oct 5: players who hold their theater, survive disruptors and defend their AO across sessions become named legends in world history. |
 | `sacrifice.py` | Sacrifice system (GDD §9): a player can sacrifice their own rank, territory, or equipment to another player or to the world. Frank records the sacrifice in world history. The giver drops permanently. |
 
 **Tribunal flow:**
@@ -172,7 +183,7 @@ Players run the world. The tribunal decides life and death. King of Theater is e
 
 ## MapTiler Integration
 
-Status: **WAITING ON API KEY** — JW is getting it. Integration code ready to write once key is in the vault.
+Status: **WIRED** (Oct 5) — key is in the vault (`maptiler.env`); raster tiles verified live; the plan has no Static Maps API (403), so snapshots are rendered by Frank instead. Godot draws tiles through the worker's `/tiles` proxy.
 
 MapTiler powers the theater map, named ground labels, AO boundaries, and strategic overview. The key goes into the Phoenix vault (`F:\Phoenix\Vault\secrets\`) and is pulled by `theater_map.py` at runtime — never hardcoded, never in the repo.
 
