@@ -143,6 +143,27 @@ into the kernel and restoring her Dandelion.
 
 **Consequence for the Compaq road test** (`docs/plans/compaq-road-test-plan.md`), which Jerry set 2026-09-29: "if it's slow as shit we change helix's strands to unmanaged the ingress and egress." These numbers argue for ingress on Helix (bulk repeat reads) and for measuring egress (writes, concurrent pushes) both Helix-managed and unmanaged from the first run.
 
+## 5c. Opened up: dm-helix on pbmIII (pbm3), 2 GiB Strand A, CPU governor performance (2026-10-05)
+
+Same box for every run (AMD Athlon II X2 250, 7 GB, HDD, 4 GiB loop image, direct I/O), dbench 60 s.
+Tool: `sector1/kernels/helix_tune.sh`. New governor knob `relief_enabled` (module param) isolates relief.
+
+| Clients | Raw MB/s | Helix MB/s | Helix, relief off | Helix ÷ raw |
+|---|---|---|---|---|
+| 6  | 163.98 | 67.33  | 66.76  | 0.41× |
+| 12 | 158.44 | 117.52 | 120.54 | 0.74× |
+| 48 | 492.79 | 430.23 | 381.43 | **0.87×** (was 0.26× at 256 MiB on the Compaq) |
+
+What it shows:
+- **Starved, not broken.** With room, 48 clients went from 0.26× to 0.87×.
+- **The governor's relief (compression, Strand B moves) costs nothing measurable.** Off vs on is within noise.
+- **Helix's own code is not CPU-hot.** dbench took 65% of the CPU; no Helix symbol is near the top.
+- **dbench barely re-reads:** Helix counted 47 hits vs 368 misses. It is a write-new-data workload, not
+  Helix's job (re-reads: 37× in §5b). The remaining gap is pass-through cost on writes. The standard fix is
+  write-around for new writes; that is the next tuning step.
+- The desktop (Xorg/Thunar/XFCE) used about 15% of the CPU during the run. Servers should boot without it.
+- Lesson: `kptr_restrict=2` (hardening) hides kernel symbols from `perf`. Profile with it lowered, then restore.
+
 ## 6. Why older numbers understate her
 
 Her real configuration is L1 256 MB / L2 1024 MB / L3 3072 MB (about half the

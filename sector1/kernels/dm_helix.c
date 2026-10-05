@@ -78,6 +78,13 @@ static unsigned int dandelion_ops_ref;     /* 0 = she calibrates herself */
 module_param(dandelion_ops_ref, uint, 0644);
 MODULE_PARM_DESC(dandelion_ops_ref, "Fixed ops/s that count as full load; 0 (default) = the Dandelion calibrates to her own peak on this machine");
 
+/* Governor tuning knob. Relief = the tick's compression and Strand B moves.
+ * Default on (her normal behaviour). Off isolates the relief cost when tuning
+ * her to a machine; writable at runtime: /sys/module/helix/parameters/relief_enabled */
+static bool relief_enabled = true;
+module_param(relief_enabled, bool, 0644);
+MODULE_PARM_DESC(relief_enabled, "1 (default) = the governor relieves memory (compress / move to Strand B) under load; 0 = never (tuning)");
+
 /* Shared with helix_kmod.c (/proc/helix, GET_STATS, Frank's slots). */
 atomic_t helix_dandelion_heat = ATOMIC_INIT(0);          /* 0..1000 */
 atomic_t helix_dandelion_state = ATOMIC_INIT(HX_COOL_COLD);
@@ -1155,7 +1162,7 @@ static void hx_dandelion_tick(struct work_struct *w)
 		hc->state = hc->compression < 1000 ? HX_COOL_COOLING : HX_COOL_COLD;
 	}
 
-	if (hc->compression < 1000) {
+	if (relief_enabled && hc->compression < 1000) {
 		buf = kmalloc(HX_Z_KEEP_MAX, GFP_KERNEL | __GFP_NOWARN);
 		if (buf) {
 			freed = hx_relieve(hc, buf);
