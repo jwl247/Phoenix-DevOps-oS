@@ -19,3 +19,14 @@ Open:
 - Interactive SSH via a Windows Hello passkey (ecdsa-sk). Automation keeps a separate key, which should also be restricted to mesh source addresses.
 - Apply the same baseline to the AWS lighthouse (with no LAN break-glass; the cloud firewall plus the mesh cover it) and to the Compaq.
 - Lesson recorded: `cmd | grep -q` under `set -o pipefail` gives false alarms (SIGPIPE). Capture output first.
+
+## Shares (`scripts/shares/phoenix-shares.sh`): pbmIII, 2026-10-05, shares-1.0.1
+
+| Control | NIST SP 800-171 r2 | SOC 2 | How | Evidence |
+|---|---|---|---|---|
+| Least privilege / access control | 3.1.1, 3.1.2, 3.1.5 | CC6.1, CC6.3 | One SMB user; Samba bound only to the mesh IP (`10.42.0.10:445`), `hosts allow 10.42.0.0/16`. Nebula only lets the `jerry` group reach servers | `ss -ltn` shows 10.42.0.10:445 + loopback only |
+| Protect data in transit | 3.13.8 | CC6.7 | SMB3 with encryption **required** and mandatory signing, inside Nebula's encryption | `Get-SmbConnection` → 3.1.1, Encrypted True |
+| Integrity of the old disk | 3.8.x, 3.4.6 | CC6.1 | The old install disk is mounted `ro,noexec,nosuid,nodev` and shared read-only | A write from `O:` is refused |
+| Configuration + drift | 3.4.1–3.4.3 | CC8.1 | Known-good smb.conf, heal timer every 15 min. Drift includes "SMB exposed off-mesh" and "SMB not on the mesh" | `phoenix-shares check` → clean |
+| Secrets handling | 3.13.10, 3.5.10 | CC6.1 | The SMB password is random and kept in the vault (`samba-pbmiii.env`). It reaches the box via a 0600 file, then shredded, never on argv. Stored on the PC in Windows Credential Manager | — |
+| Audit | 3.3.1 | CC7.2 | auditd watches `/etc/samba/`; Samba auth audit at level 3 to the journal | — |
