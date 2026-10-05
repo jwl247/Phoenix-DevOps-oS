@@ -77,7 +77,14 @@ them. That is everything Phoenix needs, so we dropped MapTiler (JW, 2026-10-05).
 OpenStreetMap data (© OpenStreetMap contributors, ODbL), cut from the Protomaps daily planet build.
 Only the theater boxes are read, never the whole planet.
 
-From the repo root, in PowerShell 7:
+**One command does all of it**: tests, extract, intake, bucket, upload, deploy, remove the MapTiler key,
+and verify the live tiles. It stops at the first failure and is safe to run again:
+
+```powershell
+pwsh -File F:\Phoenix\Phoenix-DevOps-oS\game\worker\deploy-maps.ps1            # add -DryRun to preview
+```
+
+The same steps by hand, from the repo root in PowerShell 7:
 
 ```powershell
 # a. Cut the theaters (repeat --bbox per theater; 25 % margin is added around each)
