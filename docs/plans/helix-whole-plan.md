@@ -111,4 +111,10 @@ What that means for the build:
 - **To test it, the same harness** (`helix_tune.sh`, `helix_pair_test.sh`): split-tier (today) vs twin
   deterministic strands, raw and paired with the paging manager.
 
+- **Track at the doors, never in the hallway** (JW: "track the in before it gets there and the out after it
+  leaves"). The same rule as Header QR before hashing / Footer QR after hashing, and Romeo in / Juliet out.
+  - Ingress is recorded **before** data arrives (the request and intent; the paging manager's predictive fetch
+    already reads this side).
+  - Egress is recorded **after** it leaves.
+  - Inside her, data moves through both strands untracked.
 Status: JW's stated design; build after JW's go.
