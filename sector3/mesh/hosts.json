@@ -5,6 +5,7 @@
   "lighthouses": {
     "pbmiii": [
       "mesh-lh1.authenticcoder.com:4242",
+      "[2605:59ca:531b:9008:d685:64ff:fea3:84ed]:4242",
       "192.168.1.190:4242"
     ]
   },
@@ -25,7 +26,7 @@
         "lighthouse"
       ],
       "os": "linux",
-      "note": "HP - home router (192.168.1.190), internet, lighthouse + relay; public name mesh-lh1.authenticcoder.com",
+      "note": "HP - home Starlink router (192.168.1.190; Starlink = CGNAT, no IPv4 inbound/port forward) - lighthouse over public IPv6 (mesh-lh1 AAAA) + relay",
       "ssh": "a@192.168.1.190",
       "ssh_key": "phoenix_third_debian_ed25519"
     },

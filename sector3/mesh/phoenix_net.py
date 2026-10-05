@@ -212,7 +212,7 @@ lighthouse:
   hosts: {json.dumps([] if is_lh else lh_ips)}
 
 listen:
-  host: "0.0.0.0"
+  host: "[::]"
   port: {cfg['port'] if (is_lh or linux) else 0}
 
 punchy:
