@@ -533,14 +533,18 @@ function genie {
                 if (-not (Test-GenieHealth)) { throw 'kernel is down — genie up first' }
                 foreach ($id in $Args2) {
                     try {
-                        # Custody verification is mandatory for anything the kernel will execute: no -Force here.
-                        $c = Invoke-GenieClone -Id $id -To $script:GenieCloset
-                        $body = @{ file = $c.Name; sha3_512 = $c.Sha3; sector = $Sector; family = $Family; write = [bool]$Write }
+                        # In-RAM import: resolve the clonepool row (metadata only — NO byte download here),
+                        # hand the kernel the hex + custody SHA3, and it pulls from R2 + verifies + execs in
+                        # memory. The bytes never touch this machine's disk. Custody is mandatory: no -Force.
+                        $row = Resolve-GenieRow $id
+                        $body = @{ hex = $row.hex_id; sector = $Sector; family = $Family; write = [bool]$Write }
+                        if ($row.PSObject.Properties['hash_sha3'] -and $row.hash_sha3) { $body.sha3_512 = ([string]$row.hash_sha3).ToLowerInvariant() }
                         if ($Type) { $body.suit_type = $Type }
-                        if ($Name) { $body.name = $Name }
+                        if ($Name) { $body.name = $Name } elseif ($row.name) { $body.name = ([string]$row.name) }
                         $r = Invoke-GenieControl POST '/suits' $body
-                        G-Ok ("in the closet: {0}  [{1}] sector {2} ring {3}  {4}  closet now {5} suits" -f $r.name, $r.suit_type, $r.sector, $r.ring_pos,
-                              $(if ($r.preloaded) { 'preloaded' } else { 'registered (loads on first wear)' }), $r.suits_in_closet)
+                        $where = if ($r.in_ram) { 'IN-RAM (nothing on disk)' } else { 'closet' }
+                        G-Ok ("imported: {0}  [{1}] sector {2} ring {3}  {4}  closet now {5} suits" -f $r.name, $r.suit_type, $r.sector, $r.ring_pos,
+                              $where, $r.suits_in_closet)
                     } catch { G-Err "$id — $($_.Exception.Message)" }
                 }
             }
