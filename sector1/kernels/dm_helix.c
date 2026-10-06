@@ -43,6 +43,7 @@
  * strands are only ever copies: removing the target loses nothing.
  */
 #define DM_MSG_PREFIX "helix"
+#include <linux/version.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/device-mapper.h>
@@ -1460,7 +1461,11 @@ static int hx_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 			ti->error = "b_mb must be > 0";
 			goto bad;
 		}
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
+		r = dm_get_device(ti, argv[2], FMODE_READ | FMODE_WRITE, &hc->bdev);	/* <6.5 (Debian 12) */
+#else
 		r = dm_get_device(ti, argv[2], BLK_OPEN_READ | BLK_OPEN_WRITE, &hc->bdev);
+#endif
 		if (r) {
 			ti->error = "strand B device lookup failed";
 			goto bad;

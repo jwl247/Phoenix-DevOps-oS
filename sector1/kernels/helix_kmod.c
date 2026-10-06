@@ -27,6 +27,7 @@
 #include <linux/jiffies.h>
 #include <linux/mm.h>
 #include <linux/string.h>
+#include <linux/version.h>
 #include "helix.h"
 
 #define DEVICE_NAME   "helix_intent"
@@ -334,7 +335,11 @@ static int __init helix_init(void)
 		pr_alert("helix: failed to register character device\n");
 		return major_number;
 	}
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
+	helix_class = class_create(THIS_MODULE, CLASS_NAME);	/* <6.4 (Debian 12) took the owner too */
+#else
 	helix_class = class_create(CLASS_NAME);
+#endif
 	if (IS_ERR(helix_class)) {
 		unregister_chrdev(major_number, DEVICE_NAME);
 		return PTR_ERR(helix_class);
