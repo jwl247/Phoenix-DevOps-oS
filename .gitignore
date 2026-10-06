@@ -95,3 +95,7 @@ hud.checks/obj/
 # Atlas: generated bundle (lives in R2 via intake) and the retired local blob
 sector2/package-handler/atlas-sources.json
 sector2/package-handler/atlas.json
+
+# Private business drafts and Claude scratch — kept off the public repo (JW 2026-10-06)
+Claude outputs/
+press-room/*.pptx
