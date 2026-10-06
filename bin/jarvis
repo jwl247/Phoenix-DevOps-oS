@@ -5,10 +5,13 @@ Phoenix DevOps OS | jwl247 | GPL v3
   jarvis what is on Laurie's list today
   echo "long question" | jarvis
   jarvis --json "question"          raw JSON answer
+  jarvis ui                         open his web screen (SSH tunnel to pbmIII, nothing exposed)
 
 Path: SSH over the Phoenix Mesh as jarvis-call (forced command, no shell) -> jarvis-gate -> Jarvis
 -> local Ollama. On pbmIII itself it talks to the gate directly. Same door the Genie suit uses.
 Env: JARVIS_HOST (default jarvis-call@10.42.0.10), JARVIS_KEY (default ~/.ssh/phoenix_jarvis_ed25519)
+     ui: JARVIS_UI_HOST (default a@10.42.0.10), JARVIS_UI_KEY (default ~/.ssh/phoenix_third_debian_ed25519),
+         JARVIS_UI_PORT (default 8800 on this machine)
 """
 import json, os, subprocess, sys
 from pathlib import Path
@@ -16,8 +19,37 @@ from pathlib import Path
 GATE = "/opt/openjarvis/jarvis-gate"
 
 
+def ui() -> int:
+    """Forward localhost:PORT -> pbmIII 127.0.0.1:8000 over SSH and open the browser. Ctrl+C closes it."""
+    import socket, time, webbrowser
+    port = int(os.environ.get("JARVIS_UI_PORT", "8800"))
+    url = f"http://127.0.0.1:{port}/"
+    if os.path.exists(GATE):
+        print("on pbmIII: http://127.0.0.1:8000/"); return 0
+    key = os.environ.get("JARVIS_UI_KEY", str(Path.home() / ".ssh" / "phoenix_third_debian_ed25519"))
+    tun = subprocess.Popen(["ssh", "-i", key, "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
+                            "-N", "-L", f"127.0.0.1:{port}:127.0.0.1:8000",
+                            os.environ.get("JARVIS_UI_HOST", "a@10.42.0.10")])
+    for _ in range(40):
+        if tun.poll() is not None:
+            print(f"jarvis ui: tunnel failed (port {port} busy? mesh up?)", file=sys.stderr); return 1
+        try:
+            socket.create_connection(("127.0.0.1", port), timeout=0.5).close(); break
+        except OSError:
+            time.sleep(0.25)
+    print(f"Jarvis screen: {url}   (Ctrl+C here closes it)")
+    webbrowser.open(url)
+    try:
+        tun.wait()
+    except KeyboardInterrupt:
+        tun.terminate()
+    return 0
+
+
 def main() -> int:
     args = sys.argv[1:]
+    if args == ["ui"]:
+        return ui()
     raw = "--json" in args
     args = [a for a in args if a != "--json"]
     if args in ([], ["-h"], ["--help"]) and sys.stdin.isatty():
