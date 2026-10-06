@@ -1,0 +1,2230 @@
+// packages-worker — Phoenix DevOps OS
+// UnitedSys — United Systems | jwl247
+// Role: Catalog index — clonepool, glossary, TOC, packages, peer review
+// DB: phoenix_dev_db (D1) — the backbone
+// Auth: PHOENIX_AUTH (Cloudflare secret) = owner; member keys in D1 api_keys (3.9.0)
+// Version: 3.9.0
+
+import { parseAtlas, buildAtlasBlob, BUNDLE_FORMAT, BUNDLE_KEY } from './atlas-parse.mjs';
+
+const VERSION = '3.9.0';
+
+const HEADERS = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  // PATCH is /clonepool/:hex/tier (tier rotation); without it a browser
+  // preflight for that route was refused (audit S2CORE-F30).
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+const ok = (data, status = 200) => new Response(JSON.stringify(data, null, 2), { status, headers: HEADERS });
+const err = (msg, status = 400) => ok({ error: msg }, status);
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+// Two kinds of key (3.9.0):
+//   PHOENIX_AUTH  the owner's key (worker secret). Everything, exactly as before.
+//   member keys   D1 api_keys, only their SHA-256 stored. memberGate() below runs
+//                 before the router and decides, per request, whether a member key
+//                 may make THIS call; if it may, the request is marked here and the
+//                 route's own isAuthorized() check passes. A member key can:
+//                   read  — every GET a client needs, never a row flagged sensitive
+//                   intake — write ONLY names that are new or already its own
+//                 It can never delete, rebuild Atlas, touch the bundle key, write
+//                 another person's (or the owner's) rows, or manage keys.
+const MEMBER = new WeakMap();   // Request -> { who, scopes }
+
+function bearer(req) {
+  const m = (req.headers.get('Authorization') || '').match(/^Bearer\s+(.+)$/i);
+  return m ? m[1] : null;
+}
+function isOwner(req, env) {
+  const b = bearer(req);
+  return !!b && !!env.PHOENIX_AUTH && b === env.PHOENIX_AUTH;
+}
+function isAuthorized(req, env) {
+  return isOwner(req, env) || MEMBER.has(req);
+}
+
+const hexOf = (s) => Array.from(new TextEncoder().encode(s), (b) => b.toString(16).padStart(2, '0')).join('');
+const nameOfHex = (h) => { try { return new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(h.match(/../g).map((x) => parseInt(x, 16)))); } catch { return h; } };
+async function sha256hex(s) {
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))),
+                    (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Who owns a hex? The D1 row's owner (NULL = the Phoenix owner), or — for bytes
+// uploaded before their row exists — the uploader recorded on the R2 object.
+async function writeVerdict(env, db, hex, who) {
+  if (typeof hex !== 'string' || !/^[0-9a-f]+$/.test(hex) || hex.length % 2) return 'not a Phoenix identity';
+  if (hex === BUNDLE_KEY) return 'that key is reserved for the Atlas bundle';
+  const row = await db.prepare('SELECT name, owner FROM clonepool WHERE hex_id = ?').bind(hex).first();
+  if (row) return row.owner === who ? null : `"${row.name}" already belongs to ${row.owner || 'the Phoenix owner'} — rename your file and intake it again`;
+  if (env.CLONEPOOL_BUCKET) {
+    const obj = await env.CLONEPOOL_BUCKET.head(hex);
+    if (obj && (obj.customMetadata || {}).owner !== who) return `"${nameOfHex(hex)}" already has stored bytes that are not yours — rename your file`;
+  }
+  return null;
+}
+
+const MEMBER_READS = [
+  /^\/whoami$/, /^\/health$/, /^\/$/, /^\/clonepool$/, /^\/clonepool\/[^/]+(\/versions\/[0-9a-f]{16})?$/,
+  /^\/search$/, /^\/custody$/, /^\/versions$/, /^\/glossary$/, /^\/glossary\/[^/]+(\/code)?$/,
+  /^\/categories$/, /^\/deps$/, /^\/packages$/, /^\/may-write\/[^/]+$/,
+];
+
+// Returns a Response to refuse with, or null to let the router handle it.
+async function memberGate(req, env, db, url, path) {
+  const b = bearer(req);
+  if (!b || isOwner(req, env)) return null;                 // owner or anonymous: unchanged
+  let key;
+  try {
+    key = await db.prepare('SELECT id, who, scopes FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL')
+                  .bind(await sha256hex(b)).first();
+  } catch { return null; }                                   // api_keys not migrated: behaves like 3.8.1
+  if (!key) return null;                                     // unknown key: the route answers 401
+  const who = key.who;
+  const scopes = new Set(String(key.scopes || '').split(',').map((s) => s.trim()).filter(Boolean));
+  const deny = (msg, status = 403) => err(`key "${who}": ${msg}`, status);
+  const grant = () => { MEMBER.set(req, { who, scopes }); return null; };
+  await db.prepare('UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?').bind(key.id).run().catch(() => {});
+
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    if (!scopes.has('read')) return deny('this key has no read access');
+    if (!MEMBER_READS.some((re) => re.test(path))) return deny('owner only');
+    if (path.startsWith('/may-write/')) {
+      if (!scopes.has('intake')) return deny('this key is read-only');
+      const why = await writeVerdict(env, db, decodeURIComponent(path.slice(11)), who);
+      return why ? deny(why) : ok({ ok: true, who, hex: decodeURIComponent(path.slice(11)) });
+    }
+    if (path === '/clonepool') url.searchParams.set('sensitive', '0');      // the list route filters on it
+    let id = null;
+    if (path.startsWith('/clonepool/')) id = decodeURIComponent(path.slice(11)).split('/')[0];
+    else if (path.startsWith('/glossary/')) id = decodeURIComponent(path.slice(10)).replace(/\/code$/, '');
+    if (id) {
+      const rows = (await db.prepare('SELECT sensitive FROM clonepool WHERE hex_id = ? OR name = ?').bind(id, id).all()).results;
+      if (rows.some((r) => r.sensitive)) return deny('that record is private');
+    }
+    return grant();
+  }
+
+  if (!scopes.has('intake')) return deny('this key is read-only');
+  const json = async () => { try { return await req.clone().json(); } catch { return {}; } };
+  let hex = null;
+  const m = path.match(/^\/clonepool\/([0-9a-f]+)(?:\/versions\/[0-9a-f]{16})?(\/mpu(?:\/[^/]+)?(?:\/(?:\d+|complete))?|\/copy|\/validate|\/tier)?$/);
+  if (req.method === 'POST' && path === '/clonepool') hex = (await json()).hex_id;
+  else if (req.method === 'POST' && path === '/custody') hex = (await json()).hex_id;
+  else if (req.method === 'POST' && path === '/glossary') hex = (await json()).hex;
+  else if (req.method === 'POST' && path === '/deps') {
+    // deps are keyed by package NAME: every row with that name must be theirs.
+    const p = (await json()).package;
+    if (typeof p !== 'string' || !p) return deny('package required', 400);
+    const rows = (await db.prepare('SELECT owner FROM clonepool WHERE name = ?').bind(p).all()).results;
+    if (rows.some((r) => r.owner !== who)) return deny(`"${p}" belongs to someone else`);
+    hex = hexOf(p);
+  }
+  else if (m) {
+    const tail = m[2] || '';
+    const allowed = (req.method === 'PUT' && (tail === '' || tail.startsWith('/mpu/')))
+                 || (req.method === 'POST' && (tail.startsWith('/mpu') || tail === '/copy' || tail === '/validate'))
+                 || (req.method === 'DELETE' && tail.startsWith('/mpu/'))      // abort own upload, never a record
+                 || (req.method === 'PATCH' && tail === '/tier');
+    if (allowed) hex = m[1];
+    if (allowed && tail === '/copy') {                                          // copying FROM a private object = reading it
+      const from = (await json()).from;
+      const src = typeof from === 'string' ? await db.prepare('SELECT sensitive, owner FROM clonepool WHERE hex_id = ?').bind(from).first() : null;
+      if (src && src.sensitive && src.owner !== who) return deny('that record is private');
+    }
+  }
+  if (!hex) return deny('this key can read and intake its own files — nothing else');
+  const why = await writeVerdict(env, db, String(hex), who);
+  return why ? deny(why) : grant();
+}
+
+// ── Connections lookup ───────────────────────────────────────────────────────
+// A human won't type a node's exact stored path/name (parsed from prose —
+// e.g. "package-handler/" vs the stored "sector2/package-handler"), so an
+// exact-match-only lookup is unusable in practice. Try exact match first,
+// then fall back to a LIKE scan, preferring the shortest matching path (the
+// most specific/direct hit rather than a long nested one).
+async function resolveConnection(db, id) {
+  return (await resolveConnectionRanked(db, id)).center;
+}
+
+// Rank every name/path hit instead of taking the shortest path: "intake"
+// used to land on the bin/intake shim and fill the globe with its sibling
+// shims (live test 2026-09-30). Score: the last path segment IS the query
+// (100), its stem is (90), the query starts a segment (50), anywhere (30);
+// plus how connected the node is (a subsystem outranks a 2-line shim), then
+// the shorter path. `candidates` = the other strong hits, so a caller can
+// offer "did you mean" instead of silently guessing.
+function connectionScore(row, q) {
+  const p = String(row.path || '').toLowerCase().replace(/\/$/, '');
+  const last = p.split('/').pop();
+  const stem = last.replace(/\.[a-z0-9]+$/, '');
+  let s = 30;
+  if (last === q) s = 100;
+  else if (stem === q) s = 90;
+  else if (p.split('/').some((seg) => seg.startsWith(q))) s = 50;
+  let links = 0;
+  try { links = JSON.parse(row.links || '[]').length; } catch (_) {}
+  return s + Math.min(links, 20);
+}
+async function resolveConnectionRanked(db, id) {
+  const exact = await db.prepare('SELECT * FROM connections WHERE hex = ? OR name = ? OR path = ?').bind(id, id, id).first();
+  if (exact) return { center: exact, candidates: [] };
+  // Escape LIKE wildcards so a lookup for "frank_save" or "100%" matches
+  // literally instead of "_"/"%" acting as wildcards (and "%" alone
+  // matching an arbitrary row). Values are bound, so this is about correct
+  // matching, not SQL injection.
+  const pat = `%${String(id).replace(/[\\%_]/g, (c) => '\\' + c)}%`;
+  const q = String(id).toLowerCase();
+  let hits = (await db.prepare(
+    `SELECT * FROM connections WHERE name LIKE ? ESCAPE '\\' OR path LIKE ? ESCAPE '\\'`
+  ).bind(pat, pat).all()).results;
+  if (!hits.length) {
+    // Last resort: the description. Most file-level lookups ("frank_save",
+    // "usys.ps1") name a file that lives inside a directory node, so it only
+    // appears in that node's description (audit CONN-F10).
+    hits = (await db.prepare(
+      `SELECT * FROM connections WHERE description LIKE ? ESCAPE '\\' ORDER BY LENGTH(path) ASC LIMIT 12`
+    ).bind(pat).all()).results;
+    return { center: hits[0] || null, candidates: hits.slice(1, 7).map(candidateOf) };
+  }
+  hits = hits.map((r) => ({ r, s: connectionScore(r, q) }))
+    .sort((a, b) => b.s - a.s || a.r.path.length - b.r.path.length || a.r.path.localeCompare(b.r.path));
+  const best = hits[0];
+  // Ambiguous = another hit names the query as plainly as the winner does.
+  const strong = hits.slice(1).filter((h) => h.s >= 90 || h.s >= best.s - 10);
+  return { center: best.r, candidates: strong.slice(0, 6).map((h) => candidateOf(h.r)) };
+}
+const candidateOf = (r) => ({ hex: r.hex, name: r.name, path: r.path, description: r.description });
+
+// ── Connections ↔ glossary enrichment ────────────────────────────────────────
+// connections.hex is sha256(path)[:16] (parse-connections.js) while
+// glossary.hex is intake.sh's to_hex(basename) — raw hex of the file or
+// directory name. A `LEFT JOIN glossary g ON g.hex = c.hex` could therefore
+// never match (0 of 37 rows, audit CONN-F03). Enrich by the intake key
+// instead: hex of the node path's last segment.
+function intakeHexOfPath(p) {
+  const base = String(p || '').replace(/\/+$/, '').split('/').pop();
+  return Array.from(new TextEncoder().encode(base), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+async function enrichWithGlossary(db, rows) {
+  const list = rows.filter(Boolean);
+  const keys = [...new Set(list.map((r) => intakeHexOfPath(r.path)).filter(Boolean))];
+  const byHex = new Map();
+  for (let i = 0; i < keys.length; i += 90) {           // stay under D1's bind limit
+    const chunk = keys.slice(i, i + 90);
+    const res = await db.prepare(
+      `SELECT hex, state, pool_path FROM glossary WHERE hex IN (${chunk.map(() => '?').join(',')})`
+    ).bind(...chunk).all();
+    for (const g of res.results) byHex.set(g.hex, g);
+  }
+  for (const r of list) {
+    const g = byHex.get(intakeHexOfPath(r.path));
+    r.file_state = g ? g.state : null;
+    r.file_pool_path = g ? g.pool_path : null;
+  }
+  return rows;
+}
+
+// ── Platform HTML ───────────────────────────────────────────────────────────
+const HTML_PLATFORM = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phoenix Package Handler — Platform</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--accent:#f78166;--accent2:#79c0ff;--text:#e6edf3;--muted:#8b949e;--green:#56d364;--red:#f85149;--yellow:#e3b341;--purple:#bc8cff}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:16px}
+  header h1{font-size:1.1rem;font-weight:600;color:var(--accent)}
+  header span{color:var(--muted);font-size:.85rem}
+  .tabs{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--surface);padding:0 24px}
+  .tab{padding:10px 18px;cursor:pointer;border:none;background:none;color:var(--muted);font-size:.9rem;border-bottom:2px solid transparent;transition:all .15s}
+  .tab:hover{color:var(--text)}
+  .tab.active{color:var(--accent2);border-bottom-color:var(--accent2)}
+  .panel{display:none;padding:24px;max-width:1100px;margin:0 auto}
+  .panel.active{display:block}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px}
+  .card h3{font-size:.95rem;font-weight:600;margin-bottom:8px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:.75rem;font-weight:600}
+  .badge.white{background:#1f3a2a;color:var(--green)}
+  .badge.grey{background:#2d2a1f;color:var(--yellow)}
+  .badge.black{background:#2d1f1f;color:var(--red)}
+  .badge.pending{background:#1f2a3a;color:var(--accent2)}
+  .badge.approved{background:#1f3a2a;color:var(--green)}
+  .badge.rejected{background:#2d1f1f;color:var(--red)}
+  .badge.revoked{background:#2d1f2d;color:var(--purple)}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .row.sb{justify-content:space-between}
+  input,select,textarea{background:#0d1117;border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 12px;font-size:.9rem;font-family:inherit;width:100%}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent2)}
+  textarea{resize:vertical;min-height:80px}
+  .btn{padding:8px 16px;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;font-weight:600;transition:opacity .15s}
+  .btn:hover{opacity:.85}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.primary{background:var(--accent2);color:#0d1117}
+  .btn.success{background:var(--green);color:#0d1117}
+  .btn.danger{background:var(--red);color:#fff}
+  .btn.warn{background:var(--yellow);color:#0d1117}
+  .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  .form-row{display:grid;gap:10px;margin-bottom:14px}
+  .form-row label{font-size:.8rem;color:var(--muted);margin-bottom:2px;display:block}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .meta{font-size:.78rem;color:var(--muted)}
+  .votes{display:flex;gap:6px;align-items:center}
+  .votes span{font-size:.8rem}
+  #toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:8px;font-size:.9rem;font-weight:500;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999}
+  #toast.show{opacity:1}
+  #toast.ok{background:#1f3a2a;color:var(--green);border:1px solid var(--green)}
+  #toast.err{background:#2d1f1f;color:var(--red);border:1px solid var(--red)}
+  .empty{text-align:center;color:var(--muted);padding:40px 0;font-size:.9rem}
+  .filter-bar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .filter-bar input{max-width:280px}
+  .filter-bar select{max-width:160px;width:auto}
+  details summary{cursor:pointer;color:var(--accent2);font-size:.85rem;margin-top:8px}
+  .vote-row{display:flex;gap:8px;margin-top:10px}
+  .hex{font-family:monospace;font-size:.8rem;color:var(--muted)}
+  hr{border:none;border-top:1px solid var(--border);margin:16px 0}
+  .loading{text-align:center;padding:32px;color:var(--muted)}
+  .auth-note{background:#1a1a2a;border:1px solid #3a3a5a;border-radius:6px;padding:10px 14px;font-size:.82rem;color:var(--muted);margin-bottom:14px}
+  .auth-note b{color:var(--accent2)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>&#9654; Phoenix Package Handler</h1>
+    <span>UnitedSys &mdash; United Systems &bull; packages-worker</span>
+  </div>
+  <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+    <label style="font-size:.8rem;color:var(--muted)">Auth Token</label>
+    <input id="authToken" type="password" placeholder="PHOENIX_AUTH" style="width:200px;padding:6px 10px;font-size:.82rem">
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('glossary')">Glossary</button>
+  <button class="tab" onclick="showTab('review')">Review Queue</button>
+  <button class="tab" onclick="showTab('submit')">Submit</button>
+  <button class="tab" onclick="showTab('feed')">Opt-In Feed</button>
+  <button class="tab" onclick="showTab('verify')">Verify</button>
+</div>
+
+<!-- GLOSSARY TAB -->
+<div id="tab-glossary" class="panel active">
+  <div class="row sb" style="margin-bottom:16px">
+    <h2 style="font-size:1rem">Package Glossary</h2>
+    <button class="btn primary" onclick="openGlossaryAdd()">+ Add Entry</button>
+  </div>
+  <div class="filter-bar">
+    <input id="g-search" placeholder="Search by name..." oninput="loadGlossary()">
+    <select id="g-cat" onchange="loadGlossary()"><option value="">All Categories</option></select>
+    <select id="g-state" onchange="loadGlossary()">
+      <option value="">All States</option>
+      <option value="white">White (active)</option>
+      <option value="grey">Grey (deprecated)</option>
+      <option value="black">Black (retired)</option>
+    </select>
+    <button class="btn ghost" onclick="loadGlossary()">Refresh</button>
+  </div>
+  <div id="glossary-list"><div class="loading">Loading glossary...</div></div>
+  
+  <!-- Add/Edit Modal -->
+  <div id="glossary-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:flex;align-items:center;justify-content:center">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto">
+      <h3 id="gmodal-title" style="margin-bottom:16px">Add Glossary Entry</h3>
+      <div class="grid2">
+        <div class="form-row"><label>Name *</label><input id="gf-name" placeholder="e.g. nginx.conf"></div>
+        <div class="form-row"><label>Hex (SHA-derived)</label><input id="gf-hex" placeholder="auto-generated if blank"></div>
+      </div>
+      <div class="form-row"><label>Description</label><textarea id="gf-desc" rows="2" placeholder="What does this package do?"></textarea></div>
+      <div class="grid3">
+        <div class="form-row"><label>Category</label><input id="gf-cat" placeholder="scripts, configs..."></div>
+        <div class="form-row"><label>Platform</label>
+          <select id="gf-platform"><option value="">any</option><option>linux</option><option>macos</option><option>windows</option><option>all</option></select>
+        </div>
+        <div class="form-row"><label>State</label>
+          <select id="gf-state"><option value="white">white</option><option value="grey">grey</option><option value="black">black</option></select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="form-row"><label>Version</label><input id="gf-version" placeholder="1.0.0"></div>
+        <div class="form-row"><label>Backend</label><input id="gf-backend" placeholder="apt, brew, pip..."></div>
+      </div>
+      <div class="form-row"><label>Notes</label><input id="gf-notes" placeholder="optional notes"></div>
+      <input type="hidden" id="gf-editing-hex">
+      <div class="row" style="margin-top:16px;gap:8px;justify-content:flex-end">
+        <button class="btn ghost" onclick="closeGlossaryModal()">Cancel</button>
+        <button class="btn primary" onclick="saveGlossaryEntry()">Save Entry</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REVIEW QUEUE TAB -->
+<div id="tab-review" class="panel">
+  <div class="row sb" style="margin-bottom:16px">
+    <h2 style="font-size:1rem">Review Queue</h2>
+    <div class="row" style="gap:8px">
+      <select id="r-status" onchange="loadReviews()">
+        <option value="">All</option>
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+        <option value="revoked">Revoked</option>
+      </select>
+      <button class="btn ghost" onclick="loadReviews()">Refresh</button>
+    </div>
+  </div>
+  <div id="review-list"><div class="loading">Loading submissions...</div></div>
+</div>
+
+<!-- SUBMIT TAB -->
+<div id="tab-submit" class="panel">
+  <div style="max-width:600px">
+    <h2 style="font-size:1rem;margin-bottom:6px">Submit Artifact for Review</h2>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:16px">Submit a file, package, config, or dependency for community peer review. The hex hash is the canonical identity.</p>
+    <div class="auth-note"><b>Auth required.</b> Set your PHOENIX_AUTH token in the header above before submitting.</div>
+    <div class="form-row"><label>Artifact Name *</label><input id="sf-name" placeholder="e.g. nginx.conf"></div>
+    <div class="form-row"><label>SHA-256 Hex *</label><input id="sf-hex" placeholder="64-char SHA-256 hash of the artifact"></div>
+    <div class="form-row"><label>Description</label><textarea id="sf-desc" placeholder="What does this artifact do?"></textarea></div>
+    <div class="grid2">
+      <div class="form-row"><label>Category</label><input id="sf-cat" placeholder="scripts, configs, packages..."></div>
+      <div class="form-row"><label>Platform</label>
+        <select id="sf-platform"><option value="">any</option><option>linux</option><option>macos</option><option>windows</option><option>all</option></select>
+      </div>
+    </div>
+    <div class="form-row"><label>Submitter Handle</label><input id="sf-submitter" placeholder="your handle or ID (optional)"></div>
+    <div class="form-row"><label>Artifact URL (optional pull pointer — not the content)</label><input id="sf-url" placeholder="https://..."></div>
+    <button class="btn primary" onclick="submitArtifact()" style="margin-top:8px">Submit for Review</button>
+  </div>
+</div>
+
+<!-- FEED TAB -->
+<div id="tab-feed" class="panel">
+  <div class="row sb" style="margin-bottom:16px">
+    <div>
+      <h2 style="font-size:1rem">Opt-In Availability Feed</h2>
+      <p style="color:var(--muted);font-size:.82rem;margin-top:4px">Approved artifacts available to pull. Nothing is pushed — availability is announced only.</p>
+    </div>
+    <div class="row" style="gap:8px">
+      <select id="feed-cat" onchange="loadFeed()"><option value="">All Categories</option></select>
+      <select id="feed-platform" onchange="loadFeed()">
+        <option value="">All Platforms</option>
+        <option>linux</option><option>macos</option><option>windows</option><option>all</option>
+      </select>
+      <button class="btn ghost" onclick="loadFeed()">Refresh</button>
+    </div>
+  </div>
+  <div id="feed-list"><div class="loading">Loading feed...</div></div>
+</div>
+
+<!-- VERIFY TAB -->
+<div id="tab-verify" class="panel">
+  <div style="max-width:560px">
+    <h2 style="font-size:1rem;margin-bottom:6px">Verify Artifact</h2>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:16px">Enter a SHA-256 hex to check an artifact's verification status. Scan a QR code or paste the hash directly.</p>
+    <div class="row" style="gap:10px;margin-bottom:16px">
+      <input id="v-hex" placeholder="SHA-256 hex hash..." style="flex:1">
+      <button class="btn primary" onclick="verifyArtifact()">Verify</button>
+    </div>
+    <div id="verify-result"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const BASE = '';  // same-origin — worker serves this HTML and the API
+
+function getAuth() { return document.getElementById('authToken').value.trim(); }
+
+function toast(msg, type='ok') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'show ' + type;
+  setTimeout(() => t.className = '', 3000);
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+  if(name === 'glossary') loadGlossary();
+  if(name === 'review') loadReviews();
+  if(name === 'feed') loadFeed();
+}
+
+async function apiFetch(path, opts={}) {
+  const auth = getAuth();
+  const headers = { 'Content-Type': 'application/json' };
+  if(auth) headers['Authorization'] = 'Bearer ' + auth;
+  try {
+    const r = await fetch(BASE + path, { ...opts, headers });
+    const json = await r.json();
+    return { ok: r.ok, status: r.status, data: json };
+  } catch(e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// ── GLOSSARY ────────────────────────────────────────────────────────────────
+
+async function loadGlossary() {
+  const search = document.getElementById('g-search').value;
+  const cat = document.getElementById('g-cat').value;
+  const state = document.getElementById('g-state').value;
+  let qs = [];
+  if(search) qs.push('q=' + encodeURIComponent(search));
+  if(cat) qs.push('category=' + encodeURIComponent(cat));
+  const url = '/glossary' + (qs.length ? '?' + qs.join('&') : '');
+  const res = await apiFetch(url);
+  const list = document.getElementById('glossary-list');
+  if(!res.ok) { list.innerHTML = '<div class="empty">Failed to load glossary</div>'; return; }
+  const items = (res.data.glossary || res.data || []).filter(g => !state || g.state === state);
+  if(!items.length) { list.innerHTML = '<div class="empty">No entries found</div>'; return; }
+  list.innerHTML = items.map(g => renderGlossaryEntry(g)).join('');
+  // Populate category filter
+  const cats = [...new Set(items.map(g => g.category).filter(Boolean))];
+  const catSel = document.getElementById('g-cat');
+  const curVal = catSel.value;
+  catSel.innerHTML = '<option value="">All Categories</option>' + cats.map(c => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join('');
+  catSel.value = curVal;
+}
+
+function renderGlossaryEntry(g) {
+  return '<div class="card" id="gentry-' + esc(g.hex) + '">' +
+    '<div class="row sb">' +
+      '<div class="row" style="gap:8px"><b>' + esc(g.name) + '</b>' +
+      (g.state ? '<span class="badge ' + esc(g.state) + '">' + esc(g.state) + '</span>' : '') +
+      (g.category ? '<span class="badge grey">' + esc(g.category) + '</span>' : '') +
+      (g.platform ? '<span class="meta">' + esc(g.platform) + '</span>' : '') +
+      '</div>' +
+      '<div class="row" style="gap:6px">' +
+        '<button class="btn ghost" style="padding:4px 10px;font-size:.78rem" onclick="editGlossaryEntry(' + esc(JSON.stringify(g)) + ')">Edit</button>' +
+        '<button class="btn danger" style="padding:4px 10px;font-size:.78rem" onclick="deleteGlossaryEntry(' + esc(JSON.stringify(g.hex || g.name)) + ')">Delete</button>' +
+      '</div>' +
+    '</div>' +
+    (g.description ? '<p style="margin-top:6px;font-size:.85rem;color:var(--muted)">' + esc(g.description) + '</p>' : '') +
+    '<div class="row" style="margin-top:6px;gap:12px">' +
+      (g.version ? '<span class="meta">v' + esc(g.version) + '</span>' : '') +
+      (g.backend ? '<span class="meta">via ' + esc(g.backend) + '</span>' : '') +
+      '<span class="hex">' + esc((g.hex||'').substring(0,16)) + '...</span>' +
+    '</div>' +
+  '</div>';
+}
+
+function openGlossaryAdd() {
+  document.getElementById('gmodal-title').textContent = 'Add Glossary Entry';
+  ['gf-name','gf-hex','gf-desc','gf-version','gf-backend','gf-notes','gf-cat'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('gf-state').value = 'white';
+  document.getElementById('gf-platform').value = '';
+  document.getElementById('gf-editing-hex').value = '';
+  document.getElementById('glossary-modal').style.display = 'flex';
+}
+
+function editGlossaryEntry(g) {
+  document.getElementById('gmodal-title').textContent = 'Edit Glossary Entry';
+  document.getElementById('gf-name').value = g.name || '';
+  document.getElementById('gf-hex').value = g.hex || '';
+  document.getElementById('gf-desc').value = g.description || '';
+  document.getElementById('gf-state').value = g.state || 'white';
+  document.getElementById('gf-platform').value = g.platform || '';
+  document.getElementById('gf-version').value = g.version || '';
+  document.getElementById('gf-backend').value = g.backend || '';
+  document.getElementById('gf-notes').value = g.notes || '';
+  document.getElementById('gf-cat').value = g.category || '';
+  document.getElementById('gf-editing-hex').value = g.hex || g.name;
+  document.getElementById('glossary-modal').style.display = 'flex';
+}
+
+function closeGlossaryModal() {
+  document.getElementById('glossary-modal').style.display = 'none';
+}
+
+async function saveGlossaryEntry() {
+  const editingHex = document.getElementById('gf-editing-hex').value;
+  const body = {
+    name: document.getElementById('gf-name').value.trim(),
+    hex: document.getElementById('gf-hex').value.trim(),
+    description: document.getElementById('gf-desc').value.trim(),
+    state: document.getElementById('gf-state').value,
+    platform: document.getElementById('gf-platform').value,
+    version: document.getElementById('gf-version').value.trim(),
+    backend: document.getElementById('gf-backend').value.trim(),
+    notes: document.getElementById('gf-notes').value.trim(),
+    category: document.getElementById('gf-cat').value.trim(),
+  };
+  if(!body.name) { toast('Name is required', 'err'); return; }
+  let res;
+  if(editingHex) {
+    res = await apiFetch('/glossary/' + editingHex, { method: 'PUT', body: JSON.stringify(body) });
+  } else {
+    res = await apiFetch('/glossary', { method: 'POST', body: JSON.stringify(body) });
+  }
+  if(res.ok) { toast(editingHex ? 'Entry updated' : 'Entry added'); closeGlossaryModal(); loadGlossary(); }
+  else toast('Error: ' + (res.data?.error || 'unknown'), 'err');
+}
+
+async function deleteGlossaryEntry(hexOrName) {
+  if(!confirm('Delete entry ' + hexOrName + '?')) return;
+  if(!getAuth()) { toast('Auth token required to delete', 'err'); return; }
+  const res = await apiFetch('/glossary/' + hexOrName, { method: 'DELETE' });
+  if(res.ok) { toast('Entry deleted'); loadGlossary(); }
+  else toast('Error: ' + (res.data?.error || 'unauthorized'), 'err');
+}
+
+// ── REVIEW QUEUE ─────────────────────────────────────────────────────────────
+
+async function loadReviews() {
+  const status = document.getElementById('r-status').value;
+  const url = '/review' + (status ? '?status=' + status : '');
+  const res = await apiFetch(url);
+  const list = document.getElementById('review-list');
+  if(!res.ok) { list.innerHTML = '<div class="empty">Failed to load submissions</div>'; return; }
+  const items = res.data.submissions || res.data || [];
+  if(!items.length) { list.innerHTML = '<div class="empty">No submissions found</div>'; return; }
+  list.innerHTML = items.map(s => renderSubmission(s)).join('');
+}
+
+function renderSubmission(s) {
+  return '<div class="card" id="sub-' + esc(s.hex) + '">' +
+    '<div class="row sb">' +
+      '<div><b>' + esc(s.name) + '</b> <span class="badge ' + esc(s.status) + '">' + esc(s.status) + '</span></div>' +
+      '<span class="meta">' + esc((s.submitted_at||'').substring(0,10)) + '</span>' +
+    '</div>' +
+    (s.description ? '<p class="meta" style="margin-top:4px">' + esc(s.description) + '</p>' : '') +
+    '<div class="row" style="margin-top:6px;gap:10px">' +
+      (s.category ? '<span class="meta">&#128193; ' + esc(s.category) + '</span>' : '') +
+      (s.platform ? '<span class="meta">&#x1F4BB; ' + esc(s.platform) + '</span>' : '') +
+      '<span class="hex">' + esc((s.hex||'').substring(0,20)) + '...</span>' +
+    '</div>' +
+    '<div class="vote-row">' +
+      '<button class="btn success" style="padding:5px 12px;font-size:.8rem" onclick="castVote(' + esc(JSON.stringify(s.hex)) + ',&quot;approve&quot;)">&#10003; Approve</button>' +
+      '<button class="btn danger" style="padding:5px 12px;font-size:.8rem" onclick="castVote(' + esc(JSON.stringify(s.hex)) + ',&quot;reject&quot;)">&#10007; Reject</button>' +
+      '<button class="btn ghost" style="padding:5px 12px;font-size:.8rem" onclick="castVote(' + esc(JSON.stringify(s.hex)) + ',&quot;abstain&quot;)">&#x25CB; Abstain</button>' +
+      '<button class="btn ghost" style="padding:5px 12px;font-size:.8rem" onclick="loadVotes(' + esc(JSON.stringify(s.hex)) + ')">View Votes</button>' +
+      (s.status === 'approved' ? '<button class="btn warn" style="padding:5px 12px;font-size:.8rem" onclick="revokeArtifact(' + esc(JSON.stringify(s.hex)) + ')">Revoke</button>' : '') +
+    '</div>' +
+    '<div id="votes-' + esc(s.hex) + '" style="margin-top:8px"></div>' +
+  '</div>';
+}
+
+async function castVote(hex, vote) {
+  if(!getAuth()) { toast('Auth token required to vote', 'err'); return; }
+  const reviewer = prompt('Your reviewer handle:', 'anonymous');
+  if(reviewer === null) return;
+  const notes = prompt('Notes (optional):', '');
+  const res = await apiFetch('/review/' + hex + '/vote', {
+    method: 'POST',
+    body: JSON.stringify({ vote, reviewer: reviewer||'anonymous', notes: notes||'' })
+  });
+  if(res.ok) { toast('Vote cast: ' + vote + ' — ' + (res.data.status||'')); loadReviews(); }
+  else toast('Error: ' + (res.data?.error || 'unknown'), 'err');
+}
+
+async function loadVotes(hex) {
+  const el = document.getElementById('votes-' + hex);
+  const res = await apiFetch('/review/' + hex + '/votes');
+  if(!res.ok) { el.innerHTML = '<span class="meta">Failed to load votes</span>'; return; }
+  const votes = res.data.votes || [];
+  if(!votes.length) { el.innerHTML = '<span class="meta">No votes yet</span>'; return; }
+  el.innerHTML = '<hr><div class="meta" style="margin-bottom:4px">Votes:</div>' +
+    votes.map(v => '<span class="badge ' + (v.vote==='approve'?'approved':v.vote==='reject'?'rejected':'pending') + '" style="margin-right:4px">' + esc(v.vote) + ' — ' + esc(v.reviewer) + (v.notes?' ('+esc(v.notes)+')':'') + '</span>').join(' ');
+}
+
+async function revokeArtifact(hex) {
+  if(!getAuth()) { toast('Auth token required', 'err'); return; }
+  const reason = prompt('Revocation reason:');
+  if(!reason) return;
+  const res = await apiFetch('/review/' + hex + '/revoke', {
+    method: 'POST', body: JSON.stringify({ reason, revoked_by: 'admin' })
+  });
+  if(res.ok) { toast('Artifact revoked'); loadReviews(); }
+  else toast('Error: ' + (res.data?.error || 'unknown'), 'err');
+}
+
+// ── SUBMIT ───────────────────────────────────────────────────────────────────
+
+async function submitArtifact() {
+  if(!getAuth()) { toast('Auth token required to submit', 'err'); return; }
+  const body = {
+    name: document.getElementById('sf-name').value.trim(),
+    hex: document.getElementById('sf-hex').value.trim(),
+    description: document.getElementById('sf-desc').value.trim(),
+    category: document.getElementById('sf-cat').value.trim(),
+    platform: document.getElementById('sf-platform').value,
+    submitter: document.getElementById('sf-submitter').value.trim()||'anonymous',
+    artifact_url: document.getElementById('sf-url').value.trim()||null,
+  };
+  if(!body.name||!body.hex) { toast('Name and hex are required', 'err'); return; }
+  const res = await apiFetch('/review', { method: 'POST', body: JSON.stringify(body) });
+  if(res.ok) {
+    toast('Submitted for review!');
+    ['sf-name','sf-hex','sf-desc','sf-cat','sf-submitter','sf-url'].forEach(id => document.getElementById(id).value='');
+  } else toast('Error: ' + (res.data?.error || 'unknown'), 'err');
+}
+
+// ── FEED ─────────────────────────────────────────────────────────────────────
+
+async function loadFeed() {
+  const cat = document.getElementById('feed-cat').value;
+  const platform = document.getElementById('feed-platform').value;
+  let qs = [];
+  if(cat) qs.push('category=' + encodeURIComponent(cat));
+  if(platform) qs.push('platform=' + encodeURIComponent(platform));
+  const url = '/feed' + (qs.length ? '?' + qs.join('&') : '');
+  const res = await apiFetch(url);
+  const list = document.getElementById('feed-list');
+  if(!res.ok) { list.innerHTML = '<div class="empty">Failed to load feed</div>'; return; }
+  const items = res.data.feed || res.data || [];
+  if(!items.length) { list.innerHTML = '<div class="empty">No approved artifacts in the feed yet</div>'; return; }
+  list.innerHTML = items.map(f => '<div class="card">' +
+    '<div class="row sb">' +
+      '<div><b>' + esc(f.name) + '</b>' +
+      (f.revoked ? '<span class="badge black" style="margin-left:6px">revoked</span>' : '<span class="badge white" style="margin-left:6px">available</span>') +
+      (f.category ? '<span class="badge grey" style="margin-left:6px">' + esc(f.category) + '</span>' : '') +
+      '</div>' +
+      '<span class="meta">' + esc((f.advertised_at||'').substring(0,10)) + '</span>' +
+    '</div>' +
+    (f.description ? '<p class="meta" style="margin-top:4px">' + esc(f.description) + '</p>' : '') +
+    '<div class="row" style="margin-top:6px;gap:10px">' +
+      '<span class="meta">&#10003; ' + (f.approvals||0) + ' approvals</span>' +
+      (f.platform ? '<span class="meta">&#x1F4BB; ' + esc(f.platform) + '</span>' : '') +
+      '<span class="hex">' + esc((f.hex||'').substring(0,20)) + '...</span>' +
+    '</div>' +
+    (f.artifact_url ? '<div style="margin-top:8px"><a href="' + esc(f.artifact_url) + '" target="_blank" rel="noopener" style="color:var(--accent2);font-size:.82rem">Opt-in pull link &rarr;</a></div>' : '') +
+  '</div>').join('');
+  // Populate category filter from feed items
+  const cats = [...new Set(items.map(i => i.category).filter(Boolean))];
+  const catSel = document.getElementById('feed-cat');
+  catSel.innerHTML = '<option value="">All Categories</option>' + cats.map(c => '<option>' + esc(c) + '</option>').join('');
+}
+
+// ── VERIFY ───────────────────────────────────────────────────────────────────
+
+async function verifyArtifact() {
+  const hex = document.getElementById('v-hex').value.trim();
+  if(!hex) { toast('Enter a hex hash', 'err'); return; }
+  const res = await apiFetch('/verify/' + hex);
+  const el = document.getElementById('verify-result');
+  if(!res.ok && res.status !== 200) { el.innerHTML = '<div class="card"><span class="badge rejected">Error loading</span></div>'; return; }
+  const d = res.data;
+  const rv = d.revocation || {};  // /verify nests revocation details (S2CORE-F15)
+  const statusColor = d.verified ? 'approved' : (d.status === 'revoked' ? 'black' : d.status === 'pending' ? 'pending' : 'rejected');
+  el.innerHTML = '<div class="card">' +
+    '<div class="row" style="gap:10px;margin-bottom:8px">' +
+      '<span class="badge ' + statusColor + '" style="font-size:.9rem;padding:4px 12px">' + esc(d.status||'unknown') + '</span>' +
+      (d.verified ? '<span style="color:var(--green)">&#10003; Verified</span>' : '<span style="color:var(--red)">&#10007; Not Verified</span>') +
+    '</div>' +
+    (d.name ? '<div><b>' + esc(d.name) + '</b></div>' : '') +
+    (d.description ? '<p class="meta" style="margin-top:4px">' + esc(d.description) + '</p>' : '') +
+    '<div class="row" style="margin-top:8px;gap:12px">' +
+      (d.submitted_at ? '<span class="meta">Submitted: ' + esc(String(d.submitted_at).substring(0,10)) + '</span>' : '') +
+      (rv.revoked_by ? '<span class="meta">Revoked by: ' + esc(rv.revoked_by) + '</span>' : '') +
+      (rv.reason ? '<span class="meta">Reason: ' + esc(rv.reason) + '</span>' : '') +
+    '</div>' +
+    '<div class="hex" style="margin-top:8px">' + esc(hex) + '</div>' +
+  '</div>';
+}
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+function esc(s) {
+  if(s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Auto-load on start
+loadGlossary();
+</script>
+</body>
+</html>`;
+
+
+// ── Atlas rebuild ────────────────────────────────────────────────────────────
+// The worker keeps the Atlas right by itself. parse-connections.js bundles
+// every CONNECTIONS.md into atlas-sources.json and intakes it; the moment its
+// bytes land in R2 (PUT /clonepool/<BUNDLE_KEY>) this rebuilds the
+// `connections` graph and _meta/atlas from it, and the daily cron re-checks
+// that the graph was built from the bundle R2 holds now. One parser
+// (atlas-parse.mjs) is shared with the local script, so a dry run there shows
+// exactly what lands here.
+async function rebuildAtlas(env, { onlyIfStale = false } = {}) {
+  const db = env.PHOENIX_DB;
+  const obj = await env.CLONEPOOL_BUCKET.get(BUNDLE_KEY);
+  if (!obj) return { ok: false, reason: 'no Atlas bundle in R2 yet — run parse-connections.js' };
+  const builtFrom = { key: BUNDLE_KEY, etag: obj.etag, uploaded: obj.uploaded.toISOString() };
+
+  if (onlyIfStale) {
+    const cur = await env.CLONEPOOL_BUCKET.get('_meta/atlas');
+    if (cur) {
+      try {
+        const blob = await cur.json();
+        if (blob.built_from && blob.built_from.etag === obj.etag) return { ok: true, skipped: 'current', built_from: builtFrom };
+      } catch (_) { /* unreadable blob → rebuild */ }
+    }
+  }
+
+  let bundle;
+  try { bundle = await obj.json(); } catch (e) { return { ok: false, reason: `bundle is not JSON: ${e.message}` }; }
+  if (bundle.format !== BUNDLE_FORMAT || !Array.isArray(bundle.files) || !bundle.files.length
+      || !bundle.files.every((f) => typeof f.path === 'string' && typeof f.text === 'string')) {
+    return { ok: false, reason: `bundle is not ${BUNDLE_FORMAT}` };
+  }
+  builtFrom.files = bundle.files.length;
+
+  const rows = await parseAtlas(bundle.files);
+  // Guard: a truncated or wrong bundle must not wipe the graph. A real doc
+  // change never removes half of it in one go.
+  const before = (await db.prepare('SELECT COUNT(*) AS n FROM connections').first())?.n || 0;
+  if (rows.length < before / 2) {
+    return { ok: false, reason: `bundle parses to ${rows.length} nodes, the live graph has ${before} — refusing to replace it` };
+  }
+
+  const upsert = db.prepare(`
+    INSERT INTO connections (hex, name, path, area, description, key_fact, source_file, state, links)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(hex) DO UPDATE SET
+      name = excluded.name, path = excluded.path, area = excluded.area,
+      description = excluded.description, key_fact = excluded.key_fact,
+      source_file = excluded.source_file, state = excluded.state, links = excluded.links,
+      updated_at = CURRENT_TIMESTAMP`);
+  for (let i = 0; i < rows.length; i += 50) {
+    await db.batch(rows.slice(i, i + 50).map((r) => upsert.bind(
+      r.hex, r.name, r.path, r.area || null, r.description || '', r.key_fact || null,
+      r.source_file || null, r.state || 'white', r.links || '[]')));
+  }
+  // Reconcile: nodes no longer in any CONNECTIONS.md go (CONN-F09).
+  const keep = new Set(rows.map((r) => r.hex));
+  const stale = (await db.prepare('SELECT hex FROM connections').all()).results.map((r) => r.hex).filter((h) => !keep.has(h));
+  const del = db.prepare('DELETE FROM connections WHERE hex = ?');
+  for (let i = 0; i < stale.length; i += 50) await db.batch(stale.slice(i, i + 50).map((h) => del.bind(h)));
+
+  const blob = buildAtlasBlob(bundle.files, rows, builtFrom);
+  blob.worker_version = VERSION;
+  await env.CLONEPOOL_BUCKET.put('_meta/atlas', JSON.stringify(blob, null, 2), { httpMetadata: { contentType: 'application/json' } });
+  return { ok: true, nodes: rows.length, edges: blob.atlas_edge_count, deleted: stale, built_from: builtFrom };
+}
+
+// ── Router ───────────────────────────────────────────────────────────────────
+export default {
+  // Daily safety net: rebuild only if the graph was not built from the
+  // bundle R2 holds now (a missed trigger, a failed rebuild).
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(rebuildAtlas(env, { onlyIfStale: true }).then((r) => {
+      if (!r.ok) console.error(`atlas cron: ${r.reason}`);
+    }));
+  },
+
+  async fetch(req, env, ctx) {
+
+    if (req.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: HEADERS });
+    }
+
+    const url = new URL(req.url);
+    const path = url.pathname.replace(/\/$/, '') || '/';
+    const db = env.PHOENIX_DB;
+
+    try {
+
+      // ── Member keys: decide before any route runs (see memberGate) ─────────
+      const refused = await memberGate(req, env, db, url, path);
+      if (refused) return refused;
+
+      // GET /may-write/:hex — intake asks before writing. Owner: always yes.
+      // (Members are answered inside memberGate.)
+      if (path.startsWith('/may-write/') && req.method === 'GET') {
+        if (!isOwner(req, env)) return err('unauthorized', 401);
+        return ok({ ok: true, who: 'owner', hex: decodeURIComponent(path.slice(11)) });
+      }
+
+      // ── Keys (owner only) ──────────────────────────────────────────────────
+      //   POST /keys {who, scopes?}    -> the new key, shown ONCE (only its SHA-256 is kept)
+      //   GET  /keys                   -> who, scopes, created, last used, revoked
+      //   POST /keys/:who/revoke       -> that person's key stops working at once
+      if (path === '/keys' || path.startsWith('/keys/')) {
+        if (!isOwner(req, env)) return err('owner only', isAuthorized(req, env) ? 403 : 401);
+        if (path === '/keys' && req.method === 'GET') {
+          const r = await db.prepare('SELECT who, scopes, created_at, last_used_at, revoked_at FROM api_keys ORDER BY id').all();
+          return ok({ keys: r.results, count: r.results.length });
+        }
+        if (path === '/keys' && req.method === 'POST') {
+          const body = await req.json().catch(() => ({}));
+          const who = String(body.who || '').toLowerCase();
+          if (!/^[a-z0-9][a-z0-9._-]{1,31}$/.test(who) || who === 'owner') return err('who: 2-32 of a-z 0-9 . _ - (not "owner")', 400);
+          const scopes = [...new Set(String(body.scopes || 'read,intake').split(',').map((s) => s.trim()))];
+          if (!scopes.length || scopes.some((s) => !['read', 'intake'].includes(s))) return err('scopes: read and/or intake', 400);
+          if (scopes.includes('intake') && !scopes.includes('read')) scopes.push('read');   // intake needs to look before it writes
+          const live = await db.prepare('SELECT 1 FROM api_keys WHERE who = ? AND revoked_at IS NULL').bind(who).first();
+          if (live) return err(`"${who}" already has a working key — revoke it first to issue a new one`, 409);
+          const raw = new Uint8Array(32); crypto.getRandomValues(raw);
+          const key = 'phx_' + btoa(String.fromCharCode(...raw)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+          await db.prepare('INSERT INTO api_keys (who, key_hash, scopes) VALUES (?, ?, ?)').bind(who, await sha256hex(key), scopes.join(',')).run();
+          return ok({ ok: true, who, scopes: scopes.join(','), key, note: 'shown once — Phoenix keeps only its hash' });
+        }
+        const rv = path.match(/^\/keys\/([^/]+)\/revoke$/);
+        if (rv && req.method === 'POST') {
+          const r = await db.prepare('UPDATE api_keys SET revoked_at = CURRENT_TIMESTAMP WHERE who = ? AND revoked_at IS NULL').bind(decodeURIComponent(rv[1])).run();
+          return r.meta.changes ? ok({ ok: true, revoked: decodeURIComponent(rv[1]) }) : err('no working key for that name', 404);
+        }
+        return err('bad /keys request', 400);
+      }
+
+      // ── Health ──────────────────────────────────────────────────────────────
+      // ── Platform UI (GET /platform or browser request to /)
+      if (path === '/platform' || (path === '/' && (req.headers.get('Accept')||'').includes('text/html'))) {
+        return new Response(HTML_PLATFORM, { status: 200, headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Access-Control-Allow-Origin': '*' } });
+      }
+
+      // ── Whoami (GET /whoami — auth round-trip check, no side effects) ────────
+      // Exists so a token rotation (or intake.sh's preflight) can confirm the
+      // local PHOENIX_AUTH actually matches this worker's secret in one cheap
+      // call, instead of finding out from a pile of silent per-file 401s.
+      if (path === '/whoami' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const mk = MEMBER.get(req);
+        return ok({ ok: true, worker: 'packages-worker', version: VERSION,
+                    who: mk ? mk.who : 'owner', scopes: mk ? [...mk.scopes].join(',') : 'all' });
+      }
+
+      // ── Health (GET / or GET /health — API clients) ──────────────────────────
+      if (path === '/' || path === '/health') {
+        const tables = await db
+          .prepare("SELECT count(*) as n FROM sqlite_master WHERE type='table'")
+          .first();
+        return ok({
+          status: 'ok',
+          worker: 'packages-worker',
+          version: VERSION,
+          brand: 'USys — United Systems',
+          db: 'phoenix_dev_db',
+          tables: tables.n,
+          platform_ui: '/platform',
+        });
+      }
+
+      // ── Stats (GET /stats — dashboard get-phoenix-stats / Help Desk prompt) ─
+      // dashboard/main.js reads glossary_total, custody_total and r2_objects
+      // (null = unknown, never a guess). Before 2026-09-29 this route did not
+      // exist and every call 404'd (audit S2CORE-F29 / DASH-F05). R2 listing
+      // is paged 1000 keys at a time and capped at R2_STATS_MAX_PAGES so one
+      // dashboard poll can never turn into an unbounded list walk; past the cap
+      // r2_objects is a floor and r2_objects_capped is true.
+      if (path === '/stats' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const count = async (table) => {
+          try {
+            const row = await db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first();
+            return row ? row.n : null;
+          } catch { return null; }
+        };
+        const [glossary_total, custody_total, clonepool_total, versions_total] = await Promise.all([
+          count('glossary'), count('custody'), count('clonepool'), count('versions'),
+        ]);
+        let r2_objects = null, r2_objects_capped = false;
+        if (env.CLONEPOOL_BUCKET) {
+          const R2_STATS_MAX_PAGES = 20;
+          let cursor, pages = 0, n = 0, truncated = true;
+          while (truncated && pages < R2_STATS_MAX_PAGES) {
+            const listed = await env.CLONEPOOL_BUCKET.list({ limit: 1000, cursor });
+            n += listed.objects.length;
+            truncated = listed.truncated;
+            cursor = listed.cursor;
+            pages++;
+          }
+          r2_objects = n;
+          r2_objects_capped = truncated;
+        }
+        return ok({
+          glossary_total, custody_total, clonepool_total, versions_total,
+          r2_objects, r2_objects_capped,
+          generated_at: new Date().toISOString(),
+        });
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+      // INTAKE ENDPOINTS — called by intake.sh after every operation
+      // All writes require auth
+      // ══════════════════════════════════════════════════════════════════════
+
+      // ── /clonepool/:hex/versions/:hashPrefix — immutable per-version bytes ──
+      // clonepool's own hex_id is filename-based (to_hex(name) in intake.sh),
+      // stable across re-intakes, so PUT /clonepool/:hex always overwrites the
+      // same "current" key. This sub-route is the actual byte-retrievable
+      // history: each distinct content hash gets its own permanent R2 key,
+      // written once and never overwritten (re-uploading identical bytes to
+      // the same key is harmless). The `versions` D1 table's store_path
+      // points here. Checked before the generic /clonepool/:id routes below
+      // since both start with the same prefix.
+      const vMatch = path.match(/^\/clonepool\/([^/]+)\/versions\/([^/]+)$/);
+      if (vMatch && (req.method === 'PUT' || req.method === 'GET')) {
+        const [, hexId, hashPrefix] = vMatch;
+        const key = `${hexId}/versions/${hashPrefix}`;
+        if (!env.CLONEPOOL_BUCKET) return err('R2 bucket not bound to this worker', 500);
+        if (req.method === 'PUT') {
+          if (!isAuthorized(req, env)) return err('unauthorized', 401);
+          const bytes = await req.arrayBuffer();
+          await env.CLONEPOOL_BUCKET.put(key, bytes);
+          return ok({ ok: true, key, bytes: bytes.byteLength });
+        }
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const obj = await env.CLONEPOOL_BUCKET.get(key);
+        if (!obj) return err('not found', 404);
+        return new Response(obj.body, { status: 200, headers: { 'Content-Type': 'application/octet-stream' } });
+      }
+
+      // POST /clonepool — intake.sh reports a new file into the pool
+      if (path === '/clonepool' && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const body = await req.json();
+        if (!body.hex_id || !body.name) return err('hex_id and name required');
+
+        // Look up the prior hash BEFORE overwriting — this is how we know
+        // whether the content actually changed and a version row is owed.
+        const prior = await db.prepare('SELECT hash_sha3 FROM clonepool WHERE hex_id = ?').bind(body.hex_id).first();
+
+        await db.prepare(`
+          INSERT INTO clonepool (hex_id, b58, name, original_name, pool_path, sidecar_path,
+            state, tier, size, version, hash_sha3, hash_blake2, header_qr, footer_qr,
+            source_path, notes, addr_scheme, sensitive, owner)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(hex_id) DO UPDATE SET
+            state = excluded.state,
+            version = excluded.version,
+            tier = excluded.tier,
+            pool_path = excluded.pool_path,
+            hash_sha3 = COALESCE(excluded.hash_sha3, clonepool.hash_sha3),
+            hash_blake2 = COALESCE(excluded.hash_blake2, clonepool.hash_blake2),
+            header_qr = COALESCE(excluded.header_qr, clonepool.header_qr),
+            footer_qr = COALESCE(excluded.footer_qr, clonepool.footer_qr),
+            addr_scheme = excluded.addr_scheme,
+            sensitive = excluded.sensitive,
+            source_path = COALESCE(excluded.source_path, clonepool.source_path),
+            updated_at = CURRENT_TIMESTAMP
+        `).bind(
+          body.hex_id,
+          body.b58 || body.hex_id,
+          body.name,
+          body.original_name || body.name,
+          body.pool_path || null,
+          body.sidecar_path || null,
+          body.state || 'white',
+          body.tier || 1,
+          body.size || 0,
+          body.version || 'v1',
+          body.hash_sha3 || null,
+          body.hash_blake2 || null,
+          body.header_qr || null,
+          body.footer_qr || null,
+          body.source_path || null,
+          body.notes || null,
+          (body.hash_sha3 ? 'content-v2' : 'filename-hex-v1'),
+          body.sensitive ? 1 : 0,
+          MEMBER.get(req)?.who ?? null,        // owner: set once, never changed by ON CONFLICT
+        ).run();
+
+        // Log an immutable version row whenever content actually changed
+        // (new hash, or first hash ever seen for this hex_id). This is the
+        // real append-only history — clonepool above only ever holds current
+        // state. store_path matches the key the client should PUT/GET bytes
+        // at via /clonepool/:hex/versions/:hashPrefix.
+        let versionLogged = null;
+        if (body.hash_sha3 && (!prior || prior.hash_sha3 !== body.hash_sha3)) {
+          const countRow = await db.prepare('SELECT COUNT(*) AS n FROM versions WHERE package = ?').bind(body.name).first();
+          const versionLabel = `v${(countRow?.n || 0) + 1}`;
+          const hashPrefix = body.hash_sha3.slice(0, 16);
+          const storePath = `${body.hex_id}/versions/${hashPrefix}`;
+          // versions.package has a FOREIGN KEY on packages(name) — most
+          // clonepool files aren't registered "packages," so satisfy the
+          // constraint with a harmless stub row rather than touching schema.
+          await db.prepare('INSERT OR IGNORE INTO packages (name) VALUES (?)').bind(body.name).run();
+          await db.prepare(`
+            INSERT INTO versions (package, version, store_path, hash_sha3, hash_blake2, size, note, signed_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            body.name,
+            versionLabel,
+            storePath,
+            body.hash_sha3,
+            body.hash_blake2 || null,
+            body.size || 0,
+            body.notes || '',
+            MEMBER.get(req)?.who ?? (body.actor || null),
+          ).run();
+          versionLogged = { version: versionLabel, store_path: storePath };
+        }
+
+        // The ledger is the authority on version numbers. The client's label
+        // came from its LOCAL pool count, which restarts at v1 when the pool
+        // lives on another drive (E: vs F:, S2CORE-F41) — D1 said v1 while the
+        // ledger said v3. Keep the row's version equal to the latest ledger row.
+        await db.prepare(`
+          UPDATE clonepool SET version = (SELECT version FROM versions WHERE package = ? ORDER BY id DESC LIMIT 1)
+          WHERE hex_id = ? AND EXISTS (SELECT 1 FROM versions WHERE package = ?)
+        `).bind(body.name, body.hex_id, body.name).run();
+
+        return ok({ ok: true, hex_id: body.hex_id, name: body.name, version_logged: versionLogged });
+      }
+
+      // GET /custody — ledger view
+      if (path === '/custody' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const hex = url.searchParams.get('hex');
+        const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+        const params = [];
+        let query = 'SELECT * FROM custody';
+        const where = [];
+        if (hex) { where.push('hex_id = ?'); params.push(hex); }
+        if (MEMBER.has(req)) where.push('hex_id NOT IN (SELECT hex_id FROM clonepool WHERE sensitive = 1)');
+        if (where.length) query += ' WHERE ' + where.join(' AND ');
+        query += ' ORDER BY intaked_at DESC LIMIT ?';
+        params.push(limit);
+
+        const result = await db.prepare(query).bind(...params).all();
+        return ok({ custody: result.results, count: result.results.length });
+      }
+
+      // POST /custody — intake.sh reports a custody receipt (append only)
+      if (path === '/custody' && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const body = await req.json();
+        if (!body.hex_id || !body.name) return err('hex_id and name required');
+
+        await db.prepare(`
+          INSERT INTO custody (hex_id, name, qr_top, qr_bottom, state, action, actor, validated)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          body.hex_id,
+          body.name,
+          body.qr_top || null,
+          body.qr_bottom|| null,
+          body.state || 'white',
+          body.action || 'intake',
+          MEMBER.get(req)?.who ?? (body.actor || 'usys'),   // a member's receipts carry their name, not whatever they send
+          body.validated|| 0,
+        ).run();
+
+        return ok({ ok: true, hex_id: body.hex_id, action: body.action });
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+      // CLONEPOOL
+      // columns: id, hex_id, b58, name, original_name, pool_path, sidecar_path,
+      //          header_qr, footer_qr, hash_sha3, hash_blake2, sha3_fp, blake2_fp,
+      //          state, tier, size, version, source_path, intaked_at, updated_at,
+      //          qr_valid, notes
+      // ══════════════════════════════════════════════════════════════════════
+
+      if (path === '/clonepool' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const state = url.searchParams.get('state');
+        const sensitive = url.searchParams.get('sensitive');
+        const limit = parseInt(url.searchParams.get('limit') || '100', 10);
+        const params = [];
+        const conditions = [];
+        let query = 'SELECT * FROM clonepool';
+
+        if (state) { conditions.push('state = ?'); params.push(state); }
+        if (sensitive !== null) { conditions.push('sensitive = ?'); params.push(sensitive === 'true' || sensitive === '1' ? 1 : 0); }
+        if (conditions.length) { query += ' WHERE ' + conditions.join(' AND '); }
+        query += ' ORDER BY intaked_at DESC LIMIT ?';
+        params.push(limit);
+
+        const result = await db.prepare(query).bind(...params).all();
+        return ok({ clonepool: result.results, count: result.results.length, filter: state || 'all' });
+      }
+
+      // ── Large objects + server-side copy (3.6.0, 2026-09-29) ─────────────
+      // A single request body is capped (~100 MB) on Workers, so bigger objects
+      // (models, game packs) go up in parts; R2 itself takes objects of ~5 TB.
+      //   POST   /clonepool/<key>/mpu                        {sha3}  -> {uploadId}
+      //   PUT    /clonepool/<key>/mpu/<uploadId>/<partNumber> body   -> {partNumber, etag}
+      //   POST   /clonepool/<key>/mpu/<uploadId>/complete     {parts:[{partNumber,etag}]}
+      //   DELETE /clonepool/<key>/mpu/<uploadId>                        abort
+      //   POST   /clonepool/<key>/copy  {from, sha3}  copy INSIDE R2, no re-upload —
+      //          only when the source object's recorded sha3 equals the one given,
+      //          so a version key can never receive someone else's newer bytes.
+      // <key> is a hex id, or <hex>/versions/<sha3[0:16]>. Uploads record the
+      // client's SHA3-512 in the object's custom metadata (header X-Phoenix-SHA3).
+      {
+        const m = path.match(/^\/clonepool\/([0-9a-f]+(?:\/versions\/[0-9a-f]{16})?)\/(mpu|copy)(?:\/([^/]+))?(?:\/(\d+|complete))?$/);
+        if (m) {
+          if (!isAuthorized(req, env)) return err('unauthorized', 401);
+          if (!env.CLONEPOOL_BUCKET) return err('R2 bucket not bound to this worker', 500);
+          const [, key, kind, uploadId, tail] = m;
+          const bucket = env.CLONEPOOL_BUCKET;
+          const sha3ok = v => typeof v === 'string' && /^[0-9a-f]{128}$/.test(v);
+          if (kind === 'copy' && req.method === 'POST' && !uploadId) {
+            const b = await req.json().catch(() => ({}));
+            if (typeof b.from !== 'string' || !/^[0-9a-f]+$/.test(b.from) || !sha3ok(b.sha3)) return err('from (hex) and sha3 required', 400);
+            const src = await bucket.get(b.from);
+            if (!src) return err('source not found', 404);
+            if ((src.customMetadata || {}).sha3 !== b.sha3) {
+              src.body.cancel();
+              return err('source bytes are not the ones named (sha3 mismatch) — upload instead', 409);
+            }
+            const { readable, writable } = new FixedLengthStream(src.size);
+            const pump = src.body.pipeTo(writable);
+            await bucket.put(key, readable, { customMetadata: { sha3: b.sha3, ...(MEMBER.has(req) ? { owner: MEMBER.get(req).who } : {}) } });
+            await pump;
+            return ok({ ok: true, key, from: b.from, bytes: src.size });
+          }
+          if (kind === 'mpu' && req.method === 'POST' && !uploadId) {
+            const b = await req.json().catch(() => ({}));
+            const md = { ...(sha3ok(b.sha3) ? { sha3: b.sha3 } : {}), ...(MEMBER.has(req) ? { owner: MEMBER.get(req).who } : {}) };
+            const mpu = await bucket.createMultipartUpload(key, Object.keys(md).length ? { customMetadata: md } : {});
+            return ok({ ok: true, key, uploadId: mpu.uploadId });
+          }
+          if (kind === 'mpu' && uploadId && req.method === 'PUT' && tail && tail !== 'complete') {
+            const n = parseInt(tail, 10);
+            if (!(n >= 1 && n <= 10000)) return err('partNumber 1..10000', 400);
+            const part = await bucket.resumeMultipartUpload(key, decodeURIComponent(uploadId)).uploadPart(n, req.body);
+            return ok({ ok: true, partNumber: part.partNumber, etag: part.etag });
+          }
+          if (kind === 'mpu' && uploadId && req.method === 'POST' && tail === 'complete') {
+            const b = await req.json().catch(() => ({}));
+            if (!Array.isArray(b.parts) || !b.parts.length) return err('parts required', 400);
+            const obj = await bucket.resumeMultipartUpload(key, decodeURIComponent(uploadId)).complete(
+              b.parts.map(x => ({ partNumber: Number(x.partNumber), etag: String(x.etag) })));
+            return ok({ ok: true, key, bytes: obj.size });
+          }
+          if (kind === 'mpu' && uploadId && req.method === 'DELETE' && !tail) {
+            await bucket.resumeMultipartUpload(key, decodeURIComponent(uploadId)).abort();
+            return ok({ ok: true, aborted: key });
+          }
+          return err('bad multipart/copy request', 400);
+        }
+      }
+
+      // PUT /clonepool/:id — upload the CURRENT bytes for a hex_id (overwritten
+      // on every re-intake — this is "latest," not history; see /versions/ above
+      // for the immutable per-content copy).
+      if (path.startsWith('/clonepool/') && req.method === 'PUT') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const hex_id = decodeURIComponent(path.slice(11));
+        if (!hex_id) return err('hex_id required', 400);
+        if (!env.CLONEPOOL_BUCKET) return err('R2 bucket not bound to this worker', 500);
+        const bytes = await req.arrayBuffer();
+        const sha3 = req.headers.get('X-Phoenix-SHA3') || '';
+        const meta = {};
+        if (/^[0-9a-f]{128}$/.test(sha3)) meta.sha3 = sha3;
+        if (MEMBER.has(req)) meta.owner = MEMBER.get(req).who;
+        await env.CLONEPOOL_BUCKET.put(hex_id, bytes, Object.keys(meta).length ? { customMetadata: meta } : undefined);
+        // The Atlas bundle just landed → rebuild the graph from it, after the
+        // response (intake is not kept waiting on the parse).
+        if (hex_id === BUNDLE_KEY && ctx) {
+          ctx.waitUntil(rebuildAtlas(env).then((r) => { if (!r.ok) console.error(`atlas rebuild: ${r.reason}`); }));
+        }
+        return ok({ ok: true, hex_id, bytes: bytes.byteLength, ...(hex_id === BUNDLE_KEY ? { atlas: 'rebuilding' } : {}) });
+      }
+
+      // GET /clonepool/:id — bytes by default (R2), ?meta=true forces the D1
+      // row (hash baseline, qr_valid, etc.) — needed by the validate flow and
+      // by the glossary's "show me the code" lookup (glossary.hex ==
+      // clonepool.hex_id, so this same route serves glossary code content).
+      if (path.startsWith('/clonepool/') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const id = decodeURIComponent(path.slice(11));
+        const wantsMeta = url.searchParams.get('meta') === 'true';
+        if (env.CLONEPOOL_BUCKET && !wantsMeta) {
+          const obj = await env.CLONEPOOL_BUCKET.get(id);
+          if (obj) {
+            return new Response(obj.body, { status: 200, headers: { 'Content-Type': 'application/octet-stream',
+                                                                      'Content-Length': String(obj.size) } });
+          }
+        }
+        const row = await db
+          .prepare('SELECT * FROM clonepool WHERE hex_id = ? OR name = ?')
+          .bind(id, id).first();
+        return row ? ok(row) : err('not found', 404);
+      }
+      // DELETE /clonepool/:id — remove catalog metadata and R2 bytes (auth required)
+      if (path.startsWith('/clonepool/') && req.method === 'DELETE') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const id = decodeURIComponent(path.slice(11));
+        if (!id) return err('id required', 400);
+        // Resolve to ONE row, then act on its hex_id: R2 objects are keyed by
+        // hex_id, so deleting key = <name> (a by-name call) orphaned the real
+        // object, and `WHERE hex_id = ? OR name = ?` removed every row that
+        // shared the name (audit S2CORE-F15). Exact hex match wins; a name
+        // shared by several rows is refused (409) instead of guessing.
+        const matches = (await db.prepare(
+          'SELECT id, hex_id FROM clonepool WHERE hex_id = ? OR name = ?'
+        ).bind(id, id).all()).results;
+        const existing = matches.find((m) => m.hex_id === id) || (matches.length === 1 ? matches[0] : null);
+        if (!matches.length) return err('not found', 404);
+        if (!existing) return ok({ error: 'ambiguous name — delete by hex_id', hex_ids: matches.map((m) => m.hex_id) }, 409);
+        if (env.CLONEPOOL_BUCKET) await env.CLONEPOOL_BUCKET.delete(existing.hex_id);
+        await db.prepare('DELETE FROM clonepool WHERE id = ?').bind(existing.id).run();
+        return ok({ ok: true, deleted: existing.hex_id });
+      }
+
+      // POST /clonepool/:hex/validate — integrity check at point of use. See
+      // intake.sh's verify_clonepool_copy(): it hashes what it actually
+      // received client-side (Workers' Web Crypto has neither SHA3 nor
+      // BLAKE2b) and reports the result here. A match flips qr_valid on and
+      // stamps verified_at; a mismatch flips it off.
+      if (path.startsWith('/clonepool/') && path.endsWith('/validate') && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const hex_id = decodeURIComponent(path.slice(11, -'/validate'.length));
+        if (!hex_id) return err('hex_id required', 400);
+        const body = await req.json();
+        const row = await db.prepare('SELECT hash_sha3, hash_blake2 FROM clonepool WHERE hex_id = ?').bind(hex_id).first();
+        if (!row) return err('not found', 404);
+
+        const hasBaseline = !!(row.hash_sha3 || row.hash_blake2);
+        const sha3Match = !row.hash_sha3 || row.hash_sha3 === body.hash_sha3;
+        const blake2Match = !row.hash_blake2 || row.hash_blake2 === body.hash_blake2;
+        const valid = hasBaseline && sha3Match && blake2Match;
+
+        await db.prepare(
+          'UPDATE clonepool SET qr_valid = ?, verified_at = CURRENT_TIMESTAMP WHERE hex_id = ?'
+        ).bind(valid ? 1 : 0, hex_id).run();
+
+        return ok({ ok: true, hex_id, valid, has_baseline: hasBaseline });
+      }
+
+      // PATCH /clonepool/:hex/tier — lightweight tier move for rotation.
+      // T1=primary/newest, T4=oldest before eviction — see intake.sh's
+      // rotate_clonepool_tiers(). body.state lets eviction flip state to
+      // 'black' in the same call instead of a second round trip.
+      if (path.startsWith('/clonepool/') && path.endsWith('/tier') && req.method === 'PATCH') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const hex_id = decodeURIComponent(path.slice(11, -'/tier'.length));
+        if (!hex_id) return err('hex_id required', 400);
+        const body = await req.json();
+        if (!body.tier) return err('tier required', 400);
+
+        await db.prepare(`
+          UPDATE clonepool SET tier = ?, pool_path = COALESCE(?, pool_path),
+            state = COALESCE(?, state), updated_at = CURRENT_TIMESTAMP
+          WHERE hex_id = ?
+        `).bind(body.tier, body.pool_path || null, body.state || null, hex_id).run();
+
+        return ok({ ok: true, hex_id, tier: body.tier });
+      }
+
+
+      // ══════════════════════════════════════════════════════════════════════
+      // PACKAGES
+      // ══════════════════════════════════════════════════════════════════════
+
+      if (path === '/packages' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const limit = parseInt(url.searchParams.get('limit') || '100', 10);
+        const result = await db
+          .prepare('SELECT * FROM packages ORDER BY name LIMIT ?')
+          .bind(limit).all();
+        return ok({ packages: result.results, count: result.results.length });
+      }
+
+      if (path.startsWith('/packages/') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const id = decodeURIComponent(path.slice(10));
+        const row = await db
+          .prepare('SELECT * FROM packages WHERE name = ? OR id = ?')
+          .bind(id, id).first();
+        return row ? ok(row) : err('not found', 404);
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+      // GLOSSARY
+      // columns: id, hex, b58, name, category_hex, description, state,
+      //          version, platform, backend, size, pool_path, sidecar,
+      //          amended, intaked_at, grace_until, evicted_at, notes
+      // JOIN: categories on categories.hex = glossary.category_hex
+      // ══════════════════════════════════════════════════════════════════════
+
+      if (path === '/glossary' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const search = url.searchParams.get('q');
+        const cat = url.searchParams.get('category');
+        const params = [];
+        const conditions = [];
+        // tier/qr_valid live on clonepool (glossary.hex == clonepool.hex_id),
+        // joined in so a caller gets location/integrity status with the entry
+        // in one round trip — and, via GET /clonepool/:hex (bytes by default),
+        // the same hex is how you pull the actual code/content for an entry.
+        let query = `SELECT g.*, c.name AS category, cp.tier AS tier, cp.qr_valid AS qr_valid
+                      FROM glossary g
+                      LEFT JOIN categories c ON c.hex = g.category_hex
+                      LEFT JOIN clonepool cp ON cp.hex_id = g.hex`;
+
+        if (search) { conditions.push('g.name LIKE ?'); params.push(`%${search}%`); }
+        if (cat) { conditions.push('c.name = ?'); params.push(cat); }
+        if (MEMBER.has(req)) conditions.push('COALESCE(cp.sensitive, 0) = 0');
+        if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
+        query += ' ORDER BY g.name';
+
+        const result = await db.prepare(query).bind(...params).all();
+        return ok({ glossary: result.results, count: result.results.length });
+      }
+
+      if (path === '/glossary' && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const body = await req.json();
+        if (!body.hex || !body.name) return err('hex and name required');
+
+        await db.prepare(`
+          INSERT INTO glossary (hex, b58, name, category_hex, description, state, version, platform, backend, size, pool_path, sidecar, notes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(hex) DO UPDATE SET
+            name = excluded.name,
+            description = excluded.description,
+            category_hex = excluded.category_hex,
+            state = excluded.state,
+            amended = 1
+        `).bind(
+          body.hex,
+          body.b58 || null,
+          body.name,
+          body.category_hex|| null,
+          body.description || '',
+          body.state || 'white',
+          body.version || null,
+          body.platform || null,
+          body.backend || null,
+          body.size || null,
+          body.pool_path || null,
+          body.sidecar || null,
+          body.notes || null,
+        ).run();
+
+        return ok({ ok: true, hex: body.hex, name: body.name });
+      }
+
+      // GET /glossary/:id/code — the actual file bytes behind a glossary entry.
+      // glossary.hex == clonepool.hex_id (see the JOIN in GET /glossary above),
+      // so this just resolves the entry and re-serves R2 bytes the same way
+      // GET /clonepool/:id does. Explicit endpoint so a glossary UI never has
+      // to know that cross-reference exists — it just asks for the code.
+      if (path.endsWith('/code') && path.startsWith('/glossary/') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const id = decodeURIComponent(path.slice(10, -'/code'.length));
+        if (!id) return err('id required', 400);
+        const entry = await db.prepare('SELECT hex, name FROM glossary WHERE hex = ? OR name = ?').bind(id, id).first();
+        if (!entry) return err('glossary entry not found', 404);
+        if (!env.CLONEPOOL_BUCKET) return err('R2 bucket not bound to this worker', 500);
+        const obj = await env.CLONEPOOL_BUCKET.get(entry.hex);
+        if (!obj) return err(`no stored code for "${entry.name}" (hex ${entry.hex}) — not uploaded to R2 or not intaked yet`, 404);
+        return new Response(obj.body, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+      }
+
+      if (path.startsWith('/glossary/') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const id = decodeURIComponent(path.slice(10));
+        const row = await db
+          .prepare('SELECT * FROM glossary g WHERE g.hex = ? OR g.name = ?')
+          .bind(id, id).first();
+        return row ? ok(row) : err('not found', 404);
+      }
+
+      if (path.startsWith('/glossary/') && req.method === 'PUT') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const id = decodeURIComponent(path.slice(10));
+        const body = await req.json();
+
+        await db.prepare(`
+          UPDATE glossary SET
+            description = COALESCE(?, description),
+            category_hex = COALESCE(?, category_hex),
+            state = COALESCE(?, state),
+            notes = COALESCE(?, notes),
+            amended = 1
+          WHERE hex = ? OR name = ?
+        `).bind(
+          body.description ?? null,
+          body.category_hex ?? null,
+          body.state ?? null,
+          body.notes ?? null,
+          id, id,
+        ).run();
+
+        return ok({ ok: true, updated: id });
+      }
+
+      if (path.startsWith('/glossary/') && req.method === 'DELETE') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const id = decodeURIComponent(path.slice(10));
+        await db.prepare('DELETE FROM glossary WHERE hex = ? OR name = ?').bind(id, id).run();
+        return ok({ ok: true, deleted: id });
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+      // CONNECTIONS — the Atlas: every component/feature documented in a
+      // CONNECTIONS.md, plus the real relationships between them (parsed from
+      // "Connects to / connected from" + shared area). One node per bullet/row
+      // in a CONNECTIONS.md; edges live in `links` (JSON array of hex ids).
+      // Where a node is also a real intaked file/dir, enrichWithGlossary()
+      // adds its live state (file_state / file_pool_path), keyed by the
+      // intake hex of the path's last segment (see CONN-F03 above).
+      // columns: hex, name, path, area, description, key_fact, source_file,
+      //          state, links, updated_at
+      // ══════════════════════════════════════════════════════════════════════
+
+      if (path === '/connections' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const search = url.searchParams.get('q');
+        const area = url.searchParams.get('area');
+        const params = [];
+        const conditions = [];
+        let query = 'SELECT c.* FROM connections c';
+        if (search) { conditions.push('(c.name LIKE ? OR c.description LIKE ? OR c.path LIKE ?)'); params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+        if (area) { conditions.push('c.area = ?'); params.push(area); }
+        if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
+        query += ' ORDER BY c.name';
+
+        const result = await db.prepare(query).bind(...params).all();
+        await enrichWithGlossary(db, result.results);
+        return ok({ connections: result.results, count: result.results.length });
+      }
+
+      // POST /connections/reconcile — body { keep: [hex, ...] }: delete every
+      // node NOT in the list. The upsert below never deletes, so a node
+      // removed or renamed in a CONNECTIONS.md stayed in D1 (and in /related)
+      // forever (audit CONN-F09). parse-connections.js sends the full hex list
+      // after a clean run. Guarded: an empty or malformed list deletes nothing.
+      // POST /connections/rebuild — rebuild the graph + _meta/atlas from the
+      // intaked bundle in R2 now (parse-connections.js --rebuild; also its
+      // fallback when an unchanged bundle was not re-uploaded).
+      if (path === '/connections/rebuild' && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const r = await rebuildAtlas(env);
+        return ok(r, r.ok ? 200 : 409);
+      }
+
+      if (path === '/connections/reconcile' && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const body = await req.json();
+        const keep = Array.isArray(body.keep) ? body.keep.filter((h) => typeof h === 'string' && /^[0-9a-f]{16}$/.test(h)) : [];
+        if (!keep.length || keep.length !== (body.keep || []).length) {
+          return err('keep must be a non-empty array of 16-char hex ids', 400);
+        }
+        const keepSet = new Set(keep);
+        const all = await db.prepare('SELECT hex FROM connections').all();
+        const stale = all.results.map((r) => r.hex).filter((h) => !keepSet.has(h));
+        for (const h of stale) {
+          await db.prepare('DELETE FROM connections WHERE hex = ?').bind(h).run();
+        }
+        return ok({ ok: true, kept: keep.length, deleted: stale });
+      }
+
+      if (path === '/connections' && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const body = await req.json();
+        if (!body.hex || !body.name || !body.path) return err('hex, name, and path required');
+
+        await db.prepare(`
+          INSERT INTO connections (hex, name, path, area, description, key_fact, source_file, state, links)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(hex) DO UPDATE SET
+            name = excluded.name,
+            path = excluded.path,
+            area = excluded.area,
+            description = excluded.description,
+            key_fact = excluded.key_fact,
+            source_file = excluded.source_file,
+            state = excluded.state,
+            links = excluded.links,
+            updated_at = CURRENT_TIMESTAMP
+        `).bind(
+          body.hex,
+          body.name,
+          body.path,
+          body.area || null,
+          body.description || '',
+          body.key_fact || null,
+          body.source_file || null,
+          body.state || 'white',
+          body.links || '[]',
+        ).run();
+
+        return ok({ ok: true, hex: body.hex, name: body.name });
+      }
+
+      // GET /connections/:id/related — the "snow globe": up to 8 neighbors,
+      // closest first. 1) explicit edges from `links` (both directions),
+      // 2) same-area entries not already picked, 3) backfill from anywhere if
+      // the graph around this node is still short. Must be checked before the
+      // generic /connections/:id GET below (path.startsWith would shadow it).
+      if (path.startsWith('/connections/') && path.endsWith('/related') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const id = decodeURIComponent(path.slice('/connections/'.length, -'/related'.length));
+        const { center, candidates } = await resolveConnectionRanked(db, id);
+        if (!center) return err('not found', 404);
+
+        // The whole graph is a few hundred rows — load it once and rank in
+        // memory. Same lookup → same 8, every time (the old fill-in was
+        // ORDER BY RANDOM(): different unrelated filler on every call).
+        const all = (await db.prepare('SELECT * FROM connections').all()).results;
+        const byHex = new Map(all.map((r) => [r.hex, r]));
+        const adj = new Map(all.map((r) => [r.hex, new Set()]));
+        for (const r of all) {
+          let l = [];
+          try { l = JSON.parse(r.links || '[]'); } catch (_) {}
+          for (const h of l) if (adj.has(h) && h !== r.hex) { adj.get(r.hex).add(h); adj.get(h).add(r.hex); }
+        }
+        const degree = (h) => adj.get(h)?.size || 0;
+        const byWeight = (a, b) => degree(b.hex) - degree(a.hex) || a.path.localeCompare(b.path);
+        const pickedHexes = new Set([center.hex]);
+        const picked = [];
+        const take = (rows, via) => {
+          for (const row of rows) {
+            if (picked.length >= 8) return;
+            if (pickedHexes.has(row.hex)) continue;
+            pickedHexes.add(row.hex);
+            picked.push({ ...row, via });
+          }
+        };
+
+        // 1) documented connections (both directions), best-connected first
+        const direct = [...(adj.get(center.hex) || [])].map((h) => byHex.get(h)).filter(Boolean);
+        take(direct.sort(byWeight), 'edge');
+        // 2) neighbours of neighbours, ranked by how many paths lead there
+        if (picked.length < 8) {
+          const hops = new Map();
+          for (const n of direct) for (const h of adj.get(n.hex) || []) {
+            if (!pickedHexes.has(h)) hops.set(h, (hops.get(h) || 0) + 1);
+          }
+          take([...hops.entries()].sort((a, b) => b[1] - a[1] || byWeight(byHex.get(a[0]), byHex.get(b[0])))
+            .map(([h]) => byHex.get(h)), 'near');
+        }
+        // 3) same folder. Nothing random after that: fewer than 8 is the truth.
+        if (picked.length < 8 && center.area) {
+          take(all.filter((r) => r.area === center.area).sort(byWeight), 'area');
+        }
+
+        // `via` tells a documented relationship (edge) from a two-step one
+        // (near) and a same-folder neighbour (area) — audit CONN-F11.
+        await enrichWithGlossary(db, [center, ...picked]);
+        return ok({ center, related: picked, count: picked.length, candidates });
+      }
+
+      if (path.startsWith('/connections/') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const id = decodeURIComponent(path.slice('/connections/'.length));
+        const row = await resolveConnection(db, id);
+        if (row) await enrichWithGlossary(db, [row]);
+        return row ? ok(row) : err('not found', 404);
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+      // CATEGORIES
+      // columns: hex, name, description
+      // ══════════════════════════════════════════════════════════════════════
+
+      if (path === '/categories' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const result = await db.prepare('SELECT * FROM categories ORDER BY name').all();
+        return ok({ categories: result.results, count: result.results.length });
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+      // TOC — live table of contents
+      // toc columns: id, title, parent_id, position, description, layer
+      // toc_entries columns: id, toc_id, package_id, position
+      // ══════════════════════════════════════════════════════════════════════
+
+      if (path === '/toc' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const [toc, entries, poolSummary] = await Promise.all([
+          db.prepare('SELECT * FROM toc ORDER BY position, title').all(),
+          db.prepare('SELECT * FROM toc_entries ORDER BY toc_id, position').all(),
+          db.prepare('SELECT state, COUNT(*) as n FROM clonepool GROUP BY state').all(),
+        ]);
+
+        const entryMap = {};
+        for (const e of entries.results) {
+          if (!entryMap[e.toc_id]) entryMap[e.toc_id] = [];
+          entryMap[e.toc_id].push(e);
+        }
+
+        const tocFull = toc.results.map(t => ({
+          ...t,
+          entries: entryMap[t.id] || [],
+        }));
+
+        return ok({
+          toc: tocFull,
+          total: tocFull.length,
+          pool_summary: poolSummary.results,
+          generated_at: new Date().toISOString(),
+        });
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+      // VERSIONS
+      // ══════════════════════════════════════════════════════════════════════
+
+      if (path === '/versions' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const pkg = url.searchParams.get('package');
+        const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+        const params = [];
+        let query = 'SELECT * FROM versions';
+        const where = [];
+        if (pkg) { where.push('package = ?'); params.push(pkg); }
+        if (MEMBER.has(req)) where.push('package NOT IN (SELECT name FROM clonepool WHERE sensitive = 1)');
+        if (where.length) query += ' WHERE ' + where.join(' AND ');
+        query += ' ORDER BY created_at DESC LIMIT ?';
+        params.push(limit);
+
+        const result = await db.prepare(query).bind(...params).all();
+        return ok({ versions: result.results, count: result.results.length });
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+      // DEPS — package dependency edges, reported by translator.sh's new
+      // `deps` verb via intake.sh's intake_from_backend(). Canonical table is
+      // `deps` (package, depends_on) — name-keyed like clonepool/versions/
+      // custody, not the integer-package_id `dependencies` table, which is
+      // an older unreconciled design and stays unused.
+      // ══════════════════════════════════════════════════════════════════════
+
+      if (path === '/deps' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const pkg = url.searchParams.get('package');
+        const reverse = url.searchParams.get('reverse'); // ?reverse=true: what depends ON this package
+        const params = [];
+        let query = 'SELECT * FROM deps';
+        if (pkg && reverse === 'true') { query += ' WHERE depends_on = ?'; params.push(pkg); }
+        else if (pkg) { query += ' WHERE package = ?'; params.push(pkg); }
+        const result = await db.prepare(query).bind(...params).all();
+        return ok({ deps: result.results, count: result.results.length });
+      }
+
+      // POST /deps — record one dependency edge (idempotent: same
+      // package+depends_on pair just updates version_req/optional).
+      if (path === '/deps' && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const body = await req.json();
+        if (!body.package || !body.depends_on) return err('package and depends_on required');
+
+        await db.prepare(`
+          INSERT INTO deps (package, depends_on, version_req, optional)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(package, depends_on) DO UPDATE SET
+            version_req = excluded.version_req,
+            optional = excluded.optional
+        `).bind(
+          body.package,
+          body.depends_on,
+          body.version_req || null,
+          body.optional ? 1 : 0,
+        ).run();
+
+        return ok({ ok: true, package: body.package, depends_on: body.depends_on });
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+      // SEARCH — clonepool + glossary + packages
+      // ══════════════════════════════════════════════════════════════════════
+
+      if (path === '/search' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const q = url.searchParams.get('q');
+        if (!q) return err('q required');
+        const term = `%${q}%`;
+
+        const [pool, gloss, pkgs] = await Promise.all([
+          db.prepare('SELECT hex_id, name, state, tier FROM clonepool WHERE (name LIKE ? OR hex_id LIKE ?) AND (? = 0 OR COALESCE(sensitive, 0) = 0) LIMIT 20').bind(term, term, MEMBER.has(req) ? 1 : 0).all(),
+          db.prepare('SELECT hex, name, description, category_hex FROM glossary WHERE name LIKE ? OR description LIKE ? LIMIT 20').bind(term, term).all(),
+          db.prepare('SELECT name, version, description FROM packages WHERE name LIKE ? OR description LIKE ? LIMIT 20').bind(term, term).all(),
+        ]);
+
+        return ok({
+          query: q,
+          clonepool: pool.results,
+          glossary: gloss.results,
+          packages: pkgs.results,
+          total: pool.results.length + gloss.results.length + pkgs.results.length,
+        });
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+      // PEER REVIEW — opt-in distribution + review + hex + QR verification
+      // Tables: submissions, reviews, revocations, advertisement_feed
+      // Principle: the hex is the identity. Review attaches judgment, not content.
+      // Nothing is pushed. Availability is advertised. Users pull only what they choose.
+      // ══════════════════════════════════════════════════════════════════════
+
+      // GET /review — list all submissions (filter by ?status=pending|approved|rejected)
+      if (path === '/review' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const status = url.searchParams.get('status');
+        const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+        const params = [];
+        let query = 'SELECT * FROM submissions';
+
+        if (status) { query += ' WHERE status = ?'; params.push(status); }
+        query += ' ORDER BY submitted_at DESC LIMIT ?';
+        params.push(limit);
+
+        const result = await db.prepare(query).bind(...params).all();
+        return ok({ submissions: result.results, count: result.results.length, filter: status || 'all' });
+      }
+
+      // GET /review/:hex — fetch review record for a specific artifact
+      if (path.startsWith('/review/') && !path.includes('/vote') && !path.includes('/revoke') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const hex = decodeURIComponent(path.slice(8));
+        const [submission, reviewVotes] = await Promise.all([
+          db.prepare('SELECT * FROM submissions WHERE hex = ?').bind(hex).first(),
+          db.prepare('SELECT * FROM reviews WHERE submission_hex = ? ORDER BY voted_at DESC').bind(hex).all(),
+        ]);
+        if (!submission) return err('not found', 404);
+        return ok({ submission, reviews: reviewVotes.results, vote_count: reviewVotes.results.length });
+      }
+
+      // POST /review — submit an artifact for community review (auth required)
+      if (path === '/review' && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const body = await req.json();
+        if (!body.hex || !body.name) return err('hex and name required');
+
+        await db.prepare(`
+          INSERT INTO submissions (hex, name, description, category, platform, submitter, artifact_url, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+          ON CONFLICT(hex) DO UPDATE SET
+            name = excluded.name,
+            description = excluded.description,
+            status = 'pending',
+            submitted_at = CURRENT_TIMESTAMP
+        `).bind(
+          body.hex,
+          body.name,
+          body.description || '',
+          body.category || null,
+          body.platform || null,
+          body.submitter || 'anonymous',
+          body.artifact_url || null,
+        ).run();
+
+        return ok({ ok: true, hex: body.hex, name: body.name, status: 'pending' });
+      }
+
+      // POST /review/:hex/vote — cast a vote (approve / reject / abstain) (auth required)
+      if (path.match(/^\/review\/[^\/]+\/vote$/) && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const hex = decodeURIComponent(path.slice(8, path.lastIndexOf('/vote')));
+        const body = await req.json();
+        if (!body.vote || !['approve', 'reject', 'abstain'].includes(body.vote)) {
+          return err('vote must be approve, reject, or abstain');
+        }
+
+        await db.prepare(`
+          INSERT INTO reviews (submission_hex, reviewer, vote, notes)
+          VALUES (?, ?, ?, ?)
+        `).bind(
+          hex,
+          body.reviewer || 'anonymous',
+          body.vote,
+          body.notes || null,
+        ).run();
+
+        // Tally votes — auto-approve if approvals >= threshold (default 2)
+        const threshold = 2;
+        const tally = await db.prepare(
+          "SELECT vote, COUNT(*) as n FROM reviews WHERE submission_hex = ? GROUP BY vote"
+        ).bind(hex).all();
+
+        const counts = {};
+        for (const row of tally.results) counts[row.vote] = row.n;
+        const approvals = counts['approve'] || 0;
+        const rejections = counts['reject'] || 0;
+
+        let newStatus = null;
+        if (approvals >= threshold) newStatus = 'approved';
+        else if (rejections >= threshold) newStatus = 'rejected';
+
+        if (newStatus) {
+          await db.prepare("UPDATE submissions SET status = ? WHERE hex = ?").bind(newStatus, hex).run();
+
+          // If approved, register in the advertisement feed
+          if (newStatus === 'approved') {
+            const sub = await db.prepare('SELECT * FROM submissions WHERE hex = ?').bind(hex).first();
+            if (sub) {
+              await db.prepare(`
+                INSERT INTO advertisement_feed (hex, name, description, category, platform, approvals, artifact_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(hex) DO UPDATE SET
+                  approvals = excluded.approvals,
+                  advertised_at = CURRENT_TIMESTAMP
+              `).bind(
+                hex,
+                sub.name,
+                sub.description || '',
+                sub.category || null,
+                sub.platform || null,
+                approvals,
+                sub.artifact_url || null,
+              ).run();
+            }
+          }
+        }
+
+        return ok({ ok: true, hex, vote: body.vote, approvals, rejections, status: newStatus || 'pending' });
+      }
+
+      // GET /review/:hex/votes — view all votes on a submission
+      if (path.match(/^\/review\/[^\/]+\/votes$/) && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const hex = decodeURIComponent(path.slice(8, path.lastIndexOf('/votes')));
+        const result = await db.prepare(
+          'SELECT * FROM reviews WHERE submission_hex = ? ORDER BY voted_at DESC'
+        ).bind(hex).all();
+        const tally = await db.prepare(
+          "SELECT vote, COUNT(*) as n FROM reviews WHERE submission_hex = ? GROUP BY vote"
+        ).bind(hex).all();
+        const counts = {};
+        for (const row of tally.results) counts[row.vote] = row.n;
+        return ok({ hex, votes: result.results, tally: counts, total: result.results.length });
+      }
+
+      // POST /review/:hex/revoke — revoke an approved artifact (auth required)
+      if (path.match(/^\/review\/[^\/]+\/revoke$/) && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const hex = decodeURIComponent(path.slice(8, path.lastIndexOf('/revoke')));
+        const body = await req.json();
+
+        // Identity == hash. Old artifact remains addressable. Only status changes.
+        await db.prepare("UPDATE submissions SET status = 'revoked' WHERE hex = ?").bind(hex).run();
+
+        await db.prepare(`
+          INSERT INTO revocations (hex, reason, revoked_by, superseded_by)
+          VALUES (?, ?, ?, ?)
+        `).bind(
+          hex,
+          body.reason || 'no reason provided',
+          body.revoked_by || 'admin',
+          body.superseded_by || null,
+        ).run();
+
+        // Mark as revoked in the feed (don't delete — revocation is public record)
+        await db.prepare(
+          "UPDATE advertisement_feed SET revoked = 1, revoked_at = CURRENT_TIMESTAMP WHERE hex = ?"
+        ).bind(hex).run();
+
+        return ok({ ok: true, hex, status: 'revoked', reason: body.reason || 'no reason provided' });
+      }
+
+      // GET /verify/:hex — verify an artifact — returns status + review provenance
+      if (path.startsWith('/verify/') && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const hex = decodeURIComponent(path.slice(8));
+        const [submission, revocation, feedEntry] = await Promise.all([
+          db.prepare('SELECT hex, name, status, submitted_at FROM submissions WHERE hex = ?').bind(hex).first(),
+          db.prepare('SELECT * FROM revocations WHERE hex = ?').bind(hex).first(),
+          db.prepare('SELECT * FROM advertisement_feed WHERE hex = ?').bind(hex).first(),
+        ]);
+
+        if (!submission) {
+          return ok({ hex, status: 'unknown', verified: false });
+        }
+
+        if (revocation) {
+          return ok({
+            hex,
+            status: 'revoked',
+            verified: false,
+            name: submission.name,
+            revocation: {
+              reason: revocation.reason,
+              revoked_by: revocation.revoked_by,
+              revoked_at: revocation.revoked_at,
+              superseded_by: revocation.superseded_by || null,
+            },
+          });
+        }
+
+        if (submission.status === 'approved') {
+          return ok({
+            hex,
+            status: 'verified',
+            verified: true,
+            name: submission.name,
+            submitted_at: submission.submitted_at,
+            in_feed: feedEntry ? true : false,
+          });
+        }
+
+        return ok({ hex, status: submission.status, verified: false, name: submission.name });
+      }
+
+      // GET /feed — opt-in availability feed of approved artifacts
+      if (path === '/feed' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const category = url.searchParams.get('category');
+        const platform = url.searchParams.get('platform');
+        const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+        const params = [];
+        const conditions = ['revoked = 0'];
+        let query = 'SELECT * FROM advertisement_feed';
+
+        if (category) { conditions.push('category = ?'); params.push(category); }
+        if (platform) { conditions.push('platform = ?'); params.push(platform); }
+        query += ' WHERE ' + conditions.join(' AND ');
+        query += ' ORDER BY advertised_at DESC LIMIT ?';
+        params.push(limit);
+
+        const result = await db.prepare(query).bind(...params).all();
+        return ok({
+          feed: result.results,
+          count: result.results.length,
+          note: 'Availability advertised. Nothing is pushed. Pull only what you choose.',
+        });
+      }
+
+      // ── /player — node session lifecycle ─────────────────────────────────
+      // Hash is the filename, the D1 key, and the R2 object key.
+      // Sidecars travel. Files never travel unless a node genuinely lacks them.
+      // All routes gated by PHOENIX_AUTH bearer token.
+      // R2 layout: players/{uid}/state.json
+      //            players/{uid}/hardware.json
+      //            players/{uid}/sidecars/{hash}.sidecar.json
+      //            players/{uid}/blobs/{hash}
+
+      if (path.startsWith('/player/')) {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        if (!env.CLONEPOOL_BUCKET) return err('CLONEPOOL_BUCKET not bound', 500);
+
+        // parse uid and sub-route: /player/:uid/<rest>
+        const playerRest = path.slice('/player/'.length);
+        const slashIdx   = playerRest.indexOf('/');
+        if (slashIdx === -1) return err('missing sub-route', 400);
+        const uid      = playerRest.slice(0, slashIdx);
+        const subRoute = playerRest.slice(slashIdx + 1);
+        if (!uid) return err('uid required', 400);
+
+        // ── GET /player/:uid/state ──────────────────────────────────────────
+        if (subRoute === 'state' && req.method === 'GET') {
+          const obj = await env.CLONEPOOL_BUCKET.get(`players/${uid}/state.json`);
+          if (!obj) return ok({ uid, state: {}, note: 'new player' });
+          const body = await obj.text();
+          return new Response(body, { status: 200, headers: HEADERS });
+        }
+
+        // ── PUT /player/:uid/state ──────────────────────────────────────────
+        if (subRoute === 'state' && req.method === 'PUT') {
+          const body = await req.text();
+          try { JSON.parse(body); } catch { return err('state must be valid JSON', 400); }
+          await env.CLONEPOOL_BUCKET.put(`players/${uid}/state.json`, body, {
+            httpMetadata: { contentType: 'application/json' },
+          });
+          return ok({ ok: true, uid, key: `players/${uid}/state.json` });
+        }
+
+        // ── GET /player/:uid/hardware ───────────────────────────────────────
+        if (subRoute === 'hardware' && req.method === 'GET') {
+          const obj = await env.CLONEPOOL_BUCKET.get(`players/${uid}/hardware.json`);
+          if (!obj) return ok({ uid, hardware: null });
+          const body = await obj.text();
+          return new Response(body, { status: 200, headers: HEADERS });
+        }
+
+        // ── PUT /player/:uid/hardware ───────────────────────────────────────
+        if (subRoute === 'hardware' && req.method === 'PUT') {
+          const body = await req.text();
+          try { JSON.parse(body); } catch { return err('hardware must be valid JSON', 400); }
+          await env.CLONEPOOL_BUCKET.put(`players/${uid}/hardware.json`, body, {
+            httpMetadata: { contentType: 'application/json' },
+          });
+          return ok({ ok: true, uid, key: `players/${uid}/hardware.json` });
+        }
+
+        // ── GET /player/:uid/sidecars ───────────────────────────────────────
+        if (subRoute === 'sidecars' && req.method === 'GET') {
+          const list = await env.CLONEPOOL_BUCKET.list({ prefix: `players/${uid}/sidecars/` });
+          const sidecars = list.objects.map(o => ({
+            key:      o.key,
+            hash:     o.key.split('/').pop().replace('.sidecar.json', ''),
+            size:     o.size,
+            uploaded: o.uploaded,
+          }));
+          return ok({ uid, sidecars, count: sidecars.length });
+        }
+
+        // ── GET /player/:uid/sidecar/:hash ──────────────────────────────────
+        if (subRoute.startsWith('sidecar/') && req.method === 'GET') {
+          const hash = subRoute.slice('sidecar/'.length);
+          if (!hash) return err('hash required', 400);
+          const obj = await env.CLONEPOOL_BUCKET.get(`players/${uid}/sidecars/${hash}.sidecar.json`);
+          if (!obj) return err('sidecar not found', 404);
+          const body = await obj.text();
+          return new Response(body, { status: 200, headers: HEADERS });
+        }
+
+        // ── PUT /player/:uid/sidecar/:hash ──────────────────────────────────
+        if (subRoute.startsWith('sidecar/') && req.method === 'PUT') {
+          const hash = subRoute.slice('sidecar/'.length);
+          if (!hash) return err('hash required', 400);
+          const body = await req.text();
+          let sc;
+          try { sc = JSON.parse(body); } catch { return err('sidecar must be valid JSON', 400); }
+          if (sc.hash && sc.hash !== hash) return err('sidecar.hash does not match route hash', 400);
+          sc.hash = hash;
+          await env.CLONEPOOL_BUCKET.put(
+            `players/${uid}/sidecars/${hash}.sidecar.json`,
+            JSON.stringify(sc),
+            { httpMetadata: { contentType: 'application/json' } },
+          );
+          return ok({ ok: true, uid, hash, key: `players/${uid}/sidecars/${hash}.sidecar.json` });
+        }
+
+        // ── GET /player/:uid/blob/:hash ─────────────────────────────────────
+        if (subRoute.startsWith('blob/') && req.method === 'GET') {
+          const hash = subRoute.slice('blob/'.length);
+          if (!hash) return err('hash required', 400);
+          const obj = await env.CLONEPOOL_BUCKET.get(`players/${uid}/blobs/${hash}`);
+          if (!obj) return err('blob not found', 404);
+          return new Response(obj.body, { status: 200, headers: {
+            ...HEADERS,
+            'Content-Type': 'application/octet-stream',
+            'X-Phoenix-Hash': hash,
+          }});
+        }
+
+        // ── PUT /player/:uid/blob/:hash ─────────────────────────────────────
+        // Hash verification happens in node_session.py before PUT.
+        // Worker enforces header/route hash consistency as second check.
+        if (subRoute.startsWith('blob/') && req.method === 'PUT') {
+          const hash = subRoute.slice('blob/'.length);
+          if (!hash) return err('hash required', 400);
+          const claimedHash = req.headers.get('X-Phoenix-Hash') || '';
+          if (claimedHash && claimedHash !== hash) {
+            return err('X-Phoenix-Hash header does not match route hash', 400);
+          }
+          const bytes = await req.arrayBuffer();
+          await env.CLONEPOOL_BUCKET.put(`players/${uid}/blobs/${hash}`, bytes);
+          return ok({ ok: true, uid, hash, bytes: bytes.byteLength, key: `players/${uid}/blobs/${hash}` });
+        }
+
+        // ── DELETE /player/:uid/wipe — full node cleanup on logout ──────────
+        if (subRoute === 'wipe' && req.method === 'DELETE') {
+          const list = await env.CLONEPOOL_BUCKET.list({ prefix: `players/${uid}/` });
+          const keys = list.objects.map(o => o.key);
+          await Promise.all(keys.map(k => env.CLONEPOOL_BUCKET.delete(k)));
+          return ok({ ok: true, uid, wiped: keys.length });
+        }
+
+        return err('unknown player sub-route', 404);
+      }
+
+
+      // ── /context ──────────────────────────────────────────────────────────
+      // AI session bootstrap — one auth'd GET returns the full project state:
+      // node counts, flagged/deprecated nodes, key facts, and frame state from
+      // _meta/atlas. No LLM calls — pure D1 + R2 aggregation, zero API cost.
+      if (path === '/context' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const [total, stateCounts, flagged, keyFacts] = await Promise.all([
+          db.prepare('SELECT COUNT(*) AS n FROM connections').first(),
+          db.prepare('SELECT state, COUNT(*) AS n FROM connections GROUP BY state').all(),
+          db.prepare(
+            'SELECT hex, name, path, area, state, description, key_fact FROM connections WHERE state != \'white\' ORDER BY area'
+          ).all(),
+          db.prepare(
+            'SELECT hex, name, path, area, key_fact FROM connections WHERE key_fact IS NOT NULL AND key_fact != \'\' ORDER BY area'
+          ).all(),
+        ]);
+        let frames = [];
+        let atlas_meta = null;
+        if (env.CLONEPOOL_BUCKET) {
+          const [atlasObj, bundleHead] = await Promise.all([
+            env.CLONEPOOL_BUCKET.get('_meta/atlas'),
+            env.CLONEPOOL_BUCKET.head(BUNDLE_KEY),
+          ]);
+          if (atlasObj) {
+            try {
+              const atlasJson = await atlasObj.json();
+              frames = atlasJson.frames || atlasJson.session_state || [];
+              // stale = R2 holds a newer Atlas bundle than the graph was built from
+              const builtEtag = atlasJson.built_from && atlasJson.built_from.etag;
+              atlas_meta = {
+                generated: atlasJson.generated,
+                built_from: atlasJson.built_from || null,
+                stale: !!bundleHead && builtEtag !== bundleHead.etag,
+              };
+            } catch (_) {}
+          }
+        }
+        const stateMap = {};
+        for (const row of (stateCounts.results || [])) stateMap[row.state] = row.n;
+        return ok({
+          project: 'Phoenix DevOps OS',
+          generated: new Date().toISOString(),
+          atlas: atlas_meta,
+          frames,
+          nodes: {
+            total: total?.n ?? 0,
+            white: stateMap.white ?? 0,
+            grey: stateMap.grey ?? 0,
+            black: stateMap.black ?? 0,
+            flagged: flagged.results || [],
+            key_facts: keyFacts.results || [],
+          },
+          canonical: {
+            worker_deploy: 'sector2/package-handler/worker/',
+            decoy_warning: 'sector3/workers/packages-worker/ is intentionally bricked — never deploy from there',
+            packages_worker_version: VERSION,
+          },
+          hint: 'State: white=active grey=deprecated black=wtf. GET /connections for full node list. GET /meta/atlas for raw blob.',
+        });
+      }
+
+      // ── /meta ─────────────────────────────────────────────────────────────
+      // Auth-gated R2 key-value store for machine-readable session bootstrap.
+      // Keys live under _meta/<key> in CLONEPOOL_BUCKET.
+      // GET /meta/<key>    → R2 object body (JSON or text)
+      // PUT /meta/<key>    → store body under _meta/<key>
+      // DELETE /meta/<key> → remove key
+      // Primary use: /meta/atlas — combined Atlas + frame state for Claude bootstrap.
+      if (path.startsWith('/meta/')) {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const metaSubKey = path.slice('/meta/'.length);
+        if (!metaSubKey) return err('key required', 400);
+        const metaKey = `_meta/${metaSubKey}`;
+
+        if (req.method === 'GET') {
+          const obj = await env.CLONEPOOL_BUCKET.get(metaKey);
+          if (!obj) return err(`meta key not found: ${metaSubKey}`, 404);
+          const ct = obj.httpMetadata?.contentType || 'application/json';
+          return new Response(obj.body, { status: 200, headers: { 'Content-Type': ct } });
+        }
+
+        if (req.method === 'PUT') {
+          // _meta/atlas is built by rebuildAtlas() from the intaked bundle
+          // only — a hand-PUT would be overwritten anyway, and until then
+          // /context would serve whatever was typed.
+          if (metaSubKey === 'atlas') return err('_meta/atlas is built by the worker from the intaked bundle — run parse-connections.js', 409);
+          const body = await req.arrayBuffer();
+          const ct = req.headers.get('Content-Type') || 'application/json';
+          await env.CLONEPOOL_BUCKET.put(metaKey, body, {
+            httpMetadata: { contentType: ct },
+          });
+          return ok({ stored: metaKey, bytes: body.byteLength });
+        }
+
+        if (req.method === 'DELETE') {
+          await env.CLONEPOOL_BUCKET.delete(metaKey);
+          return ok({ deleted: metaKey });
+        }
+
+        return err('method not allowed on /meta', 405);
+      }
+
+      // ── 404 ───────────────────────────────────────────────────────────────
+      return err('not found', 404);
+
+    } catch (e) {
+      return ok({ error: e.message, worker: 'packages-worker', db: 'phoenix_dev_db' }, 500);
+    }
+  },
+};
