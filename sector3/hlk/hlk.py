@@ -432,7 +432,14 @@ def model_decide(history):
                 "args": d.get("args") if isinstance(d.get("args"), dict) else {}}
     if tier == "api":
         key = open(os.environ["HLK_ANTHROPIC_KEY_FILE"], encoding="utf-8").read().strip()
-        body = {"model": os.environ.get("HLK_API_MODEL", "claude-sonnet-5-5"), "max_tokens": 1024,
+        api_model = os.environ.get("HLK_API_MODEL")
+        if not api_model:
+            raise RuntimeError(
+                "HLK_API_MODEL env var is required for API tier — "
+                "no vendor model is hardcoded. Set it to your model string "
+                "before starting H.L.K in API mode."
+            )
+        body = {"model": api_model, "max_tokens": 1024,
                 "system": system_prompt() + "\nReply with the JSON object only.", "messages": history}
         req = urllib.request.Request("https://api.anthropic.com/v1/messages", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json", "x-api-key": key,
@@ -611,6 +618,31 @@ def make_handler(token, allow_from):
 
 
 def mesh_ip():
+    """Return this machine's mesh IP address.
+
+    Tries Tailscale first (100.x.x.x) — the active mesh transport.
+    Falls back to WireGuard config for the transition period while any
+    legacy nodes still run wg-phx.  Returns None if neither is up yet;
+    callers should retry (see startup loop in main()).
+    """
+    # ── Tailscale (primary — 100.x.x.x) ──────────────────────────────────
+    try:
+        import subprocess as _sp
+        result = _sp.run(
+            ["tailscale", "ip", "-4"],
+            capture_output=True, text=True, timeout=3
+        )
+        addr = result.stdout.strip()
+        if addr.startswith("100."):
+            return addr
+    except FileNotFoundError:
+        pass  # tailscale binary not installed
+    except OSError:
+        pass
+    except Exception:
+        pass
+
+    # ── WireGuard fallback (legacy / transition) ──────────────────────────
     try:
         with open("/etc/phoenix-mesh/wg-phx.conf", encoding="utf-8") as f:
             for line in f:
@@ -619,6 +651,7 @@ def mesh_ip():
                     return v.strip().split("/")[0]
     except OSError:
         pass
+
     return None
 
 

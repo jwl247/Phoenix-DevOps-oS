@@ -30,6 +30,7 @@
 #                     Residue files cleaned from stage dir.
 # =============================================================================
 
+import math
 import os
 import hashlib
 import shutil
@@ -207,7 +208,6 @@ class PCS:
         for b in data:
             counts[b] += 1
         n = len(data)
-        import math
         entropy = 0.0
         for c in counts:
             if c:
