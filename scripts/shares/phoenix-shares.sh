@@ -9,11 +9,11 @@
 # allowed; SMB3 with encryption REQUIRED (on top of Nebula's); one user; the old disk is mounted and
 # shared READ-ONLY. Versioned (/etc/phoenix/shares.VERSION), self-healing (timer, 15 min), audited.
 set -euo pipefail
-VERSION="shares-1.0.1"
+VERSION="shares-1.0.2"
 STATE=/etc/phoenix
 USER_NAME="${SHARE_USER:-a}"
 DATA=/srv/pbmiii
-OLD_UUID="97eb0325-b18f-4853-9a63-b2d607a1c1c9"
+OLD_UUID="9d35bab9-b0ab-455a-924f-7c166e7940ef"   # 1 TB Seagate: the previous Debian install (2026-10-06 rebuild; was 97eb0325..., gone)
 OLD_MNT=/mnt/pbmiii-old
 log() { logger -t phoenix-shares "$*"; echo "$*"; }
 [[ $EUID -eq 0 ]] || { echo "run with sudo"; exit 1; }
@@ -107,7 +107,7 @@ heal() {
     case "$item" in
       smb.conf|smb-exposed|smb-not-on-mesh) cp $STATE/smb.known-good /etc/samba/smb.conf; systemctl restart smbd ;;
       smbd) systemctl restart smbd ;;
-      old-disk-mount) mount $OLD_MNT || true ;;
+      old-disk-mount) mount $OLD_MNT || { log "heal FAILED: old-disk-mount (mount $OLD_MNT refused)"; continue; } ;;
       old-disk-writable) mount -o remount,ro $OLD_MNT ;;
     esac
     log "drift healed: $item ($(cat $STATE/shares.VERSION 2>/dev/null))"
