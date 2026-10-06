@@ -149,14 +149,25 @@ function Invoke-IntakeEngine {
         return 0
     }
 
-    # Bash env: source .phoenix_env.sh so curl/D1 auth works in Git Bash
-    $envSh = ConvertTo-GitBashPath (Join-Path $HOME '.phoenix_env.sh')
-    $cmd   = "source '$envSh' 2>/dev/null; bash '$bashIntake' $($bashArgs -join ' ')"
+    # Bash env: source .phoenix_env.sh so curl/D1 auth works in Git Bash.
+    # Arguments go to bash as separate argv entries, never pasted into the
+    # script text: a file name with ; $( ) or a quote used to be EXECUTED by
+    # bash, and file names are attacker-influenced (Downloads auto-intake).
+    $envSh  = ConvertTo-GitBashPath (Join-Path $HOME '.phoenix_env.sh')
+    $script = 'source "$1" 2>/dev/null; shift; exec bash "$@"'
 
     Write-Host ''
     Write-IntakeInfo "-> $($Args -join ' ')"
-    & $bash -lc $cmd | Out-Host
-    $code = $LASTEXITCODE
+    # intake.sh writes UTF-8 (→, ✓, box drawing); decode it as UTF-8 or the
+    # console's legacy code page turns → into ΓåÆ. Restored afterwards.
+    $prevEnc = [Console]::OutputEncoding
+    try {
+        [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+        & $bash -lc $script phoenix-intake $envSh $bashIntake @bashArgs | Out-Host
+        $code = $LASTEXITCODE
+    } finally {
+        [Console]::OutputEncoding = $prevEnc
+    }
     if ($code -eq 0) { Write-IntakeOk 'complete' } else { Write-IntakeErr "exited $code" }
     Write-Host ''
     return $code
@@ -265,6 +276,14 @@ function Show-IntakeHelp {
 # =============================================================================
 # GLOBAL FUNCTION — primary interface when dot-sourced
 # =============================================================================
+# `intake` is global, but every helper it calls (Invoke-IntakeFile, ...) is
+# script-scoped. When this file runs as a script (shim, PATH, `& intake.ps1`)
+# rather than being dot-sourced, that script scope dies after the run and the
+# global `intake` left behind could no longer find its helpers — the first
+# call worked, every later call failed with "Invoke-IntakeFile is not
+# recognized" (hit 2026-10-03). The global function now re-loads its helpers
+# from this file whenever they are missing; dot-sourcing skips the shim entry.
+$global:PhoenixIntakePs1 = $PSCommandPath
 function global:intake {
     [CmdletBinding(DefaultParameterSetName = 'File')]
     param(
@@ -301,6 +320,13 @@ function global:intake {
         [string]$Notes = '',
         [switch]$DryRun
     )
+
+    if (-not (Get-Command Invoke-IntakeFile -CommandType Function -ErrorAction SilentlyContinue)) {
+        if (-not ($global:PhoenixIntakePs1 -and (Test-Path -LiteralPath $global:PhoenixIntakePs1))) {
+            throw 'intake helpers are not loaded and intake.ps1 cannot be found — re-run install.ps1'
+        }
+        . $global:PhoenixIntakePs1
+    }
 
     if ($Help) { Show-IntakeHelp; return }
 
@@ -404,8 +430,20 @@ if ($MyInvocation.InvocationName -ne '.' -and $MyInvocation.Line -notmatch '^\s*
             if ($cloneName -match '^[A-Za-z]:$' -and $filtered.Count -ge 3) {
                 $cloneName = "$cloneName\$($filtered[2])"
             }
-            $code = Invoke-IntakeClone -Name $cloneName -DryRun:$dry
-            exit $(if ($null -eq $code) { 0 } else { $code })
+            if ($dry) {
+                $code = Invoke-IntakeClone -Name $cloneName -DryRun
+                exit $(if ($null -eq $code) { 0 } else { $code })
+            }
+            # Same engine as the global `clone` (bin\clone): vN, a target folder
+            # and --force all pass through. Before 2026-10-02 this dropped
+            # everything after the name, so `intake clone x v5` cloned latest.
+            $bash = Get-IntakeGitBash
+            $cloneSh = Join-Path (Get-IntakeRepoRoot) 'bin\clone'
+            if (-not $bash -or -not (Test-Path $cloneSh)) { Write-IntakeErr 'Git Bash or bin\clone not found'; exit 1 }
+            $restArgs = @($filtered | Select-Object -Skip 2)
+            if ($cloneName -ne $filtered[1]) { $restArgs = @($restArgs | Select-Object -Skip 1) }
+            & $bash (ConvertTo-GitBashPath $cloneSh) $cloneName @restArgs
+            exit $LASTEXITCODE
         }
         default {
             # Rejoin path segments when pwsh splits on backslashes (e.g. C: + \foo\bar)

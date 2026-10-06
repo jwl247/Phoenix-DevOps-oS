@@ -118,6 +118,15 @@ print(result)
 # ── Bootstrap ─────────────────────────────────────────────────
 mkdir -p "${LOG_DIR}" "${CLONEPOOL_DIR}" "$(dirname "${CATALOG_DB}")"
 
+# Auth headers: an owner-only temp file every curl reads with -H @file, never
+# the command line — keys on curl argv were readable by anything that lists
+# processes (audit A2-N1, a real exposure). printf is a builtin, so writing
+# the file doesn't put them on a command line either. Removed on exit.
+AUTH_HDR_FILE=$(umask 077; mktemp "${TMPDIR:-/tmp}/phx-hdr.XXXXXX")
+trap 'rm -f "${AUTH_HDR_FILE}"' EXIT
+printf 'Authorization: Bearer %s\nCF-Access-Client-Id: %s\nCF-Access-Client-Secret: %s\n' \
+  "${PHOENIX_AUTH}" "${CF_ACCESS_CLIENT_ID:-}" "${CF_ACCESS_CLIENT_SECRET:-}" > "${AUTH_HDR_FILE}"
+
 # ── Logging ───────────────────────────────────────────────────
 log() {
   local level="$1"; shift
@@ -125,7 +134,13 @@ log() {
 }
 
 # ── Hex ───────────────────────────────────────────────────────
-to_hex() { echo -n "$1" | xxd -p | tr -d '\n'; }
+# xxd ships with vim and is missing on minimal Linux/Termux/proot installs;
+# od is coreutils and always there. Same lowercase hex either way.
+if command -v xxd >/dev/null 2>&1; then
+  to_hex() { printf '%s' "$1" | xxd -p | tr -d '\n'; }
+else
+  to_hex() { printf '%s' "$1" | od -An -v -tx1 | tr -d ' \n'; }
+fi
 
 # ── Path normalization — slash-direction agnostic ──────────────
 # Root cause of tonight's JSON-500s, the tier-rotation [[ -f ]] mismatch,
@@ -262,10 +277,62 @@ detect_companions() {
 }
 
 # ── Version helpers ───────────────────────────────────────────
+# Next version from the D1 ledger (the authority), never lower than the local
+# pool's own count. The local count alone restarted at v1 whenever the pool
+# lived on another drive (E: vs F:, S2CORE-F41): D1 said v1 while the ledger
+# said v3. Falls back to the local count when the worker can't be reached.
+next_version_for() {
+  local name="$1" pool_dir="$2"
+  local local_v; local_v=$(get_next_version "${pool_dir}")
+  local n_local="${local_v#v}" n_ledger=0
+  if [[ -n "${PHOENIX_AUTH}" ]]; then
+    local max
+    max=$(fetch_versions_json "${name}" | grep -o '"version":[[:space:]]*"v[0-9]*"' | grep -o '[0-9]*"$' | tr -d '"' | sort -n | tail -1 || true)
+    [[ -n "${max}" ]] && n_ledger=$(( max + 1 ))
+  fi
+  (( n_ledger > n_local )) && echo "v${n_ledger}" || echo "v${n_local}"
+}
+
+# Identity is the file NAME (hex = to_hex(basename)), so a different file that
+# happens to share a name would silently become this one's next version and
+# `clone` would hand back the wrong file (2026-10-03 walk: other/a.py became
+# v4 of app/a.py). Compare where it came from: the last two path parts
+# (folder/name) must match what D1 recorded, or intake stops and asks.
+# A moved repo (F:\…\sector3\x.py → D:\…\sector3\x.py) still matches.
+# Unattended runs refuse; INTAKE_SAME_NAME_OK=1 accepts on purpose.
+_ident_tail() { local p="${1//\\//}"; p="${p%/}"; local f="${p##*/}"; local d="${p%/*}"; [[ "${d}" == "${p}" ]] && d=""; echo "${d##*/}/${f}"; }
+same_name_guard() {
+  local filepath="$1" hex="$2" orig="$3"
+  [[ -z "${PHOENIX_AUTH}" || "${INTAKE_SAME_NAME_OK:-0}" == "1" ]] && return 0
+  local meta prev
+  meta=$(curl -s -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null || true)
+  prev=$(grep -o '"source_path"[[:space:]]*:[[:space:]]*"[^"]*"' <<< "${meta}" | head -1 | sed -E 's/.*"([^"]*)"$/\1/' || true)
+  [[ -z "${prev}" ]] && return 0
+  local was now; was=$(_ident_tail "${prev}"); now=$(_ident_tail "${filepath}")
+  [[ "${was,,}" == "${now,,}" ]] && return 0
+  echo ""
+  echo "[intake:NAME] '${orig}' is already in the pool from: ${prev}"
+  echo "              this one is from:                  ${filepath}"
+  echo "  A different file with the same name would become its next version."
+  echo "  [1] Cancel                     (default)"
+  echo "  [2] Same file, moved — version it"
+  local choice="1"
+  if [[ "${INTAKE_YES:-0}" == "1" ]] || ! read -rp "Choice [1/2]: " choice; then
+    echo "[intake:STOP] refused (unattended). Rename the file, or set INTAKE_SAME_NAME_OK=1 if it really is the same file."
+    return 1
+  fi
+  [[ "${choice}" == "2" ]] && { log "INFO" "same-name intake accepted by user: ${filepath} (was ${prev})"; return 0; }
+  echo "[intake:OK] cancelled — nothing changed"
+  return 1
+}
+
 get_next_version() {
   local dir="$1"
   [[ ! -d "${dir}" ]] && { echo "v1"; return; }
-  local files; files=$(ls "${dir}"/v*_* 2>/dev/null || true)
+  # -d: a directory snapshot (v1_proj/) is itself a directory — plain `ls`
+  # listed its CONTENTS, found no vN_ prefix and answered v1 forever, so each
+  # folder re-intake overwrote the previous snapshot in place (backlog bug).
+  local files; files=$(ls -d "${dir}"/v*_* 2>/dev/null || true)
   [[ -z "${files}" ]] && { echo "v1"; return; }
   # Anchored: only the leading vN_ prefix is the version. An unanchored
   # 'v[0-9]*' also matched inside the name (helix_v10_notes.txt -> v11).
@@ -451,8 +518,11 @@ custody_log_local() {
   local hex="$1" name="$2" action="$3" version="$4" \
         src="$5" dst="$6" state="$7" actor="$8"
   command -v sqlite3 &>/dev/null || return 0
-  sqlite3 "${CATALOG_DB}" 2>/dev/null <<SQL
-PRAGMA busy_timeout = 5000;
+  # .timeout, not PRAGMA busy_timeout: the PRAGMA returns its value as a row,
+  # which the sqlite3 CLI printed as a stray "5000" in the middle of every
+  # intake (seen on PBMII 2026-10-03). stdout discarded for the same reason.
+  sqlite3 "${CATALOG_DB}" >/dev/null 2>/dev/null <<SQL
+.timeout 5000
 CREATE TABLE IF NOT EXISTS custody (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   hex_id TEXT NOT NULL, name TEXT NOT NULL, action TEXT NOT NULL,
@@ -476,7 +546,7 @@ SQL
 check_whoami() {
   local url="$1"
   curl -s -o /dev/null -w "%{http_code}" \
-    -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
+    -H @"${AUTH_HDR_FILE}" \
     "${url}/whoami" 2>/dev/null
 }
 
@@ -509,7 +579,7 @@ post_to_d1() {
   response=$(curl -s -w "\n%{http_code}" \
     -X POST \
     -H "Content-Type: application/json" \
-    -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
+    -H @"${AUTH_HDR_FILE}" \
     -d "${payload}" \
     "${WORKER_URL}${endpoint}" 2>/dev/null)
   http_code=$(echo "${response}" | tail -1)
@@ -533,7 +603,7 @@ R2_SINGLE_MAX=$((95 * 1024 * 1024))
 R2_PART=$((64 * 1024 * 1024))
 _auth_hdrs=()
 _r2_auth() {
-  _auth_hdrs=(-H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}")
+  _auth_hdrs=(-H @"${AUTH_HDR_FILE}")
 }
 
 # r2_put <key> <file> <sha3> — 0 on success. The sha3 is recorded on the object
@@ -551,7 +621,7 @@ r2_put() {
   local uid n=1 parts="" part resp etag nparts
   nparts=$(( (size + R2_PART - 1) / R2_PART ))
   uid=$(curl -s -X POST "${_auth_hdrs[@]}" -H "Content-Type: application/json" -d "{\"sha3\":\"${sha3}\"}" \
-        "${WORKER_URL}/clonepool/${key}/mpu" 2>/dev/null | grep -o '"uploadId"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)"$/\1/')
+        "${WORKER_URL}/clonepool/${key}/mpu" 2>/dev/null | grep -o '"uploadId"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)"$/\1/' || true)
   [[ -z "${uid}" ]] && { log "WARN" "R2 multipart: could not start ${key}"; return 1; }
   part=$(mktemp)
   while (( n <= nparts )); do
@@ -559,7 +629,7 @@ r2_put() {
       || dd if="${filepath}" of="${part}" bs="${R2_PART}" skip=$((n - 1)) count=1 status=none
     resp=$(curl -s -X PUT "${_auth_hdrs[@]}" --data-binary "@${part}" \
            "${WORKER_URL}/clonepool/${key}/mpu/${uid}/${n}" 2>/dev/null)
-    etag=$(grep -o '"etag"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${resp}" | sed -E 's/.*"([^"]*)"$/\1/')
+    etag=$(grep -o '"etag"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${resp}" | sed -E 's/.*"([^"]*)"$/\1/' || true)
     if [[ -z "${etag}" ]]; then
       rm -f "${part}"
       curl -s -o /dev/null -X DELETE "${_auth_hdrs[@]}" "${WORKER_URL}/clonepool/${key}/mpu/${uid}" 2>/dev/null
@@ -671,11 +741,31 @@ report_clonepool() {
   if [[ -n "${stored_filepath}" && -f "${stored_filepath}" ]]; then
     hash_sha3=$(openssl dgst -sha3-512 -r "${stored_filepath}" 2>/dev/null | awk '{print $1}')
     hash_blake2=$(openssl dgst -blake2b512 -r "${stored_filepath}" 2>/dev/null | awk '{print $1}')
+    # An openssl without SHA3/BLAKE2 (or any failure above) used to leave
+    # these blank SILENTLY, and the row went to D1 with no custody baseline —
+    # that is how 86 clonepool rows ended up unverifiable (found 2026-10-03).
+    # Fall back to Python's hashlib; if that fails too, say so loudly.
+    if [[ ! "${hash_sha3}" =~ ^[0-9a-f]{128}$ || ! "${hash_blake2}" =~ ^[0-9a-f]{128}$ ]]; then
+      if [[ -n "${PYTHON_CMD:-}" ]]; then
+        local _py_hashes
+        _py_hashes=$("${PYTHON_CMD}" -c 'import hashlib,sys
+d=open(sys.argv[1],"rb").read()
+print(hashlib.sha3_512(d).hexdigest(), hashlib.blake2b(d).hexdigest())' "${stored_filepath}" 2>/dev/null)
+        [[ "${hash_sha3}"   =~ ^[0-9a-f]{128}$ ]] || hash_sha3="${_py_hashes%% *}"
+        [[ "${hash_blake2}" =~ ^[0-9a-f]{128}$ ]] || hash_blake2="${_py_hashes##* }"
+      fi
+      [[ "${hash_sha3}"   =~ ^[0-9a-f]{128}$ ]] || hash_sha3=""
+      [[ "${hash_blake2}" =~ ^[0-9a-f]{128}$ ]] || hash_blake2=""
+      if [[ -z "${hash_sha3}" ]]; then
+        log "ERROR" "NO SHA3-512 for ${stored_filepath} — openssl and python both failed; ${2} goes to D1 WITHOUT a custody baseline (Genie will refuse it). Fix openssl/python and re-intake."
+        echo "  ✗ NO CUSTODY HASH for ${2} — re-intake once openssl or python works" >&2
+      fi
+    fi
   fi
   LAST_REPORTED_FILE="${stored_filepath}"   # reused by upload_version_to_r2
   LAST_REPORTED_SHA3="${hash_sha3}"
   post_to_d1 "/clonepool" \
-    "{\"hex_id\":\"$(json_escape "${hex}")\",\"b58\":\"$(json_escape "${b58:-${hex}}")\",\"name\":\"$(json_escape "${2}")\",\"version\":\"$(json_escape "${3}")\",\"state\":\"$(json_escape "${4}")\",\"pool_path\":\"$(json_escape "${5}")\",\"sidecar_path\":\"$(json_escape "${6}")\",\"tier\":${7},\"size\":${8},\"sensitive\":${sensitive},\"header_qr\":\"$(json_escape "${header_qr}")\",\"footer_qr\":\"$(json_escape "${footer_qr}")\",\"hash_sha3\":\"$(json_escape "${hash_sha3}")\",\"hash_blake2\":\"$(json_escape "${hash_blake2}")\"}"
+    "{\"hex_id\":\"$(json_escape "${hex}")\",\"b58\":\"$(json_escape "${b58:-${hex}}")\",\"name\":\"$(json_escape "${2}")\",\"version\":\"$(json_escape "${3}")\",\"state\":\"$(json_escape "${4}")\",\"pool_path\":\"$(json_escape "${5}")\",\"sidecar_path\":\"$(json_escape "${6}")\",\"tier\":${7},\"size\":${8},\"sensitive\":${sensitive},\"header_qr\":\"$(json_escape "${header_qr}")\",\"footer_qr\":\"$(json_escape "${footer_qr}")\",\"hash_sha3\":\"$(json_escape "${hash_sha3}")\",\"hash_blake2\":\"$(json_escape "${hash_blake2}")\",\"source_path\":\"$(json_escape "${location}")\"}"
 }
 report_custody() {
   local hex="${1}"
@@ -762,9 +852,9 @@ verify_clonepool_copy() {
   local hex="$1" filepath="$2" name="${3:-}"
   [[ -z "${PHOENIX_AUTH}" || ! -f "${filepath}" ]] && { echo "no_baseline"; return; }
   local meta
-  meta=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
+  meta=$(curl -s -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
   local baseline_sha3
-  baseline_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+  baseline_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' || true)
   [[ -z "${baseline_sha3}" ]] && { echo "no_baseline"; return; }
 
   local actual_sha3
@@ -775,7 +865,7 @@ verify_clonepool_copy() {
     # sha3 alone flipped qr_valid to 0 on every successful verification.
     local actual_blake2
     actual_blake2=$(openssl dgst -blake2b512 -r "${filepath}" 2>/dev/null | awk '{print $1}')
-    curl -s -o /dev/null -X POST -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" -H "Content-Type: application/json" \
+    curl -s -o /dev/null -X POST -H @"${AUTH_HDR_FILE}" -H "Content-Type: application/json" \
       -d "{\"hash_sha3\":\"${actual_sha3}\",\"hash_blake2\":\"${actual_blake2}\"}" "${WORKER_URL}/clonepool/${hex}/validate" 2>/dev/null
     echo "valid"
   elif [[ -n "${actual_sha3}" && -n "${name}" ]] && version_hash_recorded "${hex}" "${name}" "${actual_sha3}"; then
@@ -791,7 +881,7 @@ verify_clonepool_copy() {
 fetch_versions_json() {
   local name="$1"
   local enc_name; enc_name=$(url_encode "${name}")
-  curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
+  curl -s -H @"${AUTH_HDR_FILE}" \
     "${WORKER_URL}/versions?package=${enc_name}&limit=1000" 2>/dev/null
 }
 
@@ -813,6 +903,20 @@ version_row_for_label() {
     /"store_path": "/ { s=$0; sub(/.*"store_path": "/, "", s); sub(/".*/, "", s) }
     /"hash_sha3": "/  { h=$0; sub(/.*"hash_sha3": "/, "", h); sub(/".*/, "", h) }
     /^[[:space:]]*}/  { if (v == want && index(s, pfx) == 1 && h != "") { print s " " h; exit }
+                        v = ""; s = ""; h = "" }'
+}
+
+# Prints the D1 ledger label (v6, ...) whose bytes are <sha3> for <hex>; nothing
+# if none. The local vN_ prefix is a per-machine counter — clone used to report
+# it (said v3 for what the ledger calls v6, 2026-10-02).
+ledger_label_for_sha3() {
+  local hex="$1" name="$2" sha3="$3"
+  [[ -z "${PHOENIX_AUTH}" || ${#sha3} -lt 16 ]] && return 0
+  fetch_versions_json "${name}" | awk -v want="${sha3}" -v pfx="${hex}/versions/" '
+    /"version": "/    { v=$0; sub(/.*"version": "/, "", v); sub(/".*/, "", v) }
+    /"store_path": "/ { s=$0; sub(/.*"store_path": "/, "", s); sub(/".*/, "", s) }
+    /"hash_sha3": "/  { h=$0; sub(/.*"hash_sha3": "/, "", h); sub(/".*/, "", h) }
+    /^[[:space:]]*}/  { if (h == want && index(s, pfx) == 1) { print v; exit }
                         v = ""; s = ""; h = "" }'
 }
 
@@ -882,8 +986,8 @@ self_register() {
   # running copy goes in only if it IS Phoenix's current intake.sh.
   if [[ -n "${PHOENIX_AUTH}" ]]; then
     local meta d1_sha3
-    meta=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${SCRIPT_HEX}?meta=true" 2>/dev/null)
-    d1_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+    meta=$(curl -s -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${SCRIPT_HEX}?meta=true" 2>/dev/null)
+    d1_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' || true)
     if [[ -n "${d1_sha3}" ]]; then
       mkdir -p "${dir}"
       local self_sha3; self_sha3=$(openssl dgst -sha3-512 -r "${self_path}" 2>/dev/null | awk '{print $1}')
@@ -966,13 +1070,16 @@ intake_file() {
     sensitive="true"
   fi
 
+  # ── Same name, different file? ─────────────────────────────
+  same_name_guard "${filepath}" "${hex}" "${orig}" || return 1
+
   # ── Duplicate check ────────────────────────────────────────
   local dup_result
   dup_result=$(check_duplicate "${filepath}" "${pool_dir}" "${orig}")
 
   if [[ "${dup_result}" == dup:* ]]; then
     local existing="${dup_result#dup:}"
-    local existing_ver; existing_ver=$(basename "${existing}" | grep -o '^v[0-9]*')
+    local existing_ver; existing_ver=$(basename "${existing}" | grep -o '^v[0-9]*' || true)
     local age; age=$(file_age_days "${existing}")
     echo ""
     echo "[intake:DUP] ${orig} is identical to ${existing_ver} in clonepool (${age} days old)"
@@ -1008,7 +1115,7 @@ intake_file() {
     esac
   fi
 
-  local version; version=$(get_next_version "${pool_dir}")
+  local version; version=$(next_version_for "${orig}" "${pool_dir}")
   local filetype; filetype=$(detect_filetype "${orig}")
   local category_hex; category_hex=$(filetype_to_category "${filetype}")
   local size; size=$(get_size "${filepath}")
@@ -1056,7 +1163,7 @@ intake_file() {
     fi
     if [[ -z "${suite_name}" ]]; then
       suite_name=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "${filepath}" 2>/dev/null \
-        | head -1 | sed 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+        | head -1 | sed 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
     fi
     if [[ -n "${suite_name}" && "${suite_name}" != */* && "${suite_name}" != *\\* ]]; then
       local suite_dir="${CLONEPOOL_DIR}/${suite_name}"
@@ -1091,14 +1198,14 @@ fetch_r2_fallback() {
   [[ -z "${PHOENIX_AUTH}" ]] && return 1
 
   local meta
-  meta=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
+  meta=$(curl -s -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
   [[ -z "${meta}" ]] && return 1
 
   local remote_version
-  remote_version=$(echo "${meta}" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+  remote_version=$(echo "${meta}" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' || true)
   [[ -z "${remote_version}" ]] && return 1
   local baseline_sha3
-  baseline_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+  baseline_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' || true)
 
   # Current version -> the overwritten "current" key (<hex>). Any other
   # version -> its immutable per-content key (<hex>/versions/<sha3[0:16]>),
@@ -1121,7 +1228,7 @@ fetch_r2_fallback() {
   remote_version="${fetched_version}"
 
   local http_code
-  http_code=$(curl -s -o "${tmp}" -w "%{http_code}" -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${r2_key}" 2>/dev/null)
+  http_code=$(curl -s -o "${tmp}" -w "%{http_code}" -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${r2_key}" 2>/dev/null)
   if [[ "${http_code}" != "200" ]]; then
     rm -f "${tmp}"
     rmdir "${pool_dir}" 2>/dev/null || true   # don't leave an empty bucket that hides R2 next time
@@ -1177,7 +1284,7 @@ intake_clone_ledger_version() {
   if [[ -z "${src}" ]]; then
     tmp=$(mktemp "${TMPDIR:-/tmp}/intake-clone.XXXXXX")
     local code
-    code=$(curl -s -o "${tmp}" -w "%{http_code}" -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" "${WORKER_URL}/clonepool/${store_path}" 2>/dev/null)
+    code=$(curl -s -o "${tmp}" -w "%{http_code}" -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${store_path}" 2>/dev/null)
     if [[ "${code}" != "200" ]]; then
       rm -f "${tmp}"
       echo "[intake:MISS] ${name} ${label}: no local copy with its hash, and R2 returned ${code:-no answer}"
@@ -1266,14 +1373,14 @@ intake_clone() {
       echo "  Available versions:"
       ls "${pool_dir}"/v*_"${name}" 2>/dev/null \
         | while read -r f; do
-            num=$(basename "${f}" | grep -o '^v[0-9]*')
+            num=$(basename "${f}" | grep -o '^v[0-9]*' || true)
             echo "    ${num}"
           done || echo "    (none)"
       return 1
     fi
   fi
 
-  local version; version=$(basename "${target}" | grep -o '^v[0-9]*')
+  local version; version=$(basename "${target}" | grep -o '^v[0-9]*' || true)
   local dest="${PWD}/${name}"
 
   local verify_result; verify_result=$(verify_clonepool_copy "${hex}" "${target}" "${name}")
@@ -1285,7 +1392,7 @@ intake_clone() {
   if [[ "${verify_result}" == "CORRUPT" && "${req_version}" == "latest" ]]; then
     if fetch_r2_fallback "${name}" "${hex}" "latest" >/dev/null && [[ -f "${LAST_R2_FETCHED}" ]]; then
       target="${LAST_R2_FETCHED}"
-      version=$(basename "${target}" | grep -o '^v[0-9]*')
+      version=$(basename "${target}" | grep -o '^v[0-9]*' || true)
       verify_result="valid"
       echo "[intake:OK] Local copy was out of date — refreshed from Phoenix (R2), checked against D1"
       log "INFO" "clone: stale local ${name} refreshed from R2 (${version})"
@@ -1308,6 +1415,10 @@ intake_clone() {
       echo "[intake:OK] Integrity verified — matches D1 baseline"
       ;;
   esac
+
+  # Report the ledger's version number, not this machine's local counter.
+  local ledger_ver; ledger_ver=$(ledger_label_for_sha3 "${hex}" "${name}" "$(_sha3_of "${target}")")
+  [[ -n "${ledger_ver}" ]] && version="${ledger_ver}"
 
   if [[ -f "${dest}" ]]; then
     echo "[intake:WARN] '${name}' already exists here — overwriting with ${version}"
@@ -1428,7 +1539,7 @@ rotate_clonepool_tiers() {
 
       local registered_at
       registered_at=$(grep -o '"registered_at"[[:space:]]*:[[:space:]]*"[^"]*"' "${sidecar}" \
-        | head -1 | sed -E 's/.*"registered_at"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+        | head -1 | sed -E 's/.*"registered_at"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' || true)
       [[ -z "${registered_at}" ]] && continue
 
       local reg_epoch now_epoch age_days
@@ -1450,7 +1561,7 @@ rotate_clonepool_tiers() {
         mv "${entry_dir%/}" "${dest_root}/${hex}"
         log "INFO" "tier rotate: ${hex} T${from_num} -> T${to_num} (${age_days}d old)"
         [[ -n "${PHOENIX_AUTH}" ]] && curl -s -o /dev/null -X PATCH \
-          -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" -H "Content-Type: application/json" \
+          -H @"${AUTH_HDR_FILE}" -H "Content-Type: application/json" \
           -d "{\"tier\":${to_num},\"pool_path\":\"$(json_escape "${dest_root}/${hex}")\"}" \
           "${WORKER_URL}/clonepool/${hex}/tier" 2>/dev/null
         (( moved++ )) || true
@@ -1458,7 +1569,7 @@ rotate_clonepool_tiers() {
         rm -rf "${entry_dir%/}"
         log "INFO" "tier evict: ${hex} (${age_days}d old, past ${total_window}-day window) — local copy cleared, D1 flagged black"
         [[ -n "${PHOENIX_AUTH}" ]] && curl -s -o /dev/null -X PATCH \
-          -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" -H "Content-Type: application/json" \
+          -H @"${AUTH_HDR_FILE}" -H "Content-Type: application/json" \
           -d '{"tier":4,"pool_path":"evicted","state":"black"}' \
           "${WORKER_URL}/clonepool/${hex}/tier" 2>/dev/null
         (( evicted++ )) || true
@@ -1689,7 +1800,7 @@ intake_directory() {
   local dirname; dirname=$(basename "${dirpath}")
   local hex;     hex=$(to_hex "${dirname}")
   local pool_dir="${CLONEPOOL_DIR}/T1/${hex}"
-  local version; version=$(get_next_version "${pool_dir}")
+  local version; version=$(next_version_for "${dirname}" "${pool_dir}")
 
   echo ""
   echo " [intake:DIR] Scanning directory..."
@@ -1977,7 +2088,7 @@ DIRSIDECAR
 fetch_dir_r2_fallback() {
   local name="$1" hex="$2" version="$3"
   [[ -z "${PHOENIX_AUTH}" || "${version}" != "latest" ]] && return 1
-  local auth=(-H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}")
+  local auth=(-H @"${AUTH_HDR_FILE}")
   # Probe the first bytes only: a manifest opens with "type": "directory", and
   # anything else (every plain file) must not cost a second full download.
   local probe
@@ -1985,7 +2096,7 @@ fetch_dir_r2_fallback() {
   grep -q '"type": "directory"' <<<"${probe}" || return 1
   local meta want
   meta=$(curl -s "${auth[@]}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
-  want=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
+  want=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/' || true)
   [[ ${#want} -lt 64 ]] && return 1        # no manifest hash in D1: nothing to trust
   local tmp code got
   tmp=$(mktemp)
@@ -1999,7 +2110,7 @@ fetch_dir_r2_fallback() {
     return 1
   fi
   local ver pool_dir snap
-  ver=$(grep -o '"version": "[^"]*"' "${tmp}" | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
+  ver=$(grep -o '"version": "[^"]*"' "${tmp}" | head -1 | sed -E 's/.*"([^"]*)"$/\1/' || true)
   pool_dir="${CLONEPOOL_DIR}/T1/${hex}"
   snap="${pool_dir}/${ver}_${name}"
   rm -rf "${snap}"                     # rebuilt whole from the manifest, no stale leftovers
@@ -2058,7 +2169,7 @@ intake_clone_directory() {
   if [[ -f "${sidecar}" && "${version}" == "latest" && -n "${PHOENIX_AUTH}" ]] \
      && grep -q '"type": "directory"' "${sidecar}" 2>/dev/null; then
     local d1_manifest local_manifest
-    d1_manifest=$(curl -s -H "Authorization: Bearer ${PHOENIX_AUTH}" -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
+    d1_manifest=$(curl -s -H @"${AUTH_HDR_FILE}" \
                   "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null \
                   | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[0-9a-f]*"' | head -1 | grep -o '[0-9a-f]\{64,\}' || true)
     local_manifest=$(openssl dgst -sha3-512 -r "${sidecar}" 2>/dev/null | awk '{print $1}')
@@ -2108,7 +2219,7 @@ intake_clone_directory() {
     return 1
   fi
 
-  local ver; ver=$(basename "${snapshot}" | grep -o '^v[0-9]*')
+  local ver; ver=$(basename "${snapshot}" | grep -o '^v[0-9]*' || true)
   local dest="${PWD}/${name}"
 
   echo "[intake] Verifying snapshot integrity..."
@@ -2158,12 +2269,12 @@ resolve_lol() {
 # Preflight first: a bad token must stop the run with the one loud banner,
 # before self_register makes its own D1/R2 calls (which would only log
 # per-call WARNs). Order fixed 2026-09-29 (audit F28).
+# `help` is offline: no auth check, no self-registration round trip.
 if [[ "${1:-help}" != "help" && "${1:-help}" != "--help" && "${1:-help}" != "-h" ]]; then
   preflight_auth
+  # ── Self register ───────────────────────────────────────────
+  self_register
 fi
-
-# ── Self register ─────────────────────────────────────────────
-self_register
 
 case "${1:-help}" in
   help|--help|-h) show_help ;;
@@ -2172,6 +2283,7 @@ case "${1:-help}" in
     shift
     name="${1:-}"; version="${2:-latest}"
     [[ "${name}" == *.lol ]] && name="${name%.lol}"
+    name="${name%/}"   # "proj/" names the folder proj (was: not found)
     # Directory snapshot first, then single file. (A `clone project` branch
     # called intake_clone_project, which was never defined anywhere in git
     # history: exit 127 "command not found". Removed 2026-09-29, audit F06;

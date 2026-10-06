@@ -203,6 +203,55 @@ def _kernel_feed():
 
 
 # ============================================================================
+# MACHINE MEMORY — her load source on every OS
+# ============================================================================
+
+def machine_memory() -> Dict[str, float]:
+    """Physical memory and commit charge, as fractions in use (0..1).
+
+    `ram`    — physical RAM in use.
+    `commit` — committed memory against the commit limit (RAM + pagefile on
+               Windows, CommitLimit on Linux): how close the machine is to
+               having nowhere left to page. Linux reads /proc/meminfo (as she
+               always did); Windows reads GlobalMemoryStatusEx. Until
+               2026-10-03 only /proc/meminfo was read, so on Windows her
+               Dandelion always saw 0 memory pressure.
+    """
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            class _MSX(ctypes.Structure):
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                            ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                            ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                            ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                            ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+            m = _MSX()
+            m.dwLength = ctypes.sizeof(_MSX)
+            if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m)):
+                raise OSError("GlobalMemoryStatusEx failed")
+            ram = 1.0 - m.ullAvailPhys / m.ullTotalPhys
+            commit = 1.0 - m.ullAvailPageFile / m.ullTotalPageFile if m.ullTotalPageFile else ram
+            return {"ram": ram, "commit": commit, "total_mb": m.ullTotalPhys / MB,
+                    "avail_mb": m.ullAvailPhys / MB}
+        except Exception:
+            return {"ram": 0.0, "commit": 0.0, "total_mb": 0.0, "avail_mb": 0.0}
+    try:
+        info = {}
+        with open("/proc/meminfo") as f:
+            for line in f:
+                k, v = line.split(":", 1)
+                info[k] = int(v.split()[0])
+        ram = 1.0 - info["MemAvailable"] / info["MemTotal"]
+        commit = min(1.0, info["Committed_AS"] / info["CommitLimit"]) if info.get("CommitLimit") else ram
+        return {"ram": ram, "commit": commit, "total_mb": info["MemTotal"] / 1024.0,
+                "avail_mb": info["MemAvailable"] / 1024.0}
+    except (OSError, KeyError, ValueError, ZeroDivisionError):
+        return {"ram": 0.0, "commit": 0.0, "total_mb": 0.0, "avail_mb": 0.0}
+
+
+# ============================================================================
 # HELIX MEMORY MANAGER
 # ============================================================================
 
@@ -217,10 +266,17 @@ class HelixMemoryManager:
                  strand_b_mb: int = 8192,     # Strand B on a fast disk
                  strand_b_dir: Optional[str] = None,
                  autostart: bool = True,
-                 use_kernel: bool = True):
+                 use_kernel: bool = True,
+                 pressure_fn=None):
         self.raw_budget = (max_hot_mb + max_warm_mb) * MB
         self.z_budget = max_cold_mb * MB
         self.b_budget = strand_b_mb * MB
+        self.b_base = self.b_budget    # her configured Strand B; the pager never goes below it
+        # Memory-pressure source for her Dandelion (0..1). Default: physical RAM
+        # in use (machine_memory). The paging manager plugs itself in here so
+        # commit charge (RAM + pagefile) counts as load too.
+        self._pressure_fn = pressure_fn
+        self.load = 0.0
         base = strand_b_dir or os.environ.get("HELIX_VRAM_STRAND_B") or tempfile.gettempdir()
         os.makedirs(base, exist_ok=True)
         self.b_dir = tempfile.mkdtemp(prefix="helix-strandB-", dir=base)
@@ -504,15 +560,24 @@ class HelixMemoryManager:
 
     # ------------------------------------------------------- the Dandelion
     def _mem_pressure(self) -> float:
-        try:
-            info = {}
-            with open("/proc/meminfo") as f:
-                for line in f:
-                    k, v = line.split(":", 1)
-                    info[k] = int(v.split()[0])
-            return 1.0 - info["MemAvailable"] / info["MemTotal"]
-        except (OSError, KeyError, ValueError):
-            return 0.0
+        if self._pressure_fn is not None:
+            try:
+                return max(0.0, min(1.0, float(self._pressure_fn())))
+            except Exception:
+                pass   # a broken feed must not stop the center; fall back to RAM
+        return machine_memory()["ram"]
+
+    def set_pressure_source(self, fn) -> None:
+        """Plug in (or with None, unplug) an external memory-pressure source."""
+        self._pressure_fn = fn
+
+    def set_strand_b_budget(self, mb: float) -> int:
+        """Resize Strand B (relief on disk). Never below her configured size,
+        never below what she already holds there. Returns the new budget in MB."""
+        _, _, b = self._totals()
+        new = max(int(mb * MB), self.b_base, b)
+        self.b_budget = new
+        return new // MB
 
     def tick(self, dt: float = HX_TICK_S) -> Dict:
         """One Dandelion tick. Runs every second on her own thread; callable
@@ -528,6 +593,7 @@ class HelixMemoryManager:
         ref = max(self._peak, HX_PEAK_FLOOR)
         io_load = min(1.0, rate / ref)
         load = max(io_load, self._mem_pressure())
+        self.load = load
 
         if load >= 0.5:
             self.heat = min(1.0, self.heat + load / 10)
@@ -643,11 +709,13 @@ class HelixMemoryManager:
             "hot_blocks": counts["hot"], "warm_blocks": counts["warm"],
             "cold_blocks": counts["cold"], "frozen_blocks": 0, "rungs": rungs,
             "hot_usage_mb": raw / MB, "warm_usage_mb": z / MB, "cold_usage_mb": b / MB,
+            "raw_budget_mb": self.raw_budget / MB, "z_budget_mb": self.z_budget / MB,
+            "strand_b_budget_mb": self.b_budget / MB, "strand_b_base_mb": self.b_base / MB,
             "total_usage_mb": (raw + z + b) / MB,
             "bytes_saved_mb": st["bytes_saved"] / MB,
             "hit_rate": (st["hits"] / asked * 100.0) if asked else 0.0,
             "dandelion": {"heat": round(self.heat, 3), "state": self.state,
-                          "compression": round(self.compression, 3),
+                          "compression": round(self.compression, 3), "load": round(self.load, 3),
                           "kernel_linked": self._feed is not None},
             "temperatures": self.temperatures(),
             **st,

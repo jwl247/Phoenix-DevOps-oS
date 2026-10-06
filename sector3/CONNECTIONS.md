@@ -7,6 +7,8 @@ Verify against current code before trusting a specific line number.
 ## What it is
 - `quadengine/quadengine.py` — the quadralingual comms engine.
 - `romeo_juliet/` — `romeo.py` (ingress), `juliet.py`/`dbl_juliet.py` (egress); loopback-bound by default, need pyzmq.
+- `phone-node/phoenix_phone.py` — Life First's phone side (Termux, stdlib only), 2026-10-03: `say`/`voice`/`where` send addressed check-ins to the brain's Helix-I over the Phoenix Mesh with the `HELIX_SOCKET_TOKEN` handshake; `listen` holds a Helix-E stream and turns each reply for `PHOENIX_WHO` into a termux notification (optionally spoken). Brain unreachable → check-ins wait in `~/.phoenix/phone/outbox.jsonl` and drain when it's back. Config `~/.phoenix/phone.env` (0600). Sandbox-tested against the real kernel with fake termux-api commands.
+- `phone-node/phone-setup.sh` — one-time Termux setup: packages, worker keys typed hidden into a 0600 curl header file (`curl -H @file`, never argv — A2-N1), `phoenix_phone.py` pulled from the clonepool and SHA3-512-checked against D1 (refuses mismatch / no baseline / no bytes), `phone.env` (brain address must be Tailscale 100.64.0.0/10 or *.ts.net), `lifefirst` shortcut, start-at-boot via Termux:Boot. `--with-kernel`: proot Debian + python3 + PowerShell 7 arm64; stops before cloning the kernel tree (needs sector1/sector4 intaked as verified directory snapshots first). Linted (bash -n, shellcheck clean); not yet run on a phone.
 - `translator/translator.sh` — 9 package backends; fires on OUTPUT only, never on intake (Critical Rule #2 in root CLAUDE.md — do not call this from an intake path).
 - `services/` — 20 systemd unit files (17 `.service` incl. the `helix@.service` template, 3 `.target`), `install-units.sh` (explicit allow-list), and the dashboard deploy scripts (`deploy-dashboard.sh`, `push-dashboard.ps1`/`.sh`, `install-dashboard-windows.ps1`, `scout-ubuntu.sh`).
 - `services/helix@.service` — one named kernel Helix per instance (`helix@ingress`, `helix@egress`): runs `helix_boot.sh start|stop <instance>`, settings in `/etc/default/helix-<instance>`; conflicts with the single `helix.service`, so a box uses one layout or the other.
@@ -31,7 +33,7 @@ Verify against current code before trusting a specific line number.
 - `sector3/phoenix-net/mesh-worker/wrangler.jsonc` — own D1 `phoenix_mesh`, own secret `MESH_ADMIN`.
 - `sector3/workers/packages-worker/wrangler.jsonc` — stale: D1 `DEV_DB`→`phoenix_dev_db`,
   `CATALOG_DB`→`phoenix-catalog` (deleted 2026-09-25), R2 `CLONEPOOL_BUCKET`. Not what is deployed.
-- romeo/juliet/quadengine need `pyzmq` (not installed on the Windows box; no requirements file here).
+- romeo/juliet/quadengine need `pyzmq` (not installed on the Windows box; no requirements file here). Live-tested 2026-10-03 (sandbox, pyzmq): 5 messages into Romeo → 2 correctly rejected (missing `id`; `pre_translated` — "translation is output only"), 3 out of Juliet, `romeo_ingress` 5 rows / `juliet_egress` 3 rows. Repo copies differ from their v1 clonepool baselines — re-intake (v2) pending.
 - `worker-up/dataplane-up.sh`: env `CF_API_TOKEN` + `CF_ACCOUNT_ID` for the TARGET account, `npx wrangler`, `curl`, `python`.
   State outside the repo in `~/.phoenix/worker-up/<name>/` (generated wrangler config, the data plane's own auth, deployed hash, URL).
 - On the worker box: `bash`, `curl`, `openssl` (SHA3-512), root for the Helix/H.L.K/model/net steps, the mesh agent
@@ -62,6 +64,8 @@ Verify against current code before trusting a specific line number.
 - `sector3/services/push-dashboard.ps1` → `sector3/services/scout-ubuntu.sh` → `sector3/services/deploy-dashboard.sh` (remote) → `dashboard/`.
 - `sector3/services/push-dashboard.sh` → `sector3/services/deploy-dashboard.sh` (remote).
 - `deploy/deploy.sh` → `sector3/translator/translator.sh` (local copy into systemd dirs).
+- `sector3/phone-node/phoenix_phone.py` → `sector1/helix-lightning/helixi.py` (check-ins into Helix-I ch1 over the mesh) and → `sector1/helix-lightning/helixe.py` (replies from ch5).
+- `sector3/phone-node/phone-setup.sh` → `sector2/package-handler/worker/index.js` (`/whoami`, `/clonepool/:hex?meta=true` baseline, `/clonepool/:hex` bytes).
 - `sector3/romeo_juliet/juliet.py` → `sector3/translator/translator.sh` (output translation; promoted copy first, repo copy as fallback).
 - `install.ps1` → `sector3/services/install-dashboard-windows.ps1`.
 - `sector3/services/phoenix-paging.service` → `sector4/paging.py`; `sector3/services/helix.service` → `sector1/kernels/helix_boot.sh`.
@@ -81,6 +85,8 @@ Verify against current code before trusting a specific line number.
 - `sector3/hlk/eval_models.py` → `sector3/hlk/hlk.py` (uses its real decision path); `sector3/hlk/test_hlk.py` → `sector3/hlk/hlk.py`.
 
 ## Known issues (verified, not guessed)
+- `romeo_juliet/romeo.py` and `juliet.py` crash at start on a machine with no `~/.catalog/` (`sqlite3.OperationalError: unable to open database file`) — neither creates the folder before `catalog_init()`. PBMII has it; a fresh box (phone node, compaq) does not. Fix: `os.makedirs(os.path.dirname(CATALOG_DB), exist_ok=True)` before the connect (found 2026-10-03, not yet applied).
+- Helix-E (`sector1/helix-lightning/helixe.py`) and Juliet both describe themselves as THE output-translation boundary — two egress paths claim the same rule. Which owns it is Jerry's call (2026-10-03).
 - **`sector3/workers/packages-worker/` is a stale duplicate.** The live worker is
   `sector2/package-handler/worker/index.js`. It shares the name `packages-worker` and has no
   auth on its `/custody`, `/clonepool`, `/packages` GETs; its `wrangler.jsonc` `main` points at

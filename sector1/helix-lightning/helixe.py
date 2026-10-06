@@ -49,6 +49,13 @@ STRAND_B_CHANNELS = (7, 8)
 ALL_CHANNELS      = STRAND_A_CHANNELS + STRAND_B_CHANNELS
 
 SOCKET_BASE     = int(os.environ.get("HELIX_E_PORT", 7800))
+# HELIX_E_BIND: which interface the egress output sockets listen on.
+# Default 127.0.0.1 (loopback-only, single-machine).
+# Set to 0.0.0.0 on the compaq so precision can consume translated output
+# across the mesh.  Belongs in /etc/default/helix-egress or the
+# helix@egress.service EnvironmentFile — never hardcoded in source.
+import helix_gate
+BIND_ADDR       = helix_gate.safe_bind(os.environ.get("HELIX_E_BIND", "127.0.0.1"), "Helix-E")
 TRANSLATOR_PATH = Path(os.environ.get(
     "TRANSLATOR_SH",
     "/etc/systemd/system/translator/translator.sh"
@@ -336,19 +343,30 @@ class HelixE:
     def _output_server(self, ch: EgressChannel, port: int):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("127.0.0.1", port))
+        sock.bind((BIND_ADDR, port))
         sock.listen(8)
         ch._sock = sock
-        log.info(f"Helix-E ch{ch.number} server ready on :{port}")
+        log.info(f"Helix-E ch{ch.number} server ready on {BIND_ADDR}:{port}")
         while self._alive:
             try:
                 conn, addr = sock.accept()
-                conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                ch._consumers.append(conn)
-                log.info(f"Helix-E ch{ch.number} consumer connected: {addr} "
-                         f"({len(ch._consumers)} total)")
+                # Handshake off the accept loop: a slow or hostile client
+                # can't stall other consumers for the 5 s handshake timeout.
+                threading.Thread(target=self._admit_consumer, args=(ch, conn, addr),
+                                 daemon=True).start()
             except Exception:
                 break
+
+    def _admit_consumer(self, ch: EgressChannel, conn: socket.socket, addr):
+        try:
+            helix_gate.check(conn, addr, f"Helix-E ch{ch.number}")
+        except PermissionError:
+            conn.close()
+            return
+        conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        ch._consumers.append(conn)
+        log.info(f"Helix-E ch{ch.number} consumer connected: {addr} "
+                 f"({len(ch._consumers)} total)")
 
     def stop(self):
         self._alive = False

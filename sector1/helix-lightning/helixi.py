@@ -48,6 +48,14 @@ STRAND_B_CHANNELS = (3, 4)
 ALL_CHANNELS      = STRAND_A_CHANNELS + STRAND_B_CHANNELS
 
 SOCKET_BASE = int(os.environ.get("HELIX_I_PORT", 7700))
+# HELIX_I_BIND: which interface the ingress sockets listen on.
+# Default 127.0.0.1 (loopback-only, single-machine).
+# Set to 0.0.0.0 on the compaq so precision can push data across the mesh.
+# Never hardcode an IP here — put it in /etc/default/helix-ingress
+# or the helix@ingress.service EnvironmentFile.
+import helix_gate
+BIND_ADDR       = helix_gate.safe_bind(os.environ.get("HELIX_I_BIND", "127.0.0.1"), "Helix-I")
+MAX_CONN_BYTES  = int(os.environ.get("HELIX_I_MAX_BYTES", str(4 * 1024 * 1024)))   # per connection
 MAX_STAGE_BYTES = STAGE_SLOT_SIZE - 64   # leave header room
 INTERRUPT_TARGET_PID = int(os.environ.get("FRANK5_PID", os.getpid()))
 
@@ -230,12 +238,12 @@ class HelixI:
             )
             t.start()
             ch._thread = t
-            log.info(f"Helix-I ch{ch.number} (strand {ch.strand}) listening on :{port}")
+            log.info(f"Helix-I ch{ch.number} (strand {ch.strand}) listening on {BIND_ADDR}:{port}")
 
     def _socket_listener(self, ch: Channel, port: int):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("127.0.0.1", port))
+        sock.bind((BIND_ADDR, port))
         sock.listen(8)
         sock.setblocking(False)
         ch._sock = sock
@@ -257,11 +265,20 @@ class HelixI:
 
     def _handle_connection(self, ch: Channel, conn: socket.socket, addr):
         try:
-            chunks = []
+            try:
+                first = helix_gate.check(conn, addr, f"Helix-I ch{ch.number}")
+            except PermissionError:
+                return
+            chunks = [first] if first else []
+            total = len(first)
             while True:
                 data = conn.recv(65536)
                 if not data:
                     break
+                total += len(data)
+                if total > MAX_CONN_BYTES:
+                    log.warning(f"Ch{ch.number}: {addr} sent over {MAX_CONN_BYTES} bytes — dropped")
+                    return
                 chunks.append(data)
             if chunks:
                 self.pull(ch.number, b"".join(chunks), {"src": str(addr)})

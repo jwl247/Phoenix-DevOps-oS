@@ -73,6 +73,27 @@ def boot():
     _helix_fix(library)
     spawner = start_spawn(frank, process_library=library)
 
+    # Addressed stages: a stage whose payload is JSON with {"suit": "<name>"}
+    # goes to that suit — but only to suits imported through Genie (custody-
+    # verified, tag "genie"). Everything else falls through to the channel
+    # resolver as before. Without this, every ch1 stage lands on the `helix`
+    # core suit, which has no run() and returns nothing (audit S1-F28).
+    import json as _json
+    def _addressed_resolver(packet):
+        try:
+            msg = _json.loads(packet.data)
+        except (ValueError, TypeError, UnicodeDecodeError):
+            return None
+        name = msg.get("suit") if isinstance(msg, dict) else None
+        if not isinstance(name, str):
+            return None
+        entry = library._suits.get(name)
+        if entry is None or "genie" not in entry.tags:
+            log.warning("  addressed stage for %r refused: not a Genie-imported suit", name)
+            return None
+        return library.get(name)
+    spawner.register_resolver(_addressed_resolver)
+
     helix_i = HelixI(frank)
     helix_i.start_socket_listeners()
 
@@ -92,6 +113,43 @@ def boot():
         helix_system.start()
     except Exception as e:
         log.info("  Helix memory stack not connected: %s (standalone mode)", e)
+
+    # ── Userspace Helix (sector1/helix/helix_vram.py) + the paging manager ──
+    # The canonical double Helix: Dandelion at her center, zlib-5 on Strand A,
+    # Strand B relief on disk. The paging manager (sector4/paging_helix.py) is
+    # her memory-pressure source (RAM + commit charge) and grows/retires
+    # Strand B with Doppelgangers as her tiered eviction needs it. Non-fatal.
+    helix_vram = None
+    pager = None
+    try:
+        import importlib.util as _hilu
+        _repo = Path(__file__).resolve().parents[2]
+        def _load(name, rel):
+            sp = _hilu.spec_from_file_location(name, _repo / rel)
+            mod = _hilu.module_from_spec(sp)
+            sys.modules[name] = mod
+            sp.loader.exec_module(mod)
+            return mod
+        _hv = _load("helix_vram", "sector1/helix/helix_vram.py")
+        _ph = _load("paging_helix", "sector4/paging_helix.py")
+        import os as _os
+        _b_base = _os.environ.get("HELIX_VRAM_STRAND_B") or str(Path.home() / ".phoenix" / "helix" / "strandB")
+        helix_vram = _hv.HelixMemoryManager(strand_b_dir=_b_base)
+        _ph.clean_stale_strand_b(_b_base, keep=helix_vram.b_dir)
+        _st = helix_vram.get_stats()
+        log.info("  Helix (userspace) online  L1+L2 %d MB raw, L3 %d MB zlib-5, Strand B %d MB at %s, kernel-linked=%s",
+                 _st["raw_budget_mb"], _st["z_budget_mb"], _st["strand_b_budget_mb"], helix_vram.b_dir,
+                 _st["dandelion"]["kernel_linked"])
+        pager = _ph.HelixPager(helix_vram, memory_fn=_hv.machine_memory)
+        pager.start()
+        # Suits run in this process; `import phoenix_ctx` gives them the live
+        # Helix (and pager) instead of each suit building its own.
+        import types as _types
+        _ctx = _types.ModuleType("phoenix_ctx")
+        _ctx.helix, _ctx.pager = helix_vram, pager
+        sys.modules["phoenix_ctx"] = _ctx
+    except Exception as e:
+        log.warning("  Helix (userspace) / paging manager not started: %s", e)
 
     # ── CoPES guardian rotation — moving-target defense, armed before the ──────
     # rest comes up. Non-fatal: a boot without guardians is worse than nothing
@@ -115,6 +173,23 @@ def boot():
         log.info("  Status server online  http://localhost:8765")
     except Exception as e:
         log.warning("  Status server not started: %s", e)
+
+    # Genie control socket — PS7 (genie.ps1) talks to the RUNNING kernel:
+    # live closet view + hot-load of custody-verified suits. Loopback only,
+    # token-gated. Non-fatal: the kernel runs without it, Genie just can't
+    # hot-load.
+    genie_ctl = None
+    try:
+        import importlib.util as _ilu
+        _gspec = _ilu.spec_from_file_location("genie_control", _here / "genie" / "genie_control.py")
+        _gmod = _ilu.module_from_spec(_gspec)
+        _gspec.loader.exec_module(_gmod)
+        start_control = _gmod.start_control
+        genie_ctl = start_control(library, frank=frank, spawner=spawner,
+                                  helix_i=helix_i, helix_e=helix_e,
+                                  helix=helix_vram, pager=pager)
+    except Exception as e:
+        log.warning("  Genie control not started: %s", e)
     # ─────────────────────────────────────────────────────────────────────────
 
     log.info("=== Phoenix Universal Kernel OPERATIONAL ===")
@@ -126,6 +201,12 @@ def boot():
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
+        if genie_ctl:
+            genie_ctl.stop()
+        if pager:
+            pager.stop()
+        if helix_vram:
+            helix_vram.close()
         spawner.stop()
         helix_i.stop()
         helix_e.stop()
