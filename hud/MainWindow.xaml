@@ -6,15 +6,11 @@
         xmlns:local="clr-namespace:Hud"
         xmlns:controls="clr-namespace:Hud.Controls"
         mc:Ignorable="d"
-        Title="Phoenix HUD — H.L.K-10"
-        Left="0" Top="0"
-        Width="{x:Static SystemParameters.PrimaryScreenWidth}"
-        Height="{x:Static SystemParameters.PrimaryScreenHeight}"
-        WindowStyle="None"
-        AllowsTransparency="True"
-        Background="Transparent"
-        Topmost="True"
-        ResizeMode="CanResizeWithGrip"
+        Title="Phoenix Console"
+        WindowStyle="SingleBorderWindow"
+        Background="#0A0D10"
+        Topmost="False"
+        ResizeMode="CanResize"
         FontFamily="Consolas">
 
     <Grid Margin="16">
@@ -23,7 +19,7 @@
         <Border Style="{StaticResource HudPanel}" Height="52" VerticalAlignment="Top"
                 MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
             <Grid Margin="16,0">
-                <TextBlock Text="PHOENIX HUD — H.L.K-10" Foreground="White" FontWeight="Bold"
+                <TextBlock Text="PHOENIX CONSOLE" Foreground="White" FontWeight="Bold"
                            FontSize="16" VerticalAlignment="Center" HorizontalAlignment="Left"/>
                 <controls:KnightRiderBar x:Name="VoiceIndicator" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 <TextBlock x:Name="ProviderLabel" Text="provider: —" Foreground="{StaticResource TextDim}"
@@ -31,6 +27,9 @@
                 <Button x:Name="CliToggleButton" Content="CLI" Width="40" Height="28" HorizontalAlignment="Right"
                         Margin="0,0,36,0" Style="{StaticResource HudButton}" Click="ToggleCli_Click"
                         ToolTip="Show/hide the CLAUDE CODE pane"/>
+                <Button x:Name="HudToggleButton" Content="HUD" Width="44" Height="28" HorizontalAlignment="Right"
+                        Margin="0,0,82,0" Style="{StaticResource HudButton}" Click="ToggleHud_Click"
+                        ToolTip="Launch / hide the HUD: see-through, chat with Claude, drop files on the left edge (Ctrl+Alt+Space)"/>
                 <Button Content="✕" Width="28" Height="28" HorizontalAlignment="Right"
                         Style="{StaticResource HudButton}" Click="Close_Click"/>
             </Grid>

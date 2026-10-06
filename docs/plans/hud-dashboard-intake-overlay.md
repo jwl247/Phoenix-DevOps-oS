@@ -399,3 +399,31 @@ if __name__ == "__main__":
   its contents.
 - The error lambda reads `e` after the except block ends, and Python clears `e` at that point, so it
   raises a NameError. Bind it as `lambda e=e:`.
+
+## Build (Claude drives the how; Jerry 2026-10-06)
+**Decisions (Jerry):** the Console is the launch pad: every human button and switch, and the old HUD's panels move
+into it. The HUD is chat only, and it's Claude. The entire desktop is drag and drop, with a drop-down of file
+actions. Paths to everything come from Atlas.
+
+**Slice 1: DONE 2026-10-06** (`hud/`):
+- `Desktop/FileActions.cs`: one engine for every door. Copy/move/rename/new folder/show/send to pbmIII/intake.
+  Shared-read copies, so open files work. A plain sentence when a file is locked. Never overwrites ("name (2)").
+  A cross-drive move is copy, then SHA-256 verify, then delete. Every action goes to
+  `E:\Phoenix\hud-live-monitor\actions.log`. Tested by calling the compiled engine: copy-while-open,
+  name collision, exclusive-lock message, folder move C:->D: verified, bad rename refused, new folder.
+- `Desktop/AtlasClient.cs` + `ActionMenu.cs` place picker: "Copy/Move to Phoenix place…" asks Atlas
+  (packages-worker `/connections?q=`) plus fixed places (pbmIII share, repo, Desktop, Downloads, clone pool)
+  plus Browse. Atlas query verified live.
+- `HudOverlay`: full work-area, see-through, click-through except the solid chat column and a 6 px drop
+  shelf on the left edge. Drop gives the drop-down at the cursor. "Ask Claude about it" attaches the paths to
+  the next message (images go as vision to the API tier). Ctrl+Alt+Space toggles it. Its log is
+  `hud-chat-log.txt`.
+- `App`: one process. Console (MainWindow, now a normal window titled "Phoenix Console") plus the HUD.
+  They share `App.Ai`, so it's one conversation. `Hud.exe --hud` opens the HUD at start. The Console has
+  a HUD switch.
+- Seen live (screenshot): the HUD over Process Monitor, which stays usable underneath; the Console behind.
+- NOT yet proven by a human hand: an actual mouse drag onto the shelf, and the picker UI. Jerry to try.
+
+**Next:** slice 3, the Explorer right-click "Phoenix" menu (HKCU verbs, then `Hud.exe --action`, sent to the
+running app). Slice 4, Console tabs: the web Console (portal) in WebView2, plus the CLI/voice/monitor panels
+and switches. Then sight in the HUD, and the Ollama/OpenJarvis button.

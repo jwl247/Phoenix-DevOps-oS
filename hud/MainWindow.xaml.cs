@@ -8,7 +8,7 @@ namespace Hud;
 
 public partial class MainWindow : Window
 {
-    private readonly AiChatService _ai = new();
+    private readonly AiChatService _ai = App.Ai;   // shared with the HUD overlay: one conversation
     private readonly ScreenCaptureService _capture = new(TimeSpan.FromMilliseconds(1000));
     private readonly List<string> _lines = new();
     private ClaudeCodeSession? _claudeCode;
@@ -339,4 +339,6 @@ public partial class MainWindow : Window
             // Transient (e.g. file locked by a reader mid-write) — next tick retries.
         }
     }
+
+    private void ToggleHud_Click(object sender, RoutedEventArgs e) => App.ToggleHud();
 }
