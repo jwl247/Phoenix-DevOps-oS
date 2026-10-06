@@ -135,3 +135,4 @@ profile loads; survives profile rebuilds; versioned through intake like other co
 suit territory). "Later dates if at all" — capture only, build when Jerry says.
 
 - **Helix bench (Jerry, 2026-10-06):** Sysinternals is downloaded. When we bench Helix, use it (Process Monitor / RAMMap / DiskMon / Process Explorer) to map the whole pipeline end to end on the Windows side.
+- **HUD/Dashboard intake overlay (Jerry, 2026-10-06):** manual-file intake via drag-and-drop overlay -> config pulled as a .jsonc suite manifest. CAPTURED, discuss before building: `docs/plans/hud-dashboard-intake-overlay.md`.
