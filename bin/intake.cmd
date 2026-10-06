@@ -34,6 +34,9 @@ if exist "%USERPROFILE%\.phoenix_env.sh" (
 
 REM Find intake.sh
 set "INTAKE_SH=%PHOENIX_INTAKE%"
+REM A stale PHOENIX_INTAKE (moved/deleted path - on PBMII it points at a dead
+REM D: path) falls back to the repo copy instead of failing (2026-10-03).
+if defined INTAKE_SH if not exist "%INTAKE_SH%" set "INTAKE_SH="
 REM In-repo Sector 2 pipeline only (the standalone package-handler repo
 REM keeps intake.sh at its root and was archived 2026-09-13 -- S34OPS-F41).
 if not defined INTAKE_SH (

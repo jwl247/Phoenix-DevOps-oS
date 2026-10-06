@@ -13,6 +13,9 @@ set -euo pipefail
 
 # Find intake.sh
 INTAKE_SH="${PHOENIX_INTAKE:-}"
+# A stale PHOENIX_INTAKE (moved/deleted path) falls back to the repo copy
+# instead of stopping with "not found" (2026-10-02: it pointed at a dead D: path).
+[[ -n "$INTAKE_SH" && ! -f "$INTAKE_SH" ]] && INTAKE_SH=""
 
 if [[ -z "$INTAKE_SH" ]]; then
     # Try common locations

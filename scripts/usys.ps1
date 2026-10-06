@@ -1672,12 +1672,36 @@ function Invoke-UsysRun {
                 }
 
                 # ── Build QEMU argument list ──────────────────────────────
+                # An .iso entry boots as a live CD; anything else is the VM's disk.
+                $bootArgs = if ($entryPath -like '*.iso') {
+                    @('-cdrom', $entryPath, '-boot', 'd')
+                } else {
+                    @('-drive', "file=$($entryPath.Replace(',', ',,')),format=$(if ($entryPath -like '*.img') { 'raw' } else { 'qcow2' }),if=virtio")
+                }
                 $qemuArgs = @(
                     '-m',       $ram,
                     '-smp',     $cpus,
-                    '-display', $display,
-                    '-drive',   "file=$($entryPath.Replace(',', ',,')),format=$(if ($entryPath -like '*.img') { 'raw' } else { 'qcow2' }),if=virtio"
-                ) + $netArgs
+                    '-display', $display
+                ) + $bootArgs + $netArgs
+
+                # UEFI-only images (e.g. Gentoo's di-* cloud images) set
+                # PHOENIX_VM_FIRMWARE=uefi. The firmware must go in as a read-only
+                # pflash drive; `-bios <edk2 code.fd>` refuses to load it.
+                if ($manifest.environment.PHOENIX_VM_FIRMWARE -eq 'uefi') {
+                    $qemuDir = Split-Path $qemu
+                    $edk2 = @(
+                        (Join-Path $qemuDir 'share\edk2-x86_64-code.fd'),
+                        (Join-Path $qemuDir '../share/qemu/edk2-x86_64-code.fd'),
+                        '/usr/share/qemu/edk2-x86_64-code.fd',
+                        '/usr/share/OVMF/OVMF_CODE.fd'
+                    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+                    if (-not $edk2) {
+                        Write-UsysErr 'Suite needs UEFI firmware (edk2-x86_64-code.fd) and none was found next to QEMU.'
+                        return
+                    }
+                    Write-UsysInfo "Firmware: UEFI ($edk2)"
+                    $qemuArgs += @('-drive', "if=pflash,format=raw,readonly=on,file=$($edk2.Replace(',', ',,'))")
+                }
                 if ($smbiosArg)         { $qemuArgs += $smbiosArg }
                 if ($virtfsArgs.Count)  { $qemuArgs += $virtfsArgs }
 
@@ -2138,7 +2162,8 @@ function Show-UsysHelp {
   Intake / Clone:
     intake <file>                Sector 4 vault intake (TAV / breach_coms4)
     intake dir <path>            Intake all files in directory
-    clone <file> [-Category] [-Tag] [-Destination] [-DryRun]
+    clone <name> [vN] [folder]   OUT of the clone pool into a folder (default: here)
+                                 (global `clone` is the same; IN = global `intake <file>`)
     open <file>                  Magic extension handler (.lol, .phx)
     download <url>               Download + auto-intake in one command
     download <url> -OutFile <p>  Download to specific path, then intake
@@ -2155,6 +2180,7 @@ function Show-UsysHelp {
   Discovery:
     search <query>               Search clonepool + catalog
     pull <suite>                 Pull suite record from D1 and stage locally
+    pull <name> -Destination <d> Pull the real bytes into folder <d>, SHA3-checked
 
   Distros (Linux VMs via QEMU — no install, no WSL, Phoenix brings the OS):
     distro list                  Show registered distros
@@ -2256,23 +2282,9 @@ function global:usys {
         }
 
         'clone' {
-            if ($Rest.Count -lt 1) {
-                Write-UsysErr 'usage: usys clone <file> [-Category x] [-Tag y] [-Destination T2] [-DryRun]'
-                return
-            }
-            $dry  = $Rest -contains '-DryRun' -or $Rest -contains '--dry-run'
-            $path = $Rest[0]
-            $cat  = ''
-            $tag  = ''
-            $dest = ''
-            for ($i = 1; $i -lt $Rest.Count; $i++) {
-                switch ($Rest[$i]) {
-                    '-Category'    { if ($i + 1 -lt $Rest.Count) { $cat  = $Rest[++$i] } }
-                    '-Tag'         { if ($i + 1 -lt $Rest.Count) { $tag  = $Rest[++$i] } }
-                    '-Destination' { if ($i + 1 -lt $Rest.Count) { $dest = $Rest[++$i] } }
-                }
-            }
-            Invoke-UsysClone -Path $path -Category $cat -Tag $tag -Destination $dest -DryRun:$dry
+            # OUT of the pool (2026-10-02; it used to put files IN — that is
+            # `usys intake`/`intake` now). Same engine as the global `clone`.
+            Invoke-UsysCloneOut -CloneArgs $Rest
         }
 
         'search' {
@@ -2379,10 +2391,16 @@ function global:usys {
         }
 
         'pull' {
-            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys pull <suite>'; return }
+            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys pull <suite> [-Destination <folder>]'; return }
             $dry = $Rest -contains '-DryRun' -or $Rest -contains '--dry-run'
-            $name = $Rest | Where-Object { $_ -notin '-DryRun','--dry-run' } | Select-Object -First 1
-            Invoke-UsysPull -SuiteName $name -DryRun:$dry
+            # -Destination was documented but never parsed here, so a pull into
+            # a folder only staged a stub (2026-10-02).
+            $dest = ''
+            $i = [array]::IndexOf([string[]]$Rest, '-Destination')
+            if ($i -ge 0 -and $i + 1 -lt $Rest.Count) { $dest = $Rest[$i + 1] }
+            $name = $Rest | Where-Object { $_ -notin '-DryRun','--dry-run','-Destination' -and $_ -ne $dest } | Select-Object -First 1
+            if ($dest) { New-Item -ItemType Directory -Force -Path $dest | Out-Null; $dest = (Resolve-Path $dest).Path }
+            Invoke-UsysPull -SuiteName $name -Destination $dest -DryRun:$dry
         }
 
         'list-suites' {
@@ -2714,15 +2732,20 @@ function Get-UsysWatcherPending {
     }
 }
 
-# Back-compat: expose clone as a global function that delegates to usys clone
-function global:clone {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory, Position = 0)][string]$Path,
-        [string]$Tag = '', [string]$Category = '', [string]$Destination = '', [switch]$DryRun
-    )
-    Invoke-UsysClone -Path $Path -Tag $Tag -Category $Category -Destination $Destination -DryRun:$DryRun
+# `clone` = OUT of the pool, wherever usys.ps1 is dot-sourced — the same
+# engine as bin\clone.cmd and `usys clone`: clone <name> [vN] [folder] [--force]
+function Invoke-UsysCloneOut {
+    param([string[]]$CloneArgs = @())
+    $bash = Get-UsysGitBash
+    if (-not $bash) { Write-UsysErr 'Git Bash not found. Install Git for Windows or set PHOENIX_BASH.'; return }
+    $cloneSh = Join-Path (Get-UsysRepoRoot) 'bin\clone'
+    if (-not (Test-Path $cloneSh)) { Write-UsysErr "bin\clone not found under $(Get-UsysRepoRoot)"; return }
+    if (-not $env:CLONEPOOL_DIR) { $env:CLONEPOOL_DIR = Get-UsysClonepoolDir }
+    $prevPool = $env:CLONEPOOL_DIR
+    $env:CLONEPOOL_DIR = ConvertTo-GitBashPath $env:CLONEPOOL_DIR
+    try { & $bash (ConvertTo-GitBashPath $cloneSh) @CloneArgs } finally { $env:CLONEPOOL_DIR = $prevPool }
 }
+function global:clone { Invoke-UsysCloneOut -CloneArgs $args }
 Set-Alias -Name phx-clone -Value clone -Scope Global -Force -ErrorAction SilentlyContinue
 
 # Direct script invocation (shim mode)

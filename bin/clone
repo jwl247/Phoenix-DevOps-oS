@@ -1,37 +1,83 @@
 #!/usr/bin/env bash
 # ============================================================
-# Phoenix Global Command: clone
-# Linux/macOS wrapper for Phoenix Clone (Sector 2 intake)
+# Phoenix Global Command: clone — OUT of the clone pool
+#   clone <name> [vN] [folder] [--force]
+# Copies a pool file or folder into <folder> (default: where you are),
+# latest or a given version, checked against D1 (intake.sh clone).
+# IN is `intake <file>`. One engine for every terminal: bin/clone.cmd,
+# `usys clone` and `intake clone` all run this script (2026-10-02 —
+# before that "clone" meant IN in three places and OUT in three others).
 # ============================================================
 
 set -euo pipefail
 
-# Source Phoenix environment
 [[ -f "$HOME/.phoenix_env.sh" ]] && source "$HOME/.phoenix_env.sh"
 
-# Find Phoenix root
-PHOENIX_ROOT="${PHOENIX_ROOT:-}"
-if [[ -z "$PHOENIX_ROOT" ]]; then
-    if [[ -f "$HOME/Phoenix/Phoenix-DevOps-oS/tools/clone.sh" ]]; then
-        PHOENIX_ROOT="$HOME/Phoenix/Phoenix-DevOps-oS"
-    elif [[ -f "$(dirname "$(dirname "${BASH_SOURCE[0]}")")/tools/clone.sh" ]]; then
-        PHOENIX_ROOT="$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)"
-    fi
+usage() {
+cat <<'USAGE'
+
+  clone — get a file or folder OUT of the Phoenix clone pool
+
+    clone <name>                  latest version into this folder
+    clone <name> v5               version 5 into this folder
+    clone <name> <folder>         latest into <folder> (created if missing)
+    clone <name> v5 <folder>      version 5 into <folder>
+    clone <folder-name>/          a whole folder snapshot
+    add --force to overwrite a file that is already there
+
+  To put something INTO the pool:  intake <file-or-folder>
+
+USAGE
+}
+
+# intake.sh: PHOENIX_INTAKE only if it really exists, else this repo's copy.
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INTAKE_SH="${PHOENIX_INTAKE:-}"
+[[ -n "$INTAKE_SH" && ! -f "$INTAKE_SH" ]] && INTAKE_SH=""
+for c in "$SELF_DIR/../sector2/package-handler/intake.sh" \
+         "${PHOENIX_ROOT:-/nonexistent}/sector2/package-handler/intake.sh" \
+         "$HOME/Phoenix/Phoenix-DevOps-oS/sector2/package-handler/intake.sh"; do
+  [[ -z "$INTAKE_SH" && -f "$c" ]] && INTAKE_SH="$(cd "$(dirname "$c")" && pwd)/intake.sh"
+done
+if [[ -z "$INTAKE_SH" ]]; then
+  echo "[clone] intake.sh not found — set PHOENIX_ROOT to your Phoenix-DevOps-oS checkout" >&2
+  exit 1
 fi
 
-if [[ -z "$PHOENIX_ROOT" ]]; then
-    echo "[ERROR] PHOENIX_ROOT not set. Run install.sh first." >&2
-    exit 1
+name="" ver="" folder="" force=0
+for a in "$@"; do
+  case "$a" in
+    -h|--help|help) usage; exit 0 ;;
+    -f|--force)     force=1 ;;
+    v[0-9]*)        if [[ -z "$ver" && "$a" =~ ^v[0-9]+$ ]]; then ver="$a"; elif [[ -z "$name" ]]; then name="$a"; else folder="$a"; fi ;;
+    *)              if [[ -z "$name" ]]; then name="$a"; elif [[ -z "$folder" ]]; then folder="$a"; else usage; exit 2; fi ;;
+  esac
+done
+[[ -z "$name" ]] && { usage; exit 2; }
+
+# name.lol is shorthand for name (lol / .lol syntax); strip it here so the
+# "already exists" check below looks at the real file, not name.lol.
+name="${name%.lol}"
+
+# The pool is keyed by name, not path: "./x/intake.sh" means "intake.sh".
+is_dir=0; [[ "$name" == */ ]] && is_dir=1
+base="${name%/}"; base="${base##*/}"; base="${base##*\\}"
+[[ "$base" != "${name%/}" ]] && echo "[clone] the pool is keyed by name — cloning '$base'"
+name="$base"; [[ $is_dir -eq 1 ]] && name="$base/"
+
+# Windows-style folder (C:\x) → bash path when cygpath is around (Git Bash).
+if [[ -n "$folder" ]]; then
+  command -v cygpath >/dev/null 2>&1 && folder="$(cygpath -u "$folder")"
+  mkdir -p "$folder"
+  cd "$folder"
 fi
 
-# Find clone.sh
-CLONE_SH="$PHOENIX_ROOT/tools/clone.sh"
-if [[ ! -f "$CLONE_SH" ]]; then
-    echo "[ERROR] clone.sh not found at $CLONE_SH" >&2
-    exit 1
+# Never silently overwrite a working file with a pool copy.
+if [[ $is_dir -eq 0 && -f "$base" && $force -eq 0 ]]; then
+  echo "[clone] '$base' already exists in $(pwd) — add --force to overwrite it" >&2
+  exit 1
 fi
 
-# Execute clone command
-exec bash "$CLONE_SH" "$@"
-
-# Made with Bob
+# The trailing "/" only marks a folder for this script; the pool name has none.
+args=(clone "${name%/}"); [[ -n "$ver" ]] && args+=("$ver")
+exec bash "$INTAKE_SH" "${args[@]}"

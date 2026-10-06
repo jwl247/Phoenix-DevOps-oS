@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# post-commit — keep the Atlas right. If this commit touched any CONNECTIONS.md,
+# bundle them and send the bundle through intake; packages-worker rebuilds the
+# graph from it by itself (sector2/package-handler/parse-connections.js).
+# Never blocks or fails a commit. Installed by: git config core.hooksPath scripts/hooks
+git diff-tree --no-commit-id --name-only -r HEAD | grep -q 'CONNECTIONS\.md$' || exit 0
+root="$(git rev-parse --show-toplevel)"
+echo "[atlas] CONNECTIONS.md changed — refreshing the Atlas..."
+node "${root}/sector2/package-handler/parse-connections.js" || echo "[atlas] refresh FAILED — run: node sector2/package-handler/parse-connections.js"
+exit 0

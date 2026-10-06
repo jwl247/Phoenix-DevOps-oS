@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# ============================================================
+# Phoenix Global Command: lol — a pool file into the current folder
+#   lol <name> [vN] [--force]        (same as: clone <name>)
+# Thin wrapper over bin/clone, the one clone engine (D1-checked, never
+# overwrites a working file without --force). 2026-10-03: lol had its own
+# path to intake.sh that skipped clone's overwrite guard.
+# ============================================================
+set -euo pipefail
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLONE="$SELF_DIR/clone"
+[[ -f "$CLONE" ]] || CLONE="${PHOENIX_ROOT:-/nonexistent}/bin/clone"
+[[ -f "$CLONE" ]] || { echo "[lol] bin/clone not found — set PHOENIX_ROOT to your Phoenix-DevOps-oS checkout" >&2; exit 1; }
+[[ -z "${1:-}" ]] && { echo "usage: lol <name> [vN] [--force]" >&2; exit 2; }
+exec bash "$CLONE" "$@"
