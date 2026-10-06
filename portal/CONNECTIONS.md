@@ -30,5 +30,12 @@ CF_ACCESS_*); `~/.phoenix/hands.token` and `~/.phoenix/hands-tokens.json` for ha
 - `portal/web/app.js` → `portal/server.py` (same-origin JSON API only).
 
 ## Known issues (verified, not guessed)
-- None open in code; README/footer wording was brought in line with the live Actions tab and
+- **Still on WireGuard, which was retired 2026-10-01** (found 2026-10-03): `server.py` binds only 127.0.0.1 and the
+  10.47.0.x address it reads from `wg-phx.conf` (`MESH_PREFIX`, `mesh_address()`), the firewall rule allows only
+  10.47.0.0/24, the Host allow-list takes `10.47.0.*`, and the Compaq/pbm3 hands answer only 10.47.0.2. Result: the
+  Console works on PBMII alone and can't reach the Compaq. Fix: Tailscale address (100.64.0.0/10, `tailscale ip -4`),
+  machines/links from `tailscale status --json`, firewall + hands allow-list to the tailnet, same per-machine tokens.
+- No `/health` route; `/api/state` answers 200 even when the vault/switchboard is unreachable (the dashboard's
+  CONSOLE button uses it as the up-check).
+- Otherwise none open in code; README/footer wording was brought in line with the live Actions tab and
   the test-copy mode on 2026-09-29 (S34OPS-F38).

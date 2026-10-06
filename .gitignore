@@ -91,3 +91,7 @@ tools/poc/*.sidecar.json
 sector1/grub/keys/
 hud.checks/bin/
 hud.checks/obj/
+
+# Atlas: generated bundle (lives in R2 via intake) and the retired local blob
+sector2/package-handler/atlas-sources.json
+sector2/package-handler/atlas.json

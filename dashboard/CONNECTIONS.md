@@ -46,7 +46,21 @@ project, NOT governed by any repo-root package.json (there isn't one).
 - `main.js` → `scripts/usys.ps1` (the CODES CLI and RUN only accept `help`, `usys …`, `intake …`).
 - `main.js` → `sector2/package-handler/worker/index.js` (glossary/custody reads, CF Access headers).
 
+## Pending in `tentative-wares/dashboard/` (2026-10-03, tested in Electron on Linux)
+- **Folder bar across the top** (`slot-transfer.js` + `hud-layout.js`): HOME · ROOT (every drive) · PHOENIX + the 6 slots,
+  each a dropdown of every entry in its folder. One click opens a folder; drag copies (Shift = move); ✎ renames.
+  Main-process rules: never overwrite, no folder into itself, never move out of `breach_coms4`, OS folders read-only,
+  cross-drive move = copy + SHA-256 verify + remove. 22 rule checks (`node slot-transfer.test.js`).
+- **CONSOLE / HUD buttons** (`phoenix-apps-launcher.js`): start `portal/server.py` (task `PhoenixPortal`, else pythonw)
+  and open it in a locked window; start the newest `hud/bin/*/net9.0-windows/Hud.exe`, warn if its build is older than its source.
+- **Repo-root fix** (`main.js resolvePhoenixRoot`): uses the repo the dashboard lives in when `PHOENIX_ROOT` is unset.
+- Install: `tentative-wares/dashboard/INSTALL.md`.
+
 ## Known issues (verified, not guessed)
+- `resolvePhoenixRoot()` defaults to `~/Phoenix/Phoenix-DevOps-oS`; the repo on PBMII is `F:\Phoenix\Phoenix-DevOps-oS`,
+  so without `PHOENIX_ROOT` set, Office, ScriptForge and the intake/help commands point at nothing (fix pending above).
+- No dashboard-to-dashboard link: machines share only the cloud pool. A per-machine dropdown in the folder bar
+  needs the Console + hands on Tailscale first (see portal/CONNECTIONS.md).
 - `ps7-shell.js` is dead code — superseded by `terminal-pty.js` (2026-08-30) but still
   present in the tree, not removed.
 - Root-level `dashboardzip1.zip` (187MB, sits outside `dashboard/` at the repo root) is a
