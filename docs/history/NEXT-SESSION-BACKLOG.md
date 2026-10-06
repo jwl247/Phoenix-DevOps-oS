@@ -133,3 +133,5 @@ Easy add/remove aliases in Jerry's PS7, like zsh's alias file. Shape: `alias add
 `alias rm <name>`, `alias list`; kept in one plain file (~/.phoenix/aliases.ps1, one line each) that the
 profile loads; survives profile rebuilds; versioned through intake like other configs (guardian/config
 suit territory). "Later dates if at all" — capture only, build when Jerry says.
+
+- **Helix bench (Jerry, 2026-10-06):** Sysinternals is downloaded. When we bench Helix, use it (Process Monitor / RAMMap / DiskMon / Process Explorer) to map the whole pipeline end to end on the Windows side.
