@@ -26,6 +26,17 @@ Not a panel on top of the dashboard. The overlay is **the new HUD itself**:
 - **click-through**: clicks pass to the app underneath except where the HUD has a control
 - **set up the way we want**: Jerry decides the layout, not a fixed panel
 
+**Why an overlay (Jerry):** it gives the HUD **desktop functions**. You drag and drop straight from the
+desktop or Explorer and work on the **same files, open or closed**. A file can be open in its own app
+and the HUD still works on it.
+
+Catch for the build: a file that's open in another app may be locked. Most apps let other programs
+read the file while they have it open, but some lock it completely. The copy buffer must open files
+for shared read rather than doing a plain `shutil.copy`. When a file is fully locked, it should take a
+Volume Shadow Copy snapshot, or say "close it first". It should never fail without saying so. Writing
+back to an open file is a separate, bigger question (the other app could overwrite it), so that belongs
+behind a "deviation" permission prompt.
+
 **AI in the new HUD:**
 - **Claude is primary.**
 - **Ollama is a fallback called by a button.** It does minimal guide work, small tasks and chat.
