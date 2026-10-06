@@ -1116,6 +1116,16 @@ function Get-UsysSuiteManifest {
     }
 }
 
+function ConvertTo-UsysSortVersion([string]$Version) {
+    # Suite versions are semver ("11.1.0") or dates ("20261004"). [version] rejects a
+    # bare number, so pad it; anything unparseable sorts lowest instead of erroring.
+    $v = $Version -replace '^v', ''
+    if ($v -match '^\d+$') { $v = "$v.0" }
+    $parsed = $null
+    if ([version]::TryParse($v, [ref]$parsed)) { return $parsed }
+    return [version]'0.0'
+}
+
 function Find-UsysSuites {
     [CmdletBinding()]
     param(
@@ -1383,7 +1393,7 @@ function Invoke-UsysSuiteTrust {
         $suites | Where-Object { $_.Version -eq $Version } | Select-Object -First 1
     }
     else {
-        $suites | Sort-Object { [version]$_.Version } -Descending | Select-Object -First 1
+        $suites | Sort-Object { ConvertTo-UsysSortVersion $_.Version } -Descending | Select-Object -First 1
     }
     if (-not $suite) { Write-UsysErr "Suite version not found: $SuiteName@$Version"; return }
 
@@ -1461,7 +1471,7 @@ function Invoke-UsysRun {
     $suite = if ($Version) {
         $suites | Where-Object { $_.Version -eq $Version } | Select-Object -First 1
     } else {
-        $suites | Sort-Object { [version]$_.Version } -Descending | Select-Object -First 1
+        $suites | Sort-Object { ConvertTo-UsysSortVersion $_.Version } -Descending | Select-Object -First 1
     }
     
     if (-not $suite) {
@@ -1595,7 +1605,10 @@ function Invoke-UsysRun {
                         if ($hvFeature -and $hvFeature.State -eq 'Enabled') {
                             $resolvedAccel = 'whpx'
                         } else {
-                            $resolvedAccel = 'tcg'
+                            # Without admin the DISM probe always fails, which used to mean
+                            # TCG every time. Let QEMU decide instead: it tries WHPX first
+                            # and drops to TCG only if WHPX is really unavailable.
+                            $resolvedAccel = 'whpx-or-tcg'
                         }
                     } else {
                         $resolvedAccel = if (Test-Path '/dev/kvm') { 'kvm' } else { 'tcg' }
@@ -1607,6 +1620,7 @@ function Invoke-UsysRun {
                     'whpx'   { Write-UsysInfo 'Accelerator: WHPX (Windows Hypervisor Platform) — near-native speed' }
                     'kvm'    { Write-UsysInfo 'Accelerator: KVM — near-native speed' }
                     'tcg'    { Write-UsysInfo 'Accelerator: TCG (software emulation) — works everywhere, no HW required' }
+                    'whpx-or-tcg' { Write-UsysInfo 'Accelerator: WHPX if available, else TCG (QEMU picks)' }
                 }
                 if ($resolvedAccel -eq 'tcg' -and ($IsWindows -or $env:OS -eq 'Windows_NT')) {
                     Write-UsysInfo '  → For full speed run: usys run debian --accel hyperv'
@@ -1715,6 +1729,8 @@ function Invoke-UsysRun {
                 } elseif ($resolvedAccel -eq 'kvm') {
                     $qemuArgs += @('-accel', 'kvm')
                     $qemuArgs += @('-cpu', 'host')
+                } elseif ($resolvedAccel -eq 'whpx-or-tcg') {
+                    $qemuArgs += @('-accel', 'whpx', '-accel', 'tcg')
                 } else {
                     $qemuArgs += @('-accel', $resolvedAccel)
                 }
@@ -1766,7 +1782,7 @@ function Invoke-UsysListSuites {
         return
     }
     
-    $suites | Sort-Object Name, { [version]$_.Version } | ForEach-Object {
+    $suites | Sort-Object Name, { ConvertTo-UsysSortVersion $_.Version } | ForEach-Object {
         $desc = if ($_.Manifest.description) { " - $($_.Manifest.description)" } else { '' }
         Write-Host "  $($_.Name) " -NoNewline -ForegroundColor Cyan
         Write-Host "v$($_.Version) " -NoNewline -ForegroundColor Green
@@ -1902,7 +1918,7 @@ function Invoke-UsysLoad {
     $suite = if ($Version) {
         $suites | Where-Object { $_.Version -eq $Version } | Select-Object -First 1
     } else {
-        $suites | Sort-Object { [version]$_.Version } -Descending | Select-Object -First 1
+        $suites | Sort-Object { ConvertTo-UsysSortVersion $_.Version } -Descending | Select-Object -First 1
     }
     
     if (-not $suite) {
