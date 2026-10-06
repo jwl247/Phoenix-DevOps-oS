@@ -54,11 +54,15 @@ def _fixed_drives() -> list:
 # places that change every second by design (kernel pseudo-files, logs, caches, temp, swap) are left
 # out, or they would bury real motion. ALERT paths are the ones where any change matters.
 DEFAULTS_WIN = {
-    "watch": ["D:\\", "E:\\", "F:\\",         # content drives in full (Phoenix + Claude data)
-              str(Path.home()), r"C:\Windows\System32\drivers\etc",
-              r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup"],
-    # C:\ as a whole is skipped on purpose: the Windows install tree is huge, changes every second,
-    # and would bury real motion + never finish a sweep. The home profile IS watched (minus caches).
+    # The spots that actually matter on PBMII — NOT the whole game/ops drives. At D:/E:/F:+home it
+    # was 1.34M files / 17-min scan, unusable on a 5-min timer (measured 2026-10-06). This set
+    # sweeps in seconds and is what an attacker/tamper would touch.
+    "watch": [r"F:\Phoenix\Vault", r"F:\Phoenix\Phoenix-DevOps-oS",
+              str(Path.home() / ".ssh"), str(Path.home() / ".phoenix" / "genie" / "closet"),
+              str(Path.home() / ".phoenix" / "security" / "bin"),
+              r"C:\Windows\System32\drivers\etc",
+              r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup",
+              str(Path.home() / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup")],
     "alert": [r"F:\Phoenix\Vault", str(Path.home() / ".ssh"), str(Path.home() / ".phoenix" / "genie" / "closet"),
               r"C:\Windows\System32\drivers\etc", r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup",
               str(Path.home() / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup")],
@@ -399,7 +403,32 @@ def _save(statef: Path, state: dict) -> None:
     tmp.replace(statef)
 
 
+PAUSE_FILE = HOME / "paused"
+
+
+def set_paused(on: bool, who: str = "") -> dict:
+    """Off-switch. Honoured by scan(); the timer keeps firing but does nothing while paused.
+    Writing/removing the file needs write access to the state dir (root on Linux, you on Windows)."""
+    if on:
+        HOME.mkdir(parents=True, exist_ok=True)
+        PAUSE_FILE.write_text(json.dumps({"at": int(time.time()), "by": who or socket.gethostname()}),
+                              encoding="utf-8")
+        return {"paused": True, "by": who or socket.gethostname()}
+    PAUSE_FILE.unlink(missing_ok=True)
+    return {"paused": False}
+
+
+def is_paused() -> dict | None:
+    try:
+        return json.loads(PAUSE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
 def scan(baseline_only=False) -> dict:
+    p = is_paused()
+    if p and not baseline_only:
+        return {"paused": True, "since": p.get("at"), "by": p.get("by"), "note": "security scan is OFF — `security on` to resume"}
     cfg = config()
     t0 = time.time()
     statef = HOME / "state.json"
@@ -489,7 +518,9 @@ ACTIONS = {"status": lambda m: status(), "scan": lambda m: scan(),
            "events": lambda m: {"events": tail(int(m.get("n", 20)))},
            "alerts": lambda m: {"alerts": tail(int(m.get("n", 20)), only_alerts=True)},
            "summary": lambda m: summary(), "verify": lambda m: verify(),
-           "versions": lambda m: versions(m["path"])}
+           "versions": lambda m: versions(m["path"]),
+           "off": lambda m: set_paused(True, m.get("by", "")), "on": lambda m: set_paused(False),
+           "paused": lambda m: {"paused": bool(is_paused()), **(is_paused() or {})}}
 
 
 def run(data, ball=None, pcs=None, **_):
