@@ -74,6 +74,7 @@
 #define HX_READ_WORKERS     8            /* parallel Strand B / slow-path readers */
 #define HX_PEAK_FLOOR       200          /* ops/s: never calibrate below this */
 #define HX_MISS_RING        4096         /* recent misses her paging manager reads (power of 2) */
+#define HX_WARM_LANES       4            /* parallel feeding lanes: origin trips in flight at once */
 
 static unsigned int dandelion_ops_ref;     /* 0 = she calibrates herself */
 module_param(dandelion_ops_ref, uint, 0644);
@@ -139,6 +140,13 @@ struct hx_lane {
 	unsigned long bcount;       /* entries on B only */
 };
 
+struct hx_cache;
+struct hx_warm_lane {                /* one feeding lane: its own worker + batch pages */
+	struct delayed_work work;
+	struct hx_cache *hc;
+	struct page **pgs;
+};
+
 struct hx_cache {
 	struct list_head node;      /* on hx_instances */
 	struct dm_dev *dev;
@@ -152,7 +160,6 @@ struct hx_cache {
 	/* What she was asked for and didn't have: her paging manager reads this to
 	 * predict what's next. Lock-free ring; entry = (blocks << 48) | first block. */
 	u64 *miss_ring;
-	struct page **warm_pgs;      /* HX_WARM_BATCH pages for one batched warm read */
 	bool warm_stopping;          /* teardown: drop the warm queue, don't drain it */
 	atomic64_t miss_seq;
 	atomic64_t compressed, zfail, cooled_bytes;
@@ -198,7 +205,7 @@ struct hx_cache {
 	spinlock_t warm_lock;
 	struct list_head warm_q;             /* hx_warm ranges waiting */
 	unsigned long warm_pending;          /* blocks queued */
-	struct delayed_work warm_work;
+	struct hx_warm_lane warm_lanes[HX_WARM_LANES];
 	atomic64_t warmed, warm_dropped;
 };
 
@@ -1056,17 +1063,30 @@ struct hx_warm {
  * range that loses the race is retried a little later, once the burst settles. */
 static void hx_warm_worker(struct work_struct *w)
 {
-	struct hx_cache *hc = container_of(to_delayed_work(w), struct hx_cache, warm_work);
-	struct hx_warm *wr;
+	struct hx_warm_lane *lane = container_of(to_delayed_work(w), struct hx_warm_lane, work);
+	struct hx_cache *hc = lane->hc;
+	struct hx_warm *wr, *chunk;
 	unsigned long flags, i;
 	bool again = false;
 
 	for (;;) {
+		chunk = kmalloc(sizeof(*chunk), GFP_NOIO | __GFP_NOWARN);
 		spin_lock_irqsave(&hc->warm_lock, flags);
 		wr = list_first_entry_or_null(&hc->warm_q, struct hx_warm, node);
-		if (wr)
+		if (wr && chunk && wr->n > HX_WARM_BATCH) {
+			/* take one trip's worth; the rest stays at the front for the other lanes */
+			chunk->first = wr->first;
+			chunk->n = HX_WARM_BATCH;
+			chunk->tries = wr->tries;
+			wr->first += HX_WARM_BATCH;
+			wr->n -= HX_WARM_BATCH;
+			wr = chunk;
+			chunk = NULL;
+		} else if (wr) {
 			list_del(&wr->node);
+		}
 		spin_unlock_irqrestore(&hc->warm_lock, flags);
+		kfree(chunk);                            /* unused when no split happened */
 		if (!wr)
 			break;
 		if (READ_ONCE(hc->warm_stopping)) {      /* prefetch is only ever "nice to have" */
@@ -1075,7 +1095,7 @@ static void hx_warm_worker(struct work_struct *w)
 		}
 		for (i = 0; i < wr->n && !READ_ONCE(hc->warm_stopping); ) {
 			unsigned long idx = wr->first + i;
-			struct page **pg = hc->warm_pgs;
+			struct page **pg = lane->pgs;
 			unsigned int n = 0, k;
 			u64 gen;
 
@@ -1139,13 +1159,14 @@ static void hx_warm_worker(struct work_struct *w)
 		kfree(wr);
 	}
 	if (again)
-		queue_delayed_work(hc->wq, &hc->warm_work, msecs_to_jiffies(100));
+		queue_delayed_work(hc->wq, &lane->work, msecs_to_jiffies(100));
 }
 
 static void hx_warm_queue(struct hx_cache *hc, sector_t rel, unsigned int sectors)
 {
 	struct hx_warm *wr;
 	unsigned long first, last, flags;
+	unsigned int i;
 
 	if (!sectors)
 		return;
@@ -1165,7 +1186,8 @@ static void hx_warm_queue(struct hx_cache *hc, sector_t rel, unsigned int sector
 	list_add_tail(&wr->node, &hc->warm_q);
 	hc->warm_pending += wr->n;
 	spin_unlock_irqrestore(&hc->warm_lock, flags);
-	queue_delayed_work(hc->wq, &hc->warm_work, msecs_to_jiffies(20));
+	for (i = 0; i < HX_WARM_LANES; i++)
+		queue_delayed_work(hc->wq, &hc->warm_lanes[i].work, msecs_to_jiffies(20));
 }
 
 static void hx_publish_dandelion(void)
@@ -1359,6 +1381,8 @@ static void hx_free_ws(struct hx_cache *hc)
 
 static void hx_destroy(struct dm_target *ti, struct hx_cache *hc)
 {
+	unsigned int i;
+
 	if (hc->wq)
 		destroy_workqueue(hc->wq);
 	bitmap_free(hc->b_map);
@@ -1368,7 +1392,8 @@ static void hx_destroy(struct dm_target *ti, struct hx_cache *hc)
 		dm_put_device(ti, hc->dev);
 	hx_free_ws(hc);
 	kvfree(hc->miss_ring);
-	kfree(hc->warm_pgs);
+	for (i = 0; i < HX_WARM_LANES; i++)
+		kfree(hc->warm_lanes[i].pgs);
 	kfree(hc);
 }
 
@@ -1465,13 +1490,16 @@ static int hx_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		goto bad;
 	}
 	hc->miss_ring = kvcalloc(HX_MISS_RING, sizeof(u64), GFP_KERNEL);   /* optional: no ring, no record */
-	hc->warm_pgs = kcalloc(HX_WARM_BATCH, sizeof(struct page *), GFP_KERNEL);
+	for (i = 0; i < HX_WARM_LANES; i++) {      /* a lane without pages falls back to 1 block/trip */
+		hc->warm_lanes[i].hc = hc;
+		hc->warm_lanes[i].pgs = kcalloc(HX_WARM_BATCH, sizeof(struct page *), GFP_KERNEL);
+		INIT_DELAYED_WORK(&hc->warm_lanes[i].work, hx_warm_worker);
+	}
 	spin_lock_init(&hc->b_lock);
 	spin_lock_init(&hc->defer_lock);
 	hc->warm_write = warm_write;
 	spin_lock_init(&hc->warm_lock);
 	INIT_LIST_HEAD(&hc->warm_q);
-	INIT_DELAYED_WORK(&hc->warm_work, hx_warm_worker);
 	bio_list_init(&hc->deferred);
 	INIT_WORK(&hc->b_write_work, hx_b_writer);
 	for (i = 0; i < HX_READ_WORKERS; i++) {
@@ -1526,7 +1554,8 @@ static void hx_dtr(struct dm_target *ti)
 	mutex_unlock(&hx_instances_lock);
 	hc->warm_write = false;
 	WRITE_ONCE(hc->warm_stopping, true);    /* the running pass stops within one origin trip */
-	cancel_delayed_work_sync(&hc->warm_work);
+	for (i = 0; i < HX_WARM_LANES; i++)
+		cancel_delayed_work_sync(&hc->warm_lanes[i].work);
 	while (!list_empty(&hc->warm_q)) {
 		struct hx_warm *wr = list_first_entry(&hc->warm_q, struct hx_warm, node);
 

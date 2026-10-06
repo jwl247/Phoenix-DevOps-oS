@@ -200,6 +200,16 @@ Harness: `sector1/kernels/helix_pair_test.sh`. Pager: `sector4/paging_kernel_hel
   so no Doppelganger was needed. Helix alone gives 2.8× here.
 - **Doppelganger:** one spawn, +3,584 MiB up to the real 4 GiB device ceiling, no spam (ceiling bug fixed).
 
+**Four feeding lanes (`HX_WARM_LANES` 4; spans split into 512 KiB pieces so lanes share one stream), same clean run:**
+
+| Workload | Far origin | Helix alone | Paired, 1 lane | **Paired, 4 lanes** |
+|---|---|---|---|---|
+| Stream | 41.7 MB/s, 12.0 ms | 41.4 MB/s, 12.1 ms | 62.4 MB/s, 8.0 ms | **87.0 MB/s (2.1× Helix alone), 5.7 ms (−53%)** |
+| Re-reads | 2.6 MB/s | 7.1 MB/s | 7.1 MB/s | 7.1 MB/s (he correctly stays out) |
+
+With four lanes her hits doubled (29,990 vs 13,606) and 545,162 blocks were warmed. His learned leads still sit at the 10 s maximum, so
+she is still feed-limited, and more lanes or deeper batches should keep climbing. That's for the next tuning session.
+
 Kernel changes behind this (dm_helix.c, target v3.1.0):
 - a control channel (`b_budget`, `prefetch`, `misses`)
 - a lock-free miss ring
