@@ -127,3 +127,9 @@ Intent: anyone looks something up and always sees it plus 8 neighbors with brief
   - **Lookup quality, found in a live test 2026-09-30** (`/connections/intake/related` resolved to the `bin/intake` shim, not `sector2/package-handler/intake.sh`, and 6 of the 8 were sibling `bin/` shims): (1) ambiguous query → show the candidate centers to pick from, don't guess; (2) rank subsystems above tiny shims when matching; (3) the deterministic 2-hop fill-in above. Thin descriptions (e.g. `bin/` = "bash → script") are a `CONNECTIONS.md` content pass.
 - **B. `usys atlas <thing>`** — same 8 results in any terminal.
 - **C. Both** — B on top of A once A exists.
+
+## Captured 2026-10-05 night (Jerry) — PS7 aliases, zsh-style
+Easy add/remove aliases in Jerry's PS7, like zsh's alias file. Shape: `alias add <name> '<command>'`,
+`alias rm <name>`, `alias list`; kept in one plain file (~/.phoenix/aliases.ps1, one line each) that the
+profile loads; survives profile rebuilds; versioned through intake like other configs (guardian/config
+suit territory). "Later dates if at all" — capture only, build when Jerry says.
