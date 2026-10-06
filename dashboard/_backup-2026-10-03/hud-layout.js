@@ -13,267 +13,60 @@
         return window.phoenix.invoke(channel, ...args);
     };
 
-    // ── Folder bar (across the top) ─────────────────────────────────────
-    // Fixed places HOME / ROOT / PHOENIX, then the 6 assignable slots. Each is
-    // a dropdown listing EVERY entry of its folder (hidden files too). Click a
-    // folder to go in, ↑ to go up. Drag files or folders from one
-    // dropdown onto another (or onto a folder row) to COPY them; hold Shift to
-    // MOVE. ✎ renames. Files dragged in from Explorer are copied. The main process
-    // (slot-transfer.js) checks every request — this page only asks.
-    const slotsState = { slots: [null, null, null, null, null, null], activeIndex: null };
-    let placesList = [];
-    const cols = {};                       // key -> { open, cwd, selected:Set, note }
-    const DRAG_TYPE = 'application/x-phoenix-paths';
-    const leaf = (p) => (p || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p;
-    const parentOf = (p) => {
-        const t = p.replace(/[\\/]+$/, '');
-        const i = Math.max(t.lastIndexOf('/'), t.lastIndexOf('\\'));
-        if (i < 0) return null;
-        const up = t.slice(0, i + 1);
-        return /^[A-Za-z]:\\$/.test(up) || up === '/' ? up : up.replace(/[\\/]$/, '');
-    };
-    const fmtSize = (n) => n == null ? '' : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB`
-        : n < 1073741824 ? `${(n / 1048576).toFixed(1)} MB` : `${(n / 1073741824).toFixed(2)} GB`;
+    // ── Dropdown slots ──────────────────────────────────────────────────
+    let slotsState = { slots: [null, null, null, null, null, null], activeIndex: null };
 
     async function loadSlots() {
         const state = await invoke('get-dropdown-slots').catch(() => null);
-        if (state) Object.assign(slotsState, state);      // mutate: the button ctx holds this object
-        placesList = await invoke('slot-places').catch(() => []);
+        if (state) slotsState = state;
         renderSlots();
         renderStatusStrip();
-    }
-
-    function columns() {
-        const list = placesList.map((p) => ({ key: 'place:' + p.key, label: p.label, root: p.path, drives: p.drives || null, place: true }));
-        slotsState.slots.forEach((s, i) => list.push({ key: 'slot:' + i, label: s ? leaf(s).toUpperCase() : '+', root: s, index: i, place: false }));
-        return list;
-    }
-
-    function colState(c) {
-        if (!cols[c.key]) cols[c.key] = { open: false, cwd: c.root, selected: new Set(), note: '' };
-        const st = cols[c.key];
-        if (!st.cwd && c.root) st.cwd = c.root;        // a slot that just got a folder
-        return st;
     }
 
     function renderSlots() {
-        const bar = document.getElementById('hud-dropdown-slots');
-        if (!bar) return;
-        bar.innerHTML = '';
-        for (const c of columns()) bar.appendChild(renderColumn(c));
-    }
+        const container = document.getElementById('hud-dropdown-slots');
+        if (!container) return;
+        container.innerHTML = '';
+        slotsState.slots.forEach((slotPath, i) => {
+            const el = document.createElement('div');
+            el.className = 'dropdown-slot' + (slotPath ? ' filled' : '') + (slotsState.activeIndex === i ? ' active-slot' : '');
+            el.dataset.slotIndex = String(i);
 
-    function renderColumn(c) {
-        const st = colState(c);
-        const el = document.createElement('div');
-        el.className = 'dropdown-slot' + (c.place ? ' place' : '') + (c.root || c.drives ? ' filled' : ' empty')
-            + (!c.place && slotsState.activeIndex === c.index ? ' active-slot' : '') + (st.open ? ' open' : '');
-        el.dataset.key = c.key;
+            const label = document.createElement('span');
+            label.className = 'slot-path';
+            label.textContent = slotPath ? slotPath.split(/[\\/]/).pop() : `slot ${i + 1} — drag a folder`;
+            el.appendChild(label);
 
-        const head = document.createElement('div');
-        head.className = 'slot-head';
-        head.title = c.root || (c.drives ? 'every drive' : 'Drop a folder here from Explorer to make it a slot');
-        head.innerHTML = `<span class="slot-caret">${c.root || c.drives ? (st.open ? '▴' : '▾') : ''}</span><span class="slot-path"></span>`;
-        head.querySelector('.slot-path').textContent = c.root || c.drives ? c.label : `+ ${c.index + 1}`;
-        if (!c.place && c.root) {
-            const act = document.createElement('button');
-            act.type = 'button'; act.className = 'slot-mini'; act.title = 'Make this the working directory (shell + Claude follow it)';
-            act.textContent = '◉';
-            act.addEventListener('click', (e) => { e.stopPropagation(); activateSlot(c.index); });
-            const clr = document.createElement('button');
-            clr.type = 'button'; clr.className = 'slot-mini'; clr.title = 'Clear this slot (the folder itself is not touched)';
-            clr.textContent = '×';
-            clr.addEventListener('click', (e) => { e.stopPropagation(); clearSlot(c.index); });
-            head.append(act, clr);
-        }
-        head.addEventListener('click', () => {
-            if (!(c.root || c.drives)) return;
-            st.open = !st.open;
-            renderSlots();
-        });
-        attachDrop(head, c, () => st.cwd || c.root);
-        el.appendChild(head);
-
-        if (st.open && (c.root || c.drives)) el.appendChild(renderPanel(c, st));
-        return el;
-    }
-
-    function renderPanel(c, st) {
-        const panel = document.createElement('div');
-        panel.className = 'slot-panel';
-        const crumb = document.createElement('div');
-        crumb.className = 'slot-crumb';
-        const up = document.createElement('button');
-        up.type = 'button'; up.className = 'slot-mini'; up.textContent = '↑'; up.title = 'Up one folder';
-        const atTop = c.drives && !c.root ? st.cwd === null : st.cwd === c.root;
-        up.disabled = atTop;
-        up.addEventListener('click', () => {
-            const p = st.cwd ? parentOf(st.cwd) : null;
-            // ROOT on Windows goes up from a drive root to the list of drives.
-            st.cwd = (c.drives && !c.root && (st.cwd === p || p === null || /^[A-Za-z]:\\$/.test(st.cwd))) ? null : p;
-            st.selected.clear(); renderSlots();
-        });
-        const where = document.createElement('span');
-        where.className = 'slot-where';
-        where.textContent = st.cwd || 'This PC — every drive';
-        where.title = where.textContent;
-        crumb.append(up, where);
-        panel.appendChild(crumb);
-
-        const list = document.createElement('div');
-        list.className = 'slot-list';
-        panel.appendChild(list);
-        const note = document.createElement('div');
-        note.className = 'slot-note';
-        note.textContent = st.note || '';
-        panel.appendChild(note);
-
-        if (!st.cwd && c.drives) {
-            for (const d of c.drives) list.appendChild(row(c, st, { name: d, path: d, isDir: true, size: null }));
-        } else {
-            list.textContent = 'reading…';
-            invoke('slot-list', { dir: st.cwd }).then((r) => {
-                list.textContent = '';
-                if (!r.success) { list.textContent = r.error; return; }
-                if (!r.items.length) list.textContent = '(empty folder)';
-                for (const it of r.items) list.appendChild(row(c, st, it));
-                where.textContent = `${st.cwd}  ·  ${r.items.length} item${r.items.length === 1 ? '' : 's'}`;
-            }).catch((e) => { list.textContent = e.message; });
-        }
-        if (st.cwd) attachDrop(list, c, () => st.cwd);
-        return panel;
-    }
-
-    function row(c, st, it) {
-        const r = document.createElement('div');
-        r.className = 'slot-row' + (it.isDir ? ' dir' : ' file') + (it.hidden ? ' hidden-entry' : '') + (st.selected.has(it.path) ? ' selected' : '');
-        r.draggable = !(c.drives && !st.cwd);           // a drive itself is not draggable
-        r.title = it.path + (it.link ? '  (link)' : '');
-        r.dataset.path = it.path;
-        r.innerHTML = '<span class="slot-ico"></span><span class="slot-name"></span><span class="slot-size"></span>';
-        r.querySelector('.slot-ico').textContent = it.isDir ? '▸' : '·';
-        r.querySelector('.slot-name').textContent = it.name;
-        r.querySelector('.slot-size').textContent = fmtSize(it.size);
-        // One click does it: a folder opens, a file gets selected. Ctrl-click picks
-        // several (folders too) to drag together. ↗ on a file opens it.
-        r.addEventListener('click', (e) => {
-            if (e.ctrlKey || e.metaKey) {
-                st.selected.has(it.path) ? st.selected.delete(it.path) : st.selected.add(it.path);
-            } else if (it.isDir) {
-                st.cwd = it.path; st.selected.clear(); renderSlots(); return;
-            } else {
-                st.selected.clear(); st.selected.add(it.path);
-            }
-            r.parentElement.querySelectorAll('.slot-row').forEach((x) => x.classList.toggle('selected', st.selected.has(x.dataset.path)));
-        });
-        if (!(c.drives && !st.cwd)) {
-            const ren = document.createElement('button');
-            ren.type = 'button'; ren.className = 'slot-mini slot-open'; ren.textContent = '✎'; ren.title = 'Rename';
-            ren.addEventListener('click', (e) => { e.stopPropagation(); startRename(c, st, r, it); });
-            r.appendChild(ren);
-        }
-        if (!it.isDir) {
-            const open = document.createElement('button');
-            open.type = 'button'; open.className = 'slot-mini slot-open'; open.textContent = '↗'; open.title = 'Open with its app';
-            open.addEventListener('click', (e) => {
-                e.stopPropagation();
-                invoke('open-path', it.path).then((res) => { if (res && !res.success) alert(res.error); }).catch((err) => alert(err.message));
+            el.addEventListener('click', async () => {
+                if (!slotPath) return;
+                const result = await invoke('set-active-slot', { index: i });
+                if (result.success) {
+                    slotsState.activeIndex = i;
+                    renderSlots();
+                    renderStatusStrip();
+                } else {
+                    alert(result.error);
+                }
             });
-            r.appendChild(open);
-        }
-        r.addEventListener('dragstart', (e) => {
-            const paths = st.selected.has(it.path) ? [...st.selected] : [it.path];
-            e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(paths));
-            e.dataTransfer.setData('text/plain', paths.join('\n'));
-            e.dataTransfer.effectAllowed = 'copyMove';
+
+            el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
+            el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+            el.addEventListener('drop', async e => {
+                e.preventDefault();
+                el.classList.remove('drag-over');
+                const file = e.dataTransfer.files[0];
+                if (!file || !file.path) return;
+                const result = await invoke('set-dropdown-slot', { index: i, dirPath: file.path });
+                if (result.success) {
+                    slotsState.slots = result.slots;
+                    renderSlots();
+                } else {
+                    alert(result.error);
+                }
+            });
+
+            container.appendChild(el);
         });
-        if (it.isDir) attachDrop(r, c, () => it.path);
-        return r;
-    }
-
-    function startRename(c, st, r, it) {
-        const nameEl = r.querySelector('.slot-name');
-        const input = document.createElement('input');
-        input.className = 'slot-rename';
-        input.value = it.name;
-        r.draggable = false;
-        nameEl.replaceWith(input);
-        input.focus();
-        const dot = it.isDir ? -1 : it.name.lastIndexOf('.');
-        input.setSelectionRange(0, dot > 0 ? dot : it.name.length);     // like Explorer: the name, not the extension
-        let done = false;
-        const finish = async (save) => {
-            if (done) return; done = true;
-            const name = input.value.trim();
-            if (save && name && name !== it.name) {
-                const res = await invoke('slot-rename', { path: it.path, newName: name }).catch((e) => ({ success: false, error: e.message }));
-                st.note = res.success ? `renamed to ${name}` : res.error;
-                if (res.success && st.selected.delete(it.path)) st.selected.add(res.path);
-            }
-            renderSlots();
-        };
-        input.addEventListener('click', (e) => e.stopPropagation());
-        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); });
-        input.addEventListener('blur', () => finish(true));
-    }
-
-    function attachDrop(el, c, destOf) {
-        el.addEventListener('dragover', (e) => {
-            const internal = e.dataTransfer.types.includes(DRAG_TYPE);
-            if (!internal && !e.dataTransfer.types.includes('Files')) return;
-            e.preventDefault(); e.stopPropagation();
-            e.dataTransfer.dropEffect = internal && e.shiftKey ? 'move' : 'copy';
-            el.classList.add('drag-over');
-        });
-        el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
-        el.addEventListener('drop', async (e) => {
-            e.preventDefault(); e.stopPropagation();
-            el.classList.remove('drag-over');
-            const internal = e.dataTransfer.types.includes(DRAG_TYPE);
-            const files = [...e.dataTransfer.files].map((f) => f.path).filter(Boolean);
-            // An empty slot: a folder dropped from Explorer becomes the slot.
-            if (!c.place && !c.root) {
-                if (!files.length) return;
-                const res = await invoke('set-dropdown-slot', { index: c.index, dirPath: files[0] });
-                if (res.success) { slotsState.slots = res.slots; renderSlots(); } else alert(res.error);
-                return;
-            }
-            const dest = destOf();
-            if (!dest) return;
-            const req = internal
-                ? { sources: JSON.parse(e.dataTransfer.getData(DRAG_TYPE) || '[]'), toDir: dest, mode: e.shiftKey ? 'move' : 'copy' }
-                : { sources: files, toDir: dest, mode: 'copy', external: true };
-            if (!req.sources.length) return;
-            const res = await invoke('slot-transfer', req).catch((err) => ({ success: false, error: err.message }));
-            const st = colState(c);
-            if (res.error) st.note = res.error;
-            else {
-                const verb = res.mode === 'copy' ? 'copied' : 'moved';
-                st.note = `${res.done.length} ${verb} to ${leaf(dest)}`
-                    + (res.skipped.length ? ` · ${res.skipped.length} skipped: ` + res.skipped.map((s) => `${s.name} (${s.reason})`).join('; ') : '');
-            }
-            Object.values(cols).forEach((s) => s.selected.clear());
-            renderSlots();          // every open dropdown re-reads its folder
-        });
-    }
-
-    async function activateSlot(i) {
-        const result = await invoke('set-active-slot', { index: i });
-        if (!result.success) return alert(result.error);
-        previousActiveIndex = result.previousIndex ?? null;
-        slotsState.activeIndex = i;
-        renderSlots();
-        renderStatusStrip();
-    }
-
-    async function clearSlot(i) {
-        const result = await invoke('set-dropdown-slot', { index: i, dirPath: null });
-        if (!result.success) return alert(result.error);
-        slotsState.slots = result.slots;
-        if (slotsState.activeIndex === i) slotsState.activeIndex = null;
-        delete cols['slot:' + i];
-        renderSlots();
-        renderStatusStrip();
     }
 
     let previousActiveIndex = null;

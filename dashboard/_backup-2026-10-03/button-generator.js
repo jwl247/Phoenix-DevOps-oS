@@ -78,38 +78,7 @@ const ButtonGenerator = {
 // ── Built-in buttons ─────────────────────────────────────────────────────
 // Order here = visual order in the right column. Add anywhere.
 
-// The other two Phoenix front ends. The sub-line shows whether each is up.
-function phoenixAppButton(id, label, channel, statusOf) {
-    return {
-        id, label, sub: 'checking...',
-        onMount({ invoke, el }) {
-            const paint = () => invoke('get-phoenix-apps-status')
-                .then((s) => { el.querySelector('.action-sub').textContent = statusOf(s); })
-                .catch(() => { el.querySelector('.action-sub').textContent = 'status unavailable'; });
-            paint();
-            if (!el._phxPoll) el._phxPoll = setInterval(paint, 15000);
-        },
-        onClick({ invoke, el }) {
-            const sub = el.querySelector('.action-sub');
-            sub.textContent = 'starting...';
-            invoke(channel, {})
-                .then((r) => {
-                    if (!r.success) { alert(r.error); }
-                    else if (r.warning) { alert(r.warning); }
-                    return invoke('get-phoenix-apps-status').then((s) => { sub.textContent = statusOf(s); });
-                })
-                .catch((e) => { sub.textContent = 'error'; alert(e.message); });
-        }
-    };
-}
-
 ButtonGenerator
-    .define(phoenixAppButton('console', 'CONSOLE', 'launch-console',
-        (s) => s.console.up ? 'machines · links · services — running' : 'machines · links · services — stopped, click to start'))
-    .define(phoenixAppButton('hud', 'HUD', 'launch-hud',
-        (s) => !s.hud.built ? 'not built — dotnet build hud -c Release'
-             : s.hud.running ? 'H.L.K-10 overlay — running'
-             : 'H.L.K-10 overlay' + (s.hud.stale ? ' — build is older than its source' : '')))
     .define({
         id: 'google',
         label: 'GOOGLE',

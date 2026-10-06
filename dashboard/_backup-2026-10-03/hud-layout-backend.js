@@ -201,13 +201,11 @@ function register({ ipcMain, spawn, dialog }) {
         if (typeof index !== 'number' || index < 0 || index > 5) {
             return { success: false, error: 'Slot index must be 0-5.' };
         }
-        // dirPath null = clear the slot (the folder itself is never touched).
-        if (dirPath !== null && (!dirPath || !fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory())) {
+        if (!dirPath || !fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory()) {
             return { success: false, error: `Not a valid directory: ${dirPath}` };
         }
         const state = loadJson(SLOTS_FILE, { slots: [...DEFAULT_SLOTS], activeIndex: null });
         state.slots[index] = dirPath;
-        if (dirPath === null && state.activeIndex === index) state.activeIndex = null;
         saveJson(SLOTS_FILE, state);
         return { success: true, slots: state.slots };
     });
@@ -359,9 +357,4 @@ function register({ ipcMain, spawn, dialog }) {
     });
 }
 
-// The 6 slot folders as saved (for slot-transfer.js's checks).
-function readSlots() {
-    return loadJson(SLOTS_FILE, { slots: [...DEFAULT_SLOTS] }).slots || [];
-}
-
-module.exports = { register, readSlots };
+module.exports = { register };

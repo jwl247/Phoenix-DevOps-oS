@@ -1292,17 +1292,6 @@ class PhoenixDashboard {
         const provider = (authStatus?.provider || 'helpdesk').toLowerCase();
         this._aiProvider = provider;   // _hudSend's wait/error wording keys off this (DASH-F16)
 
-        if (provider === 'claude') {
-            this._updateProviderIndicator('status-ok', `CLAUDE API (${authStatus.model || 'claude-sonnet-5'})`, 'claude (api key)',
-                'AI Chat ready — Claude API. Use HELP CHAT tab for the operator manual.');
-            return;
-        }
-        if (provider === 'subscription') {
-            this._updateProviderIndicator('status-ok', 'CLAUDE (subscription)', 'claude (subscription) — full tool access',
-                'AI Chat ready — Claude (subscription, full tool access, no Ollama). Use HELP CHAT tab for the operator manual.');
-            return;
-        }
-
         await ipcRenderer.invoke('ensure-ollama').catch(() => {});
         const status = await ipcRenderer.invoke('check-ollama').catch(() => ({ online: false }));
         this._updateHelpDeskStatus(status);
@@ -1310,21 +1299,19 @@ class PhoenixDashboard {
 
     _updateProviderIndicator(statusClass, statusText, providerText, welcomeText) {
         const el = document.getElementById('helpdesk-status');
-        const provider = document.getElementById('hud-provider');
         const welcome = document.getElementById('hud-welcome-msg');
         if (el) { el.textContent = statusText; el.className = statusClass; }
-        if (provider && !this._hudBusy) provider.textContent = providerText;
         if (welcome && welcomeText) welcome.textContent = welcomeText;
     }
 
     _updateHelpDeskStatus(status) {
         if (status?.online) {
             const model = status.model || (status.models && status.models[0]) || 'llama3.2';
-            this._updateProviderIndicator('status-ok', `OLLAMA (${model})`, `ollama → claude · ${model}`,
-                'AI Chat ready. Ollama primary, Claude fallback. Use HELP CHAT tab for the operator manual.');
+            this._updateProviderIndicator('status-ok', `OLLAMA (${model})`, `ollama · ${model}`,
+                'AI Chat ready. Use HELP CHAT tab for the operator manual.');
         } else {
             this._updateProviderIndicator('status-warn', 'OLLAMA OFFLINE', `ollama offline — ${status?.reason || 'start Ollama app'}`,
-                'AI Chat ready. Ollama primary, Claude fallback. Use HELP CHAT tab for the operator manual.');
+                'Ollama offline — start Ollama app. Use HELP CHAT tab for the operator manual.');
         }
     }
 
@@ -1399,20 +1386,16 @@ class PhoenixDashboard {
         this._hudAppend(message, 'hud-msg-user');
         this._hudHistory.push({ role: 'user', content: message });
 
-        // Say which backend is actually being asked (DASH-F16): only the
-        // helpdesk/ollama chain goes to Ollama; claude = API key, subscription = CLI.
         const prov = this._aiProvider || 'helpdesk';
-        const waitText = prov === 'claude' ? 'connecting to Claude API...'
-                       : prov === 'subscription' ? 'connecting to Claude (subscription, via claude CLI)...'
+        const waitText = prov === 'subscription'
+                       ? 'connecting to Claude (subscription, via claude CLI)...'
                        : 'connecting to Ollama (first reply may take ~15s)...';
         const thinking = this._hudAppend(waitText, 'hud-msg-thinking');
         const box = document.getElementById('hud-messages');
 
-        // Streamed reply support: a chunk means Claude API streaming is
-        // actually in flight for this turn, so swap the "thinking" line
-        // for a live-growing message div on the FIRST delta. Ollama/
-        // subscription paths never send chunks, so `streamDiv` stays
-        // null and the old wait-for-full-response flow below still runs.
+        // Streamed reply support: swap "thinking" for a live-growing message div
+        // on the FIRST delta. Ollama doesn't stream chunks, so `streamDiv` stays
+        // null and the wait-for-full-response flow below runs.
         let streamDiv = null;
         let streamText = '';
         let unsubscribe = null;
@@ -1452,17 +1435,11 @@ class PhoenixDashboard {
                 this._hudAppend(result.reply, 'hud-msg-assist');
             }
             this._hudHistory.push({ role: 'assistant', content: result.reply });
-            const fb = result.fallback ? ` (fallback from ${result.fallbackFrom || 'ollama'})` : '';
-            document.getElementById('hud-provider').textContent = `${result.provider}${fb}`;
             if (this._hudHistory.length > 40) this._hudHistory = this._hudHistory.slice(-40);
         } else {
             if (streamDiv) streamDiv.remove();
-            const err = (result.error || 'Help Desk unavailable.').replace(/\n/g, ' · ');
+            const err = (result.error || 'Ollama offline — start Ollama app').replace(/\n/g, ' · ');
             this._hudAppend(err, 'hud-msg-error');
-            document.getElementById('hud-provider').textContent =
-                prov === 'claude' ? 'claude api unavailable — check the API key / network'
-              : prov === 'subscription' ? 'claude (subscription) unavailable — check `claude login`'
-              : 'help desk offline — Ollama app must be running';
             this._refreshHelpDeskStatus();
         }
 
@@ -1547,19 +1524,13 @@ class PhoenixAuthModal {
             status = await ipcRenderer.invoke('get-ai-status');
         }
 
-        const savedTab = status.provider === 'claude' ? 'claude'
-                       : status.provider === 'subscription' ? 'subscription'
+        const savedTab = status.provider === 'subscription' ? 'subscription'
                        : status.provider === 'ollama' ? 'ollama'
                        : 'helpdesk';
         this._switchTab(savedTab);
 
-        if (status.hasKey) {
-            document.getElementById('auth-api-key').value = '••••••••••••••••';
-            document.getElementById('auth-api-key').dataset.prefilled = 'true';
-        }
         if (status.model) {
-            document.getElementById('auth-model').value = status.model;
-            document.getElementById('auth-helpdesk-ollama-model').value = status.model;
+            document.getElementById('auth-helpdesk-ollama-model')?.setAttribute('value', status.model);
         }
         if (status.ollamaUrl) {
             document.getElementById('auth-ollama-url').value = status.ollamaUrl;
@@ -1572,34 +1543,18 @@ class PhoenixAuthModal {
         this._checkCliStatus();
         this._checkOllamaStatus();
 
-        const revealBtn = document.getElementById('auth-reveal');
-        const keyInput  = document.getElementById('auth-api-key');
-        revealBtn.addEventListener('click', () => {
-            keyInput.type = keyInput.type === 'password' ? 'text' : 'password';
-        });
-        keyInput.addEventListener('focus', () => {
-            if (keyInput.dataset.prefilled === 'true') {
-                keyInput.value = '';
-                delete keyInput.dataset.prefilled;
-            }
-        });
-
         // Skip — use whatever is already in env
         document.getElementById('auth-skip').addEventListener('click', () => this._dismiss());
 
         // Launch
         document.getElementById('auth-go').addEventListener('click', () => this._submit());
-        document.getElementById('auth-api-key').addEventListener('keydown', e => {
-            if (e.key === 'Enter') this._submit();
-        });
     }
 
     _switchTab(tab) {
         document.querySelectorAll('.auth-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-        document.getElementById('section-helpdesk').style.display     = tab === 'helpdesk'     ? '' : 'none';
+        document.getElementById('section-helpdesk').style.display    = tab === 'helpdesk'    ? '' : 'none';
         document.getElementById('section-subscription').style.display = tab === 'subscription' ? '' : 'none';
-        document.getElementById('section-claude').style.display       = tab === 'claude'       ? '' : 'none';
-        document.getElementById('section-ollama').style.display       = tab === 'ollama'       ? '' : 'none';
+        document.getElementById('section-ollama').style.display      = tab === 'ollama'      ? '' : 'none';
     }
 
     async _checkOllamaStatus() {
@@ -1610,7 +1565,7 @@ class PhoenixAuthModal {
             const models = (result.models || []).slice(0, 3).join(', ') || 'no models listed';
             el.innerHTML = `<span class="cli-ok">&#10003; ollama online — ${models}</span>`;
         } else {
-            el.innerHTML = `<span class="cli-warn">&#9888; ollama offline — will use Claude fallback (${result.reason})</span>`;
+            el.innerHTML = `<span class="cli-warn">&#9888; ollama offline — ${result.reason || 'start Ollama app'}</span>`;
         }
     }
 
@@ -1621,13 +1576,13 @@ class PhoenixAuthModal {
             el.innerHTML = '<span class="cli-warn">CLI check requires Electron</span>';
             return;
         }
-        const result = await ipcRenderer.invoke('check-claude-cli');
+        const result = await ipcRenderer.invoke('check-claude-cli').catch(() => ({ available: false, reason: 'IPC error' }));
         if (!result.available) {
             el.innerHTML = `<span class="cli-err">&#10007; not installed</span><br><span class="cli-hint">${result.reason}</span>`;
         } else if (!result.loggedIn) {
-            el.innerHTML = `<span class="cli-warn">&#9888; ${result.version} — not logged in</span><br><span class="cli-hint">${result.reason}</span>`;
+            el.innerHTML = `<span class="cli-warn">&#9888; ${result.version} &#8212; not logged in</span><br><span class="cli-hint">${result.reason}</span>`;
         } else {
-            el.innerHTML = `<span class="cli-ok">&#10003; ${result.version} — logged in</span>`;
+            el.innerHTML = `<span class="cli-ok">&#10003; ${result.version} &#8212; logged in</span>`;
         }
     }
 
@@ -1639,8 +1594,7 @@ class PhoenixAuthModal {
     async _submit() {
         const tab      = this._activeTab();
         const provider = tab;
-        const keyInput = document.getElementById('auth-api-key');
-        const key      = (tab === 'claude' && keyInput.dataset.prefilled !== 'true') ? keyInput.value.trim() : '';
+        const key      = '';
 
         let model = '';
         let ollamaUrl = '';
@@ -1651,8 +1605,6 @@ class PhoenixAuthModal {
         } else if (tab === 'ollama') {
             model     = document.getElementById('auth-ollama-model')?.value.trim() || document.getElementById('auth-helpdesk-ollama-model').value.trim();
             ollamaUrl = document.getElementById('auth-ollama-url').value.trim();
-        } else {
-            model = document.getElementById('auth-model').value.trim();
         }
 
         const save = document.getElementById('auth-save').checked;
@@ -1716,7 +1668,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         modal.show();
     }
 
-    document.getElementById('hud-provider').addEventListener('click', () => modal.show());
+    document.getElementById('hud-provider')?.addEventListener('click', () => modal.show());
 });
 
 // Integration functions for Phoenix commands

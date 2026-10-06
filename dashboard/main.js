@@ -175,7 +175,13 @@ ipcMain.handle('get-sector-paths', async () => {
 });
 
 function resolvePhoenixRoot() {
-    return process.env.PHOENIX_ROOT || path.join(os.homedir(), 'Phoenix', 'Phoenix-DevOps-oS');
+    // PHOENIX_ROOT wins. Otherwise the repo this dashboard lives in (<repo>/dashboard):
+    // the old default, ~/Phoenix/Phoenix-DevOps-oS, isn't where the repo is on PBMII
+    // (F:\Phoenix\Phoenix-DevOps-oS), so every root-relative path pointed at nothing.
+    if (process.env.PHOENIX_ROOT) return process.env.PHOENIX_ROOT;
+    const parent = path.join(__dirname, '..');
+    if (fs.existsSync(path.join(parent, 'sector1')) && fs.existsSync(path.join(parent, 'sector2'))) return parent;
+    return path.join(os.homedir(), 'Phoenix', 'Phoenix-DevOps-oS');
 }
 
 function resolvePhoenixCommand(command) {
@@ -842,14 +848,13 @@ function loadSavedAuth() {
 loadSavedAuth();
 loadPhoenixEnv(); // phoenix.env overrides saved auth for boot settings
 
-// Check if the Claude Code CLI is installed and logged in
+// Check if the Claude Code CLI is installed and logged in (subscription tab)
 ipcMain.handle('check-claude-cli', async () => {
     return new Promise(resolve => {
         const { execFile } = require('child_process');
         const cli = _findClaudeCli();
         execFile(cli.file, [...cli.prefix, '--version'], { timeout: 6000 }, (err, stdout) => {
             if (err) return resolve({ available: false, reason: 'claude CLI not found — install with: npm install -g @anthropic-ai/claude-code' });
-            // Check auth by running a no-op to see if we get an auth error
             execFile(cli.file, [...cli.prefix, '--print', 'ping'], { timeout: 10000 }, (err2, stdout2, stderr2) => {
                 const output = (stdout2 || '') + (stderr2 || '');
                 const needsLogin = output.toLowerCase().includes('login') || output.toLowerCase().includes('auth') || output.toLowerCase().includes('not logged');
@@ -934,8 +939,10 @@ require('./terminal-pty').register({ ipcMain });
 require('./google-launcher').register({ ipcMain, shell });
 require('./steam-launcher').register({ ipcMain, shell });
 require('./scriptforge-launcher').register({ ipcMain, BrowserWindow, phoenixRoot: resolvePhoenixRoot() });
-require('./office-launcher').register({ ipcMain, BrowserWindow, dialog, phoenixRoot: resolvePhoenixRoot(), askAI: _runClaudeCli });
+require('./office-launcher').register({ ipcMain, BrowserWindow, dialog, phoenixRoot: resolvePhoenixRoot(), askAI: (prompt) => _chatOllama(null, [{ role: 'user', content: prompt }]).then(r => r.reply) });
 require('./config-centralizer').register({ ipcMain });
+require('./phoenix-apps-launcher').register({ ipcMain, BrowserWindow, shell, phoenixRoot: resolvePhoenixRoot() });
+require('./slot-transfer').register({ ipcMain, getSlots: require('./hud-layout-backend').readSlots, phoenixRoot: resolvePhoenixRoot() });
 const HudMode = require('./hud-mode');
 HudMode.install({ app, BrowserWindow, ipcMain });
 const _helixMem = new HelixMemoryJS(40);   // SectorID.CLAUDE, 40-turn rolling window
@@ -1185,112 +1192,15 @@ async function _chatOllama(systemPrompt, messages) {
     return { provider: `ollama/${model}`, reply };
 }
 
-async function _chatClaudeApi(systemPrompt, messages) {
-    const apiKey = process.env.PHOENIX_AI_KEY || process.env.ANTHROPIC_API_KEY || '';
-    if (!apiKey) throw new Error('No Anthropic API key');
-    const model = process.env.PHOENIX_AI_MODEL || 'claude-sonnet-5';
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'content-type': 'application/json'
-        },
-        body: JSON.stringify({
-            model,
-            max_tokens: 1024,
-            system: systemPrompt,
-            messages
-        }),
-        signal: AbortSignal.timeout(120000)
-    });
-    if (!res.ok) {
-        const err = await res.text();
-        throw new Error(`Claude API ${res.status}: ${err.slice(0, 200)}`);
-    }
-    const data = await res.json();
-    const reply = data.content?.[0]?.text || '';
-    if (!reply) throw new Error('Claude API returned empty response');
-    return { provider: `claude/${model}`, reply };
-}
-
-// Real token-by-token streaming via Anthropic's SSE endpoint. `onChunk` is
-// called with each text delta as it arrives — the caller pushes those to
-// the renderer over IPC so the HUD can render incrementally instead of
-// waiting for the full reply.
-async function _chatClaudeApiStream(systemPrompt, messages, onChunk) {
-    const apiKey = process.env.PHOENIX_AI_KEY || process.env.ANTHROPIC_API_KEY || '';
-    if (!apiKey) throw new Error('No Anthropic API key');
-    const model = process.env.PHOENIX_AI_MODEL || 'claude-sonnet-5';
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'content-type': 'application/json'
-        },
-        body: JSON.stringify({
-            model,
-            max_tokens: 1024,
-            system: systemPrompt,
-            messages,
-            stream: true
-        }),
-        signal: AbortSignal.timeout(120000)
-    });
-    if (!res.ok) {
-        const err = await res.text();
-        throw new Error(`Claude API ${res.status}: ${err.slice(0, 200)}`);
-    }
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let full = '';
-    let sawError = null;
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop(); // last line may be incomplete — carry it over
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith('data:')) continue;
-            const jsonStr = trimmed.slice(5).trim();
-            if (!jsonStr) continue;
-            let evt;
-            try { evt = JSON.parse(jsonStr); } catch (_) { continue; }
-            if (evt.type === 'content_block_delta' && evt.delta?.text) {
-                full += evt.delta.text;
-                onChunk(evt.delta.text);
-            } else if (evt.type === 'error') {
-                sawError = evt.error?.message || 'stream error';
-            }
-        }
-    }
-
-    if (sawError) throw new Error(`Claude API stream error: ${sawError}`);
-    if (!full) throw new Error('Claude API returned empty response');
-    return { provider: `claude/${model}`, reply: full };
-}
-
-// Find the Claude Code CLI. Same resolution order as hud/AiChatService.cs's
-// FindClaudeCli() (fixed there 2026-09-22): the native installer's
-// ~/.local/bin/claude.exe first (this machine's real install), then the
-// npm-global claude.cmd, then bare PATH lookup. Before this, every dashboard
-// CLI path assumed claude.cmd — which doesn't exist on this machine — so the
-// subscription tier, Laurie's Ollama-down fallback, the helpdesk safety net,
-// and Office's copilot all failed with "not recognized".
-// Returns { file, prefix }: spawn(file, [...prefix, ...args]).
+// ── Claude Code CLI helpers (subscription tier — max plan, zero per-token cost) ─
+// Used as: Ollama-failure fallback in helpdesk mode, and as the explicit
+// `subscription` provider. The `claude` (direct API key) provider is removed.
 function _findClaudeCli() {
     if (process.platform !== 'win32') return { file: 'claude', prefix: [] };
     const nativeExe = path.join(os.homedir(), '.local', 'bin', 'claude.exe');
     if (fs.existsSync(nativeExe)) return { file: nativeExe, prefix: [] };
     const npmGlobal = path.join(os.homedir(), 'AppData', 'Roaming', 'npm', 'claude.cmd');
     if (fs.existsSync(npmGlobal)) return { file: 'cmd.exe', prefix: ['/c', npmGlobal] };
-    // Last resort: let cmd.exe resolve `claude` via PATH/PATHEXT (.exe or .cmd).
     return { file: 'cmd.exe', prefix: ['/c', 'claude'] };
 }
 
@@ -1299,29 +1209,14 @@ function _spawnClaudeCli(args, spawnOpts) {
     return spawn(cli.file, [...cli.prefix, ...args], spawnOpts);
 }
 
-// Run Claude Code CLI — spawn so we can write the full prompt to stdin
-// NOTE: child_process.exec() ignores the `input` option; spawn is required.
-// `onChunk` (optional) gets stdout text as it arrives so the reply can
-// stream into the UI instead of landing as one wall after a long wait —
-// this matters for Laurie's Guide, where a 25-second blank pause reads as
-// "broken" and she won't come back.
+// Chat-only restricted call — used for helpdesk fallback and Laurie's guide.
 function _runClaudeCli(prompt, onChunk) {
     return new Promise((resolve, reject) => {
-        // Strip API-key auth from the child's env so this call cannot silently
-        // fall back to pay-per-token billing when the whole point of this tier
-        // is to spend subscription usage, not API credit.
         const subscriptionOnlyEnv = { ...process.env };
         delete subscriptionOnlyEnv.ANTHROPIC_API_KEY;
         delete subscriptionOnlyEnv.ANTHROPIC_AUTH_TOKEN;
-
-        // Explicit no-tools: this is a chat answer, not a coding-agent turn.
-        // Nothing here should touch Bash, Write, or Edit without you asking
-        // for that separately, through a path that actually shows you what
-        // it's about to do.
         const args = ['--print', '--disallowedTools', 'Bash,Write,Edit,WebFetch,WebSearch'];
-        const spawnOpts = { timeout: 60000, env: subscriptionOnlyEnv };
-        const proc = _spawnClaudeCli(args, spawnOpts);
-
+        const proc = _spawnClaudeCli(args, { timeout: 60000, env: subscriptionOnlyEnv });
         let stdout = '';
         let stderr = '';
         proc.stdout.on('data', d => {
@@ -1335,29 +1230,19 @@ function _runClaudeCli(prompt, onChunk) {
             if (code !== 0) return reject(new Error(stderr || `claude exited ${code}`));
             resolve(stdout.trim());
         });
-
         proc.stdin.write(prompt, 'utf8');
         proc.stdin.end();
     });
 }
 
-// Dedicated, full-capability Claude — the CLAUDE tab specifically, not the
-// Ollama-failure fallback. Full Bash/Write/Edit/WebFetch/WebSearch access,
-// no Ollama involvement, no shared fallback chain. `--print` is non-
-// interactive so there's no permission prompt to answer — a tool call would
-// otherwise just be silently denied, so --dangerously-skip-permissions is
-// required for tools to actually run here, not merely be allowed in theory.
-// Streams stdout chunks as they arrive, same shape as the API streaming path.
+// Full-capability call — used for the explicit `subscription` provider tab.
 function _runClaudeCliFull(prompt, onChunk) {
     return new Promise((resolve, reject) => {
         const subscriptionOnlyEnv = { ...process.env };
         delete subscriptionOnlyEnv.ANTHROPIC_API_KEY;
         delete subscriptionOnlyEnv.ANTHROPIC_AUTH_TOKEN;
-
         const args = ['--print', '--dangerously-skip-permissions'];
-        const spawnOpts = { timeout: 120000, env: subscriptionOnlyEnv };
-        const proc = _spawnClaudeCli(args, spawnOpts);
-
+        const proc = _spawnClaudeCli(args, { timeout: 120000, env: subscriptionOnlyEnv });
         let stdout = '';
         let stderr = '';
         proc.stdout.on('data', d => {
@@ -1371,7 +1256,6 @@ function _runClaudeCliFull(prompt, onChunk) {
             if (code !== 0) return reject(new Error(stderr || `claude exited ${code}`));
             resolve(stdout.trim());
         });
-
         proc.stdin.write(prompt, 'utf8');
         proc.stdin.end();
     });
@@ -1394,26 +1278,19 @@ ipcMain.handle('ai-chat', async (event, { message, history, phoenixStats, mode, 
         .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
     const fullPrompt = `${systemPrompt}\n\n${historyText ? historyText + '\n\n' : ''}User: ${message}`;
 
-    const errors = [];
-
-    // ── Laurie's Guide — its own tiny chain, always chat-only (no tools),
-    //    always the gentle prompt: Ollama → restricted Claude CLI. Never the
-    //    full-tool subscription path — she should never have an agent that
-    //    can touch the filesystem.
+    // ── Laurie's Guide — Ollama primary, subscription CLI fallback ──────────
     if (isLaurie) {
         try {
             const result = await _chatOllama(systemPrompt, chatMessages);
             _helixMem.pushTurn('assistant', result.reply);
             return { success: true, ...result, guide: 'laurie' };
-        } catch (e) {
-            errors.push(`ollama: ${e.message}`);
-        }
+        } catch (e) { /* fall through to subscription */ }
         try {
             const reply = await _runClaudeCli(fullPrompt, (chunk) => {
                 event.sender.send('ai-chat-stream-chunk', { delta: chunk });
             });
             _helixMem.pushTurn('assistant', reply);
-            return { success: true, provider: 'claude', reply, guide: 'laurie', streamed: true };
+            return { success: true, provider: 'subscription', reply, guide: 'laurie', streamed: true };
         } catch (e) {
             return {
                 success: false,
@@ -1423,76 +1300,44 @@ ipcMain.handle('ai-chat', async (event, { message, history, phoenixStats, mode, 
         }
     }
 
-    // ── Help Desk mode: Ollama → Claude (automatic chain) ──────────────────
-    if (provider === 'helpdesk' || provider === 'ollama') {
-        try {
-            const result = await _chatOllama(systemPrompt, chatMessages);
-            _helixMem.pushTurn('assistant', result.reply);
-            return { success: true, ...result, fallback: false };
-        } catch (e) {
-            errors.push(`ollama: ${e.message}`);
-            console.log(`[Help Desk] Ollama unavailable (${e.message}), trying Claude`);
-        }
-    }
-
-    // ── Claude API (explicit API key) — real token-by-token streaming ──────
-    if (provider === 'claude') {
-        try {
-            const result = await _chatClaudeApiStream(systemPrompt, chatMessages, (delta) => {
-                event.sender.send('ai-chat-stream-chunk', { delta });
-            });
-            _helixMem.pushTurn('assistant', result.reply);
-            return { success: true, ...result, fallback: false, streamed: true };
-        } catch (e) {
-            return { success: false, provider: 'claude', error: e.message };
-        }
-    }
-
-    // ── Claude subscription (CLAUDE tab) — dedicated, not a fallback ───────
-    // No Ollama in this chain at all, full tool access (Bash/Write/Edit/
-    // WebFetch/WebSearch), streamed. This is "ask for Claude, get Claude" —
-    // separate from the Ollama-failure safety net below, which deliberately
-    // stays restricted.
+    // ── Subscription (explicit) — full-capability CLI, no Ollama involved ───
     if (provider === 'subscription') {
         try {
             const reply = await _runClaudeCliFull(fullPrompt, (chunk) => {
                 event.sender.send('ai-chat-stream-chunk', { delta: chunk });
             });
             _helixMem.pushTurn('assistant', reply);
-            return { success: true, provider: 'claude/subscription', reply, fallback: false, streamed: true };
+            return { success: true, provider: 'subscription', reply, fallback: false, streamed: true };
         } catch (e) {
             const msg = e.message.toLowerCase();
             const error = (msg.includes('login') || msg.includes('auth') || msg.includes('not logged'))
-                ? 'Not logged in to Claude Code — run: claude login'
+                ? 'Not logged in — run: claude login'
                 : `Claude CLI: ${e.message}`;
-            return { success: false, provider: 'claude/subscription', error };
+            return { success: false, provider: 'subscription', error };
         }
     }
 
-    // ── Ollama-failure fallback — restricted-tool Claude CLI, safety net ───
-    // Only reached from the helpdesk/ollama branch above failing. Kept
-    // deliberately chat-only: this is "Ollama's down, get me any answer,"
-    // not "I asked for Claude" — it shouldn't inherit full tool access.
+    // ── Help Desk — Ollama primary, subscription CLI fallback ────────────────
+    const errors = [];
     try {
-        const reply = await _runClaudeCli(fullPrompt);
-        _helixMem.pushTurn('assistant', reply);
-        return {
-            success: true,
-            provider: 'claude/subscription',
-            reply,
-            fallback: true,
-            fallbackFrom: 'ollama'
-        };
+        const result = await _chatOllama(systemPrompt, chatMessages);
+        _helixMem.pushTurn('assistant', result.reply);
+        return { success: true, ...result, fallback: false };
     } catch (e) {
-        errors.push(`claude: ${e.message}`);
-        const msg = e.message.toLowerCase();
-        const claudeHint = (msg.includes('login') || msg.includes('auth') || msg.includes('not logged'))
-            ? 'Not logged in to Claude Code — run: claude login'
-            : `Claude CLI: ${e.message}`;
+        errors.push(`ollama: ${e.message}`);
+    }
+    try {
+        const reply = await _runClaudeCli(fullPrompt, (chunk) => {
+            event.sender.send('ai-chat-stream-chunk', { delta: chunk });
+        });
+        _helixMem.pushTurn('assistant', reply);
+        return { success: true, provider: 'subscription', reply, fallback: true, fallbackFrom: 'ollama', streamed: true };
+    } catch (e) {
+        errors.push(`subscription: ${e.message}`);
         return {
             success: false,
             provider: 'helpdesk',
-            error: `All Help Desk providers unavailable.\n${errors.join('\n')}\n${claudeHint}\n\nStart Ollama (ollama serve) or set ANTHROPIC_API_KEY for Claude.`
+            error: `All providers unavailable. Start Ollama or run: claude login\n${errors.join(' · ')}`
         };
     }
 });

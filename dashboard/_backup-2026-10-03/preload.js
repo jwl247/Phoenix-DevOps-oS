@@ -32,10 +32,6 @@ const ALLOWED_CHANNELS = new Set([
   'launch-scriptforge',
   // office-launcher.js  (the Office window has its own narrow preload for office:* channels)
   'launch-office',
-  // phoenix-apps-launcher.js — the Console and the HUD
-  'launch-console', 'launch-hud', 'get-phoenix-apps-status',
-  // slot-transfer.js — the folder bar across the top
-  'slot-places', 'slot-list', 'slot-transfer', 'slot-rename',
   // config-centralizer.js
   'config-centralizer-scan', 'config-centralizer-import', 'config-centralizer-sync-all',
   'config-centralizer-list-imported', 'config-centralizer-init-git', 'config-centralizer-commit'
