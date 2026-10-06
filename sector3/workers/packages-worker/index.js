@@ -1177,6 +1177,179 @@ export default {
         });
       }
 
+      // ── /player — node session lifecycle ─────────────────────────────────
+      // Hash is the filename, the D1 key, and the R2 object key.
+      // Sidecars travel. Files never travel unless a node genuinely lacks them.
+      // All routes gated by PHOENIX_AUTH bearer token.
+      // R2 layout: players/{uid}/state.json
+      //            players/{uid}/hardware.json
+      //            players/{uid}/sidecars/{hash}.sidecar.json
+      //            players/{uid}/blobs/{hash}
+
+      if (path.startsWith('/player/')) {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        if (!env.CLONEPOOL_BUCKET) return err('CLONEPOOL_BUCKET not bound', 500);
+
+        // parse uid and sub-route: /player/:uid/<rest>
+        const playerRest = path.slice('/player/'.length);
+        const slashIdx   = playerRest.indexOf('/');
+        if (slashIdx === -1) return err('missing sub-route', 400);
+        const uid      = playerRest.slice(0, slashIdx);
+        const subRoute = playerRest.slice(slashIdx + 1);
+        if (!uid) return err('uid required', 400);
+
+        // ── GET /player/:uid/state ──────────────────────────────────────────
+        if (subRoute === 'state' && req.method === 'GET') {
+          const obj = await env.CLONEPOOL_BUCKET.get(`players/${uid}/state.json`);
+          if (!obj) return ok({ uid, state: {}, note: 'new player' });
+          const body = await obj.text();
+          return new Response(body, { status: 200, headers: HEADERS });
+        }
+
+        // ── PUT /player/:uid/state ──────────────────────────────────────────
+        if (subRoute === 'state' && req.method === 'PUT') {
+          const body = await req.text();
+          try { JSON.parse(body); } catch { return err('state must be valid JSON', 400); }
+          await env.CLONEPOOL_BUCKET.put(`players/${uid}/state.json`, body, {
+            httpMetadata: { contentType: 'application/json' },
+          });
+          return ok({ ok: true, uid, key: `players/${uid}/state.json` });
+        }
+
+        // ── GET /player/:uid/hardware ───────────────────────────────────────
+        if (subRoute === 'hardware' && req.method === 'GET') {
+          const obj = await env.CLONEPOOL_BUCKET.get(`players/${uid}/hardware.json`);
+          if (!obj) return ok({ uid, hardware: null });
+          const body = await obj.text();
+          return new Response(body, { status: 200, headers: HEADERS });
+        }
+
+        // ── PUT /player/:uid/hardware ───────────────────────────────────────
+        if (subRoute === 'hardware' && req.method === 'PUT') {
+          const body = await req.text();
+          try { JSON.parse(body); } catch { return err('hardware must be valid JSON', 400); }
+          await env.CLONEPOOL_BUCKET.put(`players/${uid}/hardware.json`, body, {
+            httpMetadata: { contentType: 'application/json' },
+          });
+          return ok({ ok: true, uid, key: `players/${uid}/hardware.json` });
+        }
+
+        // ── GET /player/:uid/sidecars ───────────────────────────────────────
+        if (subRoute === 'sidecars' && req.method === 'GET') {
+          const list = await env.CLONEPOOL_BUCKET.list({ prefix: `players/${uid}/sidecars/` });
+          const sidecars = list.objects.map(o => ({
+            key:      o.key,
+            hash:     o.key.split('/').pop().replace('.sidecar.json', ''),
+            size:     o.size,
+            uploaded: o.uploaded,
+          }));
+          return ok({ uid, sidecars, count: sidecars.length });
+        }
+
+        // ── GET /player/:uid/sidecar/:hash ──────────────────────────────────
+        if (subRoute.startsWith('sidecar/') && req.method === 'GET') {
+          const hash = subRoute.slice('sidecar/'.length);
+          if (!hash) return err('hash required', 400);
+          const obj = await env.CLONEPOOL_BUCKET.get(`players/${uid}/sidecars/${hash}.sidecar.json`);
+          if (!obj) return err('sidecar not found', 404);
+          const body = await obj.text();
+          return new Response(body, { status: 200, headers: HEADERS });
+        }
+
+        // ── PUT /player/:uid/sidecar/:hash ──────────────────────────────────
+        if (subRoute.startsWith('sidecar/') && req.method === 'PUT') {
+          const hash = subRoute.slice('sidecar/'.length);
+          if (!hash) return err('hash required', 400);
+          const body = await req.text();
+          let sc;
+          try { sc = JSON.parse(body); } catch { return err('sidecar must be valid JSON', 400); }
+          if (sc.hash && sc.hash !== hash) return err('sidecar.hash does not match route hash', 400);
+          sc.hash = hash;
+          await env.CLONEPOOL_BUCKET.put(
+            `players/${uid}/sidecars/${hash}.sidecar.json`,
+            JSON.stringify(sc),
+            { httpMetadata: { contentType: 'application/json' } },
+          );
+          return ok({ ok: true, uid, hash, key: `players/${uid}/sidecars/${hash}.sidecar.json` });
+        }
+
+        // ── GET /player/:uid/blob/:hash ─────────────────────────────────────
+        if (subRoute.startsWith('blob/') && req.method === 'GET') {
+          const hash = subRoute.slice('blob/'.length);
+          if (!hash) return err('hash required', 400);
+          const obj = await env.CLONEPOOL_BUCKET.get(`players/${uid}/blobs/${hash}`);
+          if (!obj) return err('blob not found', 404);
+          return new Response(obj.body, { status: 200, headers: {
+            ...HEADERS,
+            'Content-Type': 'application/octet-stream',
+            'X-Phoenix-Hash': hash,
+          }});
+        }
+
+        // ── PUT /player/:uid/blob/:hash ─────────────────────────────────────
+        // Hash verification happens in node_session.py before PUT.
+        // Worker enforces header/route hash consistency as second check.
+        if (subRoute.startsWith('blob/') && req.method === 'PUT') {
+          const hash = subRoute.slice('blob/'.length);
+          if (!hash) return err('hash required', 400);
+          const claimedHash = req.headers.get('X-Phoenix-Hash') || '';
+          if (claimedHash && claimedHash !== hash) {
+            return err('X-Phoenix-Hash header does not match route hash', 400);
+          }
+          const bytes = await req.arrayBuffer();
+          await env.CLONEPOOL_BUCKET.put(`players/${uid}/blobs/${hash}`, bytes);
+          return ok({ ok: true, uid, hash, bytes: bytes.byteLength, key: `players/${uid}/blobs/${hash}` });
+        }
+
+        // ── DELETE /player/:uid/wipe — full node cleanup on logout ──────────
+        if (subRoute === 'wipe' && req.method === 'DELETE') {
+          const list = await env.CLONEPOOL_BUCKET.list({ prefix: `players/${uid}/` });
+          const keys = list.objects.map(o => o.key);
+          await Promise.all(keys.map(k => env.CLONEPOOL_BUCKET.delete(k)));
+          return ok({ ok: true, uid, wiped: keys.length });
+        }
+
+        return err('unknown player sub-route', 404);
+      }
+
+      // ── /meta — atlas bootstrap KV store ──────────────────────────────────
+      // R2 layout: _meta/<key>  (e.g. _meta/atlas)
+      // GET  /meta/:key   — retrieve blob; returns raw JSON text
+      // PUT  /meta/:key   — store blob; body must be valid JSON
+      // DELETE /meta/:key — remove blob
+      // All routes require PHOENIX_AUTH bearer token.
+      if (path.startsWith('/meta/')) {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        if (!env.CLONEPOOL_BUCKET) return err('CLONEPOOL_BUCKET not bound', 500);
+
+        const metaKey = path.slice('/meta/'.length);
+        if (!metaKey) return err('key required', 400);
+        const r2Key = `_meta/${metaKey}`;
+
+        if (req.method === 'GET') {
+          const obj = await env.CLONEPOOL_BUCKET.get(r2Key);
+          if (!obj) return err('not found', 404);
+          const body = await obj.text();
+          return new Response(body, { status: 200, headers: { ...HEADERS, 'Content-Type': 'application/json' } });
+        }
+
+        if (req.method === 'PUT') {
+          const body = await req.text();
+          try { JSON.parse(body); } catch { return err('body must be valid JSON', 400); }
+          await env.CLONEPOOL_BUCKET.put(r2Key, body, {
+            httpMetadata: { contentType: 'application/json' },
+          });
+          return ok({ ok: true, key: metaKey, r2Key });
+        }
+
+        if (req.method === 'DELETE') {
+          await env.CLONEPOOL_BUCKET.delete(r2Key);
+          return ok({ ok: true, deleted: metaKey });
+        }
+
+        return err('method not allowed', 405);
+      }
+
       // ── 404 ───────────────────────────────────────────────────────────────
       return err('not found', 404);
 
