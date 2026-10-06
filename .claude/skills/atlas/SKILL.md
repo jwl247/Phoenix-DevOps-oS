@@ -37,9 +37,12 @@ questions: no coded UI panel exists or is needed.
    If it 404s or the `center` is clearly not what was asked (e.g. "radar" lands
    on an unrelated folder), run `GET /connections?q=<query>` and use the best hit
    as the center instead.
-2. The response is the "snow globe": `center` (the direct hit) plus up to 8
-   `related`, each tagged `via`: `edge` = a real documented connection, `area`
-   = lives in the same folder, `backfill` = random filler to reach 8.
+2. The response is the "snow globe": `center` (the best-ranked hit) plus up to 8
+   `related`, each tagged `via`: `edge` = a real documented connection, `near`
+   = two steps away (a neighbour's neighbour), `area` = same folder. Nothing
+   random (since 3.8.0); fewer than 8 means that's all there is. If
+   `candidates` is non-empty the query was ambiguous — answer the center, then
+   one line "Did you mean: …" naming them.
 3. **Answer in plain English for a person, not a data dump** (Jerry, 2026-09-30:
    "it needs a human readable resolution"):
    - Start with the thing itself: its plain name and one sentence on what it does,
@@ -67,11 +70,12 @@ questions: no coded UI panel exists or is needed.
 
 ## Keeping it current
 
-The table is a snapshot from `sector2/package-handler/parse-connections.js`,
-run against whatever `CONNECTIONS.md` files exist at parse time. It does not
-auto-update when those docs change. Re-run it (`node parse-connections.js`
-from `sector2/package-handler/`) after any `CONNECTIONS.md` edit, or when a
-lookup surfaces something obviously stale.
+packages-worker keeps it right by itself: a commit touching any
+`CONNECTIONS.md` runs `parse-connections.js` (hook `scripts/hooks/post-commit`),
+which bundles them into `atlas-sources.json` and intakes it; the worker
+rebuilds the graph the moment the bundle lands in R2 and re-checks daily.
+`GET /context` → `atlas.stale: true` means it's behind — run
+`node parse-connections.js` from `sector2/package-handler/`.
 
 ## Known limits (v1, honest about scope)
 

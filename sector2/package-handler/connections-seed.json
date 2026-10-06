@@ -8,7 +8,7 @@
     "key_fact": "Guardian/honeypot security system resurrected 2026-09-09, wired into `main_kernel.py` + `phoenix_auth.py`. `sector1/grub/` is a second, unconfirmed-live USys implementation — ask before assuming it's dead.",
     "source_file": "CONNECTIONS.md, sector1/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"2cde6bdbe65b2296\",\"b7bd55c11b781b0c\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"a07692cf80ba56f2\",\"1462bf4284baafce\",\"d03c76fc5584c3dd\",\"f7ac2afbc9927964\",\"d6aa039866df21ee\",\"a1aba4936f8f8fd2\",\"0f773c9134b2e8df\",\"2f1a6d5e516b8031\",\"eb06cca118444289\",\"8355d66a7c20229d\",\"4257a5404f3c1eec\",\"24402f8a69479302\",\"ae2002a7528b058d\",\"5a4c098eb82ff3a2\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"2cde6bdbe65b2296\",\"b7bd55c11b781b0c\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"a07692cf80ba56f2\",\"1462bf4284baafce\",\"d03c76fc5584c3dd\",\"f7ac2afbc9927964\",\"d6aa039866df21ee\",\"3d91975932e93a1f\",\"c48c3164ffc5dc79\",\"a1aba4936f8f8fd2\",\"0f773c9134b2e8df\",\"2f1a6d5e516b8031\",\"eb06cca118444289\",\"8355d66a7c20229d\",\"4257a5404f3c1eec\",\"24402f8a69479302\",\"bbb127e4be86c6ff\",\"ae2002a7528b058d\",\"5a4c098eb82ff3a2\"]"
   },
   {
     "hex": "74c05e2f9190b4c2",
@@ -19,7 +19,7 @@
     "key_fact": "Canonical intake pipeline lives at `sector2/package-handler/intake.sh`. `sector2/frank/frank_save.py`'s drive-tiering logic is built but never called.",
     "source_file": "CONNECTIONS.md, sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"f9d35d43770d3909\",\"51a1f05af85e342e\",\"ba2776c90792d2fe\",\"971da9a789ab199d\",\"ae2002a7528b058d\",\"66cd9688a2ae0682\",\"e14eae3777414e90\",\"46b42b4229cd7a39\",\"65408225e6f957dc\",\"829768ca64b1b6f0\",\"a60260bdfb558038\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"4fd9c8a3d43a9294\",\"a32affab459eef1a\",\"8dff57dd9caf1201\",\"2d87f9e76d5dbf11\",\"3aaeac3b672c2c29\",\"3f0096497d3ac9a2\",\"dbb1e1de35f8a1d4\",\"15b92ac2b6f12ca6\",\"45364e3228a28e13\",\"5241b6fd4103ff95\",\"e0f90a47a3630004\",\"fe573334dc2e08a5\",\"eaae18e72d174fc6\",\"51dda0aaa75cca7f\",\"33d485653f8a5612\",\"003e99aec4ffad75\",\"7170da25dc303b71\",\"5430311e56708256\",\"f5d21aaf5aa70a2b\",\"c7e0279cccb39441\",\"1462bf4284baafce\",\"50d51a233d8ff488\"]"
+    "links": "[\"f9d35d43770d3909\",\"51a1f05af85e342e\",\"ba2776c90792d2fe\",\"971da9a789ab199d\",\"ae2002a7528b058d\",\"66cd9688a2ae0682\",\"e14eae3777414e90\",\"46b42b4229cd7a39\",\"65408225e6f957dc\",\"829768ca64b1b6f0\",\"a60260bdfb558038\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"4fd9c8a3d43a9294\",\"3d91975932e93a1f\",\"a32affab459eef1a\",\"8dff57dd9caf1201\",\"2d87f9e76d5dbf11\",\"3aaeac3b672c2c29\",\"3537160464e361ae\",\"3f0096497d3ac9a2\",\"dbb1e1de35f8a1d4\",\"15b92ac2b6f12ca6\",\"45364e3228a28e13\",\"5241b6fd4103ff95\",\"e0f90a47a3630004\",\"fe573334dc2e08a5\",\"eaae18e72d174fc6\",\"51dda0aaa75cca7f\",\"33d485653f8a5612\",\"003e99aec4ffad75\",\"7170da25dc303b71\",\"5430311e56708256\",\"f5d21aaf5aa70a2b\",\"c7e0279cccb39441\",\"d03c76fc5584c3dd\",\"1462bf4284baafce\",\"50d51a233d8ff488\"]"
   },
   {
     "hex": "ae2002a7528b058d",
@@ -30,7 +30,7 @@
     "key_fact": "`sector3/workers/packages-worker/` is a **stale, dead duplicate** of the real worker at `sector2/package-handler/worker/` — don't edit it thinking it's live.",
     "source_file": "CONNECTIONS.md, sector3/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"7f981588473fbc31\",\"b7bd55c11b781b0c\",\"f7ac2afbc9927964\",\"971da9a789ab199d\",\"0f773c9134b2e8df\",\"2f1a6d5e516b8031\",\"a1aba4936f8f8fd2\",\"8dff57dd9caf1201\",\"3aaeac3b672c2c29\",\"51dda0aaa75cca7f\",\"76fbad2417f34f2a\",\"4d526f236b2b1fc3\",\"3160df97c34fce4b\",\"5fd2e93c6bc16ed3\",\"849e6626ce9ea0af\",\"4363aaa08e4f1bd2\",\"e60e0b27cdddfd28\",\"ab31d986b71e6749\",\"a877e61bd6a80203\",\"aff88c6662579906\",\"33a2b7b4aec981b8\",\"63388ec43c164af1\",\"66be75bfcbbf72f0\",\"fd90f1c00d77a35e\",\"8c34e0996cfb53db\",\"37e28d2dd0e159eb\",\"05beb4f4c9ec1016\",\"2e44e0b3b6d84943\",\"df9dd9b48f5ba743\",\"69b19065a543212d\",\"384bcaaae67367ab\",\"b7826bfbd998a94f\",\"50d51a233d8ff488\",\"5a4c098eb82ff3a2\",\"d0960501f8971be8\",\"072fcfbdebc62d00\",\"2d87f9e76d5dbf11\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"7f981588473fbc31\",\"b7bd55c11b781b0c\",\"f7ac2afbc9927964\",\"971da9a789ab199d\",\"0f773c9134b2e8df\",\"2f1a6d5e516b8031\",\"a1aba4936f8f8fd2\",\"8dff57dd9caf1201\",\"3aaeac3b672c2c29\",\"51dda0aaa75cca7f\",\"76fbad2417f34f2a\",\"4d526f236b2b1fc3\",\"3160df97c34fce4b\",\"5fd2e93c6bc16ed3\",\"0668bd308df8950b\",\"84cd027571bddb4f\",\"849e6626ce9ea0af\",\"4363aaa08e4f1bd2\",\"e60e0b27cdddfd28\",\"ab31d986b71e6749\",\"a877e61bd6a80203\",\"aff88c6662579906\",\"33a2b7b4aec981b8\",\"63388ec43c164af1\",\"66be75bfcbbf72f0\",\"fd90f1c00d77a35e\",\"8c34e0996cfb53db\",\"37e28d2dd0e159eb\",\"05beb4f4c9ec1016\",\"2e44e0b3b6d84943\",\"df9dd9b48f5ba743\",\"69b19065a543212d\",\"384bcaaae67367ab\",\"b7826bfbd998a94f\",\"2d87f9e76d5dbf11\",\"50d51a233d8ff488\",\"5a4c098eb82ff3a2\",\"d0960501f8971be8\",\"072fcfbdebc62d00\"]"
   },
   {
     "hex": "5a4c098eb82ff3a2",
@@ -41,7 +41,7 @@
     "key_fact": "`sector4/intake/intake.sh`'s zsh-glob syntax error was fixed 2026-09-21 (`43c27ad`: shebang now zsh, glob replaced by `find`). `usys intake` still routes here while `usys clone` goes to `sector2/package-handler/intake.sh`; whether that is a mis-route or sector 4's own pipeline is an open call for Jerry (audit CONN-F08).",
     "source_file": "CONNECTIONS.md, sector4/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"a1aba4936f8f8fd2\",\"971da9a789ab199d\",\"ab31d986b71e6749\",\"4363aaa08e4f1bd2\",\"ae2002a7528b058d\",\"c9361ee760a0a611\",\"4a23e3f77d4c268d\",\"79efd15e5339e7b2\",\"b44cf41ce87d6659\",\"39cfc819a4e4452c\",\"9a75bf2a8447b15c\",\"f5d21aaf5aa70a2b\",\"e60e0b27cdddfd28\",\"63388ec43c164af1\"]"
+    "links": "[\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"a1aba4936f8f8fd2\",\"971da9a789ab199d\",\"ab31d986b71e6749\",\"4363aaa08e4f1bd2\",\"ae2002a7528b058d\",\"c9361ee760a0a611\",\"4a23e3f77d4c268d\",\"79efd15e5339e7b2\",\"a55d099940d85d77\",\"b44cf41ce87d6659\",\"39cfc819a4e4452c\",\"9a75bf2a8447b15c\",\"f5d21aaf5aa70a2b\",\"d6aa039866df21ee\",\"d03c76fc5584c3dd\",\"e60e0b27cdddfd28\",\"63388ec43c164af1\"]"
   },
   {
     "hex": "66cd9688a2ae0682",
@@ -49,10 +49,10 @@
     "path": "dashboard",
     "area": "dashboard",
     "description": "The Phoenix \"Command Center\" Electron app. Legacy: kept running, not developed; the Phoenix Console (`portal/`) is the front door and `hud/` is the HUD (decided 2026-09-26). Buttons cut that day (HUD MODE, TELEMETRY, DEBIAN ENGINE, HELIX STATUS, PHORONIX, WATCH/INTAKE DOWNLOADS, PHOENIX GUIDE, VENV, CLONEPOOL; MAP, SECTOR MAP, task/report stubs, CLAUDE and GUIDE tabs) were removed 2026-09-30; sector switches, THROUGHPUT, YOU WERE HERE and the meters are hidden. What's left: AI CHAT, HELP CHAT, SETTINGS (Config Centralizer), CODES (CLI + RUNIT), SHELL (real terminal via `terminal-pty.js`), GLOSSARY; right column GOOGLE, STEAM, SCRIPTFORGE, OFFICE, RUN, OPEN PS7, OPEN FILE EXPLORER, DRIVER UPDATES (opens Windows Update's driver list; the user picks), SCREENSHOT, LIVE MONITOR. Main files: `main.js` (Electron main process), `preload.js`, `index.html`, `dashboard.js`, `hud-*.js/.css`, `button-generator.js`/`action-buttons.js`, `config-centralizer.js`, launchers (`office-launcher.js`, `scriptforge-launcher.js`, `google-launcher.js`, `steam-launcher.js`), `manual/PHOENIX_MANUAL.md` + `manual/LAURIE_GUIDE.md`.",
-    "key_fact": "`main.js` sector paths are lowercase `sector1`–`sector4` (the old `SECTOR4` casing bug was fixed 2026-09-29).",
+    "key_fact": "Folder bar across the top + Console/HUD launchers + repo-root fix are in `tentative-wares/dashboard/` (2026-10-03), not yet installed.",
     "source_file": "CONNECTIONS.md, dashboard/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"971da9a789ab199d\",\"74c05e2f9190b4c2\",\"ae2002a7528b058d\",\"5a4c098eb82ff3a2\",\"8c5967fd8486f344\",\"829768ca64b1b6f0\",\"8dff57dd9caf1201\",\"2d87f9e76d5dbf11\",\"eaae18e72d174fc6\",\"fe573334dc2e08a5\",\"4363aaa08e4f1bd2\",\"c9361ee760a0a611\",\"79efd15e5339e7b2\",\"63b51d46400ede45\",\"f9d35d43770d3909\",\"46262755af4fe0fe\",\"78cf4842afe41dcb\"]"
+    "links": "[\"971da9a789ab199d\",\"74c05e2f9190b4c2\",\"ae2002a7528b058d\",\"5a4c098eb82ff3a2\",\"8c5967fd8486f344\",\"829768ca64b1b6f0\",\"8dff57dd9caf1201\",\"2d87f9e76d5dbf11\",\"eaae18e72d174fc6\",\"fe573334dc2e08a5\",\"4363aaa08e4f1bd2\",\"c9361ee760a0a611\",\"79efd15e5339e7b2\",\"63b51d46400ede45\",\"f9d35d43770d3909\",\"46262755af4fe0fe\",\"78cf4842afe41dcb\",\"f58a9b91f140cf3f\",\"45a4f4b55c8692a6\"]"
   },
   {
     "hex": "8c5967fd8486f344",
@@ -63,7 +63,7 @@
     "key_fact": "`bin/*` and the dashboard call through here; `tools/clone.sh` and `scripts/hsf-intake.sh` call `sector2/package-handler/intake.sh` directly. The `usys run debian` elevation failure is handled (falls back to tcg acceleration).",
     "source_file": "CONNECTIONS.md, scripts/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"61ad4a8d1e45f706\",\"51a1f05af85e342e\",\"57b94356302c8571\",\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"0149ab52b4c96671\",\"de1b1f60e8fb172a\",\"4fd9c8a3d43a9294\",\"23460fe27bbd0839\",\"8c0625570131b178\",\"de8236d2355447a1\",\"74c05e2f9190b4c2\",\"5a4c098eb82ff3a2\",\"f9d35d43770d3909\",\"971da9a789ab199d\",\"6dae1b7eb15a4a2a\",\"50d51a233d8ff488\"]"
+    "links": "[\"61ad4a8d1e45f706\",\"51a1f05af85e342e\",\"57b94356302c8571\",\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"0149ab52b4c96671\",\"de1b1f60e8fb172a\",\"4fd9c8a3d43a9294\",\"23460fe27bbd0839\",\"8c0625570131b178\",\"de8236d2355447a1\",\"74c05e2f9190b4c2\",\"5a4c098eb82ff3a2\",\"f9d35d43770d3909\",\"971da9a789ab199d\",\"6dae1b7eb15a4a2a\",\"50d51a233d8ff488\",\"2d87f9e76d5dbf11\"]"
   },
   {
     "hex": "f9d35d43770d3909",
@@ -85,7 +85,7 @@
     "key_fact": "Thin shims into `scripts/` and `tools/`; `bin/usys` has a dead fallback to a nonexistent `scripts/usys.sh`.",
     "source_file": "CONNECTIONS.md, bin/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"61ad4a8d1e45f706\",\"57b94356302c8571\",\"c7e0279cccb39441\",\"ba2776c90792d2fe\",\"bbb127e4be86c6ff\",\"d9fa231292757a7e\",\"745d592e109d6f02\",\"927c3acb453a3ded\",\"4cd73ea6ae2001c0\",\"6dae1b7eb15a4a2a\",\"549ab9571e588daf\",\"a3d2d016705b94c7\",\"4aabd81a43e1cf25\",\"eeff368e8b391ad5\",\"8c5967fd8486f344\",\"f9d35d43770d3909\",\"74c05e2f9190b4c2\",\"3b1bdfa4bc550b65\",\"043df5bdbf6639d7\",\"50d51a233d8ff488\"]"
+    "links": "[\"61ad4a8d1e45f706\",\"57b94356302c8571\",\"c7e0279cccb39441\",\"ba2776c90792d2fe\",\"bbb127e4be86c6ff\",\"d9fa231292757a7e\",\"745d592e109d6f02\",\"927c3acb453a3ded\",\"4cd73ea6ae2001c0\",\"6dae1b7eb15a4a2a\",\"549ab9571e588daf\",\"a3d2d016705b94c7\",\"4aabd81a43e1cf25\",\"eeff368e8b391ad5\",\"8c5967fd8486f344\",\"f9d35d43770d3909\",\"74c05e2f9190b4c2\",\"3b1bdfa4bc550b65\",\"043df5bdbf6639d7\",\"50d51a233d8ff488\",\"f58a9b91f140cf3f\",\"45a4f4b55c8692a6\"]"
   },
   {
     "hex": "333c04dd151a2a68",
@@ -181,10 +181,21 @@
     "path": "portal",
     "area": "portal",
     "description": "A small local web app on Jerry's PC (the hub) showing every Phoenix machine, its links and services, plus an Actions tab per machine that drives that machine's hands. Opens from any Phoenix machine at `precision.phx:8470`. Python standard library only.",
-    "key_fact": "Every machine opens this page instead of installing a dashboard.",
+    "key_fact": "**Still WireGuard-only** (10.47.0.x bind, firewall, hands allow-list); WireGuard was retired 2026-10-01, so it works on PBMII alone until moved to Tailscale.",
     "source_file": "CONNECTIONS.md, portal/CONNECTIONS.md",
     "state": "white",
     "links": "[\"072fcfbdebc62d00\",\"4d526f236b2b1fc3\",\"ae2002a7528b058d\",\"8c910aaa10efed1f\",\"78cf4842afe41dcb\",\"45a229d57d35d935\",\"b9bb58048978991a\",\"31f3b2f7b1210b44\",\"f58a9b91f140cf3f\",\"66fc6c5f5d72ca89\",\"9cc94ace07120ab1\",\"fd7b6960c41f89c7\",\"f16fd0862bf963ba\",\"a8fc9443f9fc8bac\",\"2d87f9e76d5dbf11\"]"
+  },
+  {
+    "hex": "45a4f4b55c8692a6",
+    "name": "tentative-wares",
+    "path": "tentative-wares",
+    "area": "tentative-wares",
+    "description": "| Ware | Graduates to | State | |---|---|---| | `dashboard/` | `dashboard/` | Folder bar across the top (HOME · ROOT · PHOENIX + 6 slots; drag = copy, Shift = move, ✎ rename), CONSOLE/HUD launchers, repo-root fix. Tested in Electron on Linux; 6 Windows checks in `INSTALL.md`. | | `package-handler-3.9.0/` | `sector2/package-handler/` | packages-worker 3.9.0 member keys + intake.sh asks `/may-write` first. Tested on local wrangler with the real intake.sh. `DEPLOY.md` (migration BEFORE deploy). | | `genie-cloud/` | `sector1/kernel/genie/` | Genie on R2 + D1 only (no kernel): tour, find, info, cat, clone, verify, intake, custody, key. README written for a second user. | | `peer-review/` | `sector2/apps/peer-review/` | Forum building blocks: SHA3-512 for Workers, passkeys (WebAuthn), two-way Discord bridge, forum schema with rules in triggers. Worker + website still to build. |",
+    "key_fact": "Nothing here is wired in or deployed; each ware says where it goes and how.",
+    "source_file": "CONNECTIONS.md, tentative-wares/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"66cd9688a2ae0682\",\"f58a9b91f140cf3f\",\"51a1f05af85e342e\",\"8dff57dd9caf1201\",\"45364e3228a28e13\"]"
   },
   {
     "hex": "45a229d57d35d935",
@@ -305,7 +316,7 @@
     "key_fact": null,
     "source_file": "bin/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"51a1f05af85e342e\",\"3b1bdfa4bc550b65\"]"
+    "links": "[\"51a1f05af85e342e\",\"3b1bdfa4bc550b65\",\"c48c3164ffc5dc79\",\"971da9a789ab199d\"]"
   },
   {
     "hex": "d9fa231292757a7e",
@@ -884,22 +895,22 @@
     "name": "helix/",
     "path": "sector1/helix",
     "area": "sector1",
-    "description": "userspace Helix. **Canonical:** `helix_vram.py` (HelixMemoryManager, double strand, zlib-5), `helix_translator.py` (quadralingual translator on the real manager), `test_helix_vram.py` (11 tests). Older stages kept alongside: `helix_complete_package.py`, `helix_complete_stack.py` (toy zlib-6 stacks), `helix_stack_stress_test.py`, `helix_slim.py` (needs `pyzmq`), `helix_fuse.py` (needs `fusepy`), `kernel/` (`helix_kernel.c` userspace bench + `helix_baseline.c`), `run/helix_run`, `conf/helix_mesh.conf`.",
+    "description": "userspace Helix. **Canonical:** `helix_vram.py` (HelixMemoryManager, double strand, zlib-5), `helix_translator.py` (quadralingual translator on the real manager), `test_helix_vram.py` (11 tests). Since 2026-10-03 `machine_memory()` reads load on Windows too (GlobalMemoryStatusEx; before, `/proc/meminfo` only, so her Dandelion saw 0 memory pressure on Windows), she takes an external pressure source (`set_pressure_source`, the paging manager) and Strand B can grow/shrink (`set_strand_b_budget`, never below her base or what she holds). 11/11 still pass. Booted by `kernel/main_kernel.py` with Strand B at `~/.phoenix/helix/strandB` (`HELIX_VRAM_STRAND_B` overrides). Older stages kept alongside: `helix_complete_package.py`, `helix_complete_stack.py` (toy zlib-6 stacks), `helix_stack_stress_test.py`, `helix_slim.py` (needs `pyzmq`), `helix_fuse.py` (needs `fusepy`), `kernel/` (`helix_kernel.c` userspace bench + `helix_baseline.c`), `run/helix_run`, `conf/helix_mesh.conf`.",
     "key_fact": null,
     "source_file": "sector1/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"971da9a789ab199d\",\"f7ac2afbc9927964\",\"a1aba4936f8f8fd2\",\"8355d66a7c20229d\"]"
+    "links": "[\"971da9a789ab199d\",\"d6aa039866df21ee\",\"f7ac2afbc9927964\",\"a1aba4936f8f8fd2\",\"8355d66a7c20229d\",\"3537160464e361ae\",\"74c05e2f9190b4c2\",\"a55d099940d85d77\",\"5a4c098eb82ff3a2\"]"
   },
   {
     "hex": "f7ac2afbc9927964",
     "name": "helix-lightning/",
     "path": "sector1/helix-lightning",
     "area": "sector1",
-    "description": "the **Ball permission system** project: `franken5.py` (Frank5 core conductor), `frank_ring.py`, `frank_spawn.py`, `main_kernel.py`, `process_library.py`, `helixi.py` (Helix-I stage intake, 7701-7704), `helixe.py` (Helix-E egress, 7800+, calls `sector3/translator/translator.sh`), `helix_suit_override.py`, `test_ball_permissions.py` (20 tests), `THEMOMENT.txt`. Distinct from `kernel/` below — not a duplicate.",
+    "description": "the **Ball permission system** project: `franken5.py` (Frank5 core conductor), `frank_ring.py`, `frank_spawn.py`, `main_kernel.py`, `process_library.py`, `helixi.py` (Helix-I stage intake, 7701-7704), `helixe.py` (Helix-E egress, 7800+, calls `sector3/translator/translator.sh`), `helix_suit_override.py`, `test_ball_permissions.py` (20 tests), `THEMOMENT.txt`, `helix_gate.py` (2026-10-03: the gate on the Helix sockets — `HELIX_SOCKET_TOKEN` handshake `HXT <token>\\n`, constant-time; a Helix socket asked to bind beyond loopback without a token refuses and stays on 127.0.0.1; Helix-I caps a connection at `HELIX_I_MAX_BYTES`, default 4 MB; Helix-E runs each consumer's handshake on its own thread). Distinct from `kernel/` below — not a duplicate.",
     "key_fact": null,
     "source_file": "sector1/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"971da9a789ab199d\",\"d6aa039866df21ee\",\"d03c76fc5584c3dd\",\"ae2002a7528b058d\",\"76abc3d0044d6fb1\",\"f9d35d43770d3909\"]"
+    "links": "[\"971da9a789ab199d\",\"d6aa039866df21ee\",\"c48c3164ffc5dc79\",\"3d91975932e93a1f\",\"d03c76fc5584c3dd\",\"ae2002a7528b058d\",\"0668bd308df8950b\",\"76abc3d0044d6fb1\",\"f9d35d43770d3909\"]"
   },
   {
     "hex": "d6aa039866df21ee",
@@ -910,7 +921,29 @@
     "key_fact": null,
     "source_file": "sector1/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"971da9a789ab199d\",\"f7ac2afbc9927964\",\"8355d66a7c20229d\"]"
+    "links": "[\"971da9a789ab199d\",\"f7ac2afbc9927964\",\"8355d66a7c20229d\",\"d03c76fc5584c3dd\",\"c48c3164ffc5dc79\",\"3d91975932e93a1f\",\"a55d099940d85d77\",\"5a4c098eb82ff3a2\"]"
+  },
+  {
+    "hex": "3d91975932e93a1f",
+    "name": "kernel/genie/genie.ps1",
+    "path": "sector1/kernel/genie/genie.ps1",
+    "area": "sector1",
+    "description": "Phoenix Genie, the Universal Kernel in PS7 (dot-sourced from the PS7 profile): `genie up/down/restart/status/log/doctor` runs `main_kernel.py` as a hidden background process (FileTree moved to 7713/7714 so it no longer collides with Helix-I on 7703/7704); `genie find`/`clone` pull from the clonepool through packages-worker with the SHA3-512 custody check before any byte is written (no baseline = refused unless `-Force`); `genie import` clones + hot-loads a suit into the running closet; `genie closet` lists it; `genie custody` audits clonepool rows with no SHA3 baseline and writes a reviewed re-intake script. Clone = OUT only — Genie never writes R2/D1.",
+    "key_fact": null,
+    "source_file": "sector1/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"971da9a789ab199d\",\"d6aa039866df21ee\",\"c48c3164ffc5dc79\",\"74c05e2f9190b4c2\",\"f7ac2afbc9927964\"]"
+  },
+  {
+    "hex": "c48c3164ffc5dc79",
+    "name": "kernel/genie/genie_control.py",
+    "path": "sector1/kernel/genie/genie_control.py",
+    "area": "sector1",
+    "description": "the kernel's control socket, started by `main_kernel.py:boot()`: 127.0.0.1:8766 only, per-boot token in `~/.phoenix/genie/control.token`, refuses any request with an Origin header. `GET /kernel` (live library/Frank/Helix-I/Helix-E status), `GET /closet`, `POST /suits` (loads a file from `~/.phoenix/genie/closet/` only, after re-hashing it against the SHA3-512 the caller verified; imported suits are read-only unless `write` is asked, never clone/translate/delete/kernel, and can never replace a core suit). Imports persist in `~/.phoenix/genie/imports.json` and are re-verified at every boot — a changed file is refused and reported.",
+    "key_fact": null,
+    "source_file": "sector1/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"971da9a789ab199d\",\"d6aa039866df21ee\",\"3d91975932e93a1f\",\"bbb127e4be86c6ff\",\"f7ac2afbc9927964\"]"
   },
   {
     "hex": "a1aba4936f8f8fd2",
@@ -1009,18 +1042,18 @@
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"f9d35d43770d3909\",\"9b776b8b8b8f07b7\",\"4fd9c8a3d43a9294\",\"66cd9688a2ae0682\",\"ae2002a7528b058d\",\"2d87f9e76d5dbf11\",\"63388ec43c164af1\",\"66be75bfcbbf72f0\",\"2e44e0b3b6d84943\",\"df9dd9b48f5ba743\",\"0e8f689408bbeece\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"f9d35d43770d3909\",\"9b776b8b8b8f07b7\",\"4fd9c8a3d43a9294\",\"66cd9688a2ae0682\",\"ae2002a7528b058d\",\"2d87f9e76d5dbf11\",\"63388ec43c164af1\",\"66be75bfcbbf72f0\",\"2e44e0b3b6d84943\",\"df9dd9b48f5ba743\",\"0e8f689408bbeece\",\"45a4f4b55c8692a6\"]"
   },
   {
     "hex": "2d87f9e76d5dbf11",
     "name": "package-handler/worker/",
     "path": "sector2/package-handler/worker",
     "area": "sector2",
-    "description": "packages-worker (D1 `phoenix_dev_db` + R2 `phoenix-clonepool`): clonepool, custody, glossary, versions, deps, connections (Atlas), peer review, `/stats`. Version 3.6.0 (`index.js`), live since 2026-09-29 per `docs/plans/day-by-day-2026-09.md` (Jerry deployed it): adds the `/clonepool/<key>/mpu` routes (multipart upload for big objects) and `POST /clonepool/<key>/copy` (copy a version key inside R2, no re-upload).",
+    "description": "packages-worker (D1 `phoenix_dev_db` + R2 `phoenix-clonepool`): clonepool, custody, glossary, versions, deps, connections (Atlas), peer review, `/stats`, and as of 2026-10-01 the `/player` node session lifecycle routes. Version 3.6.0 added the `/clonepool/<key>/mpu` multipart routes and `POST /clonepool/<key>/copy`; deployed 2026-10-01 (Version ID `324b61b9-f55f-493a-920f-90978df0aff1`) with the `/player/:uid/*` block. R2 layout for player data: `players/{uid}/state.json`, `players/{uid}/hardware.json`, `players/{uid}/sidecars/{hash}.sidecar.json`, `players/{uid}/blobs/{hash}`. All `/player` routes gated by `PHOENIX_AUTH` bearer token. Canonical deploy directory: `sector2/package-handler/worker/` — `sector3/workers/packages-worker/` is an intentionally bricked stale copy (its `main` points at a nonexistent file to trip any accidental deploy).",
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"15b92ac2b6f12ca6\",\"8dff57dd9caf1201\",\"3f0096497d3ac9a2\",\"dbb1e1de35f8a1d4\",\"aff88c6662579906\",\"3aaeac3b672c2c29\",\"ae2002a7528b058d\",\"f58a9b91f140cf3f\",\"d0960501f8971be8\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"15b92ac2b6f12ca6\",\"8dff57dd9caf1201\",\"3f0096497d3ac9a2\",\"dbb1e1de35f8a1d4\",\"8c5967fd8486f344\",\"84cd027571bddb4f\",\"ae2002a7528b058d\",\"aff88c6662579906\",\"3aaeac3b672c2c29\",\"f58a9b91f140cf3f\",\"d0960501f8971be8\"]"
   },
   {
     "hex": "3aaeac3b672c2c29",
@@ -1032,6 +1065,17 @@
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
     "links": "[\"74c05e2f9190b4c2\",\"ae2002a7528b058d\",\"2d87f9e76d5dbf11\"]"
+  },
+  {
+    "hex": "3537160464e361ae",
+    "name": "apps/lifefirst/suits/lifefirst_checkin.py",
+    "path": "sector2/apps/lifefirst/suits/lifefirst_checkin.py",
+    "area": "sector2",
+    "description": "Life First's first kernel suit (2026-10-03). An addressed stage `{\"suit\":\"lifefirst_checkin\",\"who\",\"type\",\"text\"[,lat,lon]}` is validated, appended to `~/.phoenix/lifefirst/checkins.jsonl` with a SHA3-512 hash chain (`python lifefirst_checkin.py verify` walks it; a hand-edit shows as broken), stored in the userspace Helix, and answered through Ollama-local (`LIFEFIRST_MODEL`, default llama3.2:3b). Ollama down/model missing → still logged, plain acknowledgement with `\"ai\": false` and the reason. Reaches the kernel by intake → `genie import lifefirst_checkin.py`.",
+    "key_fact": null,
+    "source_file": "sector2/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"74c05e2f9190b4c2\",\"d03c76fc5584c3dd\"]"
   },
   {
     "hex": "3f0096497d3ac9a2",
@@ -1075,14 +1119,14 @@
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"45a4f4b55c8692a6\"]"
   },
   {
     "hex": "5241b6fd4103ff95",
     "name": "apps/lifefirst/",
     "path": "sector2/apps/lifefirst",
     "area": "sector2",
-    "description": "**retired PHP fossil** (hardcoded creds; never run its setup/deploy scripts). The live Life First backend is the `lifefirst-mcp` Cloudflare Worker (not in this repo); `meds-worker/` and `laurie/` live here.",
+    "description": "**retired PHP fossil** (hardcoded creds; never run its setup/deploy scripts). The live Life First backend is the `lifefirst-mcp` Cloudflare Worker at `https://lifefirst-mcp.phoenix-jwl.workers.dev` (not in this repo; Anthropic managed-agent MCP server for agent `agent_016KkiogQouh7byVcSjU6Q2j` in env `env_01M6JT8FZ39zGUJaWR2p6PwS`); `meds-worker/` and `laurie/` live here.",
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "grey",
@@ -1159,7 +1203,7 @@
     "name": "apps/game/",
     "path": "sector2/apps/game",
     "area": "sector2",
-    "description": "`COMPANION_VOICE.md` only: a draft of the game companion's voice and persona (2026-09-12). Notes, no code.",
+    "description": "`COMPANION_VOICE.md` only: a draft of the game companion's voice and persona (2026-09-12). Notes, no code. The planned game is **Monster Phoenix** (MMORTS — players install Phoenix OS and become infrastructure nodes; GDD v2 stored in clonepool). Stack: Maptiler (Phase 1 map), Babylon.js (3D renderer), Electron. No Unity. Every player node runs H.L.K-10 (Helix-backed AI agent, Ollama in game mode). Vehicle art pipeline: real photogrammetry (Meshroom/RealityCapture) → .glTF → Babylon.js.",
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
@@ -1307,6 +1351,28 @@
     "source_file": "sector3/CONNECTIONS.md",
     "state": "white",
     "links": "[\"ae2002a7528b058d\",\"849e6626ce9ea0af\"]"
+  },
+  {
+    "hex": "0668bd308df8950b",
+    "name": "phone-node/phoenix_phone.py",
+    "path": "sector3/phone-node/phoenix_phone.py",
+    "area": "sector3",
+    "description": "Life First's phone side (Termux, stdlib only), 2026-10-03: `say`/`voice`/`where` send addressed check-ins to the brain's Helix-I over the Phoenix Mesh with the `HELIX_SOCKET_TOKEN` handshake; `listen` holds a Helix-E stream and turns each reply for `PHOENIX_WHO` into a termux notification (optionally spoken). Brain unreachable → check-ins wait in `~/.phoenix/phone/outbox.jsonl` and drain when it's back. Config `~/.phoenix/phone.env` (0600). Sandbox-tested against the real kernel with fake termux-api commands.",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"f7ac2afbc9927964\"]"
+  },
+  {
+    "hex": "84cd027571bddb4f",
+    "name": "phone-node/phone-setup.sh",
+    "path": "sector3/phone-node/phone-setup.sh",
+    "area": "sector3",
+    "description": "one-time Termux setup: packages, worker keys typed hidden into a 0600 curl header file (`curl -H @file`, never argv — A2-N1), `phoenix_phone.py` pulled from the clonepool and SHA3-512-checked against D1 (refuses mismatch / no baseline / no bytes), `phone.env` (brain address must be Tailscale 100.64.0.0/10 or *.ts.net), `lifefirst` shortcut, start-at-boot via Termux:Boot. `--with-kernel`: proot Debian + python3 + PowerShell 7 arm64; stops before cloning the kernel tree (needs sector1/sector4 intaked as verified directory snapshots first). Linted (bash -n, shellcheck clean); not yet run on a phone.",
+    "key_fact": null,
+    "source_file": "sector3/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"ae2002a7528b058d\",\"2d87f9e76d5dbf11\"]"
   },
   {
     "hex": "849e6626ce9ea0af",
@@ -1533,11 +1599,22 @@
     "name": "paging_windows.py",
     "path": "sector4/paging_windows.py",
     "area": "sector4",
-    "description": "Windows pagefile twin (WMI; admin-only; not live-tested).",
+    "description": "Windows pagefile twin (WMI; admin-only; not live-tested). Its expand/shrink/start need a reboot to take effect, so it cannot follow live load; superseded for Helix by `paging_helix.py` — retiring it is Jerry's call.",
     "key_fact": null,
     "source_file": "sector4/CONNECTIONS.md",
     "state": "white",
     "links": "[\"5a4c098eb82ff3a2\",\"66cd9688a2ae0682\"]"
+  },
+  {
+    "hex": "a55d099940d85d77",
+    "name": "paging_helix.py",
+    "path": "sector4/paging_helix.py",
+    "area": "sector4",
+    "description": "the paging manager wired to the userspace Helix, one file for Windows and Linux (2026-10-03). LOAD: plugs into her Dandelion as its memory-pressure source — max(RAM in use, commit charge) — so her own tiered eviction (raw → zlib 5 → Strand B) follows the machine. EVICTION: watches Strand B fill velocity and spawns Doppelgangers (temporary, self-expiring Strand B budget extensions, sized from eviction speed, capped by free disk minus max(10%, 20 GB)) when B is ≥85% full, predicted full within 120 s, or she refused an allocation; retires them after 10 min once calm and her Strand B data fits without them. Never touches L1/L2/L3, never below her base Strand B. Last 50 decisions kept for `genie status`. Started by `sector1/kernel/main_kernel.py`; `clean_stale_strand_b()` clears Strand B dirs left by force-stopped kernels.",
+    "key_fact": null,
+    "source_file": "sector4/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"5a4c098eb82ff3a2\",\"d6aa039866df21ee\",\"d03c76fc5584c3dd\"]"
   },
   {
     "hex": "b44cf41ce87d6659",
@@ -2615,7 +2692,7 @@
     "key_fact": null,
     "source_file": "portal/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"d0960501f8971be8\",\"072fcfbdebc62d00\",\"45a229d57d35d935\",\"2d87f9e76d5dbf11\",\"9cc94ace07120ab1\",\"3feedc5391c7ad02\"]"
+    "links": "[\"d0960501f8971be8\",\"072fcfbdebc62d00\",\"45a229d57d35d935\",\"2d87f9e76d5dbf11\",\"9cc94ace07120ab1\",\"3feedc5391c7ad02\",\"66cd9688a2ae0682\",\"51a1f05af85e342e\",\"45a4f4b55c8692a6\"]"
   },
   {
     "hex": "66fc6c5f5d72ca89",

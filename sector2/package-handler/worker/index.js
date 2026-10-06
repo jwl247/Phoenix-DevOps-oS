@@ -3,7 +3,11 @@
 // Role: Catalog index — clonepool, glossary, TOC, packages, peer review
 // DB: phoenix_dev_db (D1) — the backbone
 // Auth: PHOENIX_AUTH (Cloudflare secret)
-// Version: 3.6.0
+// Version: 3.8.1
+
+import { parseAtlas, buildAtlasBlob, BUNDLE_FORMAT, BUNDLE_KEY } from './atlas-parse.mjs';
+
+const VERSION = '3.8.1';
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -31,25 +35,57 @@ function isAuthorized(req, env) {
 // then fall back to a LIKE scan, preferring the shortest matching path (the
 // most specific/direct hit rather than a long nested one).
 async function resolveConnection(db, id) {
+  return (await resolveConnectionRanked(db, id)).center;
+}
+
+// Rank every name/path hit instead of taking the shortest path: "intake"
+// used to land on the bin/intake shim and fill the globe with its sibling
+// shims (live test 2026-09-30). Score: the last path segment IS the query
+// (100), its stem is (90), the query starts a segment (50), anywhere (30);
+// plus how connected the node is (a subsystem outranks a 2-line shim), then
+// the shorter path. `candidates` = the other strong hits, so a caller can
+// offer "did you mean" instead of silently guessing.
+function connectionScore(row, q) {
+  const p = String(row.path || '').toLowerCase().replace(/\/$/, '');
+  const last = p.split('/').pop();
+  const stem = last.replace(/\.[a-z0-9]+$/, '');
+  let s = 30;
+  if (last === q) s = 100;
+  else if (stem === q) s = 90;
+  else if (p.split('/').some((seg) => seg.startsWith(q))) s = 50;
+  let links = 0;
+  try { links = JSON.parse(row.links || '[]').length; } catch (_) {}
+  return s + Math.min(links, 20);
+}
+async function resolveConnectionRanked(db, id) {
   const exact = await db.prepare('SELECT * FROM connections WHERE hex = ? OR name = ? OR path = ?').bind(id, id, id).first();
-  if (exact) return exact;
+  if (exact) return { center: exact, candidates: [] };
   // Escape LIKE wildcards so a lookup for "frank_save" or "100%" matches
   // literally instead of "_"/"%" acting as wildcards (and "%" alone
   // matching an arbitrary row). Values are bound, so this is about correct
   // matching, not SQL injection.
   const pat = `%${String(id).replace(/[\\%_]/g, (c) => '\\' + c)}%`;
-  const like = await db.prepare(
-    `SELECT * FROM connections WHERE name LIKE ? ESCAPE '\\' OR path LIKE ? ESCAPE '\\' ORDER BY LENGTH(path) ASC LIMIT 1`
-  ).bind(pat, pat).first();
-  if (like) return like;
-  // Last resort: the description. Most file-level lookups ("intake",
-  // "frank_save", "usys.ps1") name a file that lives inside a directory node,
-  // so it only appears in that node's description (audit CONN-F10).
-  const desc = await db.prepare(
-    `SELECT * FROM connections WHERE description LIKE ? ESCAPE '\\' ORDER BY LENGTH(path) ASC LIMIT 1`
-  ).bind(pat).first();
-  return desc || null;
+  const q = String(id).toLowerCase();
+  let hits = (await db.prepare(
+    `SELECT * FROM connections WHERE name LIKE ? ESCAPE '\\' OR path LIKE ? ESCAPE '\\'`
+  ).bind(pat, pat).all()).results;
+  if (!hits.length) {
+    // Last resort: the description. Most file-level lookups ("frank_save",
+    // "usys.ps1") name a file that lives inside a directory node, so it only
+    // appears in that node's description (audit CONN-F10).
+    hits = (await db.prepare(
+      `SELECT * FROM connections WHERE description LIKE ? ESCAPE '\\' ORDER BY LENGTH(path) ASC LIMIT 12`
+    ).bind(pat).all()).results;
+    return { center: hits[0] || null, candidates: hits.slice(1, 7).map(candidateOf) };
+  }
+  hits = hits.map((r) => ({ r, s: connectionScore(r, q) }))
+    .sort((a, b) => b.s - a.s || a.r.path.length - b.r.path.length || a.r.path.localeCompare(b.r.path));
+  const best = hits[0];
+  // Ambiguous = another hit names the query as plainly as the winner does.
+  const strong = hits.slice(1).filter((h) => h.s >= 90 || h.s >= best.s - 10);
+  return { center: best.r, candidates: strong.slice(0, 6).map((h) => candidateOf(h.r)) };
 }
+const candidateOf = (r) => ({ hex: r.hex, name: r.name, path: r.path, description: r.description });
 
 // ── Connections ↔ glossary enrichment ────────────────────────────────────────
 // connections.hex is sha256(path)[:16] (parse-connections.js) while
@@ -598,9 +634,82 @@ loadGlossary();
 </html>`;
 
 
+// ── Atlas rebuild ────────────────────────────────────────────────────────────
+// The worker keeps the Atlas right by itself. parse-connections.js bundles
+// every CONNECTIONS.md into atlas-sources.json and intakes it; the moment its
+// bytes land in R2 (PUT /clonepool/<BUNDLE_KEY>) this rebuilds the
+// `connections` graph and _meta/atlas from it, and the daily cron re-checks
+// that the graph was built from the bundle R2 holds now. One parser
+// (atlas-parse.mjs) is shared with the local script, so a dry run there shows
+// exactly what lands here.
+async function rebuildAtlas(env, { onlyIfStale = false } = {}) {
+  const db = env.PHOENIX_DB;
+  const obj = await env.CLONEPOOL_BUCKET.get(BUNDLE_KEY);
+  if (!obj) return { ok: false, reason: 'no Atlas bundle in R2 yet — run parse-connections.js' };
+  const builtFrom = { key: BUNDLE_KEY, etag: obj.etag, uploaded: obj.uploaded.toISOString() };
+
+  if (onlyIfStale) {
+    const cur = await env.CLONEPOOL_BUCKET.get('_meta/atlas');
+    if (cur) {
+      try {
+        const blob = await cur.json();
+        if (blob.built_from && blob.built_from.etag === obj.etag) return { ok: true, skipped: 'current', built_from: builtFrom };
+      } catch (_) { /* unreadable blob → rebuild */ }
+    }
+  }
+
+  let bundle;
+  try { bundle = await obj.json(); } catch (e) { return { ok: false, reason: `bundle is not JSON: ${e.message}` }; }
+  if (bundle.format !== BUNDLE_FORMAT || !Array.isArray(bundle.files) || !bundle.files.length
+      || !bundle.files.every((f) => typeof f.path === 'string' && typeof f.text === 'string')) {
+    return { ok: false, reason: `bundle is not ${BUNDLE_FORMAT}` };
+  }
+  builtFrom.files = bundle.files.length;
+
+  const rows = await parseAtlas(bundle.files);
+  // Guard: a truncated or wrong bundle must not wipe the graph. A real doc
+  // change never removes half of it in one go.
+  const before = (await db.prepare('SELECT COUNT(*) AS n FROM connections').first())?.n || 0;
+  if (rows.length < before / 2) {
+    return { ok: false, reason: `bundle parses to ${rows.length} nodes, the live graph has ${before} — refusing to replace it` };
+  }
+
+  const upsert = db.prepare(`
+    INSERT INTO connections (hex, name, path, area, description, key_fact, source_file, state, links)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(hex) DO UPDATE SET
+      name = excluded.name, path = excluded.path, area = excluded.area,
+      description = excluded.description, key_fact = excluded.key_fact,
+      source_file = excluded.source_file, state = excluded.state, links = excluded.links,
+      updated_at = CURRENT_TIMESTAMP`);
+  for (let i = 0; i < rows.length; i += 50) {
+    await db.batch(rows.slice(i, i + 50).map((r) => upsert.bind(
+      r.hex, r.name, r.path, r.area || null, r.description || '', r.key_fact || null,
+      r.source_file || null, r.state || 'white', r.links || '[]')));
+  }
+  // Reconcile: nodes no longer in any CONNECTIONS.md go (CONN-F09).
+  const keep = new Set(rows.map((r) => r.hex));
+  const stale = (await db.prepare('SELECT hex FROM connections').all()).results.map((r) => r.hex).filter((h) => !keep.has(h));
+  const del = db.prepare('DELETE FROM connections WHERE hex = ?');
+  for (let i = 0; i < stale.length; i += 50) await db.batch(stale.slice(i, i + 50).map((h) => del.bind(h)));
+
+  const blob = buildAtlasBlob(bundle.files, rows, builtFrom);
+  blob.worker_version = VERSION;
+  await env.CLONEPOOL_BUCKET.put('_meta/atlas', JSON.stringify(blob, null, 2), { httpMetadata: { contentType: 'application/json' } });
+  return { ok: true, nodes: rows.length, edges: blob.atlas_edge_count, deleted: stale, built_from: builtFrom };
+}
+
 // ── Router ───────────────────────────────────────────────────────────────────
 export default {
-  async fetch(req, env) {
+  // Daily safety net: rebuild only if the graph was not built from the
+  // bundle R2 holds now (a missed trigger, a failed rebuild).
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(rebuildAtlas(env, { onlyIfStale: true }).then((r) => {
+      if (!r.ok) console.error(`atlas cron: ${r.reason}`);
+    }));
+  },
+
+  async fetch(req, env, ctx) {
 
     if (req.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: HEADERS });
@@ -624,7 +733,7 @@ export default {
       // call, instead of finding out from a pile of silent per-file 401s.
       if (path === '/whoami' && req.method === 'GET') {
         if (!isAuthorized(req, env)) return err('unauthorized', 401);
-        return ok({ ok: true, worker: 'packages-worker', version: '3.6.0' });
+        return ok({ ok: true, worker: 'packages-worker', version: VERSION });
       }
 
       // ── Health (GET / or GET /health — API clients) ──────────────────────────
@@ -635,7 +744,7 @@ export default {
         return ok({
           status: 'ok',
           worker: 'packages-worker',
-          version: '3.6.0',
+          version: VERSION,
           brand: 'USys — United Systems',
           db: 'phoenix_dev_db',
           tables: tables.n,
@@ -739,6 +848,7 @@ export default {
             footer_qr = COALESCE(excluded.footer_qr, clonepool.footer_qr),
             addr_scheme = excluded.addr_scheme,
             sensitive = excluded.sensitive,
+            source_path = COALESCE(excluded.source_path, clonepool.source_path),
             updated_at = CURRENT_TIMESTAMP
         `).bind(
           body.hex_id,
@@ -791,6 +901,15 @@ export default {
           ).run();
           versionLogged = { version: versionLabel, store_path: storePath };
         }
+
+        // The ledger is the authority on version numbers. The client's label
+        // came from its LOCAL pool count, which restarts at v1 when the pool
+        // lives on another drive (E: vs F:, S2CORE-F41) — D1 said v1 while the
+        // ledger said v3. Keep the row's version equal to the latest ledger row.
+        await db.prepare(`
+          UPDATE clonepool SET version = (SELECT version FROM versions WHERE package = ? ORDER BY id DESC LIMIT 1)
+          WHERE hex_id = ? AND EXISTS (SELECT 1 FROM versions WHERE package = ?)
+        `).bind(body.name, body.hex_id, body.name).run();
 
         return ok({ ok: true, hex_id: body.hex_id, name: body.name, version_logged: versionLogged });
       }
@@ -934,7 +1053,12 @@ export default {
         const sha3 = req.headers.get('X-Phoenix-SHA3') || '';
         await env.CLONEPOOL_BUCKET.put(hex_id, bytes,
           /^[0-9a-f]{128}$/.test(sha3) ? { customMetadata: { sha3 } } : undefined);
-        return ok({ ok: true, hex_id, bytes: bytes.byteLength });
+        // The Atlas bundle just landed → rebuild the graph from it, after the
+        // response (intake is not kept waiting on the parse).
+        if (hex_id === BUNDLE_KEY && ctx) {
+          ctx.waitUntil(rebuildAtlas(env).then((r) => { if (!r.ok) console.error(`atlas rebuild: ${r.reason}`); }));
+        }
+        return ok({ ok: true, hex_id, bytes: bytes.byteLength, ...(hex_id === BUNDLE_KEY ? { atlas: 'rebuilding' } : {}) });
       }
 
       // GET /clonepool/:id — bytes by default (R2), ?meta=true forces the D1
@@ -1202,6 +1326,15 @@ export default {
       // removed or renamed in a CONNECTIONS.md stayed in D1 (and in /related)
       // forever (audit CONN-F09). parse-connections.js sends the full hex list
       // after a clean run. Guarded: an empty or malformed list deletes nothing.
+      // POST /connections/rebuild — rebuild the graph + _meta/atlas from the
+      // intaked bundle in R2 now (parse-connections.js --rebuild; also its
+      // fallback when an unchanged bundle was not re-uploaded).
+      if (path === '/connections/rebuild' && req.method === 'POST') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const r = await rebuildAtlas(env);
+        return ok(r, r.ok ? 200 : 409);
+      }
+
       if (path === '/connections/reconcile' && req.method === 'POST') {
         if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const body = await req.json();
@@ -1259,59 +1392,54 @@ export default {
       if (path.startsWith('/connections/') && path.endsWith('/related') && req.method === 'GET') {
         if (!isAuthorized(req, env)) return err('unauthorized', 401);
         const id = decodeURIComponent(path.slice('/connections/'.length, -'/related'.length));
-        const center = await resolveConnection(db, id);
+        const { center, candidates } = await resolveConnectionRanked(db, id);
         if (!center) return err('not found', 404);
 
-        const linked = JSON.parse(center.links || '[]');
-        const reverseLinked = await db.prepare(
-          `SELECT hex FROM connections WHERE hex != ? AND links LIKE ?`
-        ).bind(center.hex, `%${center.hex}%`).all();
-        const candidateHexes = [...new Set([...linked, ...reverseLinked.results.map(r => r.hex)])]
-          .filter(h => h !== center.hex);
-
+        // The whole graph is a few hundred rows — load it once and rank in
+        // memory. Same lookup → same 8, every time (the old fill-in was
+        // ORDER BY RANDOM(): different unrelated filler on every call).
+        const all = (await db.prepare('SELECT * FROM connections').all()).results;
+        const byHex = new Map(all.map((r) => [r.hex, r]));
+        const adj = new Map(all.map((r) => [r.hex, new Set()]));
+        for (const r of all) {
+          let l = [];
+          try { l = JSON.parse(r.links || '[]'); } catch (_) {}
+          for (const h of l) if (adj.has(h) && h !== r.hex) { adj.get(r.hex).add(h); adj.get(h).add(r.hex); }
+        }
+        const degree = (h) => adj.get(h)?.size || 0;
+        const byWeight = (a, b) => degree(b.hex) - degree(a.hex) || a.path.localeCompare(b.path);
+        const pickedHexes = new Set([center.hex]);
         const picked = [];
-        const pickedHexes = new Set();
-
-        if (candidateHexes.length) {
-          const placeholders = candidateHexes.map(() => '?').join(',');
-          const rows = await db.prepare(`SELECT * FROM connections WHERE hex IN (${placeholders})`).bind(...candidateHexes).all();
-          for (const row of rows.results) {
-            if (picked.length >= 8) break;
-            row.via = 'edge';
-            picked.push(row);
+        const take = (rows, via) => {
+          for (const row of rows) {
+            if (picked.length >= 8) return;
+            if (pickedHexes.has(row.hex)) continue;
             pickedHexes.add(row.hex);
+            picked.push({ ...row, via });
           }
-        }
+        };
 
-        if (picked.length < 8 && center.area) {
-          const need = 8 - picked.length;
-          const excludeHexes = [...pickedHexes, center.hex];
-          const placeholders = excludeHexes.map(() => '?').join(',');
-          const rows = await db.prepare(
-            `SELECT * FROM connections WHERE area = ? AND hex NOT IN (${placeholders}) ORDER BY name LIMIT ?`
-          ).bind(center.area, ...excludeHexes, need).all();
-          for (const row of rows.results) {
-            row.via = 'area';
-            picked.push(row);
-            pickedHexes.add(row.hex);
-          }
-        }
-
+        // 1) documented connections (both directions), best-connected first
+        const direct = [...(adj.get(center.hex) || [])].map((h) => byHex.get(h)).filter(Boolean);
+        take(direct.sort(byWeight), 'edge');
+        // 2) neighbours of neighbours, ranked by how many paths lead there
         if (picked.length < 8) {
-          const need = 8 - picked.length;
-          const excludeHexes = [...pickedHexes, center.hex];
-          const placeholders = excludeHexes.map(() => '?').join(',');
-          const rows = await db.prepare(
-            `SELECT * FROM connections WHERE hex NOT IN (${placeholders}) ORDER BY RANDOM() LIMIT ?`
-          ).bind(...excludeHexes, need).all();
-          for (const row of rows.results) { row.via = 'backfill'; picked.push(row); }
+          const hops = new Map();
+          for (const n of direct) for (const h of adj.get(n.hex) || []) {
+            if (!pickedHexes.has(h)) hops.set(h, (hops.get(h) || 0) + 1);
+          }
+          take([...hops.entries()].sort((a, b) => b[1] - a[1] || byWeight(byHex.get(a[0]), byHex.get(b[0])))
+            .map(([h]) => byHex.get(h)), 'near');
+        }
+        // 3) same folder. Nothing random after that: fewer than 8 is the truth.
+        if (picked.length < 8 && center.area) {
+          take(all.filter((r) => r.area === center.area).sort(byWeight), 'area');
         }
 
-        // `via` (edge | area | backfill) lets a caller tell a documented
-        // relationship from same-area or random padding (audit CONN-F11).
-        const related = picked.slice(0, 8);
-        await enrichWithGlossary(db, [center, ...related]);
-        return ok({ center, related, count: related.length });
+        // `via` tells a documented relationship (edge) from a two-step one
+        // (near) and a same-folder neighbour (area) — audit CONN-F11.
+        await enrichWithGlossary(db, [center, ...picked]);
+        return ok({ center, related: picked, count: picked.length, candidates });
       }
 
       if (path.startsWith('/connections/') && req.method === 'GET') {
@@ -1685,6 +1813,244 @@ export default {
           count: result.results.length,
           note: 'Availability advertised. Nothing is pushed. Pull only what you choose.',
         });
+      }
+
+      // ── /player — node session lifecycle ─────────────────────────────────
+      // Hash is the filename, the D1 key, and the R2 object key.
+      // Sidecars travel. Files never travel unless a node genuinely lacks them.
+      // All routes gated by PHOENIX_AUTH bearer token.
+      // R2 layout: players/{uid}/state.json
+      //            players/{uid}/hardware.json
+      //            players/{uid}/sidecars/{hash}.sidecar.json
+      //            players/{uid}/blobs/{hash}
+
+      if (path.startsWith('/player/')) {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        if (!env.CLONEPOOL_BUCKET) return err('CLONEPOOL_BUCKET not bound', 500);
+
+        // parse uid and sub-route: /player/:uid/<rest>
+        const playerRest = path.slice('/player/'.length);
+        const slashIdx   = playerRest.indexOf('/');
+        if (slashIdx === -1) return err('missing sub-route', 400);
+        const uid      = playerRest.slice(0, slashIdx);
+        const subRoute = playerRest.slice(slashIdx + 1);
+        if (!uid) return err('uid required', 400);
+
+        // ── GET /player/:uid/state ──────────────────────────────────────────
+        if (subRoute === 'state' && req.method === 'GET') {
+          const obj = await env.CLONEPOOL_BUCKET.get(`players/${uid}/state.json`);
+          if (!obj) return ok({ uid, state: {}, note: 'new player' });
+          const body = await obj.text();
+          return new Response(body, { status: 200, headers: HEADERS });
+        }
+
+        // ── PUT /player/:uid/state ──────────────────────────────────────────
+        if (subRoute === 'state' && req.method === 'PUT') {
+          const body = await req.text();
+          try { JSON.parse(body); } catch { return err('state must be valid JSON', 400); }
+          await env.CLONEPOOL_BUCKET.put(`players/${uid}/state.json`, body, {
+            httpMetadata: { contentType: 'application/json' },
+          });
+          return ok({ ok: true, uid, key: `players/${uid}/state.json` });
+        }
+
+        // ── GET /player/:uid/hardware ───────────────────────────────────────
+        if (subRoute === 'hardware' && req.method === 'GET') {
+          const obj = await env.CLONEPOOL_BUCKET.get(`players/${uid}/hardware.json`);
+          if (!obj) return ok({ uid, hardware: null });
+          const body = await obj.text();
+          return new Response(body, { status: 200, headers: HEADERS });
+        }
+
+        // ── PUT /player/:uid/hardware ───────────────────────────────────────
+        if (subRoute === 'hardware' && req.method === 'PUT') {
+          const body = await req.text();
+          try { JSON.parse(body); } catch { return err('hardware must be valid JSON', 400); }
+          await env.CLONEPOOL_BUCKET.put(`players/${uid}/hardware.json`, body, {
+            httpMetadata: { contentType: 'application/json' },
+          });
+          return ok({ ok: true, uid, key: `players/${uid}/hardware.json` });
+        }
+
+        // ── GET /player/:uid/sidecars ───────────────────────────────────────
+        if (subRoute === 'sidecars' && req.method === 'GET') {
+          const list = await env.CLONEPOOL_BUCKET.list({ prefix: `players/${uid}/sidecars/` });
+          const sidecars = list.objects.map(o => ({
+            key:      o.key,
+            hash:     o.key.split('/').pop().replace('.sidecar.json', ''),
+            size:     o.size,
+            uploaded: o.uploaded,
+          }));
+          return ok({ uid, sidecars, count: sidecars.length });
+        }
+
+        // ── GET /player/:uid/sidecar/:hash ──────────────────────────────────
+        if (subRoute.startsWith('sidecar/') && req.method === 'GET') {
+          const hash = subRoute.slice('sidecar/'.length);
+          if (!hash) return err('hash required', 400);
+          const obj = await env.CLONEPOOL_BUCKET.get(`players/${uid}/sidecars/${hash}.sidecar.json`);
+          if (!obj) return err('sidecar not found', 404);
+          const body = await obj.text();
+          return new Response(body, { status: 200, headers: HEADERS });
+        }
+
+        // ── PUT /player/:uid/sidecar/:hash ──────────────────────────────────
+        if (subRoute.startsWith('sidecar/') && req.method === 'PUT') {
+          const hash = subRoute.slice('sidecar/'.length);
+          if (!hash) return err('hash required', 400);
+          const body = await req.text();
+          let sc;
+          try { sc = JSON.parse(body); } catch { return err('sidecar must be valid JSON', 400); }
+          if (sc.hash && sc.hash !== hash) return err('sidecar.hash does not match route hash', 400);
+          sc.hash = hash;
+          await env.CLONEPOOL_BUCKET.put(
+            `players/${uid}/sidecars/${hash}.sidecar.json`,
+            JSON.stringify(sc),
+            { httpMetadata: { contentType: 'application/json' } },
+          );
+          return ok({ ok: true, uid, hash, key: `players/${uid}/sidecars/${hash}.sidecar.json` });
+        }
+
+        // ── GET /player/:uid/blob/:hash ─────────────────────────────────────
+        if (subRoute.startsWith('blob/') && req.method === 'GET') {
+          const hash = subRoute.slice('blob/'.length);
+          if (!hash) return err('hash required', 400);
+          const obj = await env.CLONEPOOL_BUCKET.get(`players/${uid}/blobs/${hash}`);
+          if (!obj) return err('blob not found', 404);
+          return new Response(obj.body, { status: 200, headers: {
+            ...HEADERS,
+            'Content-Type': 'application/octet-stream',
+            'X-Phoenix-Hash': hash,
+          }});
+        }
+
+        // ── PUT /player/:uid/blob/:hash ─────────────────────────────────────
+        // Hash verification happens in node_session.py before PUT.
+        // Worker enforces header/route hash consistency as second check.
+        if (subRoute.startsWith('blob/') && req.method === 'PUT') {
+          const hash = subRoute.slice('blob/'.length);
+          if (!hash) return err('hash required', 400);
+          const claimedHash = req.headers.get('X-Phoenix-Hash') || '';
+          if (claimedHash && claimedHash !== hash) {
+            return err('X-Phoenix-Hash header does not match route hash', 400);
+          }
+          const bytes = await req.arrayBuffer();
+          await env.CLONEPOOL_BUCKET.put(`players/${uid}/blobs/${hash}`, bytes);
+          return ok({ ok: true, uid, hash, bytes: bytes.byteLength, key: `players/${uid}/blobs/${hash}` });
+        }
+
+        // ── DELETE /player/:uid/wipe — full node cleanup on logout ──────────
+        if (subRoute === 'wipe' && req.method === 'DELETE') {
+          const list = await env.CLONEPOOL_BUCKET.list({ prefix: `players/${uid}/` });
+          const keys = list.objects.map(o => o.key);
+          await Promise.all(keys.map(k => env.CLONEPOOL_BUCKET.delete(k)));
+          return ok({ ok: true, uid, wiped: keys.length });
+        }
+
+        return err('unknown player sub-route', 404);
+      }
+
+
+      // ── /context ──────────────────────────────────────────────────────────
+      // AI session bootstrap — one auth'd GET returns the full project state:
+      // node counts, flagged/deprecated nodes, key facts, and frame state from
+      // _meta/atlas. No LLM calls — pure D1 + R2 aggregation, zero API cost.
+      if (path === '/context' && req.method === 'GET') {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const [total, stateCounts, flagged, keyFacts] = await Promise.all([
+          db.prepare('SELECT COUNT(*) AS n FROM connections').first(),
+          db.prepare('SELECT state, COUNT(*) AS n FROM connections GROUP BY state').all(),
+          db.prepare(
+            'SELECT hex, name, path, area, state, description, key_fact FROM connections WHERE state != \'white\' ORDER BY area'
+          ).all(),
+          db.prepare(
+            'SELECT hex, name, path, area, key_fact FROM connections WHERE key_fact IS NOT NULL AND key_fact != \'\' ORDER BY area'
+          ).all(),
+        ]);
+        let frames = [];
+        let atlas_meta = null;
+        if (env.CLONEPOOL_BUCKET) {
+          const [atlasObj, bundleHead] = await Promise.all([
+            env.CLONEPOOL_BUCKET.get('_meta/atlas'),
+            env.CLONEPOOL_BUCKET.head(BUNDLE_KEY),
+          ]);
+          if (atlasObj) {
+            try {
+              const atlasJson = await atlasObj.json();
+              frames = atlasJson.frames || atlasJson.session_state || [];
+              // stale = R2 holds a newer Atlas bundle than the graph was built from
+              const builtEtag = atlasJson.built_from && atlasJson.built_from.etag;
+              atlas_meta = {
+                generated: atlasJson.generated,
+                built_from: atlasJson.built_from || null,
+                stale: !!bundleHead && builtEtag !== bundleHead.etag,
+              };
+            } catch (_) {}
+          }
+        }
+        const stateMap = {};
+        for (const row of (stateCounts.results || [])) stateMap[row.state] = row.n;
+        return ok({
+          project: 'Phoenix DevOps OS',
+          generated: new Date().toISOString(),
+          atlas: atlas_meta,
+          frames,
+          nodes: {
+            total: total?.n ?? 0,
+            white: stateMap.white ?? 0,
+            grey: stateMap.grey ?? 0,
+            black: stateMap.black ?? 0,
+            flagged: flagged.results || [],
+            key_facts: keyFacts.results || [],
+          },
+          canonical: {
+            worker_deploy: 'sector2/package-handler/worker/',
+            decoy_warning: 'sector3/workers/packages-worker/ is intentionally bricked — never deploy from there',
+            packages_worker_version: VERSION,
+          },
+          hint: 'State: white=active grey=deprecated black=wtf. GET /connections for full node list. GET /meta/atlas for raw blob.',
+        });
+      }
+
+      // ── /meta ─────────────────────────────────────────────────────────────
+      // Auth-gated R2 key-value store for machine-readable session bootstrap.
+      // Keys live under _meta/<key> in CLONEPOOL_BUCKET.
+      // GET /meta/<key>    → R2 object body (JSON or text)
+      // PUT /meta/<key>    → store body under _meta/<key>
+      // DELETE /meta/<key> → remove key
+      // Primary use: /meta/atlas — combined Atlas + frame state for Claude bootstrap.
+      if (path.startsWith('/meta/')) {
+        if (!isAuthorized(req, env)) return err('unauthorized', 401);
+        const metaSubKey = path.slice('/meta/'.length);
+        if (!metaSubKey) return err('key required', 400);
+        const metaKey = `_meta/${metaSubKey}`;
+
+        if (req.method === 'GET') {
+          const obj = await env.CLONEPOOL_BUCKET.get(metaKey);
+          if (!obj) return err(`meta key not found: ${metaSubKey}`, 404);
+          const ct = obj.httpMetadata?.contentType || 'application/json';
+          return new Response(obj.body, { status: 200, headers: { 'Content-Type': ct } });
+        }
+
+        if (req.method === 'PUT') {
+          // _meta/atlas is built by rebuildAtlas() from the intaked bundle
+          // only — a hand-PUT would be overwritten anyway, and until then
+          // /context would serve whatever was typed.
+          if (metaSubKey === 'atlas') return err('_meta/atlas is built by the worker from the intaked bundle — run parse-connections.js', 409);
+          const body = await req.arrayBuffer();
+          const ct = req.headers.get('Content-Type') || 'application/json';
+          await env.CLONEPOOL_BUCKET.put(metaKey, body, {
+            httpMetadata: { contentType: ct },
+          });
+          return ok({ stored: metaKey, bytes: body.byteLength });
+        }
+
+        if (req.method === 'DELETE') {
+          await env.CLONEPOOL_BUCKET.delete(metaKey);
+          return ok({ deleted: metaKey });
+        }
+
+        return err('method not allowed on /meta', 405);
       }
 
       // ── 404 ───────────────────────────────────────────────────────────────

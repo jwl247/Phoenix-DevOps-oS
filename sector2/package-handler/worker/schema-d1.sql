@@ -116,6 +116,26 @@ CREATE TABLE categories (
     name        TEXT NOT NULL UNIQUE,
     description TEXT DEFAULT ''
 );
+-- Seeded from production 2026-10-03: glossary.category_hex REFERENCES categories(hex),
+-- so a D1 built from this file without these rows failed every glossary write (500).
+-- hex = hex(name) except 'subsystem' (= hex('subsys')), kept exactly as production has it.
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('73797374656d', 'system', 'OS tools, daemons, kernel-level');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('6e6574776f726b', 'network', 'VPN, firewall, comms, protocols');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('7365637572697479', 'security', 'auth, hashing, verification, hardening');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('73746f72616765', 'storage', 'clonepool, vaults, drives, filesystems');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('72756e74696d65', 'runtime', 'interpreters, language runtimes');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('746f6f6c73', 'tools', 'CLI utilities, dev tools, helpers');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('6672616d65776f726b', 'framework', 'Phoenix, Helix, Propagator components');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('6461746162617365', 'database', 'SQLite, D1, catalog, schemas');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('73637269707473', 'scripts', 'shell scripts, automation, wrappers');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('6d65646961', 'media', 'images, QR codes, visual assets');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('74797065', 'type', 'file type classification');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('756e6b6e6f776e', 'unknown', 'uncategorized, needs review');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('7061636b61676573', 'packages', 'installed packages from any backend');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('66696c6573', 'files', 'individual files intaked from outside');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('737562737973', 'subsystem', 'Frank, sectors, conductors, props');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('776f726b657273', 'workers', 'Cloudflare workers');
+INSERT OR IGNORE INTO categories (hex, name, description) VALUES ('6469726563746f7279', 'directory', 'Directory-level snapshot entries from intake_directory');
 CREATE TABLE signatures (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     hex_id     TEXT    NOT NULL,

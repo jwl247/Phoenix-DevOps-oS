@@ -7,7 +7,26 @@ into a queryable graph. Ask about anything, get the direct answer plus exactly
 whole repo dumped on you at once. Same role as the Glossary: Claude itself is
 the interface (see `.claude/skills/atlas/SKILL.md`) — no coded UI panel.
 
-## Status
+## Status (2026-10-02, worker 3.8.0 — this section supersedes the older notes below)
+
+- **The worker keeps it right.** `parse-connections.js` bundles every
+  `CONNECTIONS.md` into `atlas-sources.json` and intakes it (one bundle,
+  because intake keys files by basename). packages-worker rebuilds the
+  `connections` graph + `_meta/atlas` from that bundle the moment it lands in
+  R2, re-checks daily (cron 09:17 UTC), and refuses a bundle that would drop
+  more than half the graph. `GET /context` → `atlas.stale` says if it's behind.
+- **Trigger:** `scripts/hooks/post-commit` (`git config core.hooksPath scripts/hooks`)
+  runs it on any commit touching a `CONNECTIONS.md`. Manual: `node parse-connections.js`;
+  `--dry-run` parses only; `--rebuild` rebuilds from what R2 holds.
+- **One parser:** `worker/atlas-parse.mjs`, shared by the worker and the script.
+  Trip-wires, mesh nodes, frames and the upgrade log in `/meta/atlas` come from
+  `sector2/CONNECTIONS.md` sections, never from code. `PUT /meta/atlas` is refused.
+- **Lookup:** ranked (exact name > stem > segment, then how connected), with
+  `candidates` for ambiguous queries; `/related` is deterministic — `edge`,
+  then `near` (2-hop), then `area`; no random backfill.
+- **Dashboard:** ATLAS tab shows "did you mean" and every name is clickable.
+
+## Status (older)
 
 - **Backend: live.** The `connections` table on D1 (`phoenix_dev_db`, via
   `packages-worker`) — 37 entries as of the first parse (2026-09-24), one per

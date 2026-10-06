@@ -32,7 +32,13 @@
       "binding":     "CLONEPOOL_BUCKET",
       "bucket_name": "phoenix-clonepool"
     }
-  ]
+  ],
+
+  // ── Cron ───────────────────────────────────────────────────────────────────
+  // Daily Atlas check (09:17 UTC): rebuild the connections graph only if it
+  // was not built from the Atlas bundle R2 holds now. The normal rebuild
+  // fires the moment intake uploads the bundle; this catches a missed one.
+  "triggers": { "crons": ["17 9 * * *"] }
 
   // ── Secrets ────────────────────────────────────────────────────────────────
   // PHOENIX_AUTH — rotate via ../rotate-phoenix-auth.sh, never by hand
