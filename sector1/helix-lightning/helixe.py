@@ -342,7 +342,12 @@ class HelixE:
 
     def _output_server(self, ch: EgressChannel, port: int):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # Windows SO_REUSEADDR lets ANOTHER process bind this port and take the stages
+        # (seen 2026-10-05: a POC on 7701-7704 beside the kernel). Exclusive there.
+        if hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((BIND_ADDR, port))
         sock.listen(8)
         ch._sock = sock

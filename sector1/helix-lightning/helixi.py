@@ -56,6 +56,7 @@ SOCKET_BASE = int(os.environ.get("HELIX_I_PORT", 7700))
 import helix_gate
 BIND_ADDR       = helix_gate.safe_bind(os.environ.get("HELIX_I_BIND", "127.0.0.1"), "Helix-I")
 MAX_CONN_BYTES  = int(os.environ.get("HELIX_I_MAX_BYTES", str(4 * 1024 * 1024)))   # per connection
+STAGE_READ_TIMEOUT_S = float(os.environ.get("HELIX_I_READ_TIMEOUT", "30"))           # per connection, seconds
 MAX_STAGE_BYTES = STAGE_SLOT_SIZE - 64   # leave header room
 INTERRUPT_TARGET_PID = int(os.environ.get("FRANK5_PID", os.getpid()))
 
@@ -196,12 +197,27 @@ class HelixI:
         The one signal. Helix-I's only communication with Frank.
         SIGUSR1 → Frank wakes → Frank rides.
         """
+        if os.name == "nt":
+            return self._fire_interrupt_in_process()
         try:
             os.kill(INTERRUPT_TARGET_PID, FrankSignal.STAGE_READY)
         except ProcessLookupError:
             log.warning("Frank-core PID not found — interrupt dropped")
         except PermissionError:
             log.error("Cannot signal Frank-core — check permissions")
+
+    def _fire_interrupt_in_process(self):
+        """
+        Windows has no SIGUSR1: STAGE_READY is SIGBREAK, and os.kill() with
+        anything but a CTRL event is TerminateProcess — every stage killed the
+        kernel (found 2026-10-05). Helix-I lives in Frank's process, so wake his
+        handler directly (it only queues a timestamp: thread-safe).
+        """
+        handler = signal.getsignal(FrankSignal.STAGE_READY)
+        if INTERRUPT_TARGET_PID == os.getpid() and callable(handler):
+            handler(FrankSignal.STAGE_READY, None)
+        else:
+            log.warning("Frank-core not in this process — Windows can't signal across processes; interrupt dropped")
 
     def _pack_stage(self, channel: int, data: bytes, meta: dict) -> bytes:
         """
@@ -242,7 +258,12 @@ class HelixI:
 
     def _socket_listener(self, ch: Channel, port: int):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # Windows SO_REUSEADDR lets ANOTHER process bind this port and take the stages
+        # (seen 2026-10-05: a POC on 7701-7704 beside the kernel). Exclusive there.
+        if hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((BIND_ADDR, port))
         sock.listen(8)
         sock.setblocking(False)
@@ -265,10 +286,16 @@ class HelixI:
 
     def _handle_connection(self, ch: Channel, conn: socket.socket, addr):
         try:
+            # The listener is non-blocking; on Windows an accepted socket inherits that,
+            # so recv() raised WinError 10035 before the stage arrived and every stage was
+            # dropped (found 2026-10-05). Blocking with a deadline: a stalled sender can't
+            # hold this thread forever.
+            conn.settimeout(STAGE_READ_TIMEOUT_S)
             try:
                 first = helix_gate.check(conn, addr, f"Helix-I ch{ch.number}")
             except PermissionError:
                 return
+            conn.settimeout(STAGE_READ_TIMEOUT_S)          # the gate clears its own timeout
             chunks = [first] if first else []
             total = len(first)
             while True:

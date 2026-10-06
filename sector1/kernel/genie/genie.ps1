@@ -216,6 +216,61 @@ function Show-GenieStatus {
 }
 
 # ── Kernel control socket (genie_control.py, loopback + per-boot token) ─────
+# ── Send a stage to a suit and wait for its answer ──────────────────────────
+# Helix-I door (7700+ch) takes the stage in; the answer comes out of the
+# matching Helix-E door (7804+ch). Listen FIRST, then send, so the answer
+# can't slip out before anyone is listening. The stage must be a JSON object
+# with "suit": "<name>" — only Genie-imported suits answer those.
+# HELIX_SOCKET_TOKEN (from the environment) is the gate handshake when set.
+function Split-GenieJsonStream([string]$buf) {
+    $out = [System.Collections.Generic.List[string]]::new(); $depth = 0; $start = -1; $inStr = $false; $esc = $false
+    for ($i = 0; $i -lt $buf.Length; $i++) {
+        $c = $buf[$i]
+        if ($inStr) { if ($esc) { $esc = $false } elseif ($c -eq '\') { $esc = $true } elseif ($c -eq '"') { $inStr = $false }; continue }
+        if ($c -eq '"') { $inStr = $true }
+        elseif ($c -eq '{') { if ($depth -eq 0) { $start = $i }; $depth++ }
+        elseif ($c -eq '}' -and $depth -gt 0) { $depth--; if ($depth -eq 0) { $out.Add($buf.Substring($start, $i - $start + 1)); $start = -1 } }
+    }
+    $rest = if ($depth -gt 0 -and $start -ge 0) { $buf.Substring($start) } else { '' }
+    return , @($out.ToArray(), $rest)
+}
+
+function Send-GenieStage([string]$Suit, [string]$Json, [int]$Channel = 1, [int]$Wait = 30, [string]$HostName = '127.0.0.1') {
+    if (-not $Suit) { throw 'usage: genie send <suit> [''{"key": "value"}''] [-Channel 1-4] [-Wait sec]' }
+    $stage = if ($Json) { try { $Json | ConvertFrom-Json -AsHashtable } catch { throw "the stage is not valid JSON: $($_.Exception.Message)" } } else { @{} }
+    if ($stage -isnot [hashtable]) { throw 'the stage must be a JSON object: {"key": "value"}' }
+    $stage['suit'] = $Suit
+    $bytes = [Text.Encoding]::UTF8.GetBytes(($stage | ConvertTo-Json -Compress -Depth 20))
+    $tok = if ($env:HELIX_SOCKET_TOKEN) { [Text.Encoding]::ASCII.GetBytes("HXT $($env:HELIX_SOCKET_TOKEN.Trim())`n") } else { $null }
+
+    $ear = [Net.Sockets.TcpClient]::new()
+    try {
+        $ear.Connect($HostName, 7804 + $Channel)
+        $es = $ear.GetStream(); if ($tok) { $es.Write($tok, 0, $tok.Length) }
+        Start-Sleep -Milliseconds 150                      # let Helix-E admit us before the stage lands
+        $mouth = [Net.Sockets.TcpClient]::new()
+        try {
+            $mouth.Connect($HostName, 7700 + $Channel)
+            $ms = $mouth.GetStream(); if ($tok) { $ms.Write($tok, 0, $tok.Length) }
+            $ms.Write($bytes, 0, $bytes.Length); $ms.Flush()
+        } finally { $mouth.Close() }
+        G-Info "sent to $Suit (Helix-I ch$Channel) — waiting up to $Wait s on Helix-E ch$Channel"
+        $buf = ''; $chunk = [byte[]]::new(65536); $deadline = (Get-Date).AddSeconds($Wait)
+        while ((Get-Date) -lt $deadline) {
+            $task = $es.ReadAsync($chunk, 0, $chunk.Length)
+            if (-not $task.Wait([int][Math]::Max(1, ($deadline - (Get-Date)).TotalMilliseconds))) { break }
+            if ($task.Result -le 0) { throw 'Helix-E closed the stream (gate token wrong?)' }
+            $buf += [Text.Encoding]::UTF8.GetString($chunk, 0, $task.Result)
+            $msgs, $buf = Split-GenieJsonStream $buf
+            foreach ($m in $msgs) {
+                $o = try { $m | ConvertFrom-Json } catch { $null }
+                if ($o -and $o.PSObject.Properties['suit'] -and $o.suit -eq $Suit) { return $o }
+            }
+        }
+        throw "no answer from '$Suit' within $Wait s — is it imported (genie closet)? does its reply carry `"suit`": `"$Suit`"? see genie log"
+    } finally { $ear.Close() }
+}
+
 function Invoke-GenieControl([string]$Method, [string]$Path, $Body) {
     if (-not (Test-Path $script:GenieTokenFile)) { throw 'kernel control socket is not up (no control.token) — genie restart' }
     $tok = (Get-Content $script:GenieTokenFile -Raw).Trim()
@@ -324,10 +379,13 @@ function Invoke-GenieClone([string]$Id, [string]$To, [switch]$Force) {
 # Jerry to decide. Genie writes nothing to R2 or D1 — intake does, when run.
 function ConvertTo-GenieLocalPath([string]$p) {
     if (-not $p) { return $null }
+    if (-not $IsWindows) {                # a Windows drive path (/e/... or E:/...) means nothing on Linux
+        if ($p -match '^/[a-zA-Z]/' -or $p -match '^[A-Za-z]:[\\/]') { return $null }
+        return $p
+    }
     if ($p -match '^/([a-zA-Z])/(.*)$')  { return "$($Matches[1].ToUpper()):\$($Matches[2] -replace '/', '\')" }
     if ($p -match '^[A-Za-z]:/')         { return ($p -replace '/', '\') }
-    if ($IsWindows) { return $null }      # /home/... = old WSL/Linux pool, not on this disk
-    return $p
+    return $null                          # /home/... = old WSL/Linux pool, not on this disk
 }
 
 function Invoke-GenieCustodyAudit {
@@ -336,7 +394,7 @@ function Invoke-GenieCustodyAudit {
     $rows = @($all | Where-Object { -not ($_.PSObject.Properties['hash_sha3'] -and $_.hash_sha3) })
     G-Info "$($all.Count) clonepool rows, $($rows.Count) without a SHA3 baseline — checking each (read-only)"
 
-    $skip = '\\(\.git|node_modules|__pycache__|\.venv|venv|dist|build|\.wrangler)\\'
+    $skip = '[\\/](\.git|node_modules|__pycache__|\.venv|venv|dist|build|\.wrangler)[\\/]'   # both separators
     $repoFiles = @(Get-ChildItem -LiteralPath $script:GenieRepo -Recurse -File -ErrorAction SilentlyContinue |
                    Where-Object { $_.FullName -notmatch $skip })
     $byName = @{}
@@ -429,7 +487,7 @@ function genie {
     [CmdletBinding()]
     param(
         [Parameter(Position = 0)]
-        [ValidateSet('up', 'down', 'restart', 'status', 'log', 'doctor', 'find', 'clone', 'import', 'closet', 'custody', 'profile', 'help')]
+        [ValidateSet('up', 'down', 'restart', 'status', 'log', 'doctor', 'find', 'clone', 'import', 'closet', 'send', 'custody', 'profile', 'help')]
         [string]$Command = 'status',
         [Parameter(Position = 1, ValueFromRemainingArguments)]
         [string[]]$Args2,
@@ -440,7 +498,9 @@ function genie {
         [ValidateSet('physics', 'network', 'ai', 'assets', 'system', 'user')][string]$Family = 'user',
         [ValidateSet('', 'PYTHON', 'SHELL', 'BINARY', 'NODE', 'POWER')][string]$Type = '',
         [string]$Name,
-        [switch]$Write
+        [switch]$Write,
+        [ValidateRange(1, 4)][int]$Channel = 1,
+        [ValidateRange(1, 600)][int]$Wait = 30
     )
     try {
         switch ($Command) {
@@ -484,6 +544,11 @@ function genie {
                     } catch { G-Err "$id — $($_.Exception.Message)" }
                 }
             }
+            'send'    {
+                if (-not (Test-GenieHealth)) { throw 'kernel is down — genie up first' }
+                $r = Send-GenieStage -Suit $Args2[0] -Json (($Args2 | Select-Object -Skip 1) -join ' ') -Channel $Channel -Wait $Wait
+                $r | ConvertTo-Json -Depth 10 | Write-Host
+            }
             'closet'  {
                 $c = Invoke-GenieControl GET '/closet' $null
                 $names = @($c.suits.PSObject.Properties | Sort-Object { $_.Value.sector }, { $_.Value.ring_pos })
@@ -526,6 +591,7 @@ function genie {
   genie import <name|hex> [...]    clone + verify + hot-load into the RUNNING kernel's closet
                                    [-Sector 1-4] [-Family user] [-Type PYTHON] [-Name s] [-Write]
   genie closet                     every suit in the live closet (green = imported by Genie)
+  genie send <suit> ['{json}']      send a stage to an imported suit, print its answer [-Channel 1-4] [-Wait s]
   genie custody                    audit clonepool rows with no SHA3 baseline; writes a reviewed re-intake script
   genie profile                    load Genie (and auto-boot) in every PS7 window
 '@ | Write-Host
