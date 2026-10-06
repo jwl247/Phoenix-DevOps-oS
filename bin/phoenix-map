@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+"""Phoenix Global Command: phoenix-map — where every piece is, whether it's there, whether it's running.
+Phoenix DevOps OS | jwl247 | GPL v3
+
+Run from PBMII (any terminal). It reaches each Linux box over the mesh with one read-only probe and
+prints a table per machine: component | present (file/unit exists) | running | where. Read-only: it
+runs no change, touches no drive, needs only the SSH keys already on this PC.
+
+  phoenix-map              every machine
+  phoenix-map pbmiii       one machine
+  phoenix-map --json       machine-readable
+
+Hosts come from sector3/mesh/hosts.json (ssh + ssh_key); PBMII itself is probed locally.
+"""
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(os.environ.get("PHOENIX_ROOT", Path(__file__).resolve().parents[1]))
+SSHDIR = Path.home() / ".ssh"
+
+# What to look for on a Linux box. kind: unit (systemd), file, port (listening), proc.
+# "where" is shown as-is. Not every box has every piece; absent is reported, not an error.
+LINUX = [
+    ("mesh (nebula)",      "unit", "nebula",                 "/etc/nebula/config.yml"),
+    ("  mesh address",     "cmd",  "ip -4 -br addr show nebula1 | awk '{print $3}'", "nebula1"),
+    ("ssh",                "unit", "ssh",                    "/etc/ssh/sshd_config"),
+    ("samba shares",       "unit", "smbd",                   "/etc/samba/smb.conf"),
+    ("  shares on mesh",   "port", "445",                    "mesh:445"),
+    ("ollama",             "unit", "ollama",                 "/usr/local/bin/ollama"),
+    ("  ollama port",      "port", "11434",                  "127.0.0.1:11434"),
+    ("jarvis (openjarvis)","unit", "openjarvis",             "/opt/openjarvis"),
+    ("  jarvis port",      "port", "8000",                   "127.0.0.1:8000"),
+    ("  jarvis gate",      "file", "/opt/openjarvis/jarvis-gate", "/opt/openjarvis/jarvis-gate"),
+    ("jarvis command",     "file", "/usr/local/bin/jarvis",  "/usr/local/bin/jarvis"),
+    ("security sensor",    "unit", "phoenix-security.timer", "/opt/phoenix-security"),
+    ("buddy healing",      "unit", "phoenix-buddy.timer",    "phoenix_buddy.py"),
+    ("mesh self-heal",     "unit", "phoenix-mesh-heal.timer","/usr/local/sbin/phoenix-mesh-heal"),
+    ("hardening",          "unit", "phoenix-harden-heal.timer","/usr/local/sbin/phoenix-harden"),
+    ("peer agent",         "file", "/usr/local/sbin/phoenix-peer-agent", "/usr/local/sbin/phoenix-peer-agent"),
+]
+
+# One bash probe, emits a JSON dict the parser reads. Read-only.
+PROBE = r'''
+python3 - <<'PY'
+import json, os, subprocess
+def unit(n):
+    present = subprocess.run(["systemctl","list-unit-files",n],capture_output=True,text=True).stdout.count(n)>0 \
+        or subprocess.run(["systemctl","cat",n],capture_output=True).returncode==0
+    active = subprocess.run(["systemctl","is-active","--quiet",n]).returncode==0
+    return present, active
+def port(p):
+    out=subprocess.run(["ss","-ltnH"],capture_output=True,text=True).stdout
+    return any(":"+p+" " in l or ":"+p+"\n" in (l+"\n") for l in out.splitlines())
+def cmd(c):
+    try: return subprocess.run(c,shell=True,capture_output=True,text=True,timeout=8).stdout.strip()
+    except Exception: return ""
+CHECKS=%s
+r={}
+for name,kind,arg,_ in CHECKS:
+    if kind=="unit":
+        pres,act=unit(arg); r[name]={"present":pres,"running":act}
+    elif kind=="file":
+        r[name]={"present":os.path.exists(arg),"running":None}
+    elif kind=="port":
+        r[name]={"present":None,"running":port(arg)}
+    elif kind=="cmd":
+        v=cmd(arg); r[name]={"present":bool(v),"running":bool(v),"value":v}
+# last security scan age
+try:
+    import time
+    j=json.load(open("/var/lib/phoenix-security/last_scan.json"))
+    r["security sensor"]["age_s"]=int(time.time()-j["t"]); r["security sensor"]["files"]=j["files"]
+except Exception: pass
+print(json.dumps(r))
+PY
+''' % json.dumps([[n, k, a, w] for n, k, a, w in LINUX])
+
+
+def hosts() -> dict:
+    cfg = json.loads((ROOT / "sector3" / "mesh" / "hosts.json").read_text(encoding="utf-8"))
+    return cfg["hosts"]
+
+
+def probe_linux(h: dict) -> dict:
+    key = SSHDIR / h.get("ssh_key", "")
+    target = h.get("ssh")
+    if not target:
+        return {"error": "no ssh target in hosts.json"}
+    cmd = ["ssh", "-i", str(key), "-o", "BatchMode=yes", "-o", "ConnectTimeout=6",
+           "-o", "StrictHostKeyChecking=accept-new", target, "bash -s"]
+    try:
+        p = subprocess.run(cmd, input=PROBE, capture_output=True, text=True, timeout=40)
+        return json.loads(p.stdout.strip().splitlines()[-1])
+    except subprocess.TimeoutExpired:
+        return {"error": "unreachable (timeout)"}
+    except (OSError, ValueError, IndexError):
+        return {"error": "unreachable (" + (p.stderr.strip().splitlines()[-1] if "p" in dir() and p.stderr.strip() else "no answer") + ")"}
+
+
+def _si(tool: str, *args) -> str:
+    """Run a Sysinternals tool (full suite on PATH via winget). -nobanner/-accepteula silence it."""
+    try:
+        return subprocess.run([tool, "-nobanner", "-accepteula", *args],
+                              capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def probe_pbmii() -> dict:
+    r = {}
+    # listening ports + owning PID. (The winget tcpvcon build omits ports in CSV and misses loopback;
+    # netstat is the built-in authority and sees 127.0.0.1 listeners, which is what the kernel uses.)
+    listening = {}
+    ns = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True).stdout
+    for line in ns.splitlines():
+        f = line.split()
+        if len(f) >= 5 and f[3] == "LISTENING":
+            listening[f[1].rsplit(":", 1)[-1]] = f[4]   # port -> PID
+    # PsService (Sysinternals): mesh service state
+    nebula = _si("PsService", "query", "nebula")
+    nebula_present = "SERVICE_NAME" in nebula or "nebula" in nebula.lower()
+    nebula_running = "RUNNING" in nebula
+    # scheduled task (Sysinternals has no task tool; schtasks is the native authority)
+    task = subprocess.run(["schtasks", "/query", "/tn", "Phoenix Security Scan"],
+                          capture_output=True, text=True).stdout
+
+    r["genie kernel"] = {"present": "7701" in listening, "running": "7701" in listening and "7805" in listening,
+                         "where": f"7701/7805 (pid {listening.get('7701','-')})"}
+    r["mesh (nebula)"] = {"present": nebula_present, "running": nebula_running, "where": "service nebula"}
+    r["security sensor"] = {"present": "Phoenix Security Scan" in task,
+                            "running": "Ready" in task or "Running" in task, "where": "Task: Phoenix Security Scan"}
+    r["jarvis command"] = {"present": (ROOT / "bin" / "jarvis").exists(), "running": None, "where": "bin/jarvis"}
+    r["  (ports seen)"] = {"present": None, "running": None,
+                           "where": "netstat (loopback-safe): " + ",".join(
+                               sorted(listening, key=lambda x: int(x) if x.isdigit() else 0)[:12])}
+    return r
+
+
+def mark(v):
+    return {True: "YES", False: "no ", None: " - "}[v]
+
+
+def render(name: str, data: dict) -> None:
+    print(f"\n=== {name} ===")
+    if "error" in data:
+        print(f"  UNREACHABLE: {data['error']}")
+        return
+    print(f"  {'component':22} {'there':5} {'running':7} where")
+    print(f"  {'-'*22} {'-'*5} {'-'*7} {'-'*30}")
+    for comp, st in data.items():
+        where = st.get("value") or st.get("where") or next((w for n, k, a, w in LINUX if n == comp), "")
+        extra = ""
+        if comp.strip() == "security sensor" and "age_s" in st:
+            extra = f"  (last scan {st['age_s']}s ago, {st.get('files','?')} files)"
+        print(f"  {comp:22} {mark(st.get('present')):5} {mark(st.get('running')):7} {where}{extra}")
+
+
+def main(argv) -> int:
+    want_json = "--json" in argv
+    args = [a for a in argv[1:] if not a.startswith("--")]
+    hs = hosts()
+    only = args[0].lower() if args else None
+    result = {}
+    # PBMII (this machine)
+    if not only or only in ("pbmii", "local", "here"):
+        result["pbmii (this PC)"] = probe_pbmii()
+    for hn, h in hs.items():
+        if hn == "pbmii" or h.get("os") != "linux":
+            continue
+        if only and only != hn:
+            continue
+        result[f"{hn} ({h.get('ip','')})"] = probe_linux(h)
+    if want_json:
+        print(json.dumps(result, indent=2))
+        return 0
+    for name, data in result.items():
+        render(name, data)
+    print()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
