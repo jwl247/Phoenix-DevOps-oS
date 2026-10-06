@@ -19,6 +19,23 @@ That overlay is the front of intake. We repurpose it to **pull the config out as
 The reference below (Jerry's research, emailed to himself 2026-10-06 7:38 AM) shows the pattern:
 read live config from the system, read-only, and serialize it as a commented JSONC manifest.
 
+### What "overlay" means (Jerry, 2026-10-06, correcting Claude's reading)
+
+Not a panel on top of the dashboard. The overlay is **the new HUD itself**:
+- **see-through**: a transparent window over whatever is on screen
+- **click-through**: clicks pass to the app underneath except where the HUD has a control
+- **set up the way we want**: Jerry decides the layout, not a fixed panel
+
+**AI in the new HUD:**
+- **Claude is primary.**
+- **Ollama is a fallback called by a button.** It does minimal guide work, small tasks and chat.
+  (This matches CLAUDE.md rule 14: Ollama-local stays a real, tested fallback.)
+
+Note for the design talk: a see-through, click-through window is standard Win32 (`WS_EX_LAYERED` +
+`WS_EX_TRANSPARENT`, switched off per control). WPF (the existing `hud/`) supports it directly.
+tkinter on Windows can make a window transparent, but click-through only works with Win32 calls on
+top. Ask Jerry which one to use.
+
 ## Reference code (verbatim)
 
 ```python
