@@ -400,15 +400,27 @@ def cmd_renew(a) -> None:
             print(f"  {name}: renewed in the vault - push with phoenix_vault.py, install on the box")
 
 
+def _via(h: dict) -> list[str]:
+    """`"ssh_via": "<host>"` reaches a LAN-only box (the Compaq) through that host's MESH
+    address, so the install works from anywhere on the mesh — home or travelling."""
+    if "ssh_via" not in h:
+        return []
+    j = host(load(), h["ssh_via"])
+    jkey = Path.home() / ".ssh" / j["ssh_key"]
+    juser = j["ssh"].split("@", 1)[0]
+    return ["-o", f"ProxyCommand=ssh -i {jkey} -o BatchMode=yes -o ConnectTimeout=10 -W %h:%p {juser}@{j['ip']}"]
+
+
 def _ssh(h: dict) -> list[str]:
     key = Path.home() / ".ssh" / h["ssh_key"]
-    return ["ssh", "-i", str(key), "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", h["ssh"]]
+    return ["ssh", "-i", str(key), *_via(h), "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", h["ssh"]]
 
 
 def _scp(h: dict, src: Path, dst: str) -> None:
     key = Path.home() / ".ssh" / h["ssh_key"]
     user, addr = h["ssh"].split("@", 1)
-    subprocess.run(["scp", "-i", str(key), "-o", "BatchMode=yes", str(src), f"{user}@[{addr}]:{dst}"], check=True)
+    subprocess.run(["scp", "-i", str(key), *_via(h), "-o", "BatchMode=yes", str(src), f"{user}@[{addr}]:{dst}"],
+                   check=True)
 
 
 def cmd_install_ssh(a) -> None:
