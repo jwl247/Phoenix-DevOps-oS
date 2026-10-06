@@ -17,7 +17,12 @@
         "admin"
       ],
       "os": "windows",
-      "note": "Jerry's PC \u2014 travels"
+      "note": "Jerry's PC \u2014 travels",
+      "buddies": [
+        "pbmiii",
+        "awslh"
+      ],
+      "lan_net": "192.168.1."
     },
     "pbmiii": {
       "ip": "10.42.0.10",
@@ -29,7 +34,13 @@
       "note": "HP - home Starlink router 192.168.1.190. Starlink = CGNAT and filters inbound IPv6, so it can't be a lighthouse; it dials out to awslh and relays for the Compaq on the home side",
       "ssh": "a@192.168.1.192",
       "ssh_key": "phoenix_third_debian_ed25519",
-      "relay": true
+      "relay": true,
+      "buddies": [
+        "awslh"
+      ],
+      "lan": "192.168.1.192",
+      "lan_net": "192.168.1.",
+      "mac": "2c:27:d7:27:be:aa"
     },
     "compaq": {
       "ip": "10.42.0.11",
@@ -54,7 +65,10 @@
       "os": "linux",
       "note": "AWS Lightsail us-east-1 nano ($5/mo), static IPv4 44.195.192.107 + IPv6 - always-reachable lighthouse + relay (works through Starlink CGNAT and hotel NAT)",
       "ssh": "admin@10.42.0.2",
-      "ssh_key": "phoenix_lighthouse_aws_ed25519"
+      "ssh_key": "phoenix_lighthouse_aws_ed25519",
+      "buddies": [
+        "pbmiii"
+      ]
     }
   }
 }

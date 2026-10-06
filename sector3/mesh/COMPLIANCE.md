@@ -22,3 +22,12 @@ Open items:
 - The vault's cloud copy predates the CA and host certs, so it needs a re-push (`phoenix_vault.py push`, JW's passphrase).
 - The lighthouse is not yet on the home router: it needs a public address (port forward UDP 4242) for remote access.
 - pbmIII's root password is still the install default. It gets a long random one, stored in the vault.
+
+## Buddy healing (phoenix_buddy.py + peer_agent.sh, buddy-1.0.0 / peer-agent-1.0.0, 2026-10-06)
+| Control | How |
+|---|---|
+| AC-6 least privilege | Peer key per box; `restrict`, `from=` mesh+home LAN, forced command = the agent; sudoers allows ONLY the agent. Verbs: status / heal / export mesh / restore mesh. Shell attempts refused (tested). |
+| SI-7 integrity | Mesh configs signed at render (`ssh-keygen -Y`, key in vault only). Restore installs only if hash = requested version AND signature valid AND `nebula -test` passes. Tampered config refused (tested: "signature invalid", "hash mismatch"). |
+| CP-10 recovery | Buddies keep the last 10 signed mesh versions of each peer; a box that lost its own known-good gets it back (tested: config + known-good corrupted on pbmIII, PBMII restored over LAN). |
+| AU-2/AU-3 audit | Every agent call logged with caller address (journalctl -t phoenix-peer-agent); every buddy action logged (journalctl -t phoenix-buddy; PBMII F:\Phoenix\mesh\buddy.log). Logs on state change only. |
+| SC-7 boundary | Mesh firewall: only tcp/22 added between groups servers <-> lighthouse for the agent. |

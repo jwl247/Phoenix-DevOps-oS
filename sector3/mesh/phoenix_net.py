@@ -112,6 +112,35 @@ def version_tag(config_text: str) -> str:
     return f"git:{sha} config:{hashlib.sha256(config_text.encode()).hexdigest()[:12]}"
 
 
+SIGN_KEY = VAULT / "phoenix-config-sign_ed25519"     # private: vault only. Signs every mesh config we render.
+SIGN_NS = "phoenix-mesh-config"
+
+
+def signing_files(config_text: str) -> dict:
+    """{name: bytes} for config.yml.sig + allowed_signers, so a box (and its buddies) can prove a config
+    came from here. Empty if the key has not been made yet (`phoenix_buddy.py keys`)."""
+    if not SIGN_KEY.exists():
+        return {}
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / "config.yml"
+        f.write_bytes(config_text.encode())
+        # The vault drive is exFAT (no ACLs): ssh-keygen rightly refuses a key "readable by all" there.
+        # Use a copy in this user's temp dir (NTFS), locked to this user, gone with the temp dir.
+        k = Path(td) / "sign_key"
+        k.write_bytes(SIGN_KEY.read_bytes())
+        if os.name == "nt":
+            subprocess.run(["icacls", str(k), "/inheritance:r", "/grant:r", f"{os.environ['USERNAME']}:F"],
+                           check=True, capture_output=True)
+        else:
+            k.chmod(0o600)
+        subprocess.run(["ssh-keygen", "-q", "-Y", "sign", "-f", str(k), "-n", SIGN_NS, str(f)],
+                       check=True, capture_output=True)
+        sig = (Path(td) / "config.yml.sig").read_bytes()
+    pub = Path(str(SIGN_KEY) + ".pub").read_text().split()
+    signers = f'phoenix-config namespaces="{SIGN_NS}" {pub[0]} {pub[1]}\n'
+    return {"config.yml.sig": sig, "allowed_signers": signers.encode()}
+
+
 def load() -> dict:
     return json.loads(HOSTS.read_text(encoding="utf-8"))
 
@@ -192,11 +221,17 @@ def render(cfg: dict, name: str, pki_dir: str, sep: str) -> str:
       group: jerry
     - port: any
       proto: any
-      group: servers"""
+      group: servers
+    - port: 22
+      proto: tcp
+      group: lighthouse"""        # buddy healing: the lighthouse's buddy reaches the peer agent (key-locked)
     elif linux:
         inbound = """    - port: 22
       proto: tcp
-      group: jerry"""
+      group: jerry
+    - port: 22
+      proto: tcp
+      group: servers"""           # buddy healing: servers' buddies reach the peer agent (key-locked)
     else:
         inbound = """    - port: 3389
       proto: tcp
@@ -440,6 +475,8 @@ def cmd_install_ssh(a) -> None:
                            "phoenix-mesh-heal.service": HEAL_SERVICE,
                            "phoenix-mesh-heal.timer": HEAL_TIMER}.items():
             (td / name).write_text(text, encoding="utf-8", newline="\n")
+        for name, data in signing_files(conf).items():
+            (td / name).write_bytes(data)
         (td / "nebula.service").write_text("""[Unit]
 Description=Phoenix Mesh (Nebula)
 Wants=network-online.target
@@ -469,6 +506,10 @@ sudo install -m 644 nebula.service /etc/systemd/system/nebula.service
 sudo install -m 644 VERSION lighthouse_ip /etc/nebula/
 sudo install -d -m 700 /etc/nebula/known-good
 sudo install -m 644 config.yml /etc/nebula/known-good/config.yml
+if [ -f config.yml.sig ]; then
+  sudo install -m 644 config.yml.sig /etc/nebula/ && sudo install -m 644 config.yml.sig /etc/nebula/known-good/
+  sudo install -m 644 allowed_signers /etc/nebula/
+fi
 sudo install -m 755 phoenix-mesh-heal /usr/local/sbin/phoenix-mesh-heal
 sudo install -m 644 phoenix-mesh-heal.service phoenix-mesh-heal.timer /etc/systemd/system/
 sudo /usr/local/bin/nebula -test -config /etc/nebula/config.yml
