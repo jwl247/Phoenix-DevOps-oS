@@ -247,3 +247,20 @@ in section 4 use fio's nanosecond latencies.
 - An end-to-end repeat of §1 and §3 with the kernel Helix at her real size.
 - **dbench concurrency regression (§5b): 48 clients at 0.26× raw.** Diagnose before Helix fronts any multi-client server.
 - The working-set-bigger-than-RAM run on the Compaq (15 GB RAM) is still owed.
+
+## Helix vs page cache for a local LLM — pbmIII, 2026-10-06
+`sector1/kernels/helix_llm_bench.sh` — HP Compaq 6200 Pro SFF, Debian 12 (6.1.0-53), 15.5 GB RAM, Samsung SATA SSD;
+Ollama 0.35.1 (CPU), llama3 8B Q4 (4.4 GB, copied from PBMII, blobs sha256-verified); model dir on an 8 GB ext4
+image; loop with direct I/O; page cache dropped + fresh `ollama serve` before every measured run; dm-helix 6144 MiB.
+
+| run | load_duration | gen tok/s |
+|---|---|---|
+| plain, cold #1/#2/#3 | 11.57 / 11.40 / 11.42 s | 4.00 / 4.18 / 4.19 |
+| plain, page cache warm | 3.67 s | 4.19 |
+| helix #1 (filling) | 11.69 s | 3.84 |
+| helix #2/#3 (page cache dropped) | 5.49 / 5.44 s | 4.05 / 3.89 |
+
+inserts 1,138,157, evictions 0, b_writes 0, kernel 0 oops. **Verdict:** Helix is 2.1x faster than a cold disk, and
+holds the model when the page cache is evicted. The page cache is 1.5x faster than Helix when memory is free.
+Generation doesn't change (CPU-bound). Egress: 0 writes. **Use the page cache first, Helix as the backstop under
+memory pressure.** Next test that decides it: game + model together, working set larger than free RAM.
