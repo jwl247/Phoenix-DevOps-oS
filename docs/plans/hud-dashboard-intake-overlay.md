@@ -37,6 +37,19 @@ Volume Shadow Copy snapshot, or say "close it first". It should never fail witho
 back to an open file is a separate, bigger question (the other app could overwrite it), so that belongs
 behind a "deviation" permission prompt.
 
+**Sight picture (Jerry, 2026-10-06, "hell or high water"):** Claude gets to SEE the workspace,
+the way Copilot Vision can. The HUD captures the screen (whole desktop, one window, or the area under
+the overlay) and hands it to Claude as an image. Claude already reads images, so the missing part is
+the capture and the handoff.
+- Ladder: (1) a hotkey/button that takes one screenshot and drops it into a known folder Claude reads.
+  This works today, with no new model needed. (2) The HUD sends the frame with the question, so Claude
+  sees what Jerry sees. (3) Low-rate continuous frames while Jerry asks for a watch.
+- Permission tier: a screen image leaving the machine goes to the Anthropic API. On by Jerry's choice,
+  never silent. Show a visible "Claude can see" indicator, a hotkey to stop, and skip windows marked
+  private (vault, banking, Laurie's private screens).
+- Fallback: a local Ollama vision model (llava-class) for small "what's on screen" jobs, matching the
+  Ollama button.
+
 **AI in the new HUD:**
 - **Claude is primary.**
 - **Ollama is a fallback called by a button.** It does minimal guide work, small tasks and chat.
