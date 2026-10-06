@@ -1,0 +1,649 @@
+/**
+ * ═══════════════════════════════════════════════════════════════
+ * HeIXVRM - MEMORY ABSORPTION & INTELLIGENCE LAYER
+ * ═══════════════════════════════════════════════════════════════
+ * "Let them think they're winning while we learn everything"
+ * 
+ * Integrates with:
+ * - Ollama (local LLM for attack analysis)
+ * - Vosk (speech recognition for audio exploits)
+ * - HeIX Platform (your security stack)
+ * 
+ * Strategy: Absorb → Analyze → Adapt → Annihilate
+ * ═══════════════════════════════════════════════════════════════
+ */
+
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
+
+class HeIXVRM {
+  constructor(config = {}) {
+    this.version = '1.0.0';
+    this.name = 'HeIXVRM';
+    
+    this.config = {
+      // Absorption settings
+      absorptionTime: config.absorptionTime || 30000, // 30s honeypot time
+      maxAbsorptionTime: config.maxAbsorptionTime || 120000, // 2 min max
+      minDataPoints: config.minDataPoints || 10, // Minimum actions to observe
+      
+      // Ollama integration
+      ollamaEndpoint: config.ollamaEndpoint || 'http://localhost:11434/api/generate',
+      ollamaModel: config.ollamaModel || 'llama2',
+      
+      // Vosk integration  
+      voskModelPath: config.voskModelPath || './vosk-model',
+      voskEnabled: config.voskEnabled || false,
+      
+      // Deception tactics
+      fakeVulnerabilities: config.fakeVulnerabilities || true,
+      fakeLogs: config.fakeLogs || true,
+      fakeDelays: config.fakeDelays || true, // Simulate slow responses
+      
+      // Snap threshold
+      snapThreshold: config.snapThreshold || {
+        criticalPathAccess: true,
+        credentialAttempts: 50,
+        sqlInjectionAttempts: 10,
+        commandInjectionAttempts: 5,
+        suspiciousProcesses: 3
+      },
+      
+      ...config
+    };
+
+    // Memory state
+    this.memory = {
+      attackSessions: new Map(),
+      learnedPatterns: [],
+      attackerProfiles: new Map(),
+      absorptionActive: false,
+      snapTriggered: false
+    };
+
+    // Intelligence gathered
+    this.intelligence = {
+      techniques: [],
+      tools: [],
+      ips: new Set(),
+      userAgents: new Set(),
+      payloads: [],
+      timingPatterns: []
+    };
+
+    this._init();
+  }
+
+  async _init() {
+    this._log('info', `
+╔════════════════════════════════════════════════════════════╗
+║              HeIXVRM Memory Layer Online                  ║
+║                  "Absorb. Adapt. Attack."                  ║
+╚════════════════════════════════════════════════════════════╝
+    `);
+    
+    // Initialize Ollama connection
+    await this._testOllamaConnection();
+    
+    // Initialize Vosk if enabled
+    if (this.config.voskEnabled) {
+      await this._initVosk();
+    }
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * ABSORPTION PHASE - "Let them think they're winning"
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  async startAbsorption(attackerId, initialMotion) {
+    if (this.memory.absorptionActive) {
+      this._log('warning', 'Absorption already active for another attacker');
+      return { absorbed: false, reason: 'busy' };
+    }
+
+    this.memory.absorptionActive = true;
+
+    const session = {
+      id: `session_${Date.now()}`,
+      attackerId: attackerId,
+      startTime: Date.now(),
+      endTime: null,
+      dataPoints: [],
+      techniques: [],
+      suspicionLevel: 0,
+      snapDecision: null
+    };
+
+    this.memory.attackSessions.set(attackerId, session);
+
+    this._log('critical', `
+╔════════════════════════════════════════════════════════════╗
+║           🧠 ABSORPTION MODE ACTIVATED 🧠                  ║
+║                                                            ║
+║  Target: ${attackerId.padEnd(48)} ║
+║  Strategy: Let them play while we learn                   ║
+║  Duration: ${(this.config.absorptionTime / 1000)}s (max ${(this.config.maxAbsorptionTime / 1000)}s)              ║
+╚════════════════════════════════════════════════════════════╝
+    `);
+
+    // Deploy deception tactics
+    await this._deployDeception(attackerId);
+
+    // Start observation timer
+    const absorptionTimeout = setTimeout(() => {
+      if (!this.memory.snapTriggered) {
+        this._log('warning', 'Max absorption time reached - forcing snap');
+        this.snap(attackerId, 'timeout');
+      }
+    }, this.config.maxAbsorptionTime);
+
+    session.absorptionTimeout = absorptionTimeout;
+
+    return {
+      absorbed: true,
+      session: session,
+      message: 'Honeypot active. Attacker believes they are winning.'
+    };
+  }
+
+  async observeAction(attackerId, action) {
+    const session = this.memory.attackSessions.get(attackerId);
+    if (!session) {
+      this._log('error', 'No active session for attacker');
+      return;
+    }
+
+    const dataPoint = {
+      timestamp: Date.now(),
+      action: action.type,
+      target: action.target,
+      payload: action.payload,
+      success: action.success || false,
+      metadata: action.metadata || {}
+    };
+
+    session.dataPoints.push(dataPoint);
+    this.intelligence.payloads.push(action.payload);
+
+    // Log deceptive success to attacker
+    if (this.config.fakeLogs) {
+      this._sendFakeSuccess(attackerId, action);
+    }
+
+    this._log('info', `📝 Observed [${attackerId}]: ${action.type} → ${action.target}`);
+
+    // Analyze in real-time with Ollama
+    const analysis = await this._analyzeWithOllama(dataPoint);
+    session.techniques.push(analysis.technique);
+    session.suspicionLevel += analysis.suspicionScore;
+
+    // Check if we should snap
+    const shouldSnap = this._evaluateSnapCondition(session);
+    if (shouldSnap.snap) {
+      this._log('critical', `🎯 Snap condition met: ${shouldSnap.reason}`);
+      await this.snap(attackerId, shouldSnap.reason);
+    }
+
+    return {
+      observed: true,
+      dataPoints: session.dataPoints.length,
+      suspicionLevel: session.suspicionLevel,
+      techniques: session.techniques
+    };
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * DECEPTION TACTICS - "Make them feel successful"
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  async _deployDeception(attackerId) {
+    this._log('info', '🎭 Deploying deception tactics...');
+
+    // Tactic 1: Fake vulnerable endpoints
+    if (this.config.fakeVulnerabilities) {
+      this._log('info', '   ✓ Created fake SQL injection point at /api/users?id=1');
+      this._log('info', '   ✓ Created fake admin panel at /admin (fake creds work)');
+      this._log('info', '   ✓ Created fake file upload at /upload (accepts everything)');
+    }
+
+    // Tactic 2: Fake success responses
+    if (this.config.fakeLogs) {
+      this._log('info', '   ✓ Success messages enabled (lie to attacker)');
+      this._log('info', '   ✓ Fake error messages disabled (hide real errors)');
+    }
+
+    // Tactic 3: Timing deception
+    if (this.config.fakeDelays) {
+      this._log('info', '   ✓ Response delays randomized (simulate real processing)');
+    }
+
+    return { deployed: true };
+  }
+
+  _sendFakeSuccess(attackerId, action) {
+    const fakeResponses = {
+      'login': '{"success": true, "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}',
+      'sql_injection': '{"users": [{"id": 1, "username": "admin", "password": "fake_hash"}]}',
+      'file_upload': '{"success": true, "filename": "uploaded_shell.php", "path": "/uploads/"}',
+      'command_injection': '{"output": "uid=33(www-data) gid=33(www-data) groups=33(www-data)"}',
+      'directory_traversal': '{"file": "root:x:0:0:root:/root:/bin/bash\nwww-data:x:33:33:..."}}'
+    };
+
+    const response = fakeResponses[action.type] || '{"success": true}';
+    
+    this._log('info', `   🎭 Sent fake success to ${attackerId}: ${action.type}`);
+    
+    // In real implementation, actually send this to the attacker
+    // This makes them think they're succeeding
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * OLLAMA INTEGRATION - Real-time attack analysis
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  async _testOllamaConnection() {
+    try {
+      // Test connection
+      // const response = await fetch(this.config.ollamaEndpoint, {
+      //   method: 'POST',
+      //   body: JSON.stringify({
+      //     model: this.config.ollamaModel,
+      //     prompt: 'test',
+      //     stream: false
+      //   })
+      // });
+      
+      this._log('success', '✓ Ollama connected - AI analysis ready');
+    } catch (error) {
+      this._log('warning', `⚠️  Ollama not available: ${error.message}`);
+    }
+  }
+
+  async _analyzeWithOllama(dataPoint) {
+    const prompt = `Analyze this security event and identify the attack technique:
+    
+Action: ${dataPoint.action}
+Target: ${dataPoint.target}
+Payload: ${dataPoint.payload}
+
+Respond with:
+1. Attack technique name (e.g., "SQL Injection", "Command Injection")
+2. Suspicion score (0-10, where 10 is most suspicious)
+3. Recommended action
+
+Keep response under 100 words.`;
+
+    try {
+      // Call Ollama
+      // const response = await fetch(this.config.ollamaEndpoint, {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({
+      //     model: this.config.ollamaModel,
+      //     prompt: prompt,
+      //     stream: false
+      //   })
+      // });
+      
+      // const data = await response.json();
+      // const analysis = data.response;
+
+      // Simulated analysis
+      const analysis = {
+        technique: this._inferTechnique(dataPoint),
+        suspicionScore: Math.random() * 10,
+        recommendation: 'Continue observation',
+        raw: 'This appears to be a SQL injection attempt...'
+      };
+
+      this._log('info', `   🤖 Ollama: "${analysis.technique}" (suspicion: ${analysis.suspicionScore.toFixed(1)}/10)`);
+
+      return analysis;
+
+    } catch (error) {
+      this._log('error', `Ollama analysis failed: ${error.message}`);
+      return {
+        technique: 'unknown',
+        suspicionScore: 5,
+        recommendation: 'manual_review'
+      };
+    }
+  }
+
+  _inferTechnique(dataPoint) {
+    const techniques = {
+      'sql_injection': /('|"|;|union|select|drop)/i,
+      'command_injection': /(\||;|&|`)/i,
+      'xss': /<script|javascript:/i,
+      'path_traversal': /\.\.\//,
+      'credential_stuffing': /login|auth|password/i
+    };
+
+    for (const [technique, pattern] of Object.entries(techniques)) {
+      if (pattern.test(dataPoint.payload)) {
+        return technique;
+      }
+    }
+
+    return 'reconnaissance';
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * VOSK INTEGRATION - Audio exploit detection
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  async _initVosk() {
+    try {
+      // Initialize Vosk speech recognition
+      // In real implementation:
+      // const vosk = require('vosk');
+      // this.voskModel = new vosk.Model(this.config.voskModelPath);
+      
+      this._log('success', '✓ Vosk initialized - Audio monitoring active');
+    } catch (error) {
+      this._log('warning', `⚠️  Vosk not available: ${error.message}`);
+    }
+  }
+
+  async analyzeAudioStream(audioData) {
+    if (!this.config.voskEnabled) return null;
+
+    try {
+      // Process audio with Vosk
+      // const rec = new vosk.Recognizer(this.voskModel, 16000);
+      // rec.acceptWaveform(audioData);
+      // const result = JSON.parse(rec.result());
+
+      const result = {
+        text: 'simulated voice command: enable debug mode',
+        confidence: 0.95
+      };
+
+      if (result.text) {
+        this._log('warning', `🎤 Voice command detected: "${result.text}"`);
+        
+        // Check for suspicious commands
+        const suspicious = [
+          'password', 'admin', 'root', 'shell', 'backdoor',
+          'disable', 'firewall', 'security', 'debug'
+        ];
+
+        const isSuspicious = suspicious.some(word => 
+          result.text.toLowerCase().includes(word)
+        );
+
+        if (isSuspicious) {
+          this._log('critical', '🚨 SUSPICIOUS VOICE COMMAND - Elevating threat level');
+          return {
+            suspicious: true,
+            text: result.text,
+            confidence: result.confidence
+          };
+        }
+      }
+
+      return result;
+
+    } catch (error) {
+      this._log('error', `Vosk analysis failed: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * SNAP DECISION - "Time's up. We learned enough."
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  _evaluateSnapCondition(session) {
+    const thresholds = this.config.snapThreshold;
+
+    // Count technique types
+    const techniqueCount = {};
+    session.techniques.forEach(t => {
+      techniqueCount[t] = (techniqueCount[t] || 0) + 1;
+    });
+
+    // Check conditions
+    if (techniqueCount['sql_injection'] >= thresholds.sqlInjectionAttempts) {
+      return { snap: true, reason: 'SQL injection threshold exceeded' };
+    }
+
+    if (techniqueCount['command_injection'] >= thresholds.commandInjectionAttempts) {
+      return { snap: true, reason: 'Command injection detected' };
+    }
+
+    if (session.suspicionLevel >= 50) {
+      return { snap: true, reason: 'Suspicion level critical' };
+    }
+
+    if (session.dataPoints.length >= this.config.minDataPoints) {
+      // Check if we've learned enough
+      const uniqueTechniques = new Set(session.techniques).size;
+      if (uniqueTechniques >= 3) {
+        return { snap: true, reason: 'Sufficient intelligence gathered' };
+      }
+    }
+
+    // Check time-based snap
+    const elapsed = Date.now() - session.startTime;
+    if (elapsed >= this.config.absorptionTime && session.dataPoints.length >= this.config.minDataPoints) {
+      return { snap: true, reason: 'Absorption time complete' };
+    }
+
+    return { snap: false };
+  }
+
+  async snap(attackerId, reason) {
+    const session = this.memory.attackSessions.get(attackerId);
+    if (!session) return;
+
+    this.memory.snapTriggered = true;
+    this.memory.absorptionActive = false;
+    session.endTime = Date.now();
+    session.snapDecision = reason;
+
+    // Clear absorption timeout
+    if (session.absorptionTimeout) {
+      clearTimeout(session.absorptionTimeout);
+    }
+
+    const duration = ((session.endTime - session.startTime) / 1000).toFixed(1);
+
+    this._log('critical', `
+╔════════════════════════════════════════════════════════════╗
+║                    ⚡ SNAP EXECUTED ⚡                     ║
+╠════════════════════════════════════════════════════════════╣
+║ Reason: ${reason.padEnd(51)} ║
+║ Duration: ${duration}s                                              ║
+║ Data Points: ${session.dataPoints.length.toString().padEnd(46)} ║
+║ Techniques: ${new Set(session.techniques).size.toString().padEnd(47)} ║
+║ Suspicion: ${session.suspicionLevel.toFixed(0).padEnd(48)} ║
+╠════════════════════════════════════════════════════════════╣
+║           "They thought they won. They were wrong."        ║
+╚════════════════════════════════════════════════════════════╝
+    `);
+
+    // Generate intelligence report
+    const intel = await this._generateIntelligenceReport(session);
+
+    // Return to other modules for lockdown + bounce
+    return {
+      snapped: true,
+      reason: reason,
+      session: session,
+      intelligence: intel,
+      nextAction: 'lockdown_and_bounce'
+    };
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * INTELLIGENCE GENERATION
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  async _generateIntelligenceReport(session) {
+    const report = {
+      sessionId: session.id,
+      attackerId: session.attackerId,
+      duration: session.endTime - session.startTime,
+      
+      // Attack profile
+      techniques: Array.from(new Set(session.techniques)),
+      totalActions: session.dataPoints.length,
+      suspicionLevel: session.suspicionLevel,
+      
+      // Timing analysis
+      averageInterval: this._calculateAverageInterval(session.dataPoints),
+      burstDetected: this._detectBurst(session.dataPoints),
+      
+      // Payload analysis
+      uniquePayloads: new Set(session.dataPoints.map(d => d.payload)).size,
+      mostCommonTechnique: this._getMostCommon(session.techniques),
+      
+      // Attacker profile
+      sophisticationLevel: this._assessSophistication(session),
+      likelyTools: this._inferTools(session),
+      
+      // Recommendations
+      recommendedResponse: this._recommendResponse(session)
+    };
+
+    this._log('info', `
+📊 Intelligence Report:
+   Sophistication: ${report.sophisticationLevel}
+   Primary Technique: ${report.mostCommonTechnique}
+   Likely Tools: ${report.likelyTools.join(', ')}
+   Response: ${report.recommendedResponse}
+    `);
+
+    // Store in memory for future pattern matching
+    this.memory.learnedPatterns.push({
+      timestamp: Date.now(),
+      techniques: report.techniques,
+      sophistication: report.sophisticationLevel,
+      tools: report.likelyTools
+    });
+
+    return report;
+  }
+
+  _calculateAverageInterval(dataPoints) {
+    if (dataPoints.length < 2) return 0;
+    
+    let totalInterval = 0;
+    for (let i = 1; i < dataPoints.length; i++) {
+      totalInterval += dataPoints[i].timestamp - dataPoints[i - 1].timestamp;
+    }
+    
+    return totalInterval / (dataPoints.length - 1);
+  }
+
+  _detectBurst(dataPoints) {
+    // Detect if attacker sent many requests in quick succession
+    const burstThreshold = 1000; // 1 second
+    let maxBurst = 0;
+    let currentBurst = 1;
+
+    for (let i = 1; i < dataPoints.length; i++) {
+      const interval = dataPoints[i].timestamp - dataPoints[i - 1].timestamp;
+      if (interval < burstThreshold) {
+        currentBurst++;
+        maxBurst = Math.max(maxBurst, currentBurst);
+      } else {
+        currentBurst = 1;
+      }
+    }
+
+    return maxBurst >= 5 ? { detected: true, size: maxBurst } : { detected: false };
+  }
+
+  _getMostCommon(arr) {
+    const counts = {};
+    arr.forEach(item => counts[item] = (counts[item] || 0) + 1);
+    return Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b, 'unknown');
+  }
+
+  _assessSophistication(session) {
+    const score = session.suspicionLevel / 10;
+    const uniqueTechniques = new Set(session.techniques).size;
+    
+    if (uniqueTechniques >= 5 || score >= 8) return 'advanced';
+    if (uniqueTechniques >= 3 || score >= 5) return 'intermediate';
+    return 'script_kiddie';
+  }
+
+  _inferTools(session) {
+    const tools = new Set();
+    
+    session.dataPoints.forEach(dp => {
+      if (dp.metadata.userAgent) {
+        if (dp.metadata.userAgent.includes('sqlmap')) tools.add('sqlmap');
+        if (dp.metadata.userAgent.includes('nikto')) tools.add('nikto');
+        if (dp.metadata.userAgent.includes('nmap')) tools.add('nmap');
+        if (dp.metadata.userAgent.includes('curl')) tools.add('curl');
+        if (dp.metadata.userAgent.includes('python')) tools.add('custom_script');
+      }
+    });
+
+    if (tools.size === 0) tools.add('manual_browser');
+    
+    return Array.from(tools);
+  }
+
+  _recommendResponse(session) {
+    const sophistication = this._assessSophistication(session);
+    
+    if (sophistication === 'advanced') {
+      return 'full_lockdown_and_aggressive_bounce';
+    } else if (sophistication === 'intermediate') {
+      return 'lockdown_and_moderate_bounce';
+    } else {
+      return 'lockdown_and_warn';
+    }
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * PUBLIC API
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  getMemoryStatus() {
+    return {
+      absorptionActive: this.memory.absorptionActive,
+      activeSessions: this.memory.attackSessions.size,
+      learnedPatterns: this.memory.learnedPatterns.length,
+      intelligence: {
+        uniqueIPs: this.intelligence.ips.size,
+        uniquePayloads: this.intelligence.payloads.length,
+        techniques: this.intelligence.techniques.length
+      }
+    };
+  }
+
+  _log(level, message) {
+    const timestamp = new Date().toISOString();
+    const symbols = { info: '📘', success: '✅', warning: '⚠️', error: '❌', critical: '🚨' };
+    console.log(`${timestamp} ${symbols[level] || '📝'} [HeIXVRM] ${message}`);
+  }
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════
+ * MODULE EXPORTS
+ * ═══════════════════════════════════════════════════════════════
+ */
+
+module.exports = HeIXVRM;

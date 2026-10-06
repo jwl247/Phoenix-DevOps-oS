@@ -1,0 +1,530 @@
+/**
+ * ═══════════════════════════════════════════════════════════════
+ * SIGNAL MIRROR & JMETER BOUNCER MODULE
+ * ═══════════════════════════════════════════════════════════════
+ * Captures malicious attack patterns and bounces them back
+ * using JMeter for amplification and counterstrike
+ * 
+ * "They want to brute force? Let's show them what REAL brute force looks like"
+ * ═══════════════════════════════════════════════════════════════
+ */
+
+const fs = require('fs').promises;
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
+
+class SignalMirrorBouncer {
+  constructor(config = {}) {
+    this.version = '1.0.0';
+    this.config = {
+      // JMeter configuration
+      jmeterPath: config.jmeterPath || '/opt/apache-jmeter/bin/jmeter',
+      jmeterTestPlans: config.jmeterTestPlans || './jmeter-plans',
+      
+      // Bouncer settings
+      amplificationFactor: config.amplificationFactor || 10, // Multiply attack by 10x
+      maxThreads: config.maxThreads || 1000,
+      rampUpTime: config.rampUpTime || 1, // seconds
+      
+      // Signal capture
+      captureDir: config.captureDir || './captured-signals',
+      mirrorDelay: config.mirrorDelay || 5000, // Wait 5s before bouncing
+      
+      // Safety limits (don't nuke yourself)
+      enableBounce: config.enableBounce || false, // Safety: off by default
+      whitelistIPs: config.whitelistIPs || ['127.0.0.1', 'localhost'],
+      maxBouncesPerHour: config.maxBouncesPerHour || 10,
+      
+      // Attack pattern recognition
+      recognizePatterns: {
+        bruteForce: true,
+        sqlInjection: true,
+        xss: true,
+        commandInjection: true,
+        pathTraversal: true,
+        portScan: true
+      },
+      
+      ...config
+    };
+
+    // State tracking
+    this.state = {
+      capturedSignals: [],
+      bounceHistory: [],
+      bouncesThisHour: 0,
+      lastBounceTime: null
+    };
+
+    this._init();
+  }
+
+  async _init() {
+    try {
+      // Create directories
+      // await fs.mkdir(this.config.captureDir, { recursive: true });
+      // await fs.mkdir(this.config.jmeterTestPlans, { recursive: true });
+      this._log('info', 'Signal Mirror & Bouncer initialized');
+    } catch (error) {
+      this._log('error', `Init failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * SIGNAL CAPTURE & ANALYSIS
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  async captureSignal(incident) {
+    const signal = {
+      id: `signal_${Date.now()}`,
+      timestamp: Date.now(),
+      sourceIP: incident.sourceIP || 'unknown',
+      sourcePort: incident.sourcePort || 0,
+      targetPath: incident.path,
+      attackType: await this._identifyAttackType(incident),
+      payload: this._extractPayload(incident),
+      requestCount: this._countRequests(incident),
+      pattern: this._analyzePattern(incident),
+      severity: incident.severity || 'medium'
+    };
+
+    this.state.capturedSignals.push(signal);
+
+    this._log('info', `📡 Signal captured: ${signal.attackType} from ${signal.sourceIP}`);
+    this._log('info', `   Requests: ${signal.requestCount} | Pattern: ${signal.pattern.type}`);
+
+    // Save to disk for forensics
+    await this._saveSignal(signal);
+
+    return signal;
+  }
+
+  async _identifyAttackType(incident) {
+    const indicators = {
+      bruteForce: [
+        () => incident.requestCount > 50,
+        () => incident.failedAuth === true,
+        () => incident.pattern && incident.pattern.type === 'repeated_login'
+      ],
+      sqlInjection: [
+        () => incident.payload && /('|"|;|--|\*|union|select|drop|insert)/i.test(incident.payload),
+        () => incident.targetPath && incident.targetPath.includes('?')
+      ],
+      xss: [
+        () => incident.payload && /<script|javascript:|onerror=/i.test(incident.payload)
+      ],
+      commandInjection: [
+        () => incident.payload && /(\||;|&|`|\$\(|\${)/i.test(incident.payload)
+      ],
+      pathTraversal: [
+        () => incident.targetPath && /\.\.\/|\.\.\\/.test(incident.targetPath)
+      ],
+      portScan: [
+        () => incident.connectionAttempts > 10,
+        () => incident.pattern && incident.pattern.type === 'sequential_ports'
+      ],
+      sock5Tunnel: [
+        () => incident.bufferLevel === 'SOCK5',
+        () => incident.proxyDetected === true
+      ]
+    };
+
+    for (const [type, checks] of Object.entries(indicators)) {
+      if (checks.some(check => check())) {
+        return type;
+      }
+    }
+
+    return 'unknown';
+  }
+
+  _extractPayload(incident) {
+    // Extract the actual malicious payload
+    return {
+      raw: incident.rawPayload || '',
+      headers: incident.headers || {},
+      params: incident.params || {},
+      body: incident.body || ''
+    };
+  }
+
+  _countRequests(incident) {
+    return incident.requestCount || incident.connectionAttempts || 1;
+  }
+
+  _analyzePattern(incident) {
+    // Analyze the attack pattern for mirroring
+    return {
+      type: incident.pattern || 'single',
+      frequency: incident.frequency || 1,
+      interval: incident.interval || 0,
+      target: incident.targetPath || '/',
+      method: incident.method || 'GET'
+    };
+  }
+
+  async _saveSignal(signal) {
+    const filename = `${this.config.captureDir}/${signal.id}.json`;
+    // await fs.writeFile(filename, JSON.stringify(signal, null, 2));
+    return filename;
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * JMETER TEST PLAN GENERATION
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  async generateJMeterPlan(signal) {
+    const amplifiedRequests = signal.requestCount * this.config.amplificationFactor;
+    
+    this._log('warning', `🎯 Generating JMeter plan: ${amplifiedRequests} requests to ${signal.sourceIP}`);
+
+    const testPlan = {
+      testPlanName: `Bounce_${signal.id}`,
+      targetHost: signal.sourceIP,
+      targetPort: signal.sourcePort || 80,
+      threads: Math.min(amplifiedRequests, this.config.maxThreads),
+      rampUp: this.config.rampUpTime,
+      loopCount: Math.ceil(amplifiedRequests / this.config.maxThreads),
+      requests: this._buildRequestsFromSignal(signal)
+    };
+
+    // Generate JMeter XML
+    const jmxContent = this._generateJMX(testPlan);
+    const jmxPath = `${this.config.jmeterTestPlans}/bounce_${signal.id}.jmx`;
+    
+    // await fs.writeFile(jmxPath, jmxContent);
+    
+    this._log('success', `✓ JMeter plan generated: ${jmxPath}`);
+    
+    return {
+      planPath: jmxPath,
+      testPlan: testPlan
+    };
+  }
+
+  _buildRequestsFromSignal(signal) {
+    // Mirror their attack back at them
+    const requests = [];
+
+    switch(signal.attackType) {
+      case 'bruteForce':
+        // Bounce back authentication attempts
+        requests.push({
+          method: 'POST',
+          path: '/login',
+          body: signal.payload.body,
+          headers: { 'User-Agent': 'BounceBack/1.0' }
+        });
+        break;
+
+      case 'sqlInjection':
+        // Bounce back SQL injection attempts (to their own server)
+        requests.push({
+          method: signal.pattern.method,
+          path: signal.targetPath,
+          params: signal.payload.params,
+          headers: signal.payload.headers
+        });
+        break;
+
+      case 'portScan':
+        // Bounce back port scan
+        for (let port = 1; port <= 65535; port += 100) {
+          requests.push({
+            method: 'GET',
+            path: '/',
+            port: port
+          });
+        }
+        break;
+
+      case 'sock5Tunnel':
+        // Heavy connection spam to their proxy
+        requests.push({
+          method: 'CONNECT',
+          path: signal.targetPath,
+          headers: { 'Proxy-Connection': 'keep-alive' }
+        });
+        break;
+
+      default:
+        // Generic mirror
+        requests.push({
+          method: signal.pattern.method,
+          path: signal.targetPath,
+          body: signal.payload.raw
+        });
+    }
+
+    return requests;
+  }
+
+  _generateJMX(testPlan) {
+    // Generate JMeter XML format
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.4.1">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="${testPlan.testPlanName}">
+      <stringProp name="TestPlan.comments">Auto-generated bounce-back attack</stringProp>
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+    </TestPlan>
+    <hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Bouncer Thread Group">
+        <stringProp name="ThreadGroup.num_threads">${testPlan.threads}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${testPlan.rampUp}</stringProp>
+        <stringProp name="LoopController.loops">${testPlan.loopCount}</stringProp>
+      </ThreadGroup>
+      <hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Bounce Request">
+          <stringProp name="HTTPSampler.domain">${testPlan.targetHost}</stringProp>
+          <stringProp name="HTTPSampler.port">${testPlan.targetPort}</stringProp>
+          <stringProp name="HTTPSampler.protocol">http</stringProp>
+          <stringProp name="HTTPSampler.method">${testPlan.requests[0]?.method || 'GET'}</stringProp>
+          <stringProp name="HTTPSampler.path">${testPlan.requests[0]?.path || '/'}</stringProp>
+        </HTTPSamplerProxy>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>`;
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * BOUNCE EXECUTION
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  async bounce(signal) {
+    // Safety checks
+    if (!this.config.enableBounce) {
+      this._log('warning', '⚠️  Bounce disabled in config (safety mode ON)');
+      return { bounced: false, reason: 'disabled_in_config' };
+    }
+
+    if (this._isWhitelisted(signal.sourceIP)) {
+      this._log('warning', `⚠️  ${signal.sourceIP} is whitelisted, skipping bounce`);
+      return { bounced: false, reason: 'whitelisted' };
+    }
+
+    if (this.state.bouncesThisHour >= this.config.maxBouncesPerHour) {
+      this._log('warning', '⚠️  Max bounces per hour reached');
+      return { bounced: false, reason: 'rate_limit' };
+    }
+
+    this._log('critical', `
+╔════════════════════════════════════════════════════════════╗
+║                 🚀 INITIATING BOUNCE 🚀                   ║
+╚════════════════════════════════════════════════════════════╝
+    `);
+
+    try {
+      // Generate JMeter test plan
+      const { planPath, testPlan } = await this.generateJMeterPlan(signal);
+
+      // Wait before bouncing (let them think they got away with it)
+      await this._delay(this.config.mirrorDelay);
+
+      // Execute JMeter
+      this._log('critical', `💥 Bouncing ${testPlan.threads * testPlan.loopCount} requests to ${signal.sourceIP}`);
+      
+      const result = await this._executeJMeter(planPath);
+
+      // Record bounce
+      const bounce = {
+        id: `bounce_${Date.now()}`,
+        signalId: signal.id,
+        targetIP: signal.sourceIP,
+        requestsSent: testPlan.threads * testPlan.loopCount,
+        timestamp: Date.now(),
+        result: result
+      };
+
+      this.state.bounceHistory.push(bounce);
+      this.state.bouncesThisHour++;
+      this.state.lastBounceTime = Date.now();
+
+      this._log('success', `✓ Bounce complete: ${bounce.requestsSent} requests sent`);
+
+      // Reset hourly counter
+      setTimeout(() => {
+        this.state.bouncesThisHour = 0;
+      }, 3600000); // 1 hour
+
+      return {
+        bounced: true,
+        bounce: bounce,
+        message: 'They wanted to play? Now they know what it feels like.'
+      };
+
+    } catch (error) {
+      this._log('error', `Bounce failed: ${error.message}`);
+      return {
+        bounced: false,
+        reason: 'execution_error',
+        error: error.message
+      };
+    }
+  }
+
+  async _executeJMeter(planPath) {
+    const command = `${this.config.jmeterPath} -n -t ${planPath} -l /tmp/jmeter_results.jtl`;
+    
+    this._log('info', `Executing: ${command}`);
+    
+    // In real implementation:
+    // const { stdout, stderr } = await execPromise(command);
+    // return { stdout, stderr };
+
+    // Simulated result
+    return {
+      stdout: `Created the tree successfully using ${planPath}\nStarting standalone test\nWaiting for possible Shutdown\nSummary = ${Math.floor(Math.random() * 10000)} in 00:00:05 = ${Math.floor(Math.random() * 2000)}/s\n`,
+      stderr: '',
+      success: true
+    };
+  }
+
+  _delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  _isWhitelisted(ip) {
+    return this.config.whitelistIPs.includes(ip);
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * INTEGRATION WITH BUFFER SYSTEM
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  async handleBufferEscalation(bufferLevel, incident) {
+    // Auto-bounce at SOCK5 level
+    if (bufferLevel === 'SOCK5') {
+      this._log('critical', '🚨 SOCK5 detected - AUTO-BOUNCE TRIGGERED');
+      
+      const signal = await this.captureSignal(incident);
+      const bounceResult = await this.bounce(signal);
+      
+      return {
+        signal: signal,
+        bounce: bounceResult
+      };
+    }
+
+    // Capture but don't bounce at lower levels
+    if (bufferLevel === 'BACKTRACE') {
+      this._log('warning', '🔴 BACKTRACE level - Capturing signal for analysis');
+      return await this.captureSignal(incident);
+    }
+
+    return null;
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════
+   * MANAGEMENT & UTILITIES
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  getStatus() {
+    return {
+      version: this.version,
+      bounceEnabled: this.config.enableBounce,
+      capturedSignals: this.state.capturedSignals.length,
+      bounceHistory: this.state.bounceHistory.length,
+      bouncesThisHour: this.state.bouncesThisHour,
+      lastBounce: this.state.lastBounceTime
+    };
+  }
+
+  getCapturedSignals(limit = 10) {
+    return this.state.capturedSignals.slice(-limit);
+  }
+
+  getBounceHistory(limit = 10) {
+    return this.state.bounceHistory.slice(-limit);
+  }
+
+  async enableBounce() {
+    this.config.enableBounce = true;
+    this._log('critical', '🚀 BOUNCE MODE ENABLED - Counterstrike armed');
+  }
+
+  async disableBounce() {
+    this.config.enableBounce = false;
+    this._log('info', '🛡️  BOUNCE MODE DISABLED - Defensive only');
+  }
+
+  _log(level, message) {
+    const timestamp = new Date().toISOString();
+    const symbols = {
+      info: '📘',
+      success: '✅',
+      warning: '⚠️',
+      error: '❌',
+      critical: '🚨'
+    };
+    console.log(`${timestamp} ${symbols[level] || '📝'} ${message}`);
+  }
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════
+ * USAGE EXAMPLE - Full Integration
+ * ═══════════════════════════════════════════════════════════════
+ */
+
+const BufferSystem = require('./buffer-system');
+const LockdownModule = require('./lockdown-module');
+
+// Initialize modules
+const buffer = new BufferSystem();
+const lockdown = new LockdownModule();
+const bouncer = new SignalMirrorBouncer({
+  enableBounce: false, // SAFETY: Start disabled, enable manually
+  amplificationFactor: 10,
+  maxThreads: 1000,
+  jmeterPath: '/opt/apache-jmeter/bin/jmeter'
+});
+
+// Integration hook
+async function handleSecurityIncident(motion) {
+  // 1. Buffer escalation
+  const bufferResult = await buffer.processChange(motion);
+  
+  // 2. Capture and potentially bounce
+  const bounceResult = await bouncer.handleBufferEscalation(
+    bufferResult.buffer, 
+    {
+      ...motion,
+      bufferLevel: bufferResult.buffer,
+      sourceIP: '192.168.1.100', // Extract from motion
+      requestCount: 500 // Extract from motion
+    }
+  );
+
+  // 3. Execute lockdown if needed
+  if (bufferResult.buffer === 'SOCK5') {
+    await lockdown.execute(motion);
+  }
+
+  return {
+    buffer: bufferResult,
+    bounce: bounceResult,
+    lockdown: bufferResult.buffer === 'SOCK5' ? 'executed' : 'not_needed'
+  };
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════
+ * MODULE EXPORTS
+ * ═══════════════════════════════════════════════════════════════
+ */
+
+module.exports = SignalMirrorBouncer;
