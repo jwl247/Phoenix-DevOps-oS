@@ -136,3 +136,5 @@ suit territory). "Later dates if at all" — capture only, build when Jerry says
 
 - **Helix bench (Jerry, 2026-10-06):** Sysinternals is downloaded. When we bench Helix, use it (Process Monitor / RAMMap / DiskMon / Process Explorer) to map the whole pipeline end to end on the Windows side.
 - **HUD/Dashboard intake overlay (Jerry, 2026-10-06):** manual-file intake via drag-and-drop overlay -> config pulled as a .jsonc suite manifest. CAPTURED, discuss before building: `docs/plans/hud-dashboard-intake-overlay.md`.
+- **Helix on Debian 12 (2026-10-06, pbmIII):** helix_kmod.c:337 fails on kernel 6.1: `class_create()` took (THIS_MODULE, name) before 6.4, (name) after. Needs a LINUX_VERSION_CODE guard; built only on 6.12 so far. Placed on III, not built.
+- **Harden sysctl drift on Debian (2026-10-06, pbmIII):** Debian's /usr/lib/sysctl.d/99-protect-links.conf sorts after 90-phoenix-harden.conf and resets fs.protected_fifos=1 -> heal flaps every 15 min. Fix = rename to sort last (e.g. 99-zz-phoenix-harden.conf). Touches proven harden: Jerry's call.

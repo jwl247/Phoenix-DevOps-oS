@@ -27,7 +27,7 @@
       ],
       "os": "linux",
       "note": "HP - home Starlink router 192.168.1.190. Starlink = CGNAT and filters inbound IPv6, so it can't be a lighthouse; it dials out to awslh and relays for the Compaq on the home side",
-      "ssh": "a@192.168.1.190",
+      "ssh": "a@192.168.1.192",
       "ssh_key": "phoenix_third_debian_ed25519",
       "relay": true
     },
