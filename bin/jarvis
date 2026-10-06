@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+"""Phoenix Global Command: jarvis — ask Jarvis (OpenJarvis on pbmIII) from any terminal on the mesh.
+Phoenix DevOps OS | jwl247 | GPL v3
+
+  jarvis what is on Laurie's list today
+  echo "long question" | jarvis
+  jarvis --json "question"          raw JSON answer
+
+Path: SSH over the Phoenix Mesh as jarvis-call (forced command, no shell) -> jarvis-gate -> Jarvis
+-> local Ollama. On pbmIII itself it talks to the gate directly. Same door the Genie suit uses.
+Env: JARVIS_HOST (default jarvis-call@10.42.0.10), JARVIS_KEY (default ~/.ssh/phoenix_jarvis_ed25519)
+"""
+import json, os, subprocess, sys
+from pathlib import Path
+
+GATE = "/opt/openjarvis/jarvis-gate"
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    raw = "--json" in args
+    args = [a for a in args if a != "--json"]
+    if args in ([], ["-h"], ["--help"]) and sys.stdin.isatty():
+        print(__doc__.split("\n\n")[1])
+        return 0 if args else 2
+    text = " ".join(args) if args else sys.stdin.read()
+    stage = json.dumps({"text": text})
+    if os.path.exists(GATE) and os.access(GATE, os.X_OK):
+        cmd = [GATE]                                   # on pbmIII: no SSH hop
+    else:
+        key = os.environ.get("JARVIS_KEY", str(Path.home() / ".ssh" / "phoenix_jarvis_ed25519"))
+        cmd = ["ssh", "-i", key, "-o", "BatchMode=yes", "-o", "ConnectTimeout=6",
+               "-o", "StrictHostKeyChecking=accept-new",
+               os.environ.get("JARVIS_HOST", "jarvis-call@10.42.0.10"), "ask"]
+    try:
+        p = subprocess.run(cmd, input=stage, capture_output=True, text=True, encoding="utf-8", timeout=150)
+        out = json.loads(p.stdout.strip().splitlines()[-1])
+    except subprocess.TimeoutExpired:
+        print("jarvis: no answer in 150 s", file=sys.stderr); return 1
+    except (OSError, ValueError, IndexError):
+        err = (p.stderr.strip().splitlines() or ["no output"])[-1] if "p" in locals() else "ssh not found"
+        print(f"jarvis: can't reach him ({err}). Mesh up? Key at JARVIS_KEY?", file=sys.stderr); return 1
+    if raw:
+        print(json.dumps(out)); return 0 if out.get("ok") else 1
+    if not out.get("ok"):
+        print(f"jarvis: {out.get('error')}", file=sys.stderr); return 1
+    print(out["answer"])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
