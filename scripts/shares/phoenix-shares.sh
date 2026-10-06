@@ -3,18 +3,21 @@
 # Phoenix DevOps OS | jwl247 | GPL v3
 #
 #   sudo SMB_PASS_FILE=/root/.smbpass bash phoenix-shares.sh apply   # password read from a 0600 file, never argv
+#   sudo bash phoenix-shares.sh apply                                 # re-apply; keeps the existing SMB password
 #   sudo bash phoenix-shares.sh check | heal
 #
 # Rules: Samba listens ONLY on the mesh (nebula1) — never the LAN or the internet; only mesh addresses
 # allowed; SMB3 with encryption REQUIRED (on top of Nebula's); one user; the old disk is mounted and
 # shared READ-ONLY. Versioned (/etc/phoenix/shares.VERSION), self-healing (timer, 15 min), audited.
 set -euo pipefail
-VERSION="shares-1.0.2"
+VERSION="shares-1.1.0"
 STATE=/etc/phoenix
 USER_NAME="${SHARE_USER:-a}"
 DATA=/srv/pbmiii
 OLD_UUID="9d35bab9-b0ab-455a-924f-7c166e7940ef"   # 1 TB Seagate: the previous Debian install (2026-10-06 rebuild; was 97eb0325..., gone)
 OLD_MNT=/mnt/pbmiii-old
+EGRESS_LABEL=helix-egress                         # 700 GB Toshiba (road-test egress disk) - by LABEL, not UUID
+EGRESS_MNT=/mnt/helix-egress
 log() { logger -t phoenix-shares "$*"; echo "$*"; }
 [[ $EUID -eq 0 ]] || { echo "run with sudo"; exit 1; }
 mkdir -p $STATE
@@ -58,23 +61,39 @@ smb_conf() {
    path = $OLD_MNT
    valid users = $USER_NAME
    read only = yes
+
+[helix-egress]
+   comment = pbmIII helix-egress disk (read-write)
+   path = $EGRESS_MNT
+   valid users = $USER_NAME
+   read only = no
+   create mask = 0640
+   directory mask = 0750
 EOF
 }
 
 apply() {
-  [[ -n "${SMB_PASS_FILE:-}" && -s "$SMB_PASS_FILE" ]] || { echo "SMB_PASS_FILE (0600) required"; exit 1; }
+  local have_user=false; command -v pdbedit >/dev/null && pdbedit -L 2>/dev/null | grep -q "^$USER_NAME:" && have_user=true
+  [[ -n "${SMB_PASS_FILE:-}" && -s "$SMB_PASS_FILE" ]] || $have_user || { echo "SMB_PASS_FILE (0600) required for the first apply"; exit 1; }
   DEBIAN_FRONTEND=noninteractive apt-get -y -q install samba >/dev/null
   install -d -m 750 -o "$USER_NAME" -g "$USER_NAME" $DATA
   install -d -m 755 $OLD_MNT
   grep -q "$OLD_UUID" /etc/fstab || echo "UUID=$OLD_UUID $OLD_MNT ext4 ro,nofail,noexec,nosuid,nodev 0 2" >> /etc/fstab
+  install -d -m 755 $EGRESS_MNT
+  findmnt -rno TARGET LABEL=$EGRESS_LABEL | grep -v "^$EGRESS_MNT$" | while read -r m; do umount "$m"; done   # desktop automount (/media/...)
+  grep -q "LABEL=$EGRESS_LABEL " /etc/fstab || echo "LABEL=$EGRESS_LABEL $EGRESS_MNT ext4 rw,nofail,noexec,nosuid,nodev 0 2" >> /etc/fstab
   systemctl daemon-reload
   mountpoint -q $OLD_MNT || mount $OLD_MNT
+  mountpoint -q $EGRESS_MNT || mount $EGRESS_MNT
+  [[ "$(stat -c %U $EGRESS_MNT)" == "$USER_NAME" ]] || chown "$USER_NAME:$USER_NAME" $EGRESS_MNT
   smb_conf > /etc/samba/smb.conf
   testparm -s /etc/samba/smb.conf >/dev/null 2>&1
   cp /etc/samba/smb.conf $STATE/smb.known-good
-  pw=$(cat "$SMB_PASS_FILE")
-  printf '%s\n%s\n' "$pw" "$pw" | smbpasswd -s -a "$USER_NAME" >/dev/null
-  shred -u "$SMB_PASS_FILE" 2>/dev/null || rm -f "$SMB_PASS_FILE"
+  if [[ -n "${SMB_PASS_FILE:-}" && -s "$SMB_PASS_FILE" ]]; then
+    pw=$(cat "$SMB_PASS_FILE")
+    printf '%s\n%s\n' "$pw" "$pw" | smbpasswd -s -a "$USER_NAME" >/dev/null
+    shred -u "$SMB_PASS_FILE" 2>/dev/null || rm -f "$SMB_PASS_FILE"
+  fi
   systemctl disable --now nmbd >/dev/null 2>&1 || true; systemctl mask nmbd >/dev/null 2>&1 || true
   systemctl enable smbd >/dev/null 2>&1; systemctl restart smbd
   echo "-w /etc/samba/ -p wa -k shares" > /etc/audit/rules.d/91-phoenix-shares.rules
@@ -86,13 +105,14 @@ apply() {
   printf '[Unit]\nDescription=Phoenix shares self-heal every 15 min\n[Timer]\nOnBootSec=3min\nOnUnitActiveSec=15min\nPersistent=true\n[Install]\nWantedBy=timers.target\n' \
     > /etc/systemd/system/phoenix-shares-heal.timer
   systemctl daemon-reload; systemctl enable --now phoenix-shares-heal.timer >/dev/null 2>&1
-  log "shares $VERSION applied: [pbmIII] rw $DATA, [pbmIII-old] ro $OLD_MNT — mesh only"
+  log "shares $VERSION applied: [pbmIII] rw $DATA, [pbmIII-old] ro $OLD_MNT, [helix-egress] rw $EGRESS_MNT — mesh only"
 }
 
 drift() {
   cmp -s /etc/samba/smb.conf $STATE/smb.known-good || echo "smb.conf"
   systemctl is-active -q smbd || echo "smbd"
   mountpoint -q $OLD_MNT || echo "old-disk-mount"
+  mountpoint -q $EGRESS_MNT || echo "egress-disk-mount"
   local opts; opts=$(findmnt -no OPTIONS $OLD_MNT 2>/dev/null || true)
   [[ -z "$opts" || ",$opts," == *",ro,"* ]] || echo "old-disk-writable"
   local listen; listen=$(ss -ltnH 'sport = :445' 2>/dev/null || true)
@@ -108,6 +128,7 @@ heal() {
       smb.conf|smb-exposed|smb-not-on-mesh) cp $STATE/smb.known-good /etc/samba/smb.conf; systemctl restart smbd ;;
       smbd) systemctl restart smbd ;;
       old-disk-mount) mount $OLD_MNT || { log "heal FAILED: old-disk-mount (mount $OLD_MNT refused)"; continue; } ;;
+      egress-disk-mount) mount $EGRESS_MNT || { log "heal FAILED: egress-disk-mount (mount $EGRESS_MNT refused)"; continue; } ;;
       old-disk-writable) mount -o remount,ro $OLD_MNT ;;
     esac
     log "drift healed: $item ($(cat $STATE/shares.VERSION 2>/dev/null))"
