@@ -1,0 +1,26 @@
+[Unit]
+Description=Jarvis (OpenJarvis on local Ollama) - localhost only, no network out
+After=ollama.service
+Wants=ollama.service
+
+[Service]
+User=jarvis
+Group=jarvis
+Environment=HOME=/var/lib/jarvis
+Environment=OPENJARVIS_NO_UPDATE_CHECK=1
+Environment=DO_NOT_TRACK=1
+Environment=HF_HUB_OFFLINE=1
+ExecStart=/opt/openjarvis/venv/bin/jarvis serve --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+# Rails: the kernel drops every packet that isn't loopback (no cloud, no telemetry, no downloads)
+IPAddressDeny=any
+IPAddressAllow=localhost
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/jarvis
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

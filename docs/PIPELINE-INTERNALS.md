@@ -44,7 +44,19 @@ SMB3, encryption + signing required, bound to the mesh IP only, user `a`.
 - PBMII: Ollama (llama3 in C:\Users\jwlef\.ollama\models; OLLAMA_MODELS env points at an empty
   E: folder → breaks on restart, see backlog). Genie kernel running, no restart-on-boot.
 - pbmIII: `ollama` binary at /usr/local/bin, service inactive, no models checked.
-- OpenJarvis: parked (see backlog).
+- **Jarvis (OpenJarvis bf945a4, Apache-2.0) LIVE on pbmIII 2026-10-06** — `sector2/apps/jarvis/`:
+  - `ollama.service`: user ollama, 127.0.0.1:11434, models /var/lib/ollama/models, llama3.2:3b
+    (pulled from the Ollama library: the road-test import was on the Compaq, which was off).
+  - `openjarvis.service`: user jarvis (nologin), venv /opt/openjarvis/venv, `jarvis serve` 127.0.0.1:8000,
+    config /var/lib/jarvis/.openjarvis/config.toml (analytics off, skills off, no tools, agent simple).
+    **IPAddressDeny=any + IPAddressAllow=localhost**: proven, 1.1.1.1 + pypi blocked, loopback OK.
+  - Door: SSH as `jarvis-call` → forced command `/opt/openjarvis/jarvis-gate` (from 10.42.0.0/16 only);
+    JSON in/out; the gate sends `jarvis_identity.md` as the system message on every ask (the server's own
+    system_prompt_path did not take). Journal: `journalctl -t jarvis-gate`.
+  - Suit `jarvis.py` (intaked v1, hex 6a61727669732e7079) in PBMII's Genie closet:
+    `genie send jarvis '{"text":"..."}'` → about 8–19 s per answer on the i5-2400. Caller key: PBMII
+    `~/.ssh/phoenix_jarvis_ed25519` (not in the vault yet).
+  - Rails still to earn: tools (Life First reminders etc.) one at a time, with permission tiers.
 
 ## Intake snag
 `scripts/hsf-intake.sh` can't answer intake.sh's "same name, moved — version it?" prompt (it reads

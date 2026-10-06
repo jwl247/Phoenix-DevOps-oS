@@ -1,0 +1,42 @@
+# OpenJarvis config for Phoenix's Jarvis (pbmIII) — installed to /var/lib/jarvis/.openjarvis/config.toml
+# Rails (Jerry, 2026-10-06): local model only, no analytics, no skills marketplace, no tools until earned.
+# The network lock is in openjarvis.service (IPAddressDeny=any): even a bad setting here can't reach out.
+
+[engine]
+default = "ollama"
+
+[engine.ollama]
+host = "http://127.0.0.1:11434"
+
+[intelligence]
+default_model = "llama3.2:3b"
+fallback_model = "llama3.2:3b"
+
+[agent]
+default_agent = "simple"
+max_turns = 4
+tools = ""
+system_prompt_path = "/opt/openjarvis/jarvis_identity.md"
+context_from_memory = false
+
+[tools]
+enabled = ""
+
+[server]
+host = "127.0.0.1"
+port = 8000
+agent = "simple"
+model = "llama3.2:3b"
+
+[analytics]
+enabled = false
+
+[skills]
+enabled = false
+auto_discover = false
+auto_sync = false
+index_repo = ""
+
+[security]
+enabled = true
+enforce_tool_confirmation = true
