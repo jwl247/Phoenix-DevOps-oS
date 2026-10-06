@@ -1,0 +1,41 @@
+# /etc/default/helix-ingress
+# Helix Ingress instance — left lung, Strand A + B.
+# Sourced by helix_boot.sh when called as: helix_boot.sh start ingress
+# Copy to /etc/default/helix-ingress on each node and customise.
+#
+# HELIX_WARM_WRITE=1 on ingress: blocks written through her come back warm
+# on first read — correct for the ingress instance (data you just received
+# will be read again very soon).
+#
+# DO NOT hardcode Strand B device paths — use partlabel or a loopback image
+# so the config stays portable across kernel renames.
+
+# Origin: the partition that backs Strand A.
+# helix_boot.sh default: /dev/disk/by-partlabel/helix-ingress
+#HELIX_ORIGIN=/dev/disk/by-partlabel/helix-ingress
+
+# Strand A RAM: how many MiB to hold in RAM.
+# "auto" = half the machine's total RAM (safe default for one instance).
+# Set a fixed number when running two instances so they share equally.
+HELIX_RAM=auto
+
+# Strand B: fast spillover device for hot blocks when A is full.
+# helix_boot.sh default: /var/lib/helix/strandB-ingress.img (loopback image).
+# Override with a real fast device (NVMe, SSD) if available.
+#HELIX_B_IMG=/dev/disk/by-partlabel/helix-strandB-ingress
+HELIX_B_MB=65536
+
+# Mount point for /dev/mapper/helix-ingress
+HELIX_MOUNT=/srv/helix-ingress
+
+# warm_write: make ingress writes immediately warm (recommended for ingress)
+HELIX_WARM_WRITE=1
+
+# Python-side: which interface Helix-I sockets listen on.
+# 127.0.0.1 = loopback only (single-machine mode).
+# 0.0.0.0   = all interfaces (allows cross-machine push over WireGuard).
+# compaq.phx = WireGuard interface only (preferred for security).
+HELIX_I_BIND=0.0.0.0
+
+# Base port for Helix-I channels 1-4 (channels listen on BASE+1 .. BASE+4)
+HELIX_I_PORT=7700

@@ -1,0 +1,31 @@
+# /etc/default/helix-egress
+# Helix Egress instance — right lung, Strand A + B.
+# Sourced by helix_boot.sh when called as: helix_boot.sh start egress
+# Copy to /etc/default/helix-egress on each node and customise.
+#
+# HELIX_WARM_WRITE=0 on egress: egress writes are outbound — don't warm them.
+# The data is leaving, not returning.
+
+# Origin: the partition that backs Strand A.
+# helix_boot.sh default: /dev/disk/by-partlabel/helix-egress
+#HELIX_ORIGIN=/dev/disk/by-partlabel/helix-egress
+
+# Strand A RAM.
+HELIX_RAM=auto
+
+# Strand B spillover device.
+#HELIX_B_IMG=/dev/disk/by-partlabel/helix-strandB-egress
+HELIX_B_MB=65536
+
+# Mount point for /dev/mapper/helix-egress
+HELIX_MOUNT=/srv/helix-egress
+
+# warm_write: off for egress (outbound data is not re-read locally)
+HELIX_WARM_WRITE=0
+
+# Python-side: which interface Helix-E output sockets listen on.
+# 0.0.0.0 lets precision consume translated output from this machine.
+HELIX_E_BIND=0.0.0.0
+
+# Base port for Helix-E channels 5-8 (channels listen on BASE+5 .. BASE+8)
+HELIX_E_PORT=7800
