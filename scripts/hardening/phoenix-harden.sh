@@ -2,7 +2,7 @@
 # phoenix-harden.sh — Phoenix server baseline for Debian (versioned, self-healing, audited)
 # Phoenix DevOps OS | jwl247 | GPL v3
 #
-#   sudo bash phoenix-harden.sh apply   --ssh-from "192.168.1.0/24" [--keep-desktop]
+#   sudo bash phoenix-harden.sh apply   --ssh-from "192.168.1.0/24" [--keep-desktop] [--keep-services]
 #   sudo bash phoenix-harden.sh confirm                 # keep the new firewall (else it rolls back in 120 s)
 #   sudo bash phoenix-harden.sh check                   # report drift, change nothing
 #   sudo bash phoenix-harden.sh heal                    # restore drifted settings (run by the timer)
@@ -12,29 +12,31 @@
 #             Nebula UDP 4242, everything arriving on the mesh (nebula1 — Nebula's own group
 #             firewall decides there), SSH only from --ssh-from networks (break-glass)
 #   ssh       keys only, no root, 3 tries, 30 s grace, no X11/agent forwarding
-#   services  printing/Bluetooth/mDNS/modem services off on servers
+#   services  printing/Bluetooth/mDNS/modem services off on servers (--keep-services: leave every service as set)
 #   kernel    network + kernel hardening sysctls
 #   audit     auditd with rules on identity, sudo, ssh and mesh config changes
 #   updates   unattended security upgrades
 # Firewall changes roll back automatically after 120 s unless `confirm` is run — no lockouts.
 set -euo pipefail
-VERSION="harden-1.0.1"
+VERSION="harden-1.0.2"
 STATE=/etc/phoenix
 mkdir -p "$STATE"
 log() { logger -t phoenix-harden "$*"; echo "$*"; }
 [[ $EUID -eq 0 ]] || { echo "run with sudo"; exit 1; }
 
 CMD="${1:-check}"; shift || true
-SSH_FROM=""; KEEP_DESKTOP=false
+SSH_FROM=""; KEEP_DESKTOP=false; KEEP_SERVICES=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --ssh-from) SSH_FROM="$2"; shift 2 ;;
     --keep-desktop) KEEP_DESKTOP=true; shift ;;
+    --keep-services) KEEP_SERVICES=true; shift ;;
     *) echo "unknown option $1"; exit 2 ;;
   esac
 done
 [[ -f $STATE/harden.conf ]] && source $STATE/harden.conf
 [[ -n "${SSH_FROM_ARG:-}" && -z "$SSH_FROM" ]] && SSH_FROM="$SSH_FROM_ARG"
+[[ "${KEEP_SERVICES_ARG:-false}" == true ]] && KEEP_SERVICES=true
 
 SSHD_CONF='PasswordAuthentication no
 KbdInteractiveAuthentication no
@@ -82,6 +84,7 @@ AUDIT_RULES='-w /etc/passwd -p wa -k identity
 -w /var/log/lastlog -p wa -k logins'
 
 SERVICES_OFF="cups cups-browsed bluetooth avahi-daemon ModemManager"
+$KEEP_SERVICES && SERVICES_OFF=""   # Jerry 2026-10-06 (pbmIII): never stop a service that is set
 
 nft_rules() {
   local ssh_rule=""
@@ -131,7 +134,7 @@ write_baseline() {
   cp /etc/ssh/sshd_config.d/91-phoenix-harden.conf $STATE/sshd.known-good
   cp /etc/sysctl.d/90-phoenix-harden.conf $STATE/sysctl.known-good
   cp /etc/audit/rules.d/90-phoenix.rules $STATE/audit.known-good
-  printf 'SSH_FROM_ARG="%s"\nKEEP_DESKTOP_ARG=%s\n' "$SSH_FROM" "$KEEP_DESKTOP" > $STATE/harden.conf
+  printf 'SSH_FROM_ARG="%s"\nKEEP_DESKTOP_ARG=%s\nKEEP_SERVICES_ARG=%s\n' "$SSH_FROM" "$KEEP_DESKTOP" "$KEEP_SERVICES" > $STATE/harden.conf
 }
 
 apply() {
