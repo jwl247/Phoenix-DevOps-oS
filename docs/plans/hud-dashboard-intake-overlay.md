@@ -188,3 +188,214 @@ Ask Jerry which of the three to use: tkinter, Electron or WPF.
 **Pipeline order (draft):** drop, then permission map check, then metadata sanitizer, then copy buffer
 (shutil.copy2 to staging + hash), then host file bridge, then config extraction to a manifest,
 then intake.sh, then the suite is registered.
+
+## Jerry's filled-out template, part 2 (2026-10-06, verbatim)
+
+```
+| Lightweight UI Overlay (Tkinter) |
+| [ Drag-and-Drop Tree ] <--> [ Working Dir Dashboard ] |
++-------------------------------------------------------------+
+                              |
+                              v
++-------------------------------------------------------------+
+
+| Isolation & Cloning Microkernel |
+| - Async Thread Worker Pools - Metadata Sanitizer |
+| - Permission Mapping Engine - Shutil Copy Buffers |
++-------------------------------------------------------------+
+                              |
+                              v
++-------------------------------------------------------------+
+
+| Host File System Bridge |
+| [ /mnt/c/ ] [ /home/user/ ] [ UUID Drives ] |
++-------------------------------------------------------------+
+```
+
+Step-by-Step implementation: a single executable application script named `virtual_desktop_kernel.py`.
+It has a background thread pool built in, so operations never freeze the UI workspace, whatever the file size.
+
+```python
+import os
+import shutil
+import sys
+import threading
+import tkinter as tk
+from tkinter import messagebox, ttk
+
+
+class VirtualDesktopKernel:
+
+    def __init__(self, root, working_dir=None):
+        self.root = root
+        self.root.title("Agnostic Virtual Workspace v1.0")
+        self.root.geometry("900x600")
+
+        # Configure working workspace path (defaults to current execution directory)
+        self.working_dir = (
+            os.path.abspath(working_dir)
+            if working_dir
+            else os.path.join(os.getcwd(), "workspace_dir")
+        )
+        if not os.path.exists(self.working_dir):
+            os.makedirs(self.working_dir)
+
+        # Base filesystem exploration starting point
+        # Works dynamically across Windows, WSL/Linux, or custom mounts
+        self.host_root = "/" if os.name != "nt" else "C:\\"
+
+        self.setup_styles()
+        self.create_widgets()
+        self.populate_tree(self.host_root, "")
+
+    def setup_styles(self):
+        """Builds a scannable high-contrast operational terminal scheme."""
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure(".", background="#1e1e24", foreground="#ffffff")
+        style.configure(
+            "Treeview",
+            background="#2d2d34",
+            fieldbackground="#2d2d34",
+            foreground="#ffffff",
+        )
+        style.map("Treeview", background=[("selected", "#005f73")])
+        style.configure("TButton", background="#005f73", foreground="#ffffff")
+
+    def create_widgets(self):
+        # Master Workspace Layout Split
+        self.paned_window = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        self.paned_window.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Left Frame: Host Filesystem Map
+        left_frame = ttk.Labelframe(self.paned_window, text="Host System Explorer")
+        self.paned_window.add(left_frame, weight=1)
+
+        self.tree = ttk.Treeview(left_frame, columns=("path"), show="tree")
+        self.tree.heading("#0", text="Directory Structure", anchor="w")
+        self.tree.column("path", width=0, stretch=tk.NO) # Hidden path payload
+
+        tree_scroll = ttk.Scrollbar(
+            left_frame, orient=tk.VERTICAL, command=self.tree.yview
+        )
+        self.tree.configure(yscrollcommand=tree_scroll.set)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.tree.bind("<<TreeviewOpen>>", self.on_node_expand)
+
+        # Right Frame: Virtual Active Working Directory Output
+        right_frame = ttk.Labelframe(
+            self.paned_window, text=f"Target Working Dir: {self.working_dir}"
+        )
+        self.paned_window.add(right_frame, weight=1)
+
+        self.workspace_list = tk.Listbox(
+            right_frame, bg="#1a1a1a", fg="#a9def9", font=("Consolas", 10)
+        )
+        self.workspace_list.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Action Execution Control Console
+        control_bar = ttk.Frame(right_frame)
+        control_bar.pack(fill=tk.X, side=tk.BOTTOM, padx=5, pady=5)
+
+        self.clone_btn = ttk.Button(
+            control_bar, text="⚡ Clone Selected to Workspace", command=self.trigger_cloning
+        )
+        self.clone_btn.pack(side=tk.RIGHT, padx=5)
+
+        self.refresh_workspace_view()
+
+    def populate_tree(self, parent_path, node):
+        """Discovers host resources and provisions dynamic directory nodes safely."""
+        try:
+            for item in os.listdir(parent_path):
+                full_path = os.path.join(parent_path, item)
+                is_dir = os.path.isdir(full_path)
+                # Create a placeholder if it is a directory to allow expanding actions later
+                child_node = self.tree.insert(
+                    node,
+                    "end",
+                    text=item,
+                    values=(full_path,),
+                    open=False,
+                )
+                if is_dir:
+                    self.tree.insert(child_node, "end", text="_dummy")
+        except PermissionError:
+            pass # Quietly bypass privileged system nodes
+
+    def on_node_expand(self, event):
+        """Asynchronously loads real directory metadata when tree nodes expand."""
+        node = self.tree.focus()
+        path = self.tree.item(node, "values")[0]
+
+        # Flush dummy items out of the allocation channel
+        children = self.tree.get_children(node)
+        if children and self.tree.item(children[0], "text") == "_dummy":
+            self.tree.delete(children[0])
+            self.populate_tree(path, node)
+
+    def refresh_workspace_view(self):
+        """Re-scans the isolated sandbox target directory to audit files."""
+        self.workspace_list.delete(0, tk.END)
+        for item in os.listdir(self.working_dir):
+            file_size = os.path.getsize(os.path.join(self.working_dir, item))
+            self.workspace_list.insert(tk.END, f"📦 {item} ({file_size} bytes)")
+
+    def trigger_cloning(self):
+        """Delegates copy calls to background threading pipelines."""
+        selected_node = self.tree.focus()
+        if not selected_node:
+            messagebox.showwarning("Selection Required", "Select an asset to copy.")
+            return
+
+        source_path = self.tree.item(selected_node, "values")[0]
+
+        # Spawn asynchronous thread worker to keep the environment interactive
+        worker = threading.Thread(
+            target=self.async_clone_kernel, args=(source_path,), daemon=True
+        )
+        worker.start()
+
+    def async_clone_kernel(self, src):
+        """Core kernel engine that preserves absolute attributes and permissions."""
+        base_name = os.path.basename(src)
+        dest_path = os.path.join(self.working_dir, base_name)
+
+        try:
+            if os.path.isdir(src):
+                # Copy entire structure keeping permissions and symlinks intact
+                shutil.copytree(src, dest_path, symlinks=True, dirs_exist_ok=True)
+            else:
+                # copy2 preserves metadata, access records, and execution flags
+                shutil.copy2(src, dest_path)
+
+            # Re-index working directory upon safe system exit
+            self.root.after(0, self.refresh_workspace_view)
+        except Exception as e:
+            self.root.after(
+                0,
+                lambda: messagebox.showerror(
+                    "Kernel Copy Interrupted", f"Failed file tracking operation:\n{str(e)}"
+                ),
+            )
+
+
+if __name__ == "__main__":
+```
+(The paste ended here: the `__main__` body was cut off.)
+
+**Claude's notes on part 2:**
+- This is a normal two-pane window (tree on one side, workspace on the other), not yet the see-through,
+  click-through overlay. The threaded copy and the working-dir view carry over.
+- These boxes aren't built yet: the metadata sanitizer, the permission map and the "isolation" step.
+  Today `async_clone_kernel` copies whatever is selected, straight in.
+- The copy is plain `shutil.copy2`/`copytree`. A file that's open and locked fails with an error box
+  (see the locked-file note above). There is no hash and no intake.sh handoff yet.
+- `/mnt/c` in the bridge diagram is a WSL path. Phoenix has no WSL. On Windows the bridge is the
+  drives themselves; on Linux it's the mounts.
+- The `refresh_workspace_view` `getsize` call on a directory gives the directory entry's size, not
+  its contents.
+- The error lambda reads `e` after the except block ends, and Python clears `e` at that point, so it
+  raises a NameError. Bind it as `lambda e=e:`.
