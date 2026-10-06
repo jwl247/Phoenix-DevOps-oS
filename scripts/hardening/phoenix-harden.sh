@@ -18,8 +18,12 @@
 #   updates   unattended security upgrades
 # Firewall changes roll back automatically after 120 s unless `confirm` is run — no lockouts.
 set -euo pipefail
-VERSION="harden-1.0.2"
+VERSION="harden-1.0.3"
 STATE=/etc/phoenix
+# "zz-" so it loads after every vendor 99-* file: Debian's /usr/lib/sysctl.d/99-protect-links.conf
+# sets fs.protected_fifos=1 and, loaded after the old 90- name, undid every heal (pbmIII, 2026-10-06)
+SYSCTL_FILE=/etc/sysctl.d/zz-phoenix-harden.conf
+SYSCTL_OLD=/etc/sysctl.d/90-phoenix-harden.conf
 mkdir -p "$STATE"
 log() { logger -t phoenix-harden "$*"; echo "$*"; }
 [[ $EUID -eq 0 ]] || { echo "run with sudo"; exit 1; }
@@ -127,12 +131,13 @@ EOF
 write_baseline() {
   install -d -m 755 /etc/ssh/sshd_config.d /etc/sysctl.d /etc/audit/rules.d
   echo "$SSHD_CONF" > /etc/ssh/sshd_config.d/91-phoenix-harden.conf
-  echo "$SYSCTL_CONF" > /etc/sysctl.d/90-phoenix-harden.conf
+  rm -f $SYSCTL_OLD
+  echo "$SYSCTL_CONF" > $SYSCTL_FILE
   echo "$AUDIT_RULES" > /etc/audit/rules.d/90-phoenix.rules
   nft_rules > $STATE/nftables.known-good
   # known-good copies for healing
   cp /etc/ssh/sshd_config.d/91-phoenix-harden.conf $STATE/sshd.known-good
-  cp /etc/sysctl.d/90-phoenix-harden.conf $STATE/sysctl.known-good
+  cp $SYSCTL_FILE $STATE/sysctl.known-good
   cp /etc/audit/rules.d/90-phoenix.rules $STATE/audit.known-good
   printf 'SSH_FROM_ARG="%s"\nKEEP_DESKTOP_ARG=%s\nKEEP_SERVICES_ARG=%s\n' "$SSH_FROM" "$KEEP_DESKTOP" "$KEEP_SERVICES" > $STATE/harden.conf
 }
@@ -196,7 +201,7 @@ EOF
 
 drift() {   # prints one line per drifted item; empty = clean
   cmp -s /etc/ssh/sshd_config.d/91-phoenix-harden.conf $STATE/sshd.known-good || echo "sshd"
-  cmp -s /etc/sysctl.d/90-phoenix-harden.conf $STATE/sysctl.known-good || echo "sysctl-file"
+  { [[ ! -e $SYSCTL_OLD ]] && cmp -s $SYSCTL_FILE $STATE/sysctl.known-good; } || echo "sysctl-file"
   while IFS='=' read -r k v; do
     k=$(echo "$k" | xargs); v=$(echo "$v" | xargs); [[ -z "$k" ]] && continue
     [[ "$(sysctl -n "$k" 2>/dev/null)" == "$v" ]] || echo "sysctl:$k"
@@ -216,7 +221,7 @@ heal() {
   for item in $d; do
     case "$item" in
       sshd|ssh-passwords) cp $STATE/sshd.known-good /etc/ssh/sshd_config.d/91-phoenix-harden.conf; sshd -t && systemctl reload ssh ;;
-      sysctl-file|sysctl:*) cp $STATE/sysctl.known-good /etc/sysctl.d/90-phoenix-harden.conf; sysctl -q --system >/dev/null ;;
+      sysctl-file|sysctl:*) rm -f $SYSCTL_OLD; cp $STATE/sysctl.known-good $SYSCTL_FILE; sysctl -q --system >/dev/null ;;
       audit-rules) cp $STATE/audit.known-good /etc/audit/rules.d/90-phoenix.rules; augenrules --load >/dev/null 2>&1 || true ;;
       auditd) systemctl restart auditd ;;
       firewall) nft -f $STATE/nftables.known-good ;;
