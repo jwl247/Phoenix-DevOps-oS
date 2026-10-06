@@ -39,6 +39,7 @@ No package.json/requirements.txt here, but not dependency-free:
 - `. sector1/kernel/genie/genie.ps1` then `genie help` (PS7 7.2+). `genie profile` adds it to every PS7 window (auto-boots the kernel; `PHOENIX_GENIE_AUTOUP=0` to skip). Tested 2026-10-03: sandbox (real kernel + mock worker, every clone/import/refusal case) and PBMII (doctor all green, 8 Helix ports listening, real R2 clone verified, control socket token OK).
 - 2026-10-03 evening: `genie custody` now reads every clonepool row (`/clonepool?limit=1000000`) — it had been auditing only the newest 100.
 - Cloud edition (R2 + D1 only, no kernel): `tentative-wares/genie-cloud/genie-cloud.ps1` — `genie tour|doctor|find|info|cat|clone|verify|intake|custody|key`. Graduates to `sector1/kernel/genie/`; the full `genie.ps1` should then dot-source it instead of keeping its own clone/custody copy (and its name lookup via `/search` caps at 20 hits).
+- 2026-10-05 (ce54c1b): `genie send <suit> '{json}'` — listens on Helix-E (7804+ch), sends the stage into Helix-I (7700+ch), prints the suit's answer. `kernel/genie/suits/stage_check.py` proves the stage path and is the suit template; how-to in `docs/SUITS.md`. Helix-I/E Windows fixes: in-process STAGE_READY wake (os.kill = TerminateProcess on Windows), blocking accepted sockets with a 30 s deadline, SO_EXCLUSIVEADDRUSE (no co-binding the doors).
 - `bash grub/scripts/build_phoenix_usb.sh /dev/sdX`, `build_now.sh /dev/sdX` (typed YES), `gen_key.sh`, `install_phoenix_grub.sh` — root, erase devices; QEMU-only until the audit items are fixed.
 
 ## Connects to / connected from
@@ -46,13 +47,15 @@ No package.json/requirements.txt here, but not dependency-free:
 - `sector1/kernel/main_kernel.py` → `sector1/security/copes_runtime.py` (`boot()` arms the guardians — in that process only).
 - `sector1/helix-lightning/helixi.py` → `sector1/helix-lightning/helix_gate.py` (token check on every ingress connection; fail-closed bind).
 - `sector1/helix-lightning/helixe.py` → `sector1/helix-lightning/helix_gate.py` (token check on every egress consumer; fail-closed bind).
-- `sector1/kernel/main_kernel.py` → `sector1/helix-lightning/frank_spawn.py` (`register_resolver`: an addressed stage — JSON `{"suit": "<name>"}` — goes to that suit, Genie-imported suits only; everything else keeps the channel route. Proven 2026-10-03: stage in on 7701 → suit → result out on 7805).
+- `sector1/kernel/main_kernel.py` → `sector1/helix-lightning/frank_spawn.py` (`register_resolver`: an addressed stage — JSON `{"suit": "<name>"}` — goes to that suit, Genie-imported suits only; everything else keeps the channel route. The 10/3 "proven" note did not hold on Windows: every stage killed the kernel there until ce54c1b; proven on Windows 2026-10-05 with `genie send stage_check`).
 - `sector1/kernel/main_kernel.py` → `sector1/helix/helix_vram.py` (`boot()` starts the userspace Helix — her Dandelion and tiers run inside the Universal Kernel; `sys.modules['phoenix_ctx']` hands the live Helix and pager to suits; `lifefirst_checkin` stores every check-in in her).
 - `sector1/kernel/main_kernel.py` → `sector1/kernel/genie/genie_control.py` (`boot()` starts the control socket after the closet, spawner and Helix are up; non-fatal if it fails).
 - `sector1/kernel/genie/genie.ps1` → `sector1/kernel/main_kernel.py` (`genie up` starts it; `genie down` stops it).
 - `sector1/kernel/genie/genie.ps1` → `sector1/kernel/genie/genie_control.py` (`genie import`/`closet`/`status` over 127.0.0.1:8766 with the per-boot token).
 - `sector1/kernel/genie/genie.ps1` → `sector2/package-handler/worker/index.js` (`/search`, `/clonepool`, `/clonepool/:hex` bytes + `?meta=true` baseline, `/whoami`; Bearer `PHOENIX_AUTH` + CF Access headers).
 - `sector1/kernel/genie/genie_control.py` → `sector1/helix-lightning/process_library.py` (`ProcessLibrary.register()` — hot-load into the running closet).
+- `sector1/kernel/genie/genie.ps1` → `sector1/helix-lightning/helixi.py` (`genie send`: the stage into 7700+ch, `HXT` gate line when `HELIX_SOCKET_TOKEN` is set).
+- `sector1/kernel/genie/genie.ps1` → `sector1/helix-lightning/helixe.py` (`genie send`: reads the suit's answer from 7804+ch).
 - `sector1/helix-lightning/helix_suit_override.py` → `sector1/helix/helix_complete_stack.py` (9 core suits point here; it has no `run()`/`main()`, so they execute nothing — audit S1-F28).
 - `sector1/helix-lightning/helixe.py` → `sector3/translator/translator.sh` (fallback when the deployed copy under /etc/systemd/system/translator/ is absent; the TRANSLATOR_SH variable overrides).
 - `sector1/helix/helix_translator.py` → `sector1/helix/helix_vram.py` (real HelixMemoryManager; `use_kernel=True` → `sector1/kernels/libhelix/helix.py`).
