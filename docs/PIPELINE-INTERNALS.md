@@ -7,9 +7,8 @@ Facts below were verified by running them on 2026-10-06, not copied from older d
 | Node | Mesh IP | Role | Self-heal (own timers) | Healed BY peers |
 |---|---|---|---|---|
 | pbmii (Windows, travels) | 10.42.0.1 | Jerry's PC | task "Phoenix Mesh Heal" | **nobody** (no peer agent on Windows) |
-| pbmiii (Debian, HP i5-2400, 15 GB) | 10.42.0.10 | relay, home server, LAN 192.168.1.192 | mesh-heal 5 min, harden + shares 15 min | awslh, pbmii |
+| pbmiii (Debian, HP Compaq 6200 Pro = the old road-test "Compaq", i5-2400, 15 GB) | 10.42.0.10 | relay, home server, LAN 192.168.1.192 **static** | mesh-heal 5 min, harden + shares 15 min | awslh, pbmii |
 | awslh (AWS Lightsail) | 10.42.0.2 | only lighthouse + relay | mesh-heal 5 min, harden 15 min | pbmiii, pbmii |
-| compaq | 10.42.0.11 (planned) | home server | — | **not on the mesh yet** |
 
 Peer healing chain: `sector3/mesh/phoenix_buddy.py` (timer every 5 min on each box) →
 SSH as `phoenix-peer` → forced command `peer_agent.sh` (verbs: status / heal / export mesh /
@@ -23,7 +22,7 @@ Break-glass: `sector3/mesh/pbmiii-recover.sh` at III's console (tested 10/6, 6/6
 1. PBMII is never healed by a peer (would need an inbound agent on the Windows PC).
 2. One lighthouse (awslh). If it's down, existing tunnels hold but new ones can't form.
 3. A dead VM/box can't be revived by a peer (only services); awslh revive needs the AWS API.
-4. Compaq not joined.
+4. ~~Compaq not joined~~: there is no separate Compaq. pbmIII IS that box (DMI: HP Compaq 6200 Pro), rebuilt 10/6. hosts.json entry removed.
 
 ## Hardening (`scripts/hardening/phoenix-harden.sh`, 1.0.3)
 sshd drop-in, sysctl drop-in, auditd rules, nftables (table inet phoenix), services off.

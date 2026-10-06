@@ -31,7 +31,7 @@
         "relay"
       ],
       "os": "linux",
-      "note": "HP - home Starlink router 192.168.1.190. Starlink = CGNAT and filters inbound IPv6, so it can't be a lighthouse; it dials out to awslh and relays for the Compaq on the home side",
+      "note": "HP Compaq 6200 Pro SFF (i5-2400, 15 GB) = the road-test 'Compaq', rebuilt 2026-10-06 as pbmIII. Home Starlink LAN, STATIC 192.168.1.192 (NetworkManager, set 10/6). Starlink = CGNAT and filters inbound IPv6, so it can't be a lighthouse; it dials out to awslh and relays on the home side",
       "ssh": "a@192.168.1.192",
       "ssh_key": "phoenix_third_debian_ed25519",
       "relay": true,
@@ -41,21 +41,6 @@
       "lan": "192.168.1.192",
       "lan_net": "192.168.1.",
       "mac": "2c:27:d7:27:be:aa"
-    },
-    "compaq": {
-      "ip": "10.42.0.11",
-      "groups": [
-        "servers"
-      ],
-      "os": "linux",
-      "note": "home server \u2014 reaches the mesh through pbmiii. LAN address is DHCP (last seen .141); if install-ssh can't connect, find it from pbmiii and update ssh",
-      "ssh": "a@192.168.1.141",
-      "ssh_key": "phoenix_pbm_compaq_ed25519",
-      "ssh_via": "pbmiii",
-      "relays": [
-        "10.42.0.10",
-        "10.42.0.2"
-      ]
     },
     "awslh": {
       "ip": "10.42.0.2",
