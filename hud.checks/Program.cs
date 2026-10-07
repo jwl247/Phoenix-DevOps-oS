@@ -26,6 +26,26 @@ foreach (var n in new[] { "no", "yes wait", "not yet", "what?", "", "yes but fir
 foreach (var n in new[] { "ok what does that do", "okay, what will that restart?", "sure but which one", "go ahead and tell me first", "ok?", "yes if it's safe" })
     Check($"a question is not a yes: \"{n}\"", !AiChatService.IsYes(n));
 
+// The eye + docks HUD (Jerry 2026-10-07, docs/plans/hud-eye-and-docks.md): the docks come out only when asked.
+foreach (var (t, open, which) in new[] { ("open the dock", true, "both"), ("Expose the right dock.", true, "right"),
+             ("show me the left dock", true, "left"), ("close the dock", false, "both"), ("put the docks away", false, "both"),
+             ("turn on the dock", true, "both"), ("David, expose the dock", true, "both") })
+    Check($"dock command: \"{t}\"", HudOverlay.DockCommand(t) is { } c && c.Open == open && c.Which == which);
+foreach (var t in new[] { "what is a dock in Docker and why does it open ports on my machine", "the dock", "dock", "open the door", "open and close the dock" })
+    Check($"not a dock command: \"{t}\"", HudOverlay.DockCommand(t) is null);
+Check("Jarvis, ... goes to Jarvis", HudOverlay.IsForJarvis("Jarvis, what's on Laurie's list?", out var jr) && jr == "what's on Laurie's list?");
+Check("jarvis: ... goes to Jarvis", HudOverlay.IsForJarvis("jarvis: hi", out var jr2) && jr2 == "hi");
+Check("Jarvisville is not Jarvis", !HudOverlay.IsForJarvis("Jarvisville weather", out _));
+Check("bare 'Jarvis' asks nothing", !HudOverlay.IsForJarvis("Jarvis", out _));
+Check("this PC is the full edition", HudProfile.Current.Edition == "full" && HudProfile.Current.Intake && HudProfile.Current.Console);
+Check("the full edition's dock places exist", HudProfile.Current.Places.Count > 0 && HudProfile.Current.Places.All(p => System.IO.Directory.Exists(p.Path)));
+
+if (args.Contains("--jarvis"))
+{
+    var (jok, jtext) = await HudOverlay.AskJarvisAsync("Reply with one word: ok");
+    Check($"Jarvis answers through the HUD's own path ({jtext})", jok && jtext.Length > 0);
+}
+
 if (args.Contains("--live"))
 {
     foreach (var provider in new[] { args.FirstOrDefault(x => x.StartsWith("--provider="))?[11..] ?? "subscription", "ollama" })

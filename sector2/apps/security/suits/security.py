@@ -37,7 +37,7 @@ import urllib.request
 from pathlib import Path
 
 NAME = "security"
-VERSION = "security-1.3.0"
+VERSION = "security-1.4.0"
 HOME = Path(os.environ.get("SECURITY_HOME", Path.home() / ".phoenix" / "security"))
 IS_WIN = os.name == "nt"
 GENESIS = "0" * 128
@@ -87,7 +87,7 @@ DEFAULTS_LINUX = {
 # Only the sensor's own STATE is excluded (it changes every scan). Its code (bin/) and config.json
 # stay watched: excluding the whole .phoenix/security tree hid a replaced security.py (S2APPS-F80).
 STATE_EXCLUDE = [".phoenix/security/" + n for n in
-                 ("state.json", "state.tmp", "motion.jsonl", "last_scan.json", "snap", "outbox", "paused")]
+                 ("state.json", "state.tmp", "motion.jsonl", "last_scan.json", "snap", "outbox", "paused", "hud-locked")]
 EXCLUDE = [".git", "node_modules", "__pycache__", ".cache"] + STATE_EXCLUDE
 
 
@@ -437,6 +437,25 @@ def set_paused(on: bool, who: str = "") -> dict:
     return {"paused": on, "by": by}
 
 
+HUD_LOCK = HOME / "hud-locked"
+
+
+def set_hud_lock(on: bool, who: str = "") -> dict:
+    """Security's lock over the HUD's docks (Jerry 10/7: "lockable by security"). While the file exists
+    the HUD refuses to open a dock and closes any open one. CLI-only, chained as an alert."""
+    by = who or socket.gethostname()
+    if on:
+        HOME.mkdir(parents=True, exist_ok=True)
+        HUD_LOCK.write_text(json.dumps({"at": int(time.time()), "by": by}), encoding="utf-8")
+    else:
+        if not HUD_LOCK.exists():
+            return {"hud_locked": False}
+        HUD_LOCK.unlink(missing_ok=True)
+    append([{"t": int(time.time()), "host": socket.gethostname(), "type": "hud_locked" if on else "hud_unlocked",
+             "by": by, "alert": True}])
+    return {"hud_locked": on, "by": by}
+
+
 def is_paused() -> dict | None:
     try:
         return json.loads(PAUSE_FILE.read_text(encoding="utf-8"))
@@ -543,7 +562,9 @@ ACTIONS = {"status": lambda m: status(), "scan": lambda m: scan(),
            "paused": lambda m: {"paused": bool(is_paused()), **(is_paused() or {})}}
 
 
-SUIT_ACTIONS = {k: v for k, v in ACTIONS.items() if k != "off"}   # off = CLI only (S2APPS-S18)
+ACTIONS["lock-hud"] = lambda m: set_hud_lock(True, m.get("by", ""))
+ACTIONS["unlock-hud"] = lambda m: set_hud_lock(False)
+SUIT_ACTIONS = {k: v for k, v in ACTIONS.items() if k not in ("off", "lock-hud", "unlock-hud")}   # CLI only (S18)
 
 
 def run(data, ball=None, pcs=None, **_):

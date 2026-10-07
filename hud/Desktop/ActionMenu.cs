@@ -27,6 +27,9 @@ public static class ActionMenu
         m.Items.Add(new Separator());
 
         Add(m, "Ask Claude about it", () => askClaude(paths));
+        // Jerry-edition tools only (HudProfile): a game edition never shows or reaches these.
+        if (HudProfile.Current.Intake)
+        {
         Add(m, "Copy to Phoenix place…", () => Pick("Copy", dest => Each(paths, p => FileActions.CopyTo(p, dest), report)));
         Add(m, "Move to Phoenix place…", () => Pick("Move", dest => Each(paths, p => FileActions.MoveTo(p, dest), report)));
         Add(m, "Send to pbmIII", () => Each(paths, FileActions.SendToThirdBox, report));
@@ -39,6 +42,7 @@ public static class ActionMenu
                 report((r.Ok ? "[ACT] " : "[ACT FAILED] ") + r.Message);
             }
         });
+        }
         m.Items.Add(new Separator());
         if (paths.Count == 1)
             Add(m, "Rename…", () =>

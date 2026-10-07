@@ -33,8 +33,11 @@ public partial class KnightRiderBar : UserControl
         switch (state)
         {
             case VoiceState.Idle:
-                Eye.Opacity = 0;
-                return;
+                // The eye is the only thing on screen (Jerry 10/7): idle is a slow, dim sweep - alive, quiet.
+                Eye.Opacity = 0.35;
+                EyeCoreStop.Color = Colors.Red;
+                _current = BuildSweep(travel, TimeSpan.FromMilliseconds(2200));
+                break;
 
             case VoiceState.Listening:
                 Eye.Opacity = 1;

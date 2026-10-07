@@ -4,51 +4,99 @@
         xmlns:controls="clr-namespace:Hud.Controls"
         Title="Phoenix HUD"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize"
+        Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize" ShowActivated="False"
         FontFamily="Consolas">
-    <!-- See-through and click-through: only the chat column and the drop shelf have
-         pixels; everywhere else is fully transparent, and a layered window passes
-         clicks on fully transparent pixels straight to whatever is underneath. -->
+    <!-- The HUD (Jerry, 2026-10-07, docs/plans/hud-eye-and-docks.md): the EYE is the only thing
+         always on screen. The chat drops down from it. The docks are NOT PRESENT (collapsed: nothing
+         to see, nothing catches a drag) until Jerry asks the AI for them, by voice or chat:
+         "open/expose the (left|right) dock" - a second lock, same as "turn on the radar" in the game. Everything else is fully transparent, so clicks go straight
+         through to the desktop. -->
+    <Window.Resources>
+        <SolidColorBrush x:Key="Amber"    Color="#FFCC00"/>
+        <SolidColorBrush x:Key="AmberDim" Color="#B38A1A"/>
+        <SolidColorBrush x:Key="Glass"    Color="#E00A0D10"/>
+        <DropShadowEffect x:Key="Glow" Color="#FFCC00" BlurRadius="10" ShadowDepth="0" Opacity="0.55"/>
+        <Style x:Key="DockTree" TargetType="TreeView">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{StaticResource Amber}"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+    </Window.Resources>
     <Grid>
-        <!-- Drop shelf: a 6 px strip on the left edge (#01 alpha = invisible but still
-             catches a drag). Drag anything toward it and it opens; drop for the menu. -->
-        <Border x:Name="Shelf" HorizontalAlignment="Left" VerticalAlignment="Stretch" Width="6"
-                Background="#01000000" AllowDrop="True"
+        <!-- LEFT DOCK -->
+        <Border x:Name="Shelf" HorizontalAlignment="Left" VerticalAlignment="Stretch" Width="6" Visibility="Collapsed"
+                Background="#01000000" AllowDrop="True" Tag="left"
                 DragEnter="Shelf_DragEnter" DragOver="Any_DragOver" DragLeave="Shelf_DragLeave" Drop="Any_Drop">
-            <TextBlock x:Name="ShelfText" Text="DROP&#x0a;HERE" Visibility="Collapsed" Foreground="#7FFFD4"
-                       FontSize="22" FontWeight="Bold" TextAlignment="Center"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <DockPanel x:Name="ShelfBody" Visibility="Collapsed" Margin="8">
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                    <TextBlock Text="DOCK" Foreground="{StaticResource Amber}" FontWeight="Bold" Effect="{StaticResource Glow}"/>
+                    <Button Content="×" Width="22" Height="20" HorizontalAlignment="Right" ToolTip="Close the dock"
+                            Style="{StaticResource HudButton}" Click="CloseDock_Click"/>
+                </Grid>
+                <TextBlock DockPanel.Dock="Bottom" Foreground="{StaticResource AmberDim}" FontSize="11" TextWrapping="Wrap"
+                           Text="Drag out to anywhere · drop here to intake or ask · double-click opens"/>
+                <TreeView x:Name="TreeLeft" Style="{StaticResource DockTree}"/>
+            </DockPanel>
         </Border>
 
-        <!-- Chat only. Claude. -->
-        <Border Style="{StaticResource HudPanel}" Background="#F00A0D10" Width="420" HorizontalAlignment="Right" Margin="0,16,16,16"
-                AllowDrop="True" DragOver="Any_DragOver" Drop="Any_Drop">
-            <Grid>
+        <!-- RIGHT DOCK (the same, mirrored) -->
+        <Border x:Name="ShelfRight" HorizontalAlignment="Right" VerticalAlignment="Stretch" Width="6" Visibility="Collapsed"
+                Background="#01000000" AllowDrop="True" Tag="right"
+                DragEnter="Shelf_DragEnter" DragOver="Any_DragOver" DragLeave="Shelf_DragLeave" Drop="Any_Drop">
+            <DockPanel x:Name="ShelfRightBody" Visibility="Collapsed" Margin="8">
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                    <TextBlock Text="DOCK" Foreground="{StaticResource Amber}" FontWeight="Bold" Effect="{StaticResource Glow}"/>
+                    <Button Content="×" Width="22" Height="20" HorizontalAlignment="Right" ToolTip="Close the dock"
+                            Style="{StaticResource HudButton}" Click="CloseDock_Click"/>
+                </Grid>
+                <TextBlock DockPanel.Dock="Bottom" Foreground="{StaticResource AmberDim}" FontSize="11" TextWrapping="Wrap"
+                           Text="Drag out to anywhere · drop here to intake or ask · double-click opens"/>
+                <TreeView x:Name="TreeRight" Style="{StaticResource DockTree}"/>
+            </DockPanel>
+        </Border>
+
+        <!-- THE EYE: the only thing always visible. Click = chat drops down; right-click = menu. -->
+        <Border x:Name="EyeFrame" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,6,0,0"
+                Width="268" Height="24" CornerRadius="12" Background="#D0080A0C" BorderBrush="#552A1A10" BorderThickness="1"
+                Cursor="Hand" ToolTip="Hold Right Ctrl to talk · click for the chat · right-click for more"
+                MouseLeftButtonUp="Eye_Click" MouseRightButtonUp="Eye_RightClick" AllowDrop="True" DragOver="Any_DragOver" Drop="Any_Drop">
+            <controls:KnightRiderBar x:Name="Bar" Width="250" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+
+        <!-- THE CHAT: drops down from the eye; folded away otherwise. -->
+        <Border x:Name="ChatPanel" Visibility="Collapsed" Width="480" HorizontalAlignment="Center" VerticalAlignment="Top"
+                Margin="0,34,0,0" MaxHeight="620" CornerRadius="10" BorderThickness="1" BorderBrush="#66FFCC00"
+                Background="{StaticResource Glass}" AllowDrop="True" DragOver="Any_DragOver" Drop="Any_Drop">
+            <Border.Effect>
+                <DropShadowEffect Color="#FFCC00" BlurRadius="18" ShadowDepth="0" Opacity="0.25"/>
+            </Border.Effect>
+            <Grid Margin="12">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <Grid Grid.Row="0" Margin="0,0,0,6">
-                    <controls:KnightRiderBar x:Name="Bar" HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="Header" Text="CLAUDE" Foreground="#7FFFD4" FontWeight="Bold"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    <Button Content="—" Width="28" Height="24" HorizontalAlignment="Right" ToolTip="Hide (Ctrl+Alt+Space)"
+                <Grid Grid.Row="0" Margin="0,0,0,8">
+                    <TextBlock x:Name="Header" Text="C L A U D E" Foreground="{StaticResource Amber}" FontWeight="Bold"
+                               FontSize="14" Effect="{StaticResource Glow}" VerticalAlignment="Center"/>
+                    <Button Content="—" Width="28" Height="22" HorizontalAlignment="Right" ToolTip="Fold the chat away (Esc)"
                             Style="{StaticResource HudButton}" Click="Hide_Click"/>
                 </Grid>
-                <TextBox x:Name="ChatLog" Grid.Row="1" IsReadOnly="True" IsReadOnlyCaretVisible="True" TextWrapping="Wrap"
-                         VerticalScrollBarVisibility="Auto" Background="Transparent" Foreground="#CFE8E0"
-                         BorderThickness="0" FontSize="13"/>
-                <TextBlock x:Name="Attached" Grid.Row="2" Foreground="#5A7A70" TextWrapping="Wrap" Margin="0,4,0,0"
-                           Visibility="Collapsed"/>
-                <Grid Grid.Row="3" Margin="0,6,0,0">
+                <TextBox x:Name="ChatLog" Grid.Row="1" MinHeight="160" IsReadOnly="True" IsReadOnlyCaretVisible="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto" Background="Transparent" Foreground="{StaticResource Amber}"
+                         BorderThickness="0" FontSize="14"/>
+                <TextBlock x:Name="Attached" Grid.Row="2" Foreground="{StaticResource AmberDim}" TextWrapping="Wrap"
+                           FontSize="12" Margin="0,4,0,0" Visibility="Collapsed"/>
+                <Grid Grid.Row="3" Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBox x:Name="ChatInput" Grid.Column="0" Background="#0A0D10" Foreground="White" CaretBrush="#7FFFD4"
-                             BorderBrush="#2A4A40" Padding="4" AcceptsReturn="False" KeyDown="ChatInput_KeyDown"/>
+                    <TextBox x:Name="ChatInput" Grid.Column="0" Background="#330A0D10" Foreground="{StaticResource Amber}"
+                             CaretBrush="{StaticResource Amber}" FontSize="14"
+                             BorderBrush="#66FFCC00" BorderThickness="1" Padding="6,4" AcceptsReturn="False" KeyDown="ChatInput_KeyDown"/>
                     <Button Grid.Column="1" Content="SEND" Style="{StaticResource HudButton}" Margin="6,0,0,0" Click="Send_Click"/>
                 </Grid>
             </Grid>

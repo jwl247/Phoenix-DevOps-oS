@@ -64,13 +64,19 @@ public partial class MainWindow : Window
         // to an armed-but-inert hotkey with a status line (never a crash)
         // when the local Whisper/Piper files from hud/VOICE_SETUP.md aren't
         // installed yet.
-        _voice = VoiceSetup.Create(Dispatcher);
-        _voice.StateChanged += state => Dispatcher.Invoke(() => VoiceIndicator.SetState(state));
-        _voice.TranscriptReady += transcript => _ = SendMessageAsync(transcript, speak: true);
-        _voice.Note += line => { _lines.Add($"[SYS] {line}"); RefreshChatLog(); };
-        _lines.Add(_voice.UnavailableReason is null
-            ? $"[SYS] {_voice.ArmedLine}"
-            : $"[SYS] {_voice.UnavailableReason}");
+        // Voice now belongs to the app (App.Voice): the EYE takes what you say and speaks the reply,
+        // with or without this window (Jerry 10/7, docs/plans/hud-eye-and-docks.md). This window only
+        // mirrors the voice state.
+        _voice = App.Voice;
+        if (_voice is not null)
+        {
+            Action<VoiceState> onState = state => Dispatcher.Invoke(() => VoiceIndicator.SetState(state));
+            _voice.StateChanged += onState;
+            Closed += (_, _) => _voice.StateChanged -= onState;
+            _lines.Add(_voice.UnavailableReason is null
+                ? $"[SYS] {_voice.ArmedLine} (answers come from the eye)"
+                : $"[SYS] {_voice.UnavailableReason}");
+        }
         // [HANDS] catalog / [SYS] ollama lines from H.L.K-10 (HUD-F03, HUD-F04).
         // They arrive on background threads; subscribing starts the hands refresh.
         _ai.Note += line => Dispatcher.BeginInvoke(() => { _lines.Add(line); RefreshChatLog(); });
@@ -124,8 +130,7 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             _capture.Dispose();
-            _voice?.Dispose();
-            _claudeCode?.Stop();
+            _claudeCode?.Stop();          // App.Voice is the app's: it outlives this window
         };
     }
 
@@ -247,6 +252,16 @@ public partial class MainWindow : Window
     private async Task SendMessageAsync(string message, bool speak)
     {
         if (message.Length == 0) return;
+        // Jarvis is callable from the Console (Jerry 10/7): "Jarvis, ..." goes to him, through his gate.
+        if (HudProfile.Current.Jarvis && HudOverlay.IsForJarvis(message, out var forJarvis))
+        {
+            _lines.Add($"[YOU → JARVIS] {forJarvis}");
+            RefreshChatLog();
+            var (ok, text) = await HudOverlay.AskJarvisAsync(forJarvis);
+            _lines.Add(ok ? $"[JARVIS] {text}" : $"[JARVIS · not answering] {text}");
+            RefreshChatLog();
+            return;
+        }
         _lines.Add($"[YOU] {message}");
         RefreshChatLog();
 

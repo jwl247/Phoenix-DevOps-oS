@@ -123,12 +123,14 @@ public static class FileActions
         catch (Exception e) { return Done(false, $"show {path}: {Plain(e)}"); }
     }
 
-    public static Result SendToThirdBox(string source) => CopyTo(source, ThirdBoxShare);
+    public static Result SendToThirdBox(string source) =>
+        HudProfile.Current.Intake ? CopyTo(source, ThirdBoxShare) : Done(false, "sending to pbmIII isn't part of this HUD edition");
 
     // ------------------------------------------------------------ intake
     /// <summary>Through Frank's import method (scripts/hsf-intake.sh): hex, sidecar, R2, D1.</summary>
     public static async Task<Result> IntakeAsync(string source)
     {
+        if (!HudProfile.Current.Intake) return Done(false, "intake isn't part of this HUD edition");
         var bash = new[] { @"C:\Program Files\Git\bin\bash.exe", @"C:\Program Files\Git\usr\bin\bash.exe" }
             .FirstOrDefault(File.Exists);
         if (bash is null) return Done(false, $"intake {source}: Git Bash not found");
