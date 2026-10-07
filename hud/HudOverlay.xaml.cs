@@ -108,6 +108,16 @@ public partial class HudOverlay : Window
         e.Handled = true;
     }
 
+    /// <summary>The sight light: green while the screen streams to Claude, red when it doesn't. Streaming
+    /// itself is the next build (docs/plans/hud-eye-and-docks.md "Sight"); until then it stays red.</summary>
+    public void SetStreaming(bool on)
+    {
+        var c = on ? Color.FromRgb(0x30, 0xFF, 0x60) : Color.FromRgb(0xFF, 0x30, 0x30);
+        SightLight.Fill = new SolidColorBrush(c);
+        SightGlow.Color = c;
+        SightLight.ToolTip = on ? "Sight: ON - your screen is streaming to Claude" : "Sight: off (not streaming)";
+    }
+
     /// <summary>Opens the chat with "Jarvis, " ready to finish (tray + eye menus).</summary>
     public void StartJarvisAsk()
     {

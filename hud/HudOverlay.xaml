@@ -58,15 +58,22 @@
 
         <!-- THE EYE: the only thing always visible. Click = chat drops down; right-click = menu. -->
         <Border x:Name="EyeFrame" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,6,0,0"
-                Width="268" Height="24" CornerRadius="12" Background="#D0080A0C" BorderBrush="#552A1A10" BorderThickness="1"
+                Width="356" Height="32" CornerRadius="16" Background="#D0080A0C" BorderBrush="#552A1A10" BorderThickness="1"
                 Cursor="Hand" ToolTip="Hold Right Ctrl to talk · click for the chat · right-click for more"
                 MouseLeftButtonUp="Eye_Click" MouseRightButtonUp="Eye_RightClick" AllowDrop="True" DragOver="Any_DragOver" Drop="Any_Drop">
-            <controls:KnightRiderBar x:Name="Bar" Width="250" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Grid>
+                <!-- the sight light (Jerry 10/7): green = screen streaming to Claude, red = not streaming -->
+                <Ellipse x:Name="SightLight" Width="11" Height="11" HorizontalAlignment="Left" Margin="12,0,0,0"
+                         VerticalAlignment="Center" Fill="#FF3030" ToolTip="Sight: off (not streaming)">
+                    <Ellipse.Effect><DropShadowEffect x:Name="SightGlow" Color="#FF3030" BlurRadius="8" ShadowDepth="0" Opacity="0.9"/></Ellipse.Effect>
+                </Ellipse>
+                <controls:KnightRiderBar x:Name="Bar" Width="300" Margin="22,0,0,0" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
         </Border>
 
         <!-- THE CHAT: drops down from the eye; folded away otherwise. -->
         <Border x:Name="ChatPanel" Visibility="Collapsed" Width="480" HorizontalAlignment="Center" VerticalAlignment="Top"
-                Margin="0,34,0,0" MaxHeight="620" CornerRadius="10" BorderThickness="1" BorderBrush="#66FFCC00"
+                Margin="0,42,0,0" MaxHeight="620" CornerRadius="10" BorderThickness="1" BorderBrush="#66FFCC00"
                 Background="{StaticResource Glass}" AllowDrop="True" DragOver="Any_DragOver" Drop="Any_Drop">
             <Border.Effect>
                 <DropShadowEffect Color="#FFCC00" BlurRadius="18" ShadowDepth="0" Opacity="0.25"/>
