@@ -13,6 +13,10 @@ Environment=HF_HUB_OFFLINE=1
 # OPENJARVIS_API_KEY (callers must send it) + LLAMACPP_API_KEY (Jarvis -> engine). 0600 root.
 EnvironmentFile=/etc/openjarvis/api.env
 ExecStart=/opt/openjarvis/venv/bin/jarvis serve --host 127.0.0.1 --port 8000
+# Speed: one ask through the gate at start so the engine caches the identity prefix. Cold, that prefix
+# costs 16-23 s on pbmIII's CPU (gate timeout is 22 s); warm, an ask is ~2 s. '+' = root (reads gate.key), '-' = never fails the start.
+ExecStartPost=-+/bin/sh -c 'for i in $(seq 1 60); do curl -fs http://127.0.0.1:8000/health >/dev/null && break; sleep 1; done; timeout 100 /opt/openjarvis/jarvis-gate --warm >/dev/null 2>&1'
+TimeoutStartSec=180
 Restart=always
 RestartSec=5
 # Rails: the kernel drops every packet that isn't loopback (no cloud, no telemetry, no downloads)

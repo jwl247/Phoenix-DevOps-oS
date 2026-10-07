@@ -16,7 +16,8 @@ URL = "http://127.0.0.1:8000/v1/chat/completions"
 MODEL = "llama3.2:3b"
 IDENTITY = "/opt/openjarvis/jarvis_identity.md"  # sent as the system message on EVERY ask (rail: he can't drift from it)
 MAX_TEXT = 4000
-TIMEOUT = 22          # must end BEFORE the suit gives up (WAIT 25 s): the old 120 s held Jarvis for every caller (S2APPS-F79)
+WARM = sys.argv[1:] == ["--warm"]  # root-only, from openjarvis.service at start; SSH callers can't pass argv to a forced command
+TIMEOUT = 90 if WARM else 22  # warm-up may pay the cold prefix; a caller's ask must end BEFORE the suit gives up (WAIT 25 s): the old 120 s held Jarvis for every caller (S2APPS-F79)
 MAX_TOKENS = 300      # a reply sized to finish inside TIMEOUT on CPU
 KEY_FILE = "/etc/openjarvis/gate.key"  # 0640 root:jarvis-call - Jarvis's API refuses calls without it (JARVIS-S03)
 
@@ -53,7 +54,7 @@ def main():
         log(f"refused command from {who}")
         reply({"ok": False, "error": "only 'ask' with JSON on stdin"}, 2)
     try:
-        msg = json.loads(sys.stdin.read(MAX_TEXT * 2 + 1024) or "{}")
+        msg = {"text": "ready?"} if WARM else json.loads(sys.stdin.read(MAX_TEXT * 2 + 1024) or "{}")
     except ValueError:
         reply({"ok": False, "error": "stdin is not JSON"}, 2)
     text = msg.get("text") if isinstance(msg, dict) else None
