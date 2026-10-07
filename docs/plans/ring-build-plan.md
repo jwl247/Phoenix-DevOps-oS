@@ -80,8 +80,16 @@ rings hold until he is back).
 ms-s, from what is being touched now), warm (local SSD/NVMe, s-min, from the journal: a written job's
 inputs fetched before it runs), cold (4 TB / 20 TB drive from the pool and other machines, min-h, from
 patterns). Each hands up to the tier above, so nothing is fetched twice.
-**All of it is color coded (J): the 4 rings are red, blue, yellow (+ a 4th, ask)**; the tiers carry the
-same colors. Nothing in the repo records this color code yet — it gets written here first, then into
+**All of it is color coded (J): the color FAMILY is the tier** — "primary colors tier1, secondary colors
+tier2, tertiary colors tier3":
+| Tier | Family | Colors |
+|---|---|---|
+| T1 (hot) | primary | red, blue, yellow |
+| T2 (warm) | secondary | orange, green, purple |
+| T3 (cold) | tertiary | red-orange, yellow-orange, yellow-green, blue-green, blue-violet, red-violet |
+The family says the tier at a glance; the hue inside it says which ring/lane. The rings are red, blue,
+yellow (J) — three primaries for four rings: ask whether ring 4 (Helix, "provided she is fast enough")
+is the one without a color until she earns it. Nothing in the repo records this color code yet — it gets written here first, then into
 the ring/tier code and the QR footer tier colors (CLAUDE.md TAV: footer QR = tier color T1-T4).
 
 Still open:
