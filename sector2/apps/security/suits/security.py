@@ -37,7 +37,7 @@ import urllib.request
 from pathlib import Path
 
 NAME = "security"
-VERSION = "security-1.2.0"
+VERSION = "security-1.3.0"
 HOME = Path(os.environ.get("SECURITY_HOME", Path.home() / ".phoenix" / "security"))
 IS_WIN = os.name == "nt"
 GENESIS = "0" * 128
@@ -64,6 +64,7 @@ DEFAULTS_WIN = {
               r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup",
               str(Path.home() / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup")],
     "alert": [r"F:\Phoenix\Vault", str(Path.home() / ".ssh"), str(Path.home() / ".phoenix" / "genie" / "closet"),
+              str(Path.home() / ".phoenix" / "security" / "bin"),
               r"C:\Windows\System32\drivers\etc", r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup",
               str(Path.home() / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup")],
     "exclude": ["$Recycle.Bin", "System Volume Information", "C:/Windows/Temp", "C:/Windows/Prefetch",
@@ -77,12 +78,17 @@ DEFAULTS_LINUX = {
     "watch": ["/"],
     "alert": ["/etc/ssh", "/etc/nebula", "/etc/sudoers", "/etc/sudoers.d", "/etc/passwd", "/etc/shadow",
               "/etc/group", "/etc/crontab", "/etc/cron.d", "/etc/systemd/system", "/etc/phoenix",
-              "/usr/local/sbin", "/usr/local/bin", "/root/.ssh", "/opt/openjarvis/jarvis-gate", "/boot"],
+              "/usr/local/sbin", "/usr/local/bin", "/root/.ssh", "/opt/openjarvis/jarvis-gate", "/boot",
+              "/opt/phoenix-security", "/etc/openjarvis", "/etc/phoenix-llm", "/opt/phoenix-llm"],
     "exclude": ["/proc", "/sys", "/dev", "/run", "/tmp", "/var/tmp", "/var/log", "/var/cache", "/var/spool",
                 "/var/lib/systemd", "/var/lib/ollama", "/var/lib/jarvis", "/var/lib/phoenix-security",
                 "/var/lib/apt/lists", "/var/lib/samba", "/var/lib/sss", "/swapfile", "/lost+found"],
 }
-EXCLUDE = [".git", "node_modules", "__pycache__", ".cache", ".phoenix/security"]
+# Only the sensor's own STATE is excluded (it changes every scan). Its code (bin/) and config.json
+# stay watched: excluding the whole .phoenix/security tree hid a replaced security.py (S2APPS-F80).
+STATE_EXCLUDE = [".phoenix/security/" + n for n in
+                 ("state.json", "state.tmp", "motion.jsonl", "last_scan.json", "snap", "outbox", "paused")]
+EXCLUDE = [".git", "node_modules", "__pycache__", ".cache"] + STATE_EXCLUDE
 
 
 # ---------------------------------------------------------------- config / files
@@ -97,6 +103,13 @@ def config() -> dict:
     cfg = json.loads(p.read_text(encoding="utf-8"))
     cfg.setdefault("exclude", EXCLUDE)
     cfg.setdefault("cap", 5000)
+    if ".phoenix/security" in cfg["exclude"]:                 # 1.2.0 hid the sensor's own code (S2APPS-F80)
+        cfg["exclude"] = [e for e in cfg["exclude"] if e != ".phoenix/security"] + \
+            [e for e in STATE_EXCLUDE if e not in cfg["exclude"]]
+        own = str(HOME / "bin") if IS_WIN else "/opt/phoenix-security"
+        if own not in cfg.get("alert", []):
+            cfg.setdefault("alert", []).append(own)
+        p.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     return cfg
 
 
@@ -409,13 +422,19 @@ PAUSE_FILE = HOME / "paused"
 def set_paused(on: bool, who: str = "") -> dict:
     """Off-switch. Honoured by scan(); the timer keeps firing but does nothing while paused.
     Writing/removing the file needs write access to the state dir (root on Linux, you on Windows)."""
+    by = who or socket.gethostname()
     if on:
         HOME.mkdir(parents=True, exist_ok=True)
-        PAUSE_FILE.write_text(json.dumps({"at": int(time.time()), "by": who or socket.gethostname()}),
-                              encoding="utf-8")
-        return {"paused": True, "by": who or socket.gethostname()}
-    PAUSE_FILE.unlink(missing_ok=True)
-    return {"paused": False}
+        PAUSE_FILE.write_text(json.dumps({"at": int(time.time()), "by": by}), encoding="utf-8")
+    else:
+        was = PAUSE_FILE.exists()
+        PAUSE_FILE.unlink(missing_ok=True)
+        if not was:
+            return {"paused": False}
+    # S2APPS-S18: switching the sensor off (or back on) is itself motion, in the chain, as an alert
+    append([{"t": int(time.time()), "host": socket.gethostname(), "type": "paused" if on else "resumed",
+             "by": by, "alert": True}])
+    return {"paused": on, "by": by}
 
 
 def is_paused() -> dict | None:
@@ -487,8 +506,9 @@ def status() -> dict:
            "watch": cfg["watch"], "last_scan": json.loads(last.read_text()) if last.exists() else None,
            "chain": verify(),
            "outbox_segments": len(list((HOME / "outbox").glob("motion-*.jsonl"))) if (HOME / "outbox").exists() else 0}
+    out["paused"] = is_paused()
     out["healthy"] = out["chain"]["ok"] and out["last_scan"] is not None and \
-        time.time() - out["last_scan"]["t"] < 3600
+        time.time() - out["last_scan"]["t"] < 3600 and not out["paused"]   # paused = unhealthy at once (S18)
     return out
 
 
@@ -523,6 +543,9 @@ ACTIONS = {"status": lambda m: status(), "scan": lambda m: scan(),
            "paused": lambda m: {"paused": bool(is_paused()), **(is_paused() or {})}}
 
 
+SUIT_ACTIONS = {k: v for k, v in ACTIONS.items() if k != "off"}   # off = CLI only (S2APPS-S18)
+
+
 def run(data, ball=None, pcs=None, **_):
     try:
         msg = json.loads(data)
@@ -531,10 +554,11 @@ def run(data, ball=None, pcs=None, **_):
     if not isinstance(msg, dict):
         return json.dumps({"ok": False, "suit": NAME, "error": "stage must be a JSON object"})
     action = msg.get("action", "status")
-    if action not in ACTIONS:
-        return json.dumps({"ok": False, "suit": NAME, "error": f"action must be one of {sorted(ACTIONS)}"})
+    if action not in SUIT_ACTIONS:
+        why = " (`off` is CLI-only: `security off` at the machine)" if action == "off" else ""
+        return json.dumps({"ok": False, "suit": NAME, "error": f"action must be one of {sorted(SUIT_ACTIONS)}{why}"})
     try:
-        return json.dumps({"ok": True, "suit": NAME, "action": action, **ACTIONS[action](msg)})
+        return json.dumps({"ok": True, "suit": NAME, "action": action, **SUIT_ACTIONS[action](msg)})
     except Exception as e:                                   # a suit never raises
         return json.dumps({"ok": False, "suit": NAME, "error": f"{type(e).__name__}: {e}"})
 
