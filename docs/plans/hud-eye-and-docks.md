@@ -50,3 +50,8 @@ privileged enough to use." So: a **core** every edition gets (the eye, voice, dr
 
 The edition comes from `~/.phoenix/hud-profile.json` (`{"edition": "full"}`), default `full` on Jerry's
 PC; a game build ships `game` and never the full module code paths (checked at every entry point).
+
+## Next: the Console's buttons (Jerry, 2026-10-07)
+"the console needs every easy button known to man, we can talk those out when the time comes." The Console
+(the HUD's button panel, MainWindow; it replaces the dashboard) gets every one-click action Jerry uses. List
+them with him first (start from what the Electron dashboard + portal Console + `pulse` already do), then build.
