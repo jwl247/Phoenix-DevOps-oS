@@ -19,7 +19,8 @@ configuration pages (`press-room/1.jpg`-`4.jpg`), the Music ring (a guide only),
 - **The audit file is the motor: "everything written to it runs" (press-room/4.jpg).**
 - **`helix_api.py` is different per machine; everything else in a ring is typical.**
 - **SMB = shared memory bus**, inside one machine. Between machines: the mesh.
-- **Ring 4 (Helix) only "provided Helix is fast enough" (press-room/2.jpg)** — decided by measurement.
+- **Rings 1-3 = red, blue, yellow; ring 4 = system use, so there is no latency problem waiting on
+  anything (J, 10/7).** (press-room/2.jpg's "ring 4 provided Helix is fast enough" was an earlier config.)
 - Speed is the goal: every step measured before/after (`docs/helix/BENCHMARKS.md` precision rule).
 - Validate once at the door. No redundant re-checks in the hot path.
 
@@ -93,9 +94,9 @@ the footer is text only, `USYS:<b58>:FOOTER:<hex>:<loc_hex>` in D1 (`intake.sh` 
 no color field, and no QR image is ever rendered for pool files (the only qrcode code is
 `sector3/phoenix-net/phoenix-net.py`, for something else). To build: a color field in the footer
 (family = tier, hue = ring/lane) and the rendered footer QR drawn in that color; header QR keeps its
-state colors (white/grey/black). Footer AFTER hashing, header BEFORE (CLAUDE.md rule 7) — unchanged. The rings are red, blue,
-yellow (J) — three primaries for four rings: ask whether ring 4 (Helix, "provided she is fast enough")
-is the one without a color until she earns it. Nothing in the repo records this color code yet — it gets written here first, then into
+state colors (white/grey/black). Footer AFTER hashing, header BEFORE (CLAUDE.md rule 7) — unchanged. Rings 1-3 are red, blue,
+yellow (J). **Ring 4 is SYSTEM USE (J): kept for the system's own work so nothing waits on anything —
+system jobs never queue behind user work.** (Its color: not given yet.) Nothing in the repo records this color code yet — it gets written here first, then into
 the ring/tier code and the QR footer tier colors (CLAUDE.md TAV: footer QR = tier color T1-T4).
 
 Still open:
@@ -129,7 +130,7 @@ and the sketch calls Prefetch "typical" on every ring. Questions to settle with 
 | 5 | Rings on other machines (if Jerry spreads them) | a propcoms on pbmIII reaches the Conductor over the mesh | pbmIII — service install = rule 9, Jerry's yes first |
 | 6 | The Conductor's bee line to the kernel + his standby (per Jerry's answer) | kernel work goes only Conductor → kernel; standby takes over when he stops | both + mesh |
 | 7 | Healing through the journal + per-box reference | break a node, a PEER fixes it (Jerry's test) | both |
-| 8 | Ring 4 = Helix, only if the Helix-vs-standard test says she is fast enough | decided by numbers | — |
+| 8 | Ring 4 = system use: the Conductor routes system work (healing, journal upkeep, prefetch cold tier?) only there | a heavy system job running never slows a user ball in rings 1-3 (measured) | the Conductor's machine |
 
 ## 8. Not in this plan (parked)
 Windows/Linux Concierges sharing memory on one box (press-room/1.jpg — only applies where both run on
