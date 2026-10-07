@@ -46,7 +46,7 @@ AUTH_TOKEN = os.environ.get("PHOENIX_KERNEL_TOKEN", "")
 def _check_auth(data: str) -> Optional[str]:
     """Return the command if authorized, else None."""
     if not AUTH_TOKEN:
-        return data
+        return None   # S1-S21: no token = no commands at all (a web page could reach loopback)
     first, _, rest = data.partition("\n")
     if first.startswith("AUTH ") and hmac.compare_digest(first[5:].strip(), AUTH_TOKEN):
         return rest.strip()
@@ -64,8 +64,8 @@ class PhoenixKernel:
         signal.signal(signal.SIGINT, self._shutdown)
 
     def start(self):
-        if BIND_HOST not in ("127.0.0.1", "localhost", "::1") and not AUTH_TOKEN:
-            log.error("Refusing non-loopback bind %s without PHOENIX_KERNEL_TOKEN", BIND_HOST)
+        if not AUTH_TOKEN:   # S1-S21: loopback is no boundary (a web page can reach it); token always
+            log.error("Refusing to start without PHOENIX_KERNEL_TOKEN (any bind, S1-S21)")
             return
         log.info("🚀 Phoenix Universal Kernel v1.0 (Cross-Platform) Starting...")
         log.info(f"Logs: {LOG_FILE}")

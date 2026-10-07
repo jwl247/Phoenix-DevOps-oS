@@ -20,14 +20,14 @@ log = logging.getLogger("phoenix")
 # Client protocol when a token is set: first line "AUTH <token>", then the command.
 BIND_HOST = os.environ.get("PHOENIX_KERNEL_BIND", "127.0.0.1")
 AUTH_TOKEN = os.environ.get("PHOENIX_KERNEL_TOKEN", "")
-if BIND_HOST not in ("127.0.0.1", "localhost", "::1") and not AUTH_TOKEN:
-    raise SystemExit("PhoenixUniversal: refusing non-loopback bind without PHOENIX_KERNEL_TOKEN")
+# S1-S21 (2026-10-07): loopback alone is not a boundary - any web page can POST to 127.0.0.1:7701 and
+# the HTTP request text became shell lines. The token is required for EVERY bind now.
 
 
 def _check_auth(data: str):
     """Return the command if authorized, else None."""
     if not AUTH_TOKEN:
-        return data
+        return None   # S1-S21: no token = no commands at all (a web page could reach loopback)
     first, _, rest = data.partition("\n")
     if first.startswith("AUTH ") and hmac.compare_digest(first[5:].strip(), AUTH_TOKEN):
         return rest.strip()
@@ -38,6 +38,8 @@ class PhoenixUniversal:
         self._alive = True
 
     def start(self):
+        if not AUTH_TOKEN:
+            raise SystemExit("PhoenixUniversal: refusing to start without PHOENIX_KERNEL_TOKEN (S1-S21)")
         log.info("🌍 Phoenix Universal Kernel Started — Run ANY program from ANY PC")
         for ch in range(1, 5):
             port = 7700 + ch
