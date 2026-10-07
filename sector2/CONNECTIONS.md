@@ -3,7 +3,7 @@
 Written 2026-09-12; corrected 2026-09-29 against the Round 2 functionality audit
 (`docs/compliance/pentest/2026-09-28-round2-functionality.md`, S2CORE + CONN sections);
 brought up to date 2026-09-30 with the clone-pool work since (packages-worker 3.6.0 at the time;
-**packages-worker 2026-10-07: live 3.8.0 (`/health`); repo 3.8.2 not deployed (Jerry deploys)**;
+**packages-worker 2026-10-07: live 3.8.2 (deployed + verified)**;
 version backfill, pool-tidy, intake.sh 1.7.0, the road-test data plane).
 Verify against current code before trusting a specific line number.
 
@@ -221,7 +221,7 @@ Status values: `live` · `in-flight` · `blocked` · `retired`
 
 | Frame | Status | Next | Blocked by |
 |---|---|---|---|
-| packages-worker (sector2) | live | Live 3.8.0; repo 3.8.2 not deployed (2026-10-07) | Jerry deploy |
+| packages-worker (sector2) | live | Live 3.8.2 (write-once versions, deployed 2026-10-07) | — |
 | /meta route + atlas blob | in-flight | Run run-atlas.bat to seed /meta/atlas (worker deployed 2026-10-02) | — |
 | parse-connections.js | in-flight | Run run-atlas.bat, confirm atlas.json PUT returns 200 | — |
 | node_session package | live | Run smoke test on Compaq (`ssh pbm-compaq`, `python test_node_session.py`) | — |
