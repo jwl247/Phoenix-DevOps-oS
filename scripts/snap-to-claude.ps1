@@ -7,7 +7,7 @@
 # opens latest.png. Nothing leaves this PC (screens can show secrets).
 #   snap-to-claude.ps1            make the shot
 #   snap-to-claude.ps1 -Install   put the desktop icon in place
-param([switch]$Install)
+param([switch]$Install, [int]$Delay = 0, [switch]$Quiet)   # -Delay N: wait N s first (switch windows); -Quiet: no toast (/look)
 $ErrorActionPreference = 'Stop'
 
 if ($Install) {
@@ -25,7 +25,7 @@ if ($Install) {
 }
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-Start-Sleep -Milliseconds 350                                  # let the click and any menu close first
+Start-Sleep -Milliseconds (350 + 1000 * [Math]::Max(0, [Math]::Min($Delay, 30)))   # let the click/menu close; -Delay for switching windows
 $v = [System.Windows.Forms.SystemInformation]::VirtualScreen  # all monitors together
 $bmp = New-Object System.Drawing.Bitmap $v.Width, $v.Height
 $g = [System.Drawing.Graphics]::FromImage($bmp)
@@ -47,6 +47,7 @@ foreach ($try in 1..5) {                                       # another app can
 $bmp.Dispose()
 Get-ChildItem $dir -Filter 'snap-*.png' | Sort-Object LastWriteTime -Descending | Select-Object -Skip 20 | Remove-Item -Force
 
+if ($Quiet) { Write-Output $file; return }
 $tip = New-Object System.Windows.Forms.NotifyIcon
 $tip.Icon = [System.Drawing.SystemIcons]::Information
 $tip.Visible = $true
