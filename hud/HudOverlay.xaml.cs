@@ -58,7 +58,8 @@ public partial class HudOverlay : Window
         if (_profile.Jarvis) _lines.Add("[SYS] Start a message with \"Jarvis\" (typed or spoken) to ask him instead.");
         App.Ai.Note += line => Dispatcher.BeginInvoke(() => Add(line));
         WireVoice();
-        foreach (var tree in new[] { TreeLeft, TreeRight }) FillTree(tree);
+        FillTree(TreeLeft, _profile.LeftPlaces);                        // home on the left
+        FillTree(TreeRight, _profile.RightPlaces);                      // the roots on the right
         Bar.SetState(VoiceState.Idle);
         WatchSecurityLock();
         Refresh();
@@ -212,7 +213,8 @@ public partial class HudOverlay : Window
     internal static (bool Open, string Which)? DockCommand(string text)
     {
         var t = " " + text.ToLowerInvariant().Replace(",", " ").Replace(".", " ").Replace("!", " ") + " ";
-        if (!t.Contains(" dock ") && !t.Contains(" docks ")) return null;
+        // speech-to-text hears "dock" as "door" (seen live 10/7) - take both
+        if (!new[] { " dock ", " docks ", " door ", " doors " }.Any(t.Contains)) return null;
         if (t.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length > 8) return null;   // a sentence ABOUT docks goes to the AI
         bool open = new[] { " open ", " expose ", " show ", " bring ", " turn on ", " pull " }.Any(t.Contains);
         bool close = new[] { " close ", " hide ", " away ", " turn off ", " shut " }.Any(t.Contains);
@@ -308,10 +310,11 @@ public partial class HudOverlay : Window
 
     private FrameworkElement BodyOf(Border dock) => dock == Shelf ? ShelfBody : ShelfRightBody;
 
-    private void FillTree(TreeView tree)
+    private void FillTree(TreeView tree, IReadOnlyList<(string Name, string Path)> places)
     {
         tree.Items.Clear();
-        foreach (var (name, path) in _profile.Places) tree.Items.Add(Node(path, name));
+        foreach (var (name, path) in places) tree.Items.Add(Node(path, name));
+        if (places.Count == 1 && tree.Items[0] is TreeViewItem only) only.IsExpanded = true;   // a single root opens straight away
         tree.PreviewMouseLeftButtonDown += (_, e) => { _dragStart = e.GetPosition(null); _dragItem = ItemAt(e.OriginalSource); };
         tree.PreviewMouseMove += Tree_PreviewMouseMove;
         tree.MouseDoubleClick += (_, e) =>

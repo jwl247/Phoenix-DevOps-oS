@@ -51,6 +51,19 @@ privileged enough to use." So: a **core** every edition gets (the eye, voice, dr
 The edition comes from `~/.phoenix/hud-profile.json` (`{"edition": "full"}`), default `full` on Jerry's
 PC; a game build ships `game` and never the full module code paths (checked at every entry point).
 
+## The Console's buttons: Jerry's calls (2026-10-07)
+- **System tray, only-ish**: the Console lives in the tray; click = open it, right-click = the quick buttons.
+- **A Run box like Windows' Win+R**: type a program, path or command, it runs.
+- **No folder buttons**: the docks cover folders. **Left dock = home, right dock = root** (Phoenix root, clone pool, every drive) - built.
+- **HUD button stays for everyone else**; Jerry's HUD opens automatically.
+- **No Phoenix Guide**: **Jarvis is the guide**, with Atlas opened to him (he looks things up in the snow globe).
+- **Clone pool look-up becomes Suit look-up.**
+- **The Glossary shows the code.**
+- **Import = run a suit** (genie import: custody -> RAM -> run). The old dashboard "Import" (Config Centralizer) is not a
+  button: gathering configs is the integrated guardian's job.
+- Still to talk out with Jerry: any other easy buttons, and whether Jerry-only admin (rotate-key, lock-hud) gets
+  buttons behind a typed confirm.
+
 ## Next: the Console's buttons (Jerry, 2026-10-07)
 "the console needs every easy button known to man, we can talk those out when the time comes." The Console
 (the HUD's button panel, MainWindow; it replaces the dashboard) gets every one-click action Jerry uses. List

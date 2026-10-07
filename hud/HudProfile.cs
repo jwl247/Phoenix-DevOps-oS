@@ -17,7 +17,10 @@ public sealed class HudProfile
     public bool Console { get; private init; }         // the button panel + hands on other machines
     public bool ClaudeCodeTools { get; private init; } // the subscription CLI with Bash/Write
     public bool Jarvis { get; private init; }          // Jerry's Jarvis (pbmIII)
-    public IReadOnlyList<(string Name, string Path)> Places { get; private init; } = [];
+    public IReadOnlyList<(string Name, string Path)> Places { get; private init; } = [];       // all of them
+    // Jerry 10/7: "the root directory needs to be on the right and the home directory on the left".
+    public IReadOnlyList<(string Name, string Path)> LeftPlaces { get; private init; } = [];
+    public IReadOnlyList<(string Name, string Path)> RightPlaces { get; private init; } = [];
 
     public static HudProfile Current { get; } = Load();
 
@@ -40,19 +43,16 @@ public sealed class HudProfile
         string repo = Environment.GetEnvironmentVariable("PHOENIX_ROOT") ?? @"F:\Phoenix\Phoenix-DevOps-oS";
         string pool = (Environment.GetEnvironmentVariable("CLONEPOOL_DIR") ?? @"E:\Phoenix\clonepool").Replace('/', '\\');
         if (pool.Length > 2 && pool[0] == '\\' && pool[2] == '\\') pool = $"{char.ToUpper(pool[1])}:{pool[2..]}";   // /e/x -> E:\x
+        var left = new List<(string, string)> { ("Home", home) };
+        var right = new List<(string, string)> { ("Phoenix root", repo), ("Clone pool", pool) };
+        right.AddRange(DriveInfo.GetDrives().Where(d => d.IsReady && d.DriveType is DriveType.Fixed or DriveType.Removable or DriveType.Network)
+            .Select(d => ($"{d.Name.TrimEnd('\\')}  {d.VolumeLabel}".Trim(), d.RootDirectory.FullName)));
+        left = left.Where(p => Directory.Exists(p.Item2)).ToList();
+        right = right.Where(p => Directory.Exists(p.Item2)).ToList();
         return new HudProfile
         {
             Edition = "full", Intake = true, Console = true, ClaudeCodeTools = true, Jarvis = true,
-            Places = new List<(string, string)>
-            {
-                ("Desktop", Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)),
-                ("Downloads", Path.Combine(home, "Downloads")),
-                ("Documents", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)),
-                ("Phoenix repo", repo),
-                ("Clone pool", pool),
-                ("Imports", @"E:\Phoenix\imports"),
-                ("Screenshots", Path.Combine(home, ".phoenix", "screenshots")),
-            }.Where(p => Directory.Exists(p.Item2)).ToList(),
+            LeftPlaces = left, RightPlaces = right, Places = left.Concat(right).ToList(),
         };
     }
 
@@ -63,6 +63,7 @@ public sealed class HudProfile
         {
             Edition = "game",
             Places = Directory.Exists(game) ? new List<(string, string)> { ("Game", game) } : [],
+            LeftPlaces = Directory.Exists(game) ? new List<(string, string)> { ("Game", game) } : [],
         };
     }
 }
