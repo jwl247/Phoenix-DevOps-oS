@@ -21,6 +21,15 @@ import argparse, hashlib, io, json, os, socket, subprocess, sys, tarfile, time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+
+if os.name == "nt":
+    # The 5-min task runs on Jerry's desktop: no console window may flash, ours or a child's (ssh,
+    # netsh, ...). Every subprocess this run starts gets CREATE_NO_WINDOW unless it asks otherwise.
+    class _QuietPopen(subprocess.Popen):
+        def __init__(self, *a, **k):
+            k.setdefault("creationflags", subprocess.CREATE_NO_WINDOW)
+            super().__init__(*a, **k)
+    subprocess.Popen = _QuietPopen
 VERSION = "buddy-1.0.0"
 AGENT = "/usr/local/sbin/phoenix-peer-agent"
 PEER_USER = "phoenix-peer"
@@ -286,6 +295,9 @@ cd ~ && rm -rf ~/phoenix-buddy-stage
 
 def install_windows(name, cfg):
     py = sys.executable
+    pyw = Path(py).with_name("pythonw.exe")      # windowless: python.exe flashed a console every 5 min
+    if pyw.exists():
+        py = str(pyw)
     task = "Phoenix Buddy Heal"
     ps = (f"$a=New-ScheduledTaskAction -Execute '{py}' -Argument '\"{HERE / 'phoenix_buddy.py'}\" run --me {name}' "
           f"-WorkingDirectory '{HERE}';"
