@@ -29,9 +29,9 @@ Source: [48 CFR § 52.204-21(b)(1)](https://www.law.cornell.edu/cfr/text/48/52.2
 | 7 | Sanitize/destroy media before disposal/reuse | **Fixed 2026-09-23** | See [Media Sanitization Procedure](#media-sanitization-procedure) below |
 | 8 | Limit physical access to authorized individuals | **Fixed 2026-09-23** | See [Physical Access Policy](#physical-access-policy) below |
 | 9 | Escort visitors, log physical access, manage access devices | **Fixed 2026-09-23** | Covered in the same Physical Access Policy — no separate physical-access-device inventory exists because none is needed under the current single-operator premises model |
-| 10 | Monitor/protect comms at external + internal boundaries | **Above standard** | This is a first-class architectural concept in Phoenix already — `translator.sh` OUTPUT ONLY, sector3 boundary, Cloudflare Access gating every worker. **Updated 2026-10-01:** H.L.K mesh boundary enforcement now covers Tailscale (`100.x.x.x`) in addition to the legacy WireGuard range (`10.47.0.x`). `mesh_ip()` in `sector3/hlk/hlk.py` rewritten Tailscale-first with WireGuard fallback — mesh communications at the node boundary are now correctly identified and monitored regardless of transport layer. |
+| 10 | Monitor/protect comms at external + internal boundaries | **Partial (re-scored 2026-10-07, XCUT-F39)**: the mesh boundary moved to Nebula and is not re-verified on live nodes; Cloudflare Access is off on packages-worker (XCUT-S16). Was "Above standard". | This is a first-class architectural concept in Phoenix already — `translator.sh` OUTPUT ONLY, sector3 boundary, Cloudflare Access gating every worker. **Corrected 2026-10-07 (Round 4 XCUT-F39):** Tailscale and WireGuard were removed 2026-10-05; the Phoenix Mesh is now Nebula `10.42.0.0/16` (`sector3/mesh/`, `docs/PIPELINE-INTERNALS.md`). The H.L.K mesh control is being moved to Nebula 2026-10-07 (S34OPS-F45: `mesh_ip()` in `sector3/hlk/hlk.py` reads 10.42.x as of commit `50e88f4`, not yet re-verified on the live nodes) — re-verify before credit; no credit is taken for it until then. Original 10-01 note, now historical: **Updated 2026-10-01:** H.L.K mesh boundary enforcement now covers Tailscale (`100.x.x.x`) in addition to the legacy WireGuard range (`10.47.0.x`). `mesh_ip()` in `sector3/hlk/hlk.py` rewritten Tailscale-first with WireGuard fallback — mesh communications at the node boundary are now correctly identified and monitored regardless of transport layer. |
 | 11 | Segment publicly accessible components from internal network | **Fixed 2026-09-23** | See [Network Segmentation](#network-segmentation) below |
-| 12 | Identify/report/correct flaws in a timely manner | **Above standard** | Dated remediation trail — `project_security_gap_plan` memory, dated entries in `docs/history/SESSION-LOG.md` + git history (rewritten 2026-09-25 by `git filter-repo`; commit hashes cited before that date no longer resolve, so the dated log entries are the record), and the daily pentest rounds in `pentest/` since 2026-09-25. **2026-10-01 drift audit:** Three architecture drifts identified and corrected same session — (1) `HX_ZLEVEL` in `sector1/helix/helix_complete_stack.py` was `level=6`, corrected to `level=5` per `dm_helix.c` constant; (2) `mesh_ip()` in `sector3/hlk/hlk.py` was WireGuard-only, broken for Tailscale nodes — rewritten Tailscale-first; (3) `HLK_API_MODEL` in `sector3/hlk/hlk.py` was hardcoded vendor model string — removed, now raises `RuntimeError` if env var not set. All three detected, documented, and corrected within same session. |
+| 12 | Identify/report/correct flaws in a timely manner | **Partial (re-scored 2026-10-07, XCUT-F39)**: Round 4 = FAIL 0/3, fixes in progress (addenda 1-4). Was "Above standard". | Dated remediation trail — `project_security_gap_plan` memory, dated entries in `docs/history/SESSION-LOG.md` + git history (rewritten 2026-09-25 by `git filter-repo`; commit hashes cited before that date no longer resolve, so the dated log entries are the record), and the daily pentest rounds in `pentest/` since 2026-09-25. **2026-10-01 drift audit:** Three architecture drifts identified and corrected same session — (1) `HX_ZLEVEL` in `sector1/helix/helix_complete_stack.py` was `level=6`, corrected to `level=5` per `dm_helix.c` constant; (2) `mesh_ip()` in `sector3/hlk/hlk.py` was WireGuard-only, broken for Tailscale nodes [superseded 2026-10-07: both transports removed 10-05, mesh is Nebula 10.42.0.0/16, `mesh_ip()` moved to Nebula in `50e88f4` (S34OPS-F45), re-verify before credit] — rewritten Tailscale-first; (3) `HLK_API_MODEL` in `sector3/hlk/hlk.py` was hardcoded vendor model string — removed, now raises `RuntimeError` if env var not set. All three detected, documented, and corrected within same session. |
 | 13 | Malicious code protection at appropriate locations | **Verified 2026-09-23** | Windows Defender: `AntivirusEnabled=True`, `RealTimeProtectionEnabled=True`, `BehaviorMonitorEnabled=True` — confirmed live via `Get-MpComputerStatus`, not assumed |
 | 14 | Update malicious code protection mechanisms | **Verified 2026-09-23** | `AntivirusSignatureLastUpdated` / `AntispywareSignatureLastUpdated` both same-day at check time; scheduled signature update task present |
 | 15 | Periodic + real-time scans of downloaded/opened/executed files | **Verified 2026-09-23** | `IoavProtectionEnabled=True` (on-access-via-download scanning), `OnAccessProtectionEnabled=True`, daily scheduled scan task confirmed `Ready` |
@@ -136,11 +136,11 @@ Reality, written down rather than assumed:
 
 **What's actually publicly accessible (inventory re-verified 2026-09-28, round-2
 audit XCUT-F20c):** only Cloudflare Workers — `packages-worker` (also on
-`get.authenticcoder.com`, bearer-only there), `office-notify-worker`,
+`get.authenticcoder.com`, bearer-only there; Cloudflare Access is currently OFF on its workers.dev hostname too, XCUT-S16, 2026-10-07), `office-notify-worker`,
 `phoenix-office-worker`, `pbm-leads-worker`, `pbm-radar-worker`, the
 `pbm-consulting-website` static-assets worker (pbmconsultingservice.com),
 `lifefirst-mcp`, `lifefirst-mustanswer`, `phoenix-mesh-worker` (the Phoenix Mesh
-switchboard), and — when the tunnel is up — the `lifefirst` Cloudflare tunnel
+switchboard), `sacrifice-worker` (Sacrifice game state + map tiles; public reads by design, writes need `FRANK_TOKEN`; `/` 200 on 2026-10-07), `phoenix-vault-worker` (hands out the encrypted vault only to a caller holding the passphrase-derived fetch token; `/` 200 on 2026-10-07) — both added 2026-10-07 (XCUT-F39), and — when the tunnel is up — the `lifefirst` Cloudflare tunnel
 publishing the Debian VM's Apache (down, 530, on 2026-09-28). `phoenix-clonepool-r2`
 was deleted 2026-09-25 (404). Each worker is gated by Cloudflare Access (per Gap 1's
 fix) or its own bearer-token auth; the static site and its `/radar` form are public by
@@ -150,8 +150,9 @@ design (Turnstile on the forms).
 public endpoint of their own — every read or write goes through a Worker,
 which is the only thing with the binding. The physical machines (this PC,
 the Debian VM, the `breach_coms` drives) have no open inbound port to the
-public internet at all; nothing here has ever listened on a public IP
-directly. `192.168.1.x` addresses are LAN-only, unreachable from outside the
+public internet at all. **Exception (corrected 2026-10-07, XCUT-F39):** the `awslh` AWS Lightsail
+box is the Nebula mesh lighthouse and relay and listens on a public IP on UDP 4242
+(`docs/PIPELINE-INTERNALS.md`); everything else reaches each other over that mesh. `192.168.1.x` addresses are LAN-only, unreachable from outside the
 router.
 
 **This is already real segmentation, just never diagrammed:**
@@ -170,7 +171,7 @@ D1 / R2  ◄── no public endpoint, only reachable via a Worker binding
    │
    ▼
 Local machines (this PC, Debian VM, breach_coms drives)
-   ◄── LAN-only, no public inbound port, ever
+   ◄── LAN-only, no public inbound port (except awslh, the Nebula lighthouse: public UDP 4242)
 ```
 
 Satisfies FAR 52.204-21(b)(1)(xi) as written: publicly accessible components

@@ -48,8 +48,19 @@ function findClaudeCli() {
 // it off, since forcing it there made a drafted field value come back as a
 // JSON blob instead of the value itself (audit OFFICE-F15, 2026-09-28).
 async function tryOllama({ system, messages, json = false }) {
+    // OFFICE-F32: one 20 s timer was both "is it there" and the generation limit, so a warm
+    // CPU answer to the full ReAct prompt was aborted 2 runs in 4. Now: a 3 s probe (absent = fail
+    // fast), then up to 90 s to answer.
+    const probe = new AbortController();
+    const pt = setTimeout(() => probe.abort(), 3000);
+    try {
+        const ping = await fetch(`${ollamaHost()}/api/tags`, { signal: probe.signal });
+        if (!ping.ok) throw new Error(`ollama ${ping.status}`);
+    } finally {
+        clearTimeout(pt);
+    }
     const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), 20000);
+    const t = setTimeout(() => controller.abort(), 90000);
     const model = ollamaModel();
     try {
         const res = await fetch(`${ollamaHost()}/api/chat`, {

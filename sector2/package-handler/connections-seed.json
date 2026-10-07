@@ -19,7 +19,7 @@
     "key_fact": "Canonical intake pipeline lives at `sector2/package-handler/intake.sh`. `sector2/frank/frank_save.py`'s drive-tiering logic is built but never called.",
     "source_file": "CONNECTIONS.md, sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"f9d35d43770d3909\",\"51a1f05af85e342e\",\"ba2776c90792d2fe\",\"971da9a789ab199d\",\"ae2002a7528b058d\",\"66cd9688a2ae0682\",\"e14eae3777414e90\",\"46b42b4229cd7a39\",\"65408225e6f957dc\",\"829768ca64b1b6f0\",\"a60260bdfb558038\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"4fd9c8a3d43a9294\",\"3d91975932e93a1f\",\"a32affab459eef1a\",\"8dff57dd9caf1201\",\"2d87f9e76d5dbf11\",\"3aaeac3b672c2c29\",\"3537160464e361ae\",\"3f0096497d3ac9a2\",\"dbb1e1de35f8a1d4\",\"15b92ac2b6f12ca6\",\"45364e3228a28e13\",\"5241b6fd4103ff95\",\"e0f90a47a3630004\",\"fe573334dc2e08a5\",\"eaae18e72d174fc6\",\"51dda0aaa75cca7f\",\"33d485653f8a5612\",\"003e99aec4ffad75\",\"7170da25dc303b71\",\"5430311e56708256\",\"f5d21aaf5aa70a2b\",\"c7e0279cccb39441\",\"d03c76fc5584c3dd\",\"1462bf4284baafce\",\"50d51a233d8ff488\"]"
+    "links": "[\"c7e0279cccb39441\",\"f9d35d43770d3909\",\"51a1f05af85e342e\",\"ba2776c90792d2fe\",\"971da9a789ab199d\",\"ae2002a7528b058d\",\"66cd9688a2ae0682\",\"e14eae3777414e90\",\"46b42b4229cd7a39\",\"65408225e6f957dc\",\"829768ca64b1b6f0\",\"a60260bdfb558038\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"4fd9c8a3d43a9294\",\"3d91975932e93a1f\",\"a32affab459eef1a\",\"8dff57dd9caf1201\",\"2d87f9e76d5dbf11\",\"3aaeac3b672c2c29\",\"3537160464e361ae\",\"3f0096497d3ac9a2\",\"dbb1e1de35f8a1d4\",\"15b92ac2b6f12ca6\",\"45364e3228a28e13\",\"5241b6fd4103ff95\",\"e0f90a47a3630004\",\"fe573334dc2e08a5\",\"eaae18e72d174fc6\",\"51dda0aaa75cca7f\",\"33d485653f8a5612\",\"003e99aec4ffad75\",\"7170da25dc303b71\",\"c5774ee3ec1c7dee\",\"947469ad8f4bf170\",\"5430311e56708256\",\"f5d21aaf5aa70a2b\",\"d03c76fc5584c3dd\",\"1462bf4284baafce\",\"50d51a233d8ff488\"]"
   },
   {
     "hex": "ae2002a7528b058d",
@@ -30,7 +30,7 @@
     "key_fact": "`sector3/workers/packages-worker/` is a **stale, dead duplicate** of the real worker at `sector2/package-handler/worker/` — don't edit it thinking it's live.",
     "source_file": "CONNECTIONS.md, sector3/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"7f981588473fbc31\",\"b7bd55c11b781b0c\",\"f7ac2afbc9927964\",\"971da9a789ab199d\",\"0f773c9134b2e8df\",\"2f1a6d5e516b8031\",\"a1aba4936f8f8fd2\",\"8dff57dd9caf1201\",\"3aaeac3b672c2c29\",\"51dda0aaa75cca7f\",\"76fbad2417f34f2a\",\"4d526f236b2b1fc3\",\"3160df97c34fce4b\",\"5fd2e93c6bc16ed3\",\"0668bd308df8950b\",\"84cd027571bddb4f\",\"849e6626ce9ea0af\",\"4363aaa08e4f1bd2\",\"e60e0b27cdddfd28\",\"ab31d986b71e6749\",\"a877e61bd6a80203\",\"aff88c6662579906\",\"33a2b7b4aec981b8\",\"63388ec43c164af1\",\"66be75bfcbbf72f0\",\"fd90f1c00d77a35e\",\"8c34e0996cfb53db\",\"37e28d2dd0e159eb\",\"05beb4f4c9ec1016\",\"2e44e0b3b6d84943\",\"df9dd9b48f5ba743\",\"69b19065a543212d\",\"384bcaaae67367ab\",\"b7826bfbd998a94f\",\"2d87f9e76d5dbf11\",\"50d51a233d8ff488\",\"5a4c098eb82ff3a2\",\"d0960501f8971be8\",\"072fcfbdebc62d00\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"66cd9688a2ae0682\",\"7f981588473fbc31\",\"b7bd55c11b781b0c\",\"f7ac2afbc9927964\",\"971da9a789ab199d\",\"0f773c9134b2e8df\",\"2f1a6d5e516b8031\",\"a1aba4936f8f8fd2\",\"8dff57dd9caf1201\",\"3aaeac3b672c2c29\",\"51dda0aaa75cca7f\",\"76fbad2417f34f2a\",\"4d526f236b2b1fc3\",\"3160df97c34fce4b\",\"5fd2e93c6bc16ed3\",\"0668bd308df8950b\",\"84cd027571bddb4f\",\"849e6626ce9ea0af\",\"4363aaa08e4f1bd2\",\"e60e0b27cdddfd28\",\"ab31d986b71e6749\",\"a877e61bd6a80203\",\"aff88c6662579906\",\"33a2b7b4aec981b8\",\"63388ec43c164af1\",\"66be75bfcbbf72f0\",\"fd90f1c00d77a35e\",\"8c34e0996cfb53db\",\"37e28d2dd0e159eb\",\"05beb4f4c9ec1016\",\"2e44e0b3b6d84943\",\"df9dd9b48f5ba743\",\"69b19065a543212d\",\"384bcaaae67367ab\",\"b7826bfbd998a94f\",\"2d87f9e76d5dbf11\",\"50d51a233d8ff488\",\"5a4c098eb82ff3a2\",\"d0960501f8971be8\",\"072fcfbdebc62d00\",\"3feedc5391c7ad02\",\"45a229d57d35d935\"]"
   },
   {
     "hex": "5a4c098eb82ff3a2",
@@ -38,7 +38,7 @@
     "path": "sector4",
     "area": "sector4",
     "description": "Much thinner on disk than the architecture map in root `CLAUDE.md` implies (that map lists `helix/` and `frank/` subdirectories here that do not exist; an older copy lives in the 2026-08-19 consolidation snapshot under `archive/`). Actual contents:",
-    "key_fact": "`sector4/intake/intake.sh`'s zsh-glob syntax error was fixed 2026-09-21 (`43c27ad`: shebang now zsh, glob replaced by `find`). `usys intake` still routes here while `usys clone` goes to `sector2/package-handler/intake.sh`; whether that is a mis-route or sector 4's own pipeline is an open call for Jerry (audit CONN-F08).",
+    "key_fact": "`sector4/intake/intake.sh`'s zsh-glob syntax error was fixed 2026-09-21 (`43c27ad`: shebang now zsh, glob replaced by `find`). `usys intake` still routes here while `intake <file>` (IN) and `usys clone` (OUT, via `bin/clone`) go to `sector2/package-handler/intake.sh`; whether that is a mis-route or sector 4's own pipeline is an open call for Jerry (audit CONN-F08).",
     "source_file": "CONNECTIONS.md, sector4/CONNECTIONS.md",
     "state": "white",
     "links": "[\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"a1aba4936f8f8fd2\",\"971da9a789ab199d\",\"ab31d986b71e6749\",\"4363aaa08e4f1bd2\",\"ae2002a7528b058d\",\"c9361ee760a0a611\",\"4a23e3f77d4c268d\",\"79efd15e5339e7b2\",\"a55d099940d85d77\",\"b44cf41ce87d6659\",\"39cfc819a4e4452c\",\"9a75bf2a8447b15c\",\"f5d21aaf5aa70a2b\",\"d6aa039866df21ee\",\"d03c76fc5584c3dd\",\"e60e0b27cdddfd28\",\"63388ec43c164af1\"]"
@@ -60,10 +60,10 @@
     "path": "scripts",
     "area": "scripts",
     "description": "The master PowerShell 7 CLI for the whole project plus the scripts that feed the clone pool.",
-    "key_fact": "`bin/*` and the dashboard call through here; `tools/clone.sh` and `scripts/hsf-intake.sh` call `sector2/package-handler/intake.sh` directly. The `usys run debian` elevation failure is handled (falls back to tcg acceleration).",
+    "key_fact": "`bin/*` and the dashboard call through here; `bin/intake` and `scripts/hsf-intake.sh` (IN) call `sector2/package-handler/intake.sh` directly; `clone`/`usys clone`/`tools/clone.sh` (OUT) go through `bin/clone`. The `usys run debian` elevation failure is handled (falls back to tcg acceleration).",
     "source_file": "CONNECTIONS.md, scripts/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"61ad4a8d1e45f706\",\"51a1f05af85e342e\",\"57b94356302c8571\",\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"0149ab52b4c96671\",\"de1b1f60e8fb172a\",\"4fd9c8a3d43a9294\",\"23460fe27bbd0839\",\"8c0625570131b178\",\"de8236d2355447a1\",\"74c05e2f9190b4c2\",\"5a4c098eb82ff3a2\",\"f9d35d43770d3909\",\"971da9a789ab199d\",\"6dae1b7eb15a4a2a\",\"50d51a233d8ff488\",\"2d87f9e76d5dbf11\"]"
+    "links": "[\"61ad4a8d1e45f706\",\"51a1f05af85e342e\",\"57b94356302c8571\",\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"0149ab52b4c96671\",\"de1b1f60e8fb172a\",\"4fd9c8a3d43a9294\",\"23460fe27bbd0839\",\"8c0625570131b178\",\"de8236d2355447a1\",\"74c05e2f9190b4c2\",\"c7e0279cccb39441\",\"5a4c098eb82ff3a2\",\"f9d35d43770d3909\",\"971da9a789ab199d\",\"6dae1b7eb15a4a2a\",\"50d51a233d8ff488\",\"ba2776c90792d2fe\",\"2d87f9e76d5dbf11\"]"
   },
   {
     "hex": "f9d35d43770d3909",
@@ -74,7 +74,7 @@
     "key_fact": "`tools/poc/` is where Debian/Ubuntu QEMU boot manifests + launchers live.",
     "source_file": "CONNECTIONS.md, tools/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"c7e0279cccb39441\",\"74c05e2f9190b4c2\",\"51a1f05af85e342e\",\"d9fa231292757a7e\",\"745d592e109d6f02\",\"4fd9c8a3d43a9294\",\"8c5967fd8486f344\",\"8dff57dd9caf1201\",\"0e8f689408bbeece\",\"dbcb6ea598ad03ac\",\"b76d381fb0346d50\",\"de4b5d40759ef20b\",\"5499b4b55f5c3c7b\",\"b355ff7607d8e86e\",\"7070b92178a0489b\",\"4be84287d9d36b55\",\"7ce62bfc657fd5df\",\"63b51d46400ede45\",\"ca629317e6f339c3\",\"ef8e461421e00936\",\"a75084716ee29b00\",\"c89e6f33153d830e\",\"76abc3d0044d6fb1\",\"9b776b8b8b8f07b7\",\"f7ac2afbc9927964\",\"4a23e3f77d4c268d\",\"66cd9688a2ae0682\",\"56cc318b711082fb\",\"50d51a233d8ff488\",\"4363aaa08e4f1bd2\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"c7e0279cccb39441\",\"51a1f05af85e342e\",\"d9fa231292757a7e\",\"745d592e109d6f02\",\"4fd9c8a3d43a9294\",\"8c5967fd8486f344\",\"ba2776c90792d2fe\",\"8dff57dd9caf1201\",\"0e8f689408bbeece\",\"dbcb6ea598ad03ac\",\"b76d381fb0346d50\",\"de4b5d40759ef20b\",\"5499b4b55f5c3c7b\",\"b355ff7607d8e86e\",\"7070b92178a0489b\",\"4be84287d9d36b55\",\"7ce62bfc657fd5df\",\"63b51d46400ede45\",\"ca629317e6f339c3\",\"ef8e461421e00936\",\"a75084716ee29b00\",\"c89e6f33153d830e\",\"76abc3d0044d6fb1\",\"a32affab459eef1a\",\"9b776b8b8b8f07b7\",\"f7ac2afbc9927964\",\"4a23e3f77d4c268d\",\"66cd9688a2ae0682\",\"56cc318b711082fb\",\"50d51a233d8ff488\",\"4363aaa08e4f1bd2\"]"
   },
   {
     "hex": "51a1f05af85e342e",
@@ -85,7 +85,7 @@
     "key_fact": "Thin shims into `scripts/` and `tools/`; `bin/usys` has a dead fallback to a nonexistent `scripts/usys.sh`.",
     "source_file": "CONNECTIONS.md, bin/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"61ad4a8d1e45f706\",\"57b94356302c8571\",\"c7e0279cccb39441\",\"ba2776c90792d2fe\",\"bbb127e4be86c6ff\",\"d9fa231292757a7e\",\"745d592e109d6f02\",\"927c3acb453a3ded\",\"4cd73ea6ae2001c0\",\"6dae1b7eb15a4a2a\",\"549ab9571e588daf\",\"a3d2d016705b94c7\",\"4aabd81a43e1cf25\",\"eeff368e8b391ad5\",\"8c5967fd8486f344\",\"f9d35d43770d3909\",\"74c05e2f9190b4c2\",\"3b1bdfa4bc550b65\",\"043df5bdbf6639d7\",\"50d51a233d8ff488\",\"f58a9b91f140cf3f\",\"45a4f4b55c8692a6\"]"
+    "links": "[\"61ad4a8d1e45f706\",\"57b94356302c8571\",\"c7e0279cccb39441\",\"ba2776c90792d2fe\",\"bbb127e4be86c6ff\",\"d9fa231292757a7e\",\"745d592e109d6f02\",\"927c3acb453a3ded\",\"4cd73ea6ae2001c0\",\"6dae1b7eb15a4a2a\",\"e06f8e92a54f34c9\",\"549ab9571e588daf\",\"a3d2d016705b94c7\",\"4aabd81a43e1cf25\",\"eeff368e8b391ad5\",\"8c5967fd8486f344\",\"74c05e2f9190b4c2\",\"f9d35d43770d3909\",\"3b1bdfa4bc550b65\",\"043df5bdbf6639d7\",\"50d51a233d8ff488\",\"f58a9b91f140cf3f\",\"45a4f4b55c8692a6\"]"
   },
   {
     "hex": "333c04dd151a2a68",
@@ -206,7 +206,18 @@
     "key_fact": "Every call logged to `~/.unitedsys/logs/hands.jsonl`.",
     "source_file": "CONNECTIONS.md, hands/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"76fbad2417f34f2a\",\"4d526f236b2b1fc3\",\"d0960501f8971be8\",\"78cf4842afe41dcb\",\"260fc5cbcd411a08\",\"31f3b2f7b1210b44\",\"f58a9b91f140cf3f\",\"3feedc5391c7ad02\",\"193a5ba7340ab1b9\",\"d7eb9845a2bed8d6\",\"37fb0cf218c493ef\"]"
+    "links": "[\"76fbad2417f34f2a\",\"4d526f236b2b1fc3\",\"d0960501f8971be8\",\"78cf4842afe41dcb\",\"260fc5cbcd411a08\",\"31f3b2f7b1210b44\",\"f58a9b91f140cf3f\",\"3feedc5391c7ad02\",\"193a5ba7340ab1b9\",\"d7eb9845a2bed8d6\",\"37fb0cf218c493ef\",\"ae2002a7528b058d\"]"
+  },
+  {
+    "hex": "6ca5cab77e702c78",
+    "name": "game",
+    "path": "game",
+    "area": "game",
+    "description": "Sacrifice: the permadeath military MMO (GDD + build sheet: `press-room/Sacrifice Build Plan.md`). Client engine is **Godot 4.7.2** (build plan, 2026-10-05). **No Godot client exists in this repo yet** (no `project.godot` or `.gd` files, checked 2026-10-07). What is here is Phoenix's side: Frank's game-state systems in Python and the live game-state API worker.",
+    "key_fact": "Client engine is Godot 4.7.2, but no Godot client is in the repo yet (2026-10-07). MapTiler dropped 2026-10-05.",
+    "source_file": "CONNECTIONS.md, game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"4c26efc3cda204cc\",\"abcbbe66bb71e68f\",\"f947eab185de2ed0\",\"8ad88337528c80f3\",\"c409069693e714a1\",\"856f16b20bbbb20b\",\"7320dff5b2a01c33\",\"f6089c973b95241e\",\"c4326093b1776358\",\"3198f6956a417a13\",\"fe0e837c99bc8684\",\"614dc437f7720ab1\",\"e46e74db5eeda3ce\",\"b709f68d8d15e956\",\"169e60a27524ea8b\",\"4233581019917e14\",\"097c6d621d8a43a5\",\"0044ba0079d27d63\",\"abec7c66c49737c9\",\"008d360d41fbbc70\",\"6f96c4f253695974\",\"cb23e67e6479b1fb\",\"f7fdb7b34abdc6b2\",\"2cf3031dcafdf144\",\"e9c19810e355d09d\",\"f7ac2afbc9927964\",\"4fd9c8a3d43a9294\",\"8dff57dd9caf1201\",\"3bc6703ce8243bba\"]"
   },
   {
     "hex": "3bc6703ce8243bba",
@@ -217,7 +228,7 @@
     "key_fact": "No code.",
     "source_file": "CONNECTIONS.md, press-room/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"1f1b292d6f7bbdb0\",\"dbaa4daffea73238\",\"7902a9146ed48e7e\",\"3fce2c84c37eb15e\",\"0f04912579cf027c\",\"b333fc50a366d02e\",\"b3d5999ef35a86bc\",\"56cc318b711082fb\",\"66ff7c78b9507f6b\",\"c3f44338c7e9ea1a\",\"90e054e32f683a92\"]"
+    "links": "[\"1f1b292d6f7bbdb0\",\"dbaa4daffea73238\",\"7902a9146ed48e7e\",\"3fce2c84c37eb15e\",\"0f04912579cf027c\",\"b333fc50a366d02e\",\"b3d5999ef35a86bc\",\"56cc318b711082fb\",\"66ff7c78b9507f6b\",\"c3f44338c7e9ea1a\",\"90e054e32f683a92\",\"6ca5cab77e702c78\"]"
   },
   {
     "hex": "50d51a233d8ff488",
@@ -290,22 +301,22 @@
     "name": "bin/clone",
     "path": "bin/clone",
     "area": "bin",
-    "description": "bash → `tools/clone.sh` → Sector 2 intake.",
+    "description": "bash, OUT of the pool: `clone <name> [vN] [folder] [--force]` → `sector2/package-handler/intake.sh clone`. `bin/lol`, `clone.cmd`, `usys clone` and `tools/clone.sh` all run this script.",
     "key_fact": null,
     "source_file": "bin/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"51a1f05af85e342e\",\"f9d35d43770d3909\",\"74c05e2f9190b4c2\",\"0e8f689408bbeece\"]"
+    "links": "[\"51a1f05af85e342e\",\"74c05e2f9190b4c2\",\"f9d35d43770d3909\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"0e8f689408bbeece\",\"a32affab459eef1a\"]"
   },
   {
     "hex": "ba2776c90792d2fe",
     "name": "bin/intake",
     "path": "bin/intake",
     "area": "bin",
-    "description": "bash → `sector2/package-handler/intake.sh` (same pipeline as clone; Sector 4 vault intake is `usys intake`).",
+    "description": "bash, IN to the pool: → `sector2/package-handler/intake.sh` (`intake <file-or-folder>`; also `intake clone …` OUT). Sector 4 vault intake is `usys intake`.",
     "key_fact": null,
     "source_file": "bin/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"51a1f05af85e342e\",\"74c05e2f9190b4c2\"]"
+    "links": "[\"51a1f05af85e342e\",\"74c05e2f9190b4c2\",\"f9d35d43770d3909\",\"8c5967fd8486f344\"]"
   },
   {
     "hex": "bbb127e4be86c6ff",
@@ -345,7 +356,7 @@
     "name": "usys.cmd",
     "path": "bin/usys.cmd",
     "area": "bin",
-    "description": "Windows → `pwsh -File scripts/usys.ps1 [run|clone] %*`.",
+    "description": "Windows → `pwsh -File scripts/usys.ps1 [run] %*`.",
     "key_fact": null,
     "source_file": "bin/CONNECTIONS.md",
     "state": "white",
@@ -356,7 +367,7 @@
     "name": "run.cmd",
     "path": "bin/run.cmd",
     "area": "bin",
-    "description": "Windows → `pwsh -File scripts/usys.ps1 [run|clone] %*`.",
+    "description": "Windows → `pwsh -File scripts/usys.ps1 [run] %*`.",
     "key_fact": null,
     "source_file": "bin/CONNECTIONS.md",
     "state": "white",
@@ -367,11 +378,22 @@
     "name": "clone.cmd",
     "path": "bin/clone.cmd",
     "area": "bin",
-    "description": "Windows → `pwsh -File scripts/usys.ps1 [run|clone] %*`.",
+    "description": "Windows → Git Bash running `bin/clone` / `bin/lol` (OUT) with `%*`.",
     "key_fact": null,
     "source_file": "bin/CONNECTIONS.md",
     "state": "white",
     "links": "[\"51a1f05af85e342e\",\"57b94356302c8571\",\"0149ab52b4c96671\",\"8c5967fd8486f344\"]"
+  },
+  {
+    "hex": "e06f8e92a54f34c9",
+    "name": "lol.cmd",
+    "path": "bin/lol.cmd",
+    "area": "bin",
+    "description": "Windows → Git Bash running `bin/clone` / `bin/lol` (OUT) with `%*`.",
+    "key_fact": null,
+    "source_file": "bin/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"51a1f05af85e342e\"]"
   },
   {
     "hex": "549ab9571e588daf",
@@ -800,7 +822,7 @@
     "key_fact": null,
     "source_file": "scripts/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"8c5967fd8486f344\",\"74c05e2f9190b4c2\",\"5a4c098eb82ff3a2\",\"971da9a789ab199d\",\"0149ab52b4c96671\",\"8355d66a7c20229d\",\"8dff57dd9caf1201\",\"c9361ee760a0a611\",\"7070b92178a0489b\",\"f9d35d43770d3909\",\"b9bb58048978991a\",\"31f3b2f7b1210b44\"]"
+    "links": "[\"8c5967fd8486f344\",\"74c05e2f9190b4c2\",\"c7e0279cccb39441\",\"5a4c098eb82ff3a2\",\"971da9a789ab199d\",\"0149ab52b4c96671\",\"8355d66a7c20229d\",\"8dff57dd9caf1201\",\"c9361ee760a0a611\",\"7070b92178a0489b\",\"f9d35d43770d3909\",\"b9bb58048978991a\",\"31f3b2f7b1210b44\"]"
   },
   {
     "hex": "0149ab52b4c96671",
@@ -833,7 +855,7 @@
     "key_fact": null,
     "source_file": "scripts/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"8c5967fd8486f344\",\"74c05e2f9190b4c2\",\"f9d35d43770d3909\",\"8dff57dd9caf1201\",\"7070b92178a0489b\"]"
+    "links": "[\"8c5967fd8486f344\",\"74c05e2f9190b4c2\",\"f9d35d43770d3909\",\"8dff57dd9caf1201\",\"7070b92178a0489b\",\"4233581019917e14\",\"6ca5cab77e702c78\",\"2cf3031dcafdf144\"]"
   },
   {
     "hex": "23460fe27bbd0839",
@@ -910,7 +932,7 @@
     "key_fact": null,
     "source_file": "sector1/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"971da9a789ab199d\",\"d6aa039866df21ee\",\"c48c3164ffc5dc79\",\"3d91975932e93a1f\",\"d03c76fc5584c3dd\",\"ae2002a7528b058d\",\"0668bd308df8950b\",\"76abc3d0044d6fb1\",\"f9d35d43770d3909\"]"
+    "links": "[\"971da9a789ab199d\",\"d6aa039866df21ee\",\"c48c3164ffc5dc79\",\"3d91975932e93a1f\",\"d03c76fc5584c3dd\",\"ae2002a7528b058d\",\"0668bd308df8950b\",\"76abc3d0044d6fb1\",\"f9d35d43770d3909\",\"abcbbe66bb71e68f\",\"6ca5cab77e702c78\"]"
   },
   {
     "hex": "d6aa039866df21ee",
@@ -1031,7 +1053,7 @@
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"8803e04d8fb22978\",\"56cc318b711082fb\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"c7e0279cccb39441\",\"f9d35d43770d3909\",\"8803e04d8fb22978\",\"56cc318b711082fb\"]"
   },
   {
     "hex": "8dff57dd9caf1201",
@@ -1042,14 +1064,14 @@
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"74c05e2f9190b4c2\",\"f9d35d43770d3909\",\"9b776b8b8b8f07b7\",\"4fd9c8a3d43a9294\",\"66cd9688a2ae0682\",\"ae2002a7528b058d\",\"2d87f9e76d5dbf11\",\"63388ec43c164af1\",\"66be75bfcbbf72f0\",\"2e44e0b3b6d84943\",\"df9dd9b48f5ba743\",\"0e8f689408bbeece\",\"45a4f4b55c8692a6\"]"
+    "links": "[\"74c05e2f9190b4c2\",\"f9d35d43770d3909\",\"9b776b8b8b8f07b7\",\"4fd9c8a3d43a9294\",\"66cd9688a2ae0682\",\"ae2002a7528b058d\",\"2d87f9e76d5dbf11\",\"63388ec43c164af1\",\"66be75bfcbbf72f0\",\"2e44e0b3b6d84943\",\"df9dd9b48f5ba743\",\"6ca5cab77e702c78\",\"45a4f4b55c8692a6\"]"
   },
   {
     "hex": "2d87f9e76d5dbf11",
     "name": "package-handler/worker/",
     "path": "sector2/package-handler/worker",
     "area": "sector2",
-    "description": "packages-worker (D1 `phoenix_dev_db` + R2 `phoenix-clonepool`): clonepool, custody, glossary, versions, deps, connections (Atlas), peer review, `/stats`, and as of 2026-10-01 the `/player` node session lifecycle routes. Version 3.6.0 added the `/clonepool/<key>/mpu` multipart routes and `POST /clonepool/<key>/copy`; deployed 2026-10-01 (Version ID `324b61b9-f55f-493a-920f-90978df0aff1`) with the `/player/:uid/*` block. R2 layout for player data: `players/{uid}/state.json`, `players/{uid}/hardware.json`, `players/{uid}/sidecars/{hash}.sidecar.json`, `players/{uid}/blobs/{hash}`. All `/player` routes gated by `PHOENIX_AUTH` bearer token. Canonical deploy directory: `sector2/package-handler/worker/` — `sector3/workers/packages-worker/` is an intentionally bricked stale copy (its `main` points at a nonexistent file to trip any accidental deploy).",
+    "description": "packages-worker (D1 `phoenix_dev_db` + R2 `phoenix-clonepool`): clonepool, custody, glossary, versions, deps, connections (Atlas), peer review, `/stats`, and as of 2026-10-01 the `/player` node session lifecycle routes. **Live 3.8.0 per `/health` (2026-10-07); repo `worker/index.js` is 3.8.2, not deployed (Jerry deploys).** Version 3.6.0 added the `/clonepool/<key>/mpu` multipart routes and `POST /clonepool/<key>/copy`; deployed 2026-10-01 (Version ID `324b61b9-f55f-493a-920f-90978df0aff1`) with the `/player/:uid/*` block. R2 layout for player data: `players/{uid}/state.json`, `players/{uid}/hardware.json`, `players/{uid}/sidecars/{hash}.sidecar.json`, `players/{uid}/blobs/{hash}`. All `/player` routes gated by `PHOENIX_AUTH` bearer token. Canonical deploy directory: `sector2/package-handler/worker/` — `sector3/workers/packages-worker/` is an intentionally bricked stale copy (its `main` points at a nonexistent file to trip any accidental deploy).",
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
@@ -1203,7 +1225,29 @@
     "name": "apps/game/",
     "path": "sector2/apps/game",
     "area": "sector2",
-    "description": "`COMPANION_VOICE.md` only: a draft of the game companion's voice and persona (2026-09-12). Notes, no code. The planned game is **Monster Phoenix** (MMORTS — players install Phoenix OS and become infrastructure nodes; GDD v2 stored in clonepool). Stack: Maptiler (Phase 1 map), Babylon.js (3D renderer), Electron. No Unity. Every player node runs H.L.K-10 (Helix-backed AI agent, Ollama in game mode). Vehicle art pipeline: real photogrammetry (Meshroom/RealityCapture) → .glTF → Babylon.js.",
+    "description": "`COMPANION_VOICE.md` only: a draft of the game companion's voice and persona (2026-09-12, Monster Phoenix era). Notes, no code. The game is now **Sacrifice** and its code lives in `game/` at the repo root (see `game/CONNECTIONS.md`): client engine Godot 4.7.2 (no client in the repo yet), our own OpenStreetMap PMTiles in R2 `sacrifice-maps` served by the live `sacrifice-worker`. The old Maptiler / Babylon.js / Electron stack is gone (MapTiler dropped 2026-10-05). Corrected 2026-10-07 (CONN-F25).",
+    "key_fact": null,
+    "source_file": "sector2/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"74c05e2f9190b4c2\"]"
+  },
+  {
+    "hex": "c5774ee3ec1c7dee",
+    "name": "apps/jarvis/",
+    "path": "sector2/apps/jarvis",
+    "area": "sector2",
+    "description": "Jarvis, the local-AI tier: OpenJarvis on the llama.cpp `llama-server` engine on pbmIII (`install-jarvis.sh`, `pins.sha256`, `phoenix-llm.service`, `openjarvis.service`, `config.toml`, `jarvis_identity.md`). The only door in from off the box is `jarvis-gate.py`, run as the SSH forced command for user `jarvis-call` (mesh `10.42.0.0/16` only, no shell, one JSON ask per call, journaled as `jarvis-gate`); both services are localhost-only with a key. `suits/jarvis.py` is the Genie suit that asks it over the mesh (`jarvis-call@10.42.0.10`, pinned host key). **Ollama REMOVED 2026-10-07** (it phoned home). The engine swap on pbmIII was still in flight 2026-10-07 (see `docs/history/HANDOFF-2026-10-07.md`); not re-verified live by this edit. Leftover: `suits/jarvis.py`'s docstring still says \"Ollama llama3.2:3b\".",
+    "key_fact": null,
+    "source_file": "sector2/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"74c05e2f9190b4c2\"]"
+  },
+  {
+    "hex": "947469ad8f4bf170",
+    "name": "apps/security/",
+    "path": "sector2/apps/security",
+    "area": "sector2",
+    "description": "Phoenix Security, the file motion sensor (`README.md`, `install-security.sh` / `.ps1`, `suits/security.py`): metadata sweeps every 5 min on pbmIII, awslh and PBMII, SHA3-512 of what moved, hash-chained `motion.jsonl`, alerts on sensitive paths, outbox for intake. Leftover: its `summary` verb still calls Ollama (`OLLAMA_HOST`, default `127.0.0.1:11434`) and falls back to the raw alert list when Ollama is not there; on boxes where Ollama has been removed (2026-10-07 on) that is every call until it is pointed at llama-server.",
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
@@ -1295,7 +1339,7 @@
     "key_fact": null,
     "source_file": "sector3/phoenix-net/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"4d526f236b2b1fc3\",\"072fcfbdebc62d00\",\"45a229d57d35d935\",\"ae2002a7528b058d\",\"3feedc5391c7ad02\"]"
+    "links": "[\"4d526f236b2b1fc3\",\"072fcfbdebc62d00\",\"45a229d57d35d935\",\"ae2002a7528b058d\"]"
   },
   {
     "hex": "7ce61151bc0bb3f9",
@@ -1654,21 +1698,21 @@
     "name": "clone.sh",
     "path": "tools/clone.sh",
     "area": "tools",
-    "description": "bash clone wrapper called by `bin/clone`; runs `sector2/package-handler/intake.sh` (in-repo only).",
+    "description": "forwarder to `bin/clone` (OUT of the pool) since 2026-10-07; it used to be the old IN command (CMDWALK-F06).",
     "key_fact": null,
     "source_file": "tools/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"f9d35d43770d3909\",\"c7e0279cccb39441\",\"8dff57dd9caf1201\"]"
+    "links": "[\"f9d35d43770d3909\",\"c7e0279cccb39441\"]"
   },
   {
     "hex": "dbcb6ea598ad03ac",
     "name": "clone.ps1",
     "path": "tools/clone.ps1",
     "area": "tools",
-    "description": "PowerShell clone wrapper (same pipeline); shadowed by `usys.ps1`'s global `clone` when both are loaded.",
+    "description": "legacy PowerShell `clone` that still puts files IN (intake). Not loaded by `install.ps1`; `usys.ps1`'s global `clone` (OUT) shadows it. Use `intake` for IN.",
     "key_fact": null,
     "source_file": "tools/CONNECTIONS.md",
-    "state": "white",
+    "state": "grey",
     "links": "[\"f9d35d43770d3909\"]"
   },
   {
@@ -2754,11 +2798,11 @@
     "name": "hands/hands.py",
     "path": "hands/hands.py",
     "area": "hands",
-    "description": "the helper. Windows tools: status, open_app (allow-list), screenshot, restart_pc, cancel_restart. Linux tools: status, services, restart_service (mesh agent / Ollama only), restart_pc, cancel_restart. HTTP `GET /tools`, `GET /log`, `POST /run`; token-gated; `--mesh --allow-from` for boxes; self-update from the hub's clone-pool relay, SHA3-checked and compile-checked, atomic swap.",
+    "description": "the helper. Windows tools: status, open_app (allow-list), screenshot, restart_pc, cancel_restart. Linux tools: status, services, restart_service (mesh agent `nebula` / Ollama only), restart_pc, cancel_restart. HTTP `GET /tools`, `GET /log`, `POST /run`; token-gated; `--mesh --allow-from` for boxes; self-update from the hub's clone-pool relay, SHA3-checked and compile-checked, atomic swap.",
     "key_fact": null,
     "source_file": "hands/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"45a229d57d35d935\",\"f58a9b91f140cf3f\",\"76fbad2417f34f2a\"]"
+    "links": "[\"45a229d57d35d935\",\"f58a9b91f140cf3f\",\"ae2002a7528b058d\"]"
   },
   {
     "hex": "193a5ba7340ab1b9",
@@ -2776,7 +2820,7 @@
     "name": "phoenix-hands.service",
     "path": "hands/phoenix-hands.service",
     "area": "hands",
-    "description": "systemd unit on the boxes: `/opt/phoenix-hands/hands.py --mesh --allow-from 10.47.0.2 --update-from http://precision.phx:8470/pool/hands.py`.",
+    "description": "systemd unit on the boxes: `/opt/phoenix-hands/hands.py --mesh --allow-from 10.42.0.1 --update-from http://10.42.0.1:8470/pool/hands.py` (10.42.0.1 = PBMII, the Console's PC, on the Phoenix Mesh = Nebula 10.42.0.0/16, `sector3/mesh/hosts.json`; the update hop runs inside Nebula, which authenticates + encrypts it). `--mesh` reads this box's 10.42.x address from the Nebula interface (`nebula1`; Windows adapter `PhoenixMesh`) and waits, logging, until it is up.",
     "key_fact": null,
     "source_file": "hands/CONNECTIONS.md",
     "state": "white",
@@ -2792,5 +2836,280 @@
     "source_file": "hands/CONNECTIONS.md",
     "state": "white",
     "links": "[\"45a229d57d35d935\"]"
+  },
+  {
+    "hex": "4c26efc3cda204cc",
+    "name": "__init__.py",
+    "path": "game/__init__.py",
+    "area": "game",
+    "description": "the package; re-exports the Phase 2-5 systems.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "abcbbe66bb71e68f",
+    "name": "frank_world.py",
+    "path": "game/frank_world.py",
+    "area": "game",
+    "description": "`FrankWorld`: Frank as world orchestrator, the one gate to game state. Witnesses accords, enforces laws, writes world history, sends events out through Helix-E (`sector1/helix-lightning/helix_ring.py`).",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\",\"f7ac2afbc9927964\"]"
+  },
+  {
+    "hex": "f947eab185de2ed0",
+    "name": "draft_card.py",
+    "path": "game/draft_card.py",
+    "area": "game",
+    "description": "player identity (signed draft card), MOS from observed play, rank + unit issuance, real-time wounds, permadeath archive, the public service record.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "8ad88337528c80f3",
+    "name": "mos.py",
+    "path": "game/mos.py",
+    "area": "game",
+    "description": "player identity (signed draft card), MOS from observed play, rank + unit issuance, real-time wounds, permadeath archive, the public service record.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "c409069693e714a1",
+    "name": "rank.py",
+    "path": "game/rank.py",
+    "area": "game",
+    "description": "player identity (signed draft card), MOS from observed play, rank + unit issuance, real-time wounds, permadeath archive, the public service record.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "856f16b20bbbb20b",
+    "name": "hospital.py",
+    "path": "game/hospital.py",
+    "area": "game",
+    "description": "player identity (signed draft card), MOS from observed play, rank + unit issuance, real-time wounds, permadeath archive, the public service record.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "7320dff5b2a01c33",
+    "name": "archive.py",
+    "path": "game/archive.py",
+    "area": "game",
+    "description": "player identity (signed draft card), MOS from observed play, rank + unit issuance, real-time wounds, permadeath archive, the public service record.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "f6089c973b95241e",
+    "name": "jacket.py",
+    "path": "game/jacket.py",
+    "area": "game",
+    "description": "player identity (signed draft card), MOS from observed play, rank + unit issuance, real-time wounds, permadeath archive, the public service record.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "c4326093b1776358",
+    "name": "accord.py",
+    "path": "game/accord.py",
+    "area": "game",
+    "description": "challenges, player tribunals, King of Theater, footage registration (clips carry an R2 key in the clone pool).",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "3198f6956a417a13",
+    "name": "tribunal.py",
+    "path": "game/tribunal.py",
+    "area": "game",
+    "description": "challenges, player tribunals, King of Theater, footage registration (clips carry an R2 key in the clone pool).",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "fe0e837c99bc8684",
+    "name": "king_theater.py",
+    "path": "game/king_theater.py",
+    "area": "game",
+    "description": "challenges, player tribunals, King of Theater, footage registration (clips carry an R2 key in the clone pool).",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "614dc437f7720ab1",
+    "name": "footage.py",
+    "path": "game/footage.py",
+    "area": "game",
+    "description": "challenges, player tribunals, King of Theater, footage registration (clips carry an R2 key in the clone pool).",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "e46e74db5eeda3ce",
+    "name": "equipment.py",
+    "path": "game/equipment.py",
+    "area": "game",
+    "description": "gear, vehicles, upgrades; vehicle photo → Frank's import method → live art.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "b709f68d8d15e956",
+    "name": "vehicle.py",
+    "path": "game/vehicle.py",
+    "area": "game",
+    "description": "gear, vehicles, upgrades; vehicle photo → Frank's import method → live art.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "169e60a27524ea8b",
+    "name": "vehicle_world.py",
+    "path": "game/vehicle_world.py",
+    "area": "game",
+    "description": "gear, vehicles, upgrades; vehicle photo → Frank's import method → live art.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "4233581019917e14",
+    "name": "asset_intake.py",
+    "path": "game/asset_intake.py",
+    "area": "game",
+    "description": "gear, vehicles, upgrades; vehicle photo → Frank's import method → live art.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\",\"4fd9c8a3d43a9294\"]"
+  },
+  {
+    "hex": "097c6d621d8a43a5",
+    "name": "territory.py",
+    "path": "game/territory.py",
+    "area": "game",
+    "description": "AOs and battles, ground that carries a name, the append-only hash-chained world record.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "0044ba0079d27d63",
+    "name": "named_ground.py",
+    "path": "game/named_ground.py",
+    "area": "game",
+    "description": "AOs and battles, ground that carries a name, the append-only hash-chained world record.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "abec7c66c49737c9",
+    "name": "world_history.py",
+    "path": "game/world_history.py",
+    "area": "game",
+    "description": "AOs and battles, ground that carries a name, the append-only hash-chained world record.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\",\"2cf3031dcafdf144\"]"
+  },
+  {
+    "hex": "008d360d41fbbc70",
+    "name": "pmtiles.py",
+    "path": "game/pmtiles.py",
+    "area": "game",
+    "description": "our own maps: OpenStreetMap vector tiles in one PMTiles archive cut from the Protomaps planet build (no map vendor; MapTiler dropped 2026-10-05). Pure Python, no dependencies.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "6f96c4f253695974",
+    "name": "mvt.py",
+    "path": "game/mvt.py",
+    "area": "game",
+    "description": "our own maps: OpenStreetMap vector tiles in one PMTiles archive cut from the Protomaps planet build (no map vendor; MapTiler dropped 2026-10-05). Pure Python, no dependencies.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "cb23e67e6479b1fb",
+    "name": "map_extract.py",
+    "path": "game/map_extract.py",
+    "area": "game",
+    "description": "our own maps: OpenStreetMap vector tiles in one PMTiles archive cut from the Protomaps planet build (no map vendor; MapTiler dropped 2026-10-05). Pure Python, no dependencies.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
+  },
+  {
+    "hex": "f7fdb7b34abdc6b2",
+    "name": "theater_map.py",
+    "path": "game/theater_map.py",
+    "area": "game",
+    "description": "our own maps: OpenStreetMap vector tiles in one PMTiles archive cut from the Protomaps planet build (no map vendor; MapTiler dropped 2026-10-05). Pure Python, no dependencies.",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\",\"2cf3031dcafdf144\"]"
+  },
+  {
+    "hex": "2cf3031dcafdf144",
+    "name": "worker/",
+    "path": "game/worker",
+    "area": "game",
+    "description": "**sacrifice-worker** (`index.mjs` 1.1.0, `wrangler.jsonc`, `schema.sql`, `DEPLOY.md`, `deploy-maps.ps1`): public reads `/health`, `/history`, `/named-ground`, `/territory`, `/tiles/{z}/{x}/{y}.mvt`; write `POST /history` only with Bearer `FRANK_TOKEN`. Live at `https://sacrifice-worker.phoenix-jwl.workers.dev` (jw.leftwich1 account): `/` 200 `{\"ok\":true,\"worker\":\"sacrifice-worker\",\"version\":\"1.1.0\",\"history\":0}`, `/territory` 200, `/tiles/0/0/0.mvt` 200 (checked 2026-10-07).",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\",\"4fd9c8a3d43a9294\",\"f7fdb7b34abdc6b2\",\"abec7c66c49737c9\"]"
+  },
+  {
+    "hex": "e9c19810e355d09d",
+    "name": "tests/",
+    "path": "game/tests",
+    "area": "game",
+    "description": "`test_phase3.py`, `test_phase4.py`, `test_phase5.py`, `test_maps.py`, `test_helix_agnostic.py`; `worker/test/worker.test.mjs` (Node, real SQLite).",
+    "key_fact": null,
+    "source_file": "game/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"6ca5cab77e702c78\"]"
   }
 ]

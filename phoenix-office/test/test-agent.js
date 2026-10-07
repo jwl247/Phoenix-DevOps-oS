@@ -20,11 +20,14 @@ function test(name, fn) { tests.push({ name, fn }); }
 
 // ── ai-provider.js ────────────────────────────────────────────────────────
 test('tryOllama resolves with text + via on a successful chat response', async () => {
+    const urls = [];
     global.fetch = async (url) => {
-        assert.ok(String(url).includes('/api/chat'));
+        urls.push(String(url));
         return { ok: true, json: async () => ({ message: { content: 'hello from ollama' } }) };
     };
     const r = await tryOllama({ system: 's', messages: [{ role: 'user', content: 'hi' }] });
+    // OFFICE-F32: a quick probe first, then the chat with its own longer limit
+    assert.ok(urls[0].includes('/api/tags') && urls[1].includes('/api/chat'), urls.join(' '));
     assert.strictEqual(r.text, 'hello from ollama');
     assert.ok(r.via.startsWith('ollama:'));
 });

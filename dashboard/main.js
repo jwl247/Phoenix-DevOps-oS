@@ -1317,6 +1317,19 @@ ipcMain.handle('ai-chat', async (event, { message, history, phoenixStats, mode, 
         }
     }
 
+    // ── Local (explicit) — the local model ONLY. Picking local means nothing leaves this
+    // machine, so a failure is said plainly and never handed to the cloud CLI (DASH-F25). ──
+    if (provider === 'ollama') {
+        try {
+            const result = await _chatOllama(systemPrompt, chatMessages);
+            _helixMem.pushTurn('assistant', result.reply);
+            return { success: true, ...result, fallback: false };
+        } catch (e) {
+            return { success: false, provider: 'ollama',
+                     error: `The local model isn't answering (${e.message}). Nothing was sent anywhere else. Start it, or pick another tier.` };
+        }
+    }
+
     // ── Help Desk — Ollama primary, subscription CLI fallback ────────────────
     const errors = [];
     try {
