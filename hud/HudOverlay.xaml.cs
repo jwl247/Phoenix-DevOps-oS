@@ -62,6 +62,7 @@ public partial class HudOverlay : Window
         FillTree(TreeRight, _profile.RightPlaces);                      // the roots on the right
         Bar.SetState(VoiceState.Idle);
         WatchSecurityLock();
+        StartStepAside();                                               // out of the way of full-screen apps
         Refresh();
         SourceInitialized += (_, _) =>
         {

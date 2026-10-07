@@ -36,6 +36,15 @@ public sealed class TrayIcon : IDisposable
         item("Chat (drop it down from the eye)", App.ToggleHud);
         if (p.Jarvis) item("Ask Jarvis…", () => App.Overlay?.StartJarvisAsk());
         item("Screenshot for Claude", SnapForClaude);
+        // Out of the way on demand (Jerry 10/7: "your always on top im trying to use the compaq").
+        var eye = new WinForms.ToolStripMenuItem("Hide the eye");
+        eye.Click += (_, _) => Application.Current.Dispatcher.Invoke(() =>
+        {
+            if (App.Overlay is not { } o) return;
+            o.SetEyeHidden(!o.EyeHiddenByUser);
+            eye.Text = o.EyeHiddenByUser ? "Show the eye" : "Hide the eye";
+        });
+        m.Items.Add(eye);
         m.Items.Add(new WinForms.ToolStripSeparator());
         item("Quit the HUD", () => Application.Current.Shutdown());
 
