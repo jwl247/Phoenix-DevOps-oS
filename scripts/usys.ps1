@@ -2798,6 +2798,10 @@ if ($__usysDotSourced) {
     $__goto = Join-Path $PSScriptRoot 'phoenix-goto.ps1'
     if (Test-Path $__goto) { . $__goto }
     Remove-Variable __goto -ErrorAction SilentlyContinue
+    # short commands: .. repo snap pb3 aws1 box pulse glog gst here pool (scripts\phoenix-aliases.ps1)
+    $__al = Join-Path $PSScriptRoot 'phoenix-aliases.ps1'
+    if (Test-Path $__al) { . $__al }
+    Remove-Variable __al -ErrorAction SilentlyContinue
 } else {
     # Direct script invocation (shim mode): run once, define nothing global.
     $cmd  = $args[0]
