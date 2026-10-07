@@ -32,7 +32,7 @@ Sector 4 — Helix engine, Frank orchestrator, master vault
 
 **The clone pool** is content-addressed by SHA3-512. Every file that enters Phoenix gets a hex identity, a base58 TAV address, two QR codes (header before hash, footer after), and an immutable D1 custody record. Nothing is ever deleted. Everything is versioned. The file is the unit.
 
-**The intake pipeline** is the front door. File → hex ID → sidecar → clone pool → D1 custody → R2 upload. Every file, every time. `usys clone <file>` is all you type.
+**The intake pipeline** is the front door. File → hex ID → sidecar → clone pool → D1 custody → R2 upload. Every file, every time. `intake <file>` is all you type (IN). `clone <name>` takes it back OUT.
 
 ---
 
@@ -73,7 +73,8 @@ After install:
 ```powershell
 usys init          # first-time setup — dirs, auth, profile
 usys status        # verify everything is wired
-usys clone <file>  # the intake pipeline — hex ID, QR, D1 custody, R2 upload
+intake <file>      # IN: the intake pipeline — hex ID, QR, D1 custody, R2 upload
+usys clone <name>  # OUT: a pool file into this folder, checked against D1
 usys run debian    # boot Debian from the clonepool
 ```
 

@@ -23,8 +23,8 @@ for swap operations.
 ## Commands / entry points
 - `sector4/intake/intake.sh file <path>` / `dir <path>` — reached through `usys intake`
   (`scripts/usys.ps1` `Get-UsysIntakeSh`). Needs breach_coms4 at `/mnt/g` and
-  `phoenix-core/tools/intake.py`; for everyday clone-pool intake use `usys clone`
-  (`sector2/package-handler/intake.sh`) instead.
+  `phoenix-core/tools/intake.py`; for everyday clone-pool intake use `intake <file>`
+  or `scripts/hsf-intake.sh` (`sector2/package-handler/intake.sh`) instead (`usys clone` is OUT).
 - `sector4/vault/download.sh url|pkg|batch|status|help`, `sector4/vault/phoenix-push.sh push|status|help`.
 - `paging_helix.py` has no CLI — `main_kernel.py:boot()` starts it; `genie status` shows pressure, Doppelgangers and decisions. `PHOENIX_PAGER_INTERVAL` (s, default 5), `PHOENIX_HELIX_B_MAX_MB` (hard Strand B cap).
 - `python3 sector4/paging.py start` — run by `phoenix-paging.service` (/opt/phoenix) or

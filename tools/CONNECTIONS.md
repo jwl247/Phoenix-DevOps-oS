@@ -6,8 +6,8 @@ against current code before trusting a specific line number.
 
 ## What it is
 Local utilities, the tray app, and the distro-boot / Helix proof-of-concept sandbox.
-- `clone.sh` — bash clone wrapper called by `bin/clone`; runs `sector2/package-handler/intake.sh` (in-repo only).
-- `clone.ps1` — PowerShell clone wrapper (same pipeline); shadowed by `usys.ps1`'s global `clone` when both are loaded.
+- `clone.sh` — forwarder to `bin/clone` (OUT of the pool) since 2026-10-07; it used to be the old IN command (CMDWALK-F06).
+- `clone.ps1` — legacy PowerShell `clone` that still puts files IN (intake). Not loaded by `install.ps1`; `usys.ps1`'s global `clone` (OUT) shadows it. Use `intake` for IN.
 - `align_dirs.sh` — bash; creates the Phoenix directory layout on a Linux box (`--check` = audit only).
 - `get_distros.sh` — downloads a list of Linux ISOs to a Ventoy folder (dated URLs, checks wget's own exit status).
 - `backup_user_guide.md` — a parked restic/PyQt6 whole-system backup design (no code here implements it).
@@ -28,14 +28,14 @@ format (consumed by `usys run <name>` once cloned into the pool), not npm/pip ma
 The tray needs `pystray pillow plyer` (+ optional `watchdog`) and Git for Windows' bash.
 
 ## Commands / entry points
-- `tools/clone.sh <file>` / `. tools/clone.ps1; clone <file>` → `sector2/package-handler/intake.sh`.
+- `tools/clone.sh <name> [vN] [folder]` → `bin/clone` (OUT). IN is `intake <file>` (`bin/intake`).
 - `tools/poc/run-debian.ps1` → `usys run debian`; `tools/poc/start-debian-persist.ps1` → `usys run debian -Persist --share`.
 - `tools/poc/install-helix-autostart.ps1` — registers the `Phoenix-HelixLightningKernel` logon task (elevated) or a Startup-folder fallback; called by repo-root `install.ps1`.
 - `python tools/phoenix-tray.py [--auto-intake]`.
 - `tools/poc/google.suite.json`, `steam.suite.json` use `runtime: external` — dashboard-launched only; `usys run` refuses that runtime.
 
 ## Connects to / connected from
-- `bin/clone` → `tools/clone.sh` → `sector2/package-handler/intake.sh`.
+- `tools/clone.sh` → `bin/clone` → `sector2/package-handler/intake.sh clone` (OUT).
 - `bin/align_dirs` → `tools/align_dirs.sh`.
 - `bin/get_distros` → `tools/get_distros.sh`.
 - `tools/phoenix-tray.py` → `scripts/hsf-intake.sh` → `sector2/package-handler/intake.sh`.

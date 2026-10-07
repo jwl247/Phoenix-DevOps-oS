@@ -1,17 +1,20 @@
-# Phoenix Commands — what each one does (as of 2026-10-03, evening)
+# Phoenix Commands — what each one does (as of 2026-10-07)
 
 Global = works from any folder in any terminal. On this PC: `F:\Phoenix\Phoenix-DevOps-oS\bin`,
-`...\scripts` and `C:\Users\jwlef\.usys\bin` are on PATH (`.usys\bin` = installed copies of `bin\`).
+`...\scripts` and `C:\Users\jwlef\.usys\bin` are on PATH (`.usys\bin` = forwarders that run the repo's
+`bin\` copies, so they cannot drift — 2026-10-07).
 Status: ✅ tested working · ❌ tested broken · ⚠ works but wrong/confusing · — not tested yet.
 2026-10-03: the Sector 2 pool commands were walked end to end against the real packages-worker
-(3.8.1, run locally with a D1 built from `worker/schema-d1.sql` and a local R2). ✅ below = passed that walk;
-the Windows `.cmd` shims were fixed but not run on Windows yet (⚠ until they are).
+(3.8.1, run locally with a D1 built from `worker/schema-d1.sql` and a local R2). ✅ below = passed that walk.
+2026-10-07 (Round 4 command walk): `clone.cmd`, `lol.cmd`, the repo `intake.cmd`, `usys clone`
+(OUT) and `usys pull -Destination` were run on Windows and work.
 
 ## The two directions (the rule)
 - **IN — `intake`**: a file/folder goes INTO the clone pool (hex, sidecar, R2 bytes, D1 custody + version).
 - **OUT — `clone`**: a file/folder comes OUT of the pool into a directory (latest or `vN`, checked against D1).
   Original design: `sector1/grub/usys.sh` — `usys clone <name> <dest>` = "clone with full history".
-  Today several commands break this rule — marked below, fix in progress.
+  Since 2026-10-02/10-06 every command follows this rule: `clone`, `usys clone`, `lol` and `bin/clone`
+  are OUT (all run `bin/clone` → `intake.sh clone`); `tools/clone.sh` is a forwarder to `bin/clone`.
 
 ## Clone pool — IN
 | Command | Does | Status |
@@ -19,9 +22,8 @@ the Windows `.cmd` shims were fixed but not run on Windows yet (⚠ until they a
 | `intake <file> [backend] [notes]` | File into the pool (PS7: `scripts\intake.ps1` → `intake.sh`). Version comes from the D1 ledger; a different file with the same name is refused unless `INTAKE_SAME_NAME_OK=1` | ✅ |
 | `intake <folder>/` | Whole folder into the pool, with preview. Each re-intake is a new snapshot (was: stuck at v1, overwritten) | ✅ |
 | `intake backend <pkg> <be> <ver>` | Register a package installed by a backend (winget, apt…) | ✅ |
-| `usys clone <file> [-Category x] [-Tag y]` | **IN** today (Sector 2 pool) — name says out ⚠; `-Destination` does nothing | ⚠ |
-| `clone <file>` | **IN** today (`.usys\bin\clone.cmd` → `usys clone`; bash: `tools/clone.sh`) ⚠ | ❌ bash: dead `PHOENIX_INTAKE` |
-| `usys intake <file>` / `usys intake dir <path>` | Sector 4 **vault** intake (TAV / breach_coms4) — a different pipeline from the pool | — |
+| `intake.cmd <file>` (repo `bin\intake.cmd`) | Same as `intake`, from CMD | ✅ 2026-10-07 |
+| `usys intake <file>` / `usys intake dir <path>` | Sector 4 **vault** intake (`sector4/intake/intake.sh`, TAV / breach_coms4) — a different pipeline from the Sector 2 pool | — |
 | `usys download <url> [-OutFile p] [-NoIntake]` | Download, then intake | — |
 | `usys watch start [-Auto] [-Path d]` / `stop` / `pending` / `status` | Watch Downloads (or a folder) and intake new files | — |
 | `usys fs-import <path>` / `fs-sync <dir>` (`phx-import`, `phx-sync`) | Shared-FS file/folder into the pool | — |
@@ -33,10 +35,12 @@ the Windows `.cmd` shims were fixed but not run on Windows yet (⚠ until they a
 | `intake clone <file>` (bash `intake.sh`) | Latest version into the current folder; reports the ledger version | ✅ |
 | `intake clone <file> vN` | Version N into the current folder | ✅ |
 | `intake clone <folder>` / `<folder>/` / `<folder> vN` | Folder snapshot into the current folder (trailing `/` was "not found") | ✅ |
-| `intake clone <file>` (shim `bin/intake` / `intake.cmd`) | Same as above via the shim; a dead `PHOENIX_INTAKE` now falls back to the repo copy | ✅ bash · ⚠ .cmd untested on Windows |
-| `lol <name> [vN] [--force]` | Pool file into the current folder — now a wrapper over `clone` (overwrite guard; `lol.cmd` no longer builds a PowerShell script from the name) | ✅ bash · ⚠ .cmd untested on Windows |
+| `intake clone <file>` (shim `bin/intake` / `intake.cmd`) | Same as above via the shim; a dead `PHOENIX_INTAKE` now falls back to the repo copy | ✅ bash · ✅ .cmd 2026-10-07 |
+| `clone <name> [vN] [folder] [--force]` | Pool file/folder into `[folder]` (default: here). `bin/clone` (bash) → `intake.sh clone`; `clone.cmd` runs the same script through Git Bash; refuses to overwrite a working file without `--force` | ✅ bash · ✅ .cmd 2026-10-07 |
+| `usys clone <name> [vN] [folder]` | Same engine as `clone` (`Invoke-UsysCloneOut` → `bin/clone`) | ✅ 2026-10-07 |
+| `lol <name> [vN] [--force]` | Pool file into the current folder — a wrapper over `clone` (overwrite guard; `lol.cmd` no longer builds a PowerShell script from the name) | ✅ bash · ✅ .cmd 2026-10-07 |
 | `usys open <name>.lol` | Pool file into the current folder, SHA3-checked vs D1 (when no local file of that name) | ✅ |
-| `usys pull <name> -Destination <dir>` | Meant to pull into `<dir>` — the command line drops `-Destination` | ❌ only stages a stub |
+| `usys pull <name> -Destination <dir>` | Pool item into `<dir>` (created if missing), SHA3-checked vs D1 | ✅ 2026-10-07 |
 | `usys fs-export <name> <dir>` (`phx-export`) | Pool item into a shared-FS dir | — |
 
 ## Search / status
@@ -64,7 +68,7 @@ the Windows `.cmd` shims were fixed but not run on Windows yet (⚠ until they a
 |---|---|
 | `usys distro list` / `fetch-qemu` / `intake-qemu` | Registered distros / how to get QEMU / intake QEMU into the pool |
 | `usys run debian` / `ubuntu` `[--accel tcg\|hyperv] [--share]` | Boot a VM (`--share` mounts F:\Phoenix\* at /phoenix/*) |
-| `get_distros` | Detect distributions |
+| `get_distros <dest> --yes` | **Downloads** ~10 Linux ISOs (tens of GB, `wget`) into `<dest>` for Ventoy. Without both `<dest>` and `--yes` it only prints usage and downloads nothing |
 
 ## Setup / maintenance
 | Command | Does |
@@ -77,14 +81,14 @@ the Windows `.cmd` shims were fixed but not run on Windows yet (⚠ until they a
 | `node sector2/package-handler/parse-connections.js [--dry-run\|--rebuild]` | Refresh the Atlas (also runs on commit when a CONNECTIONS.md changes) |
 | `usys <file>.py/.sh/.ps1/.js/.qcow2…` | Run/open a file by extension |
 
-## Known fixes pending (Jerry 2026-10-02: names must do what they say, globally)
-1. `clone <name> [vN] [folder]` and `usys clone` → **OUT**; IN stays `intake`.
-2. `usys pull` / `-Destination` honoured.
-3. ✅ 2026-10-03 (bash + `intake.cmd`): Shims fall back to the repo `intake.sh` when `PHOENIX_INTAKE` is dead (it points at
-   `D:\Users\jwlef\Phoenix\package-handler\intake\intake.sh`, which does not exist — also
-   in `~/.phoenix_env.sh`). Stale PATH entry: `D:\Users\jwlef\Phoenix\Phoenix-DevOps-oS\scripts`.
-4. ✅ 2026-10-03: `intake clone` reports the D1 ledger's version number, not the local pool's; intake numbers new versions from the ledger and packages-worker 3.8.1 keeps clonepool.version = ledger.
-5. Publish: `bash sector2/package-handler/sync-standalone.sh [--push]` keeps the public Phoenix-Package_handler repo in sync with this copy (allowlist, do-not-deploy worker name, secret scan).
+## Fixed (Jerry 2026-10-02: names must do what they say, globally)
+- `clone <name> [vN] [folder]` and `usys clone` are **OUT**; IN is `intake` (done 10-02/10-06, docs 10-07).
+- `usys pull -Destination` is honoured (run 2026-10-07).
+- Shims fall back to the repo `intake.sh` when `PHOENIX_INTAKE` is dead (2026-10-03).
+- `intake clone` reports the D1 ledger's version number; intake numbers new versions from the ledger (2026-10-03).
+
+## Maintenance note
+- Publish: `bash sector2/package-handler/sync-standalone.sh [--push]` keeps the public Phoenix-Package_handler repo in sync with this copy (allowlist, do-not-deploy worker name, secret scan).
 
 ---
 

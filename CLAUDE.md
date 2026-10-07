@@ -353,7 +353,7 @@ Import sequence:
 Life First's real backend is the `lifefirst-mcp` Cloudflare Worker, exposed every session as the
 `mcp__claude_ai_lifefirst-current__*` tools — use them on Life First work. The PHP tree at
 sector2/apps/lifefirst/module_*.php is a retired fossil (hardcoded creds) — never run its setup/deploy scripts.
-**WORK:** Stay in sector. Real code only. Everything through Frank/intake (`scripts/hsf-intake.sh` / `usys clone`).
+**WORK:** Stay in sector. Real code only. Everything through Frank/intake (`scripts/hsf-intake.sh` / `intake <file>`).
 **END:** Update BUILD STATUS above (one line per item, detail goes in `docs/history/BUILD-STATUS-DETAIL.md`).
 Append the session entry to **`docs/history/SESSION-LOG.md`** (NOT this file). Update NEXT SESSION below
 (top items only; full backlog in `docs/history/NEXT-SESSION-BACKLOG.md`).

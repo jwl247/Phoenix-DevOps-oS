@@ -21,7 +21,7 @@ SHA3 verification either .NET SHA3 support (Windows 11) or python3. No package m
 Load with `. .\scripts\usys.ps1` then `usys <command>`, or via `bin/usys` / `bin/usys.cmd` /
 `scripts/usys.cmd` (all `-File`, arguments passed verbatim). Subcommands:
 `init`, `status`, `doctor`, `version`, `path-register`, `help`, `intake` (Sector 4 vault
-pipeline, by design), `clone` (Sector 2 pipeline), `search`, `download`, `watch
+pipeline, by design), `clone` (OUT of the Sector 2 pool — runs `bin/clone`), `search`, `download`, `watch
 start|stop|pending|status`, `open <name>.lol` / `pull <name>` (R2 bytes, SHA3-512 checked
 against D1, refused on mismatch), `run <suite> [--accel auto|tcg|whpx|hyperv|kvm] [--share]
 [--unverified] [--dry-run]`, `suite-trust`, `list-suites`/`suite-list`, `suite-promote`,
@@ -33,7 +33,8 @@ external `usys.sh` named by `USYS_ENGINE`, and say so.
 Bash side: `bash scripts/hsf-intake.sh <path> [<path> ...]`.
 
 ## Connects to / connected from
-- `scripts/usys.ps1` → `sector2/package-handler/intake.sh` — `usys clone`, `usys download`, `usys watch`, `usys distro intake-qemu` (all via `Invoke-UsysIntakeFile`; no call site uses `phoenix-core/tools/intake.py` any more).
+- `scripts/usys.ps1` → `sector2/package-handler/intake.sh` — IN: `usys download`, `usys watch`, `usys distro intake-qemu` (all via `Invoke-UsysIntakeFile`; no call site uses `phoenix-core/tools/intake.py` any more).
+- `scripts/usys.ps1` → `bin/clone` → `intake.sh clone` — OUT: `usys clone` (`Invoke-UsysCloneOut`).
 - `scripts/usys.ps1` → `sector4/intake/intake.sh` — `usys intake` / `.lol` magic extension (the Sector 4 vault pipeline; routed there on purpose).
 - `scripts/hsf-intake.sh` → `sector2/package-handler/intake.sh` (piped, non-interactive).
 - `tools/phoenix-tray.py` → `scripts/hsf-intake.sh` (tray intake, since 2026-09-29).
@@ -42,7 +43,7 @@ Bash side: `bash scripts/hsf-intake.sh <path> [<path> ...]`.
 - `bin/usys`, `bin/run`, `bin/clone.cmd`, `scripts/usys.cmd` → `scripts/usys.ps1` (`-File`).
 - `install.ps1` → `scripts/` (PATH registration of `usys.cmd`).
 - `usys run` reads suite manifests from the clone pool (`$env:CLONEPOOL_DIR`), not from
-  `tools/poc/*.suite.json` directly — those are templates that must be `usys clone`d first.
+  `tools/poc/*.suite.json` directly — those are templates that must be `intake`d first.
 
 ## Known issues (verified, not guessed)
 - `CLONEPOOL_DIR` drift: the User env points at `E:/Phoenix/clonepool` (no suites) while the

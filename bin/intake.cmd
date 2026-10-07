@@ -1,8 +1,8 @@
 @echo off
 REM ============================================================
 REM Phoenix Global Command: intake
-REM Windows CMD wrapper for Phoenix Intake (Sector 2 clonepool -- same
-REM pipeline as `clone`; Sector 4 vault intake is `usys intake`)
+REM Windows CMD wrapper for Phoenix Intake -- IN to the Sector 2 clonepool
+REM (`clone` is the OUT direction; Sector 4 vault intake is `usys intake`)
 REM ============================================================
 
 setlocal enabledelayedexpansion

@@ -10,16 +10,17 @@ its arguments as arguments (`-File … "$@"` / `%*`, or `bash -c 'exec bash "$0"
 never spliced into a PowerShell or bash command string.
 - `bin/usys` — bash → `pwsh -File scripts/usys.ps1 "$@"`; needs PowerShell 7 (no bash engine exists).
 - `bin/run` — bash → `pwsh -File scripts/usys.ps1 run "$@"`.
-- `bin/clone` — bash → `tools/clone.sh` → Sector 2 intake.
-- `bin/intake` — bash → `sector2/package-handler/intake.sh` (same pipeline as clone; Sector 4 vault intake is `usys intake`).
+- `bin/clone` — bash, OUT of the pool: `clone <name> [vN] [folder] [--force]` → `sector2/package-handler/intake.sh clone`. `bin/lol`, `clone.cmd`, `usys clone` and `tools/clone.sh` all run this script.
+- `bin/intake` — bash, IN to the pool: → `sector2/package-handler/intake.sh` (`intake <file-or-folder>`; also `intake clone …` OUT). Sector 4 vault intake is `usys intake`.
 - `bin/status` — bash → root `status.sh`.
 - `bin/align_dirs` — bash → `tools/align_dirs.sh`.
 - `bin/get_distros` — bash → `tools/get_distros.sh`.
-- `usys.cmd`, `run.cmd`, `clone.cmd` — Windows → `pwsh -File scripts/usys.ps1 [run|clone] %*`.
+- `usys.cmd`, `run.cmd` — Windows → `pwsh -File scripts/usys.ps1 [run] %*`.
+- `clone.cmd`, `lol.cmd` — Windows → Git Bash running `bin/clone` / `bin/lol` (OUT) with `%*`.
 - `intake.cmd`, `status.cmd`, `align_dirs.cmd`, `get_distros.cmd` — Windows → Git Bash with the target script and `%*` as positional args.
 
 ## Dependencies
-None — thin shims. Runtime: PowerShell 7 for `usys`/`run`/`clone.cmd`, Git for Windows'
+None — thin shims. Runtime: PowerShell 7 for `usys`/`run`, Git for Windows'
 bash for the `.cmd` bash shims. Line endings pinned by `.gitattributes` (`bin/** eol=lf`,
 `bin/*.cmd eol=crlf`).
 
@@ -29,7 +30,7 @@ Each file here IS an entry point once installed on PATH.
 ## Connects to / connected from
 - `bin/usys` → `scripts/usys.ps1`.
 - `bin/run` → `scripts/usys.ps1` (`usys run`).
-- `bin/clone` → `tools/clone.sh` → `sector2/package-handler/intake.sh`.
+- `bin/clone` → `sector2/package-handler/intake.sh clone` (OUT). `tools/clone.sh` → `bin/clone`.
 - `bin/intake` → `sector2/package-handler/intake.sh`.
 - `bin/status` → `status.sh`.
 - `bin/align_dirs` → `tools/align_dirs.sh`.

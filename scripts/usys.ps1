@@ -643,7 +643,8 @@ function Invoke-UsysIntake {
 }
 
 # =============================================================================
-# COMMAND: clone — Sector 2 clonepool intake (wraps tools/clone.ps1 logic)
+# Invoke-UsysClone — internal IN helper: puts a file INTO the pool (used by intake/shared-fs/watch).
+# NOT the `clone` command: `usys clone` / `clone` are OUT (Invoke-UsysCloneOut → bin/clone).
 # =============================================================================
 function Invoke-UsysClone {
     [CmdletBinding()]

@@ -1,131 +1,72 @@
-# Clone -- Sector 2 Intake Command
+# Clone -- Sector 2: getting files OUT of the clone pool
 **USys -- United Systems | jwl247**
 **Sector:** 2 -- Intake / Package Handler
-**Status:** Active
+**Status:** Active (rewritten 2026-10-07: `clone` is OUT since 10-02/10-06, d68007f; audit CMDWALK-F05/F06)
 
 ---
 
-## What It Is
+## IN and OUT
 
-`clone` is the universal intake command for the Phoenix system.
-Single point of entry for any file, package, config, or script
-entering Phoenix -- from any shell, on any platform.
+| Direction | Command | What it does |
+|-----------|---------|--------------|
+| **IN** | `intake <file-or-folder>` (also `scripts/hsf-intake.sh`) | hex identity, sidecar, pool version, custody, D1 + R2 |
+| **OUT** | `clone <name> [vN] [folder] [--force]` | the pool's copy into this folder (or `folder`), checked against its D1 hash first |
 
-One command. Every platform. Everything tracked.
+`clone` never puts anything INTO the pool. If a name isn't in the pool yet, it says so and tells you to `intake` it.
 
 ---
 
 ## Files
 
-| File | Repo | Purpose |
-|------|------|---------|
-| `tools/clone.ps1` | Phoenix-DevOps-oS | PS7 global function |
-| `tools/clone.sh` | Phoenix-DevOps-oS | Bash shim -- Linux (Phoenix's Debian VM / bare metal) / macOS |
-| `sector2/package-handler/intake.sh` | Phoenix-DevOps-oS (git subtree of Phoenix-Package_handler) | Intake engine (what clone wraps) |
-| `sector2/package-handler/worker/index.js` | Phoenix-DevOps-oS (git subtree of Phoenix-Package_handler) | packages-worker -- D1 + R2 sync |
+| File | Purpose |
+|------|---------|
+| `bin/clone` | The one clone engine (bash): runs `intake.sh clone` |
+| `bin/clone.cmd` | Windows (cmd / PS7): runs `bin/clone` through Git Bash |
+| `scripts/usys.ps1` | `usys clone` = `Invoke-UsysCloneOut` → `bin/clone` |
+| `tools/clone.sh`, `tools/clone.ps1` | Forwarders to `bin/clone` / `bin/clone.cmd` (were the old IN command) |
+| `sector2/package-handler/intake.sh` | The engine behind both IN and OUT |
+| `sector2/package-handler/worker/index.js` | packages-worker -- D1 custody + R2 bytes |
+
+Installed by `install.ps1` / `install.sh` (`~/.usys/bin` forwarders); no profile line needed.
 
 ---
 
-## Install
-
-### PowerShell 7 (Windows)
-
-Add one line to your PS7 profile (`$PROFILE`):
-
-```powershell
-. "$HOME\Phoenix\Phoenix-DevOps-oS\tools\clone.ps1"
-```
-
-Reload: `. $PROFILE` -- then `clone` works from anywhere in PS7.
-
-### Bash -- Linux (Debian VM / bare metal) / macOS
-
-```bash
-chmod +x ~/Phoenix/Phoenix-DevOps-oS/tools/clone.sh
-sudo ln -s ~/Phoenix/Phoenix-DevOps-oS/tools/clone.sh /usr/local/bin/clone
-```
-
----
-
-## Environment Variables
+## Environment
 
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
-| `PHOENIX_AUTH` | Yes (for D1) | -- | packages-worker auth token |
-| `PHOENIX_WORKER_URL` | Yes (for D1) | -- | packages-worker URL |
-| `CLONEPOOL_DIR` | No | `~/Phoenix/clonepool` | Local clonepool path |
-| `PHOENIX_INTAKE` | No | auto-detected | Override path to intake.sh |
+| `PHOENIX_AUTH` | for R2/D1 | -- | packages-worker key (read from a 0600 header file, never argv) |
+| `PHOENIX_WORKER_URL` | for R2/D1 | packages-worker | worker URL |
+| `CLONEPOOL_DIR` | No | `~/Phoenix/clonepool` | Local pool |
 
 ---
 
 ## Usage
 
-### PowerShell 7
-
-```powershell
-clone ./franken.py
-clone ./nginx.conf -Tag "production config" -Category configs
-clone ./franken.py -Destination T2
-clone ./myfile.sh -DryRun
-```
-
-### Bash / Linux (Debian VM / bare metal) / macOS
-
 ```bash
-clone ./franken.py
-clone ./nginx.conf configs "production nginx"
-clone backend nodejs winget 20.11.0
-clone --dry-run ./myfile.sh
-clone status
+clone frank_helix.py          # latest version into this folder
+clone frank_helix.py v3       # a ledger version (D1's label), checked byte-for-byte
+clone kernels ./ops           # a whole intaked folder into ./ops
+clone frank_helix.py --force  # overwrite an existing local file
 ```
+
+## What happens
+
+```
+clone <name> [vN]
+   |
+ local pool has it?  -- no --> R2 (current key, or <hex>/versions/<sha3[0:16]> for an older vN)
+   |                                |
+ hash vs the D1 baseline  <---------+
+   |
+ match: copied out, "Integrity verified"   mismatch / unvouched: STOP, nothing handed out
+```
+
+Offline, the local copy is checked against its own sidecar sha256 and the output says it is unverified.
 
 ---
 
-## What Happens When You Clone
-
-```
-clone ./franken.py
-        |
-  clone.ps1 / clone.sh  (shim -- finds intake.sh, handles paths)
-        |
-  intake.sh  (sector2/package-handler/)
-        |
-  hex identity generated from filename
-  sidecar.json written
-  clonepool versioned (v1, v2, v3...)
-  custody receipt -- local sqlite3 (immutable)
-  D1 sync -> packages-worker -> phoenix_dev_db (custody + glossary)
-  R2 upload -> packages-worker -> phoenix-clonepool bucket
-        |
-  File cataloged. Custody locked.
-```
-
----
-
-## Sector Map
-
-Clone is a **Sector 2** operation with **Sector 1** authority (PCS embedded).
-By the time clone finishes, Sector 3 already knows the pattern.
-Sector 4 will prefetch it on next access.
-
----
-
-## Test It
-
-```bash
-# Dry run first -- no writes
-clone --dry-run ./anyfile.txt
-
-# Real clone
-clone ./anyfile.txt
-
-# Check status
-clone status
-```
-
----
-
-## QR State After Clone
+## QR State
 
 | QR | State | Meaning |
 |----|-------|---------|

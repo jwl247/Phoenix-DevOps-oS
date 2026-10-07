@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ============================================================
 # Phoenix Global Command: intake
-# Linux/macOS wrapper for Phoenix Intake (Sector 2 clonepool — see `bin/clone`
-# for the same pipeline; Sector 4 vault intake is a separate command, `usys
-# intake`, once sector4/intake.sh exists on the target machine)
+# Linux/macOS wrapper for Phoenix Intake — IN to the Sector 2 clonepool
+# (`bin/clone` is the OUT direction; Sector 4 vault intake is a separate
+# command, `usys intake`, once sector4/intake.sh exists on the target machine)
 # ============================================================
 
 set -euo pipefail
