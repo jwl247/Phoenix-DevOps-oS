@@ -2775,6 +2775,10 @@ if ($__usysDotSourced) {
     Set-Alias -Name usys-download -Value Invoke-UsysDownload -Scope Global -Force -ErrorAction SilentlyContinue
     Set-Alias -Name clone         -Value Invoke-UsysCloneCmd -Scope Global -Force -ErrorAction SilentlyContinue
     Set-Alias -Name phx-clone     -Value Invoke-UsysCloneCmd -Scope Global -Force -ErrorAction SilentlyContinue
+    # rotate-key: PHOENIX_AUTH rotation in one command (scripts\phoenix-rotate.ps1)
+    $__rot = Join-Path $PSScriptRoot 'phoenix-rotate.ps1'
+    if (Test-Path $__rot) { . $__rot }
+    Remove-Variable __rot -ErrorAction SilentlyContinue
 } else {
     # Direct script invocation (shim mode): run once, define nothing global.
     $cmd  = $args[0]
