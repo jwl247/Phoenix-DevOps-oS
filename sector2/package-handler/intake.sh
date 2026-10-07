@@ -654,13 +654,21 @@ r2_put() {
   while (( n <= nparts )); do
     dd if="${filepath}" of="${part}" bs="${R2_PART}" skip=$((n - 1)) count=1 iflag=fullblock status=none 2>/dev/null \
       || dd if="${filepath}" of="${part}" bs="${R2_PART}" skip=$((n - 1)) count=1 status=none
-    resp=$(pcurl -s -X PUT "${_auth_hdrs[@]}" --data-binary "@${part}" \
-           "${WORKER_URL}/clonepool/${key}/mpu/${uid}/${n}" 2>/dev/null)
-    etag=$(grep -o '"etag"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${resp}" | sed -E 's/.*"([^"]*)"$/\1/' || true)
+    # One dropped part used to throw away the whole upload (a 2 GB model died at part 3/31,
+    # 2026-10-07). A part is idempotent (same number, same bytes), so retry it before giving up.
+    local try etag=""
+    for try in 1 2 3 4; do
+      resp=$(pcurl -s -X PUT "${_auth_hdrs[@]}" --data-binary "@${part}" \
+             "${WORKER_URL}/clonepool/${key}/mpu/${uid}/${n}" 2>/dev/null)
+      etag=$(grep -o '"etag"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${resp}" | sed -E 's/.*"([^"]*)"$/\1/' || true)
+      [[ -n "${etag}" ]] && break
+      log "WARN" "R2 multipart: part ${n}/${nparts} of ${key} try ${try}/4 failed: ${resp:0:120}"
+      (( try < 4 )) && sleep $(( try * 3 ))
+    done
     if [[ -z "${etag}" ]]; then
       rm -f "${part}"
       pcurl -s -o /dev/null -X DELETE "${_auth_hdrs[@]}" "${WORKER_URL}/clonepool/${key}/mpu/${uid}" 2>/dev/null
-      log "WARN" "R2 multipart: part ${n}/${nparts} of ${key} failed — aborted"
+      log "WARN" "R2 multipart: part ${n}/${nparts} of ${key} failed 4 times — aborted"
       return 1
     fi
     parts+="{\"partNumber\":${n},\"etag\":\"${etag}\"},"
@@ -696,13 +704,19 @@ upload_to_r2() {
   [[ -z "${PHOENIX_AUTH}" ]] && { log "WARN" "PHOENIX_AUTH not set — skipping R2 upload"; return 0; }
   [[ ! -f "${filepath}" ]] && { log "WARN" "R2 upload: file not found: ${filepath}"; return 0; }
   local size sha3; size=$(get_size "${filepath}"); sha3=$(_sha3_of "${filepath}")
+  # .r2-pending marks a pool folder whose bytes never fully reached R2; a later intake of the
+  # same file (the DUP path) sees it and retries. Without it a failed upload could never heal:
+  # an identical re-intake kept the local copy and skipped R2 (the 2 GB model, 2026-10-07).
+  local pending; pending="$(dirname "${filepath}")/.r2-pending"
+  touch "${pending}" 2>/dev/null || true
   if r2_put "${hex}" "${filepath}" "${sha3}"; then
     log "INFO" "R2 OK → ${hex} (${size} bytes)"
-    upload_version_to_r2 "${hex}" "${filepath}" "${sha3}" copy
+    upload_version_to_r2 "${hex}" "${filepath}" "${sha3}" copy && rm -f "${pending}"
   else
-    log "WARN" "R2 upload failed → ${hex}"
-    upload_version_to_r2 "${hex}" "${filepath}" "${sha3}"
+    log "WARN" "R2 upload failed → ${hex} (will retry on the next intake of this file)"
+    upload_version_to_r2 "${hex}" "${filepath}" "${sha3}" || true
   fi
+  return 0
 }
 
 # ── R2 per-version bytes — the byte-retrievable history ────────
@@ -732,6 +746,7 @@ upload_version_to_r2() {
     log "INFO" "R2 version OK → ${key}"
   else
     log "WARN" "R2 version upload failed → ${key}"
+    return 1
   fi
 }
 
@@ -1129,6 +1144,12 @@ intake_file() {
     case "${choice}" in
       1)
         echo "[intake:OK] Kept existing ${existing_ver} — incoming discarded"
+        if [[ -f "${pool_dir}/.r2-pending" ]]; then
+          echo "[intake] its R2 copy never finished — sending it now"
+          upload_to_r2 "${hex}" "${existing}"
+          if [[ -f "${pool_dir}/.r2-pending" ]]; then echo "[intake:WARN] R2 still incomplete — see ${LOG_FILE}"
+          else echo "[intake:OK] R2 copy complete"; fi
+        fi
         return 0
         ;;
       2)
@@ -2151,7 +2172,7 @@ fetch_dir_r2_fallback() {
   # Probe the first bytes only: a manifest opens with "type": "directory", and
   # anything else (every plain file) must not cost a second full download.
   local probe
-  probe=$(pcurl -s "${auth[@]}" "${WORKER_URL}/clonepool/${hex}" 2>/dev/null | head -c 120)
+  probe=$(pcurl -s "${auth[@]}" "${WORKER_URL}/clonepool/${hex}" 2>/dev/null | head -c 120 | tr -d '\0')  # binary files: no bash null-byte warning
   grep -q '"type": "directory"' <<<"${probe}" || return 1
   local meta want
   meta=$(pcurl -s "${auth[@]}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)

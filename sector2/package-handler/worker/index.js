@@ -7,7 +7,7 @@
 
 import { parseAtlas, buildAtlasBlob, BUNDLE_FORMAT, BUNDLE_KEY } from './atlas-parse.mjs';
 
-const VERSION = '3.8.1';
+const VERSION = '3.8.2';
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -805,6 +805,22 @@ export default {
       // the same key is harmless). The `versions` D1 table's store_path
       // points here. Checked before the generic /clonepool/:id routes below
       // since both start with the same prefix.
+      // Write-once guard for version keys (S2CORE-S26: a PUT used to overwrite history with any
+      // bytes). The client's SHA3-512 must start with the key's hash prefix; an existing key is
+      // left alone: same sha3 = idempotent 200 (intake re-sends to heal), different = 409.
+      // head-then-put leaves a race only between two writers who both hold PHOENIX_AUTH.
+      // Returns null to go ahead, or the Response to send.
+      async function versionWriteOnce(bucket, key, sha3) {
+        const vm = key.match(/\/versions\/([0-9a-f]{16})$/);
+        if (!vm) return null;                               // a "current" key: overwrite is its job
+        if (typeof sha3 !== 'string' || !/^[0-9a-f]{128}$/.test(sha3) || !sha3.startsWith(vm[1]))
+          return err('version keys need the SHA3-512 whose first 16 hex are the key (X-Phoenix-SHA3 / sha3)', 400);
+        const have = await bucket.head(key);
+        if (!have) return null;
+        if ((have.customMetadata || {}).sha3 === sha3) return ok({ ok: true, key, exists: true, bytes: have.size });
+        return err('version key already holds other bytes - versions are write-once', 409);
+      }
+
       const vMatch = path.match(/^\/clonepool\/([^/]+)\/versions\/([^/]+)$/);
       if (vMatch && (req.method === 'PUT' || req.method === 'GET')) {
         const [, hexId, hashPrefix] = vMatch;
@@ -812,8 +828,11 @@ export default {
         if (!env.CLONEPOOL_BUCKET) return err('R2 bucket not bound to this worker', 500);
         if (req.method === 'PUT') {
           if (!isAuthorized(req, env)) return err('unauthorized', 401);
+          const sha3 = req.headers.get('X-Phoenix-SHA3') || '';
+          const stop = await versionWriteOnce(env.CLONEPOOL_BUCKET, key, sha3);
+          if (stop) return stop;
           const bytes = await req.arrayBuffer();
-          await env.CLONEPOOL_BUCKET.put(key, bytes);
+          await env.CLONEPOOL_BUCKET.put(key, bytes, { customMetadata: { sha3 } });
           return ok({ ok: true, key, bytes: bytes.byteLength });
         }
         if (!isAuthorized(req, env)) return err('unauthorized', 401);
@@ -1003,6 +1022,8 @@ export default {
           if (kind === 'copy' && req.method === 'POST' && !uploadId) {
             const b = await req.json().catch(() => ({}));
             if (typeof b.from !== 'string' || !/^[0-9a-f]+$/.test(b.from) || !sha3ok(b.sha3)) return err('from (hex) and sha3 required', 400);
+            const stop = await versionWriteOnce(bucket, key, b.sha3);
+            if (stop) return stop;
             const src = await bucket.get(b.from);
             if (!src) return err('source not found', 404);
             if ((src.customMetadata || {}).sha3 !== b.sha3) {
@@ -1017,6 +1038,8 @@ export default {
           }
           if (kind === 'mpu' && req.method === 'POST' && !uploadId) {
             const b = await req.json().catch(() => ({}));
+            const stop = await versionWriteOnce(bucket, key, b.sha3);
+            if (stop) return stop;
             const mpu = await bucket.createMultipartUpload(key, sha3ok(b.sha3) ? { customMetadata: { sha3: b.sha3 } } : {});
             return ok({ ok: true, key, uploadId: mpu.uploadId });
           }
@@ -1029,6 +1052,10 @@ export default {
           if (kind === 'mpu' && uploadId && req.method === 'POST' && tail === 'complete') {
             const b = await req.json().catch(() => ({}));
             if (!Array.isArray(b.parts) || !b.parts.length) return err('parts required', 400);
+            if (/\/versions\//.test(key) && await bucket.head(key)) {
+              await bucket.resumeMultipartUpload(key, decodeURIComponent(uploadId)).abort().catch(() => {});
+              return err('version key was written meanwhile - versions are write-once', 409);
+            }
             const obj = await bucket.resumeMultipartUpload(key, decodeURIComponent(uploadId)).complete(
               b.parts.map(x => ({ partNumber: Number(x.partNumber), etag: String(x.etag) })));
             return ok({ ok: true, key, bytes: obj.size });

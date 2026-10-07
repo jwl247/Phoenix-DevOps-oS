@@ -71,8 +71,13 @@ class R2:
                   "CF-Access-Client-Secret": os.environ.get("CF_ACCESS_CLIENT_SECRET", "")}
         self.cache = {}
 
+    def _conn(self, timeout):
+        # plain HTTP only for a local test worker on loopback; everything else is HTTPS
+        local = self.host.split(":")[0] in ("127.0.0.1", "localhost")
+        return (http.client.HTTPConnection if local else http.client.HTTPSConnection)(self.host, timeout=timeout)
+
     def _get(self, path):
-        c = http.client.HTTPSConnection(self.host, timeout=30)
+        c = self._conn(30)
         try:
             c.request("GET", self.base + path, headers=self.h)
             r = c.getresponse()
@@ -91,6 +96,24 @@ class R2:
             except OSError:
                 self.cache[key] = False
         return self.cache[key]
+
+    def bytes_sha3(self, key):
+        """SHA3-512 of the bytes R2 actually serves for key, streamed (None if it serves none).
+        The proof before a local delete: a key that merely exists could hold other bytes (S2CORE-S26)."""
+        c = self._conn(120)
+        try:
+            c.request("GET", self.base + f"/clonepool/{key}", headers=self.h)
+            r = c.getresponse()
+            if r.status != 200 or "octet-stream" not in (r.getheader("Content-Type") or ""):
+                return None
+            h = hashlib.sha3_512()
+            for chunk in iter(lambda: r.read(1 << 20), b""):
+                h.update(chunk)
+            return h.hexdigest()
+        except OSError:
+            return None
+        finally:
+            c.close()
 
     def d1_hash(self, hexid):
         try:
@@ -157,6 +180,23 @@ def plan(pl, r2):
     return go, keep
 
 
+def proven_by_bytes(path, r2):
+    """Before deleting a local copy: download what R2 serves and hash it. Existence was only the plan."""
+    hexid = os.path.basename(path)
+    side = os.path.join(path, f"{hexid}.sidecar.json")
+    files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and not f.endswith(".sidecar.json")
+             and not f.startswith(".")]
+    if not files:
+        return True                                   # only a sidecar: nothing to lose
+    if os.path.isfile(side) and '"type": "directory"' in open(side, encoding="utf-8", errors="replace").read():
+        return r2.bytes_sha3(hexid) == sha3_file(side)
+    for f in files:
+        want = sha3_file(os.path.join(path, f))
+        if r2.bytes_sha3(f"{hexid}/versions/{want[:16]}") != want:
+            return False
+    return True
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["audit", "tidy", "pin", "unpin", "pins"])
@@ -195,11 +235,14 @@ def main():
     for p, s, why in sorted(keep, key=lambda x: -x[1])[:6]:
         print(f"      e.g. {gb(s):>9}  {p}  ({why})")
     if a.cmd == "tidy" and a.apply:
-        freed = 0
+        freed, removed, r2 = 0, 0, R2()
         for p, s, _ in go:
+            if not proven_by_bytes(p, r2):
+                print(f"   kept {p}: R2's bytes do not hash to the local copy")
+                continue
             shutil.rmtree(p, ignore_errors=True)
-            freed += s
-        print(f"removed {len(go)} local copies, freed {gb(freed)}")
+            freed += s; removed += 1
+        print(f"removed {removed} local copies (each re-hashed from R2 first), freed {gb(freed)}")
     elif a.cmd == "tidy":
         print("dry run — nothing removed (add --apply)")
 
