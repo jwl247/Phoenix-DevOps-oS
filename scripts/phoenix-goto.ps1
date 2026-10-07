@@ -11,26 +11,18 @@
 # sector2/x path (tried from the repo). A folder -> you're in it. A file -> you're in its
 # folder and it's named. Nothing on the clipboard that exists -> says so, goes nowhere.
 
-function ConvertTo-PhoenixPath([string]$Text) {
-    $t = ($Text -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
-    if (-not $t) { return $null }
-    $t = $t.Trim().Trim('`', '"', "'", '<', '>', '(', ')', '[', ']', ',', ';').Trim()
-    $t = $t -replace '^file:///?', ''
-    $t = $t -replace '(:\d+){1,2}$', ''                                   # file.py:123  /  file.py:12:5
-    if ($t -match '^/mnt/([a-zA-Z])(/.*)?$') { $t = "$($Matches[1]):$($Matches[2])" }
-    elseif ($t -match '^/([a-zA-Z])(/.*)?$') { $t = "$($Matches[1]):$($Matches[2])" }   # /f/Phoenix -> f:/Phoenix
-    if ($t -match '^~([\\/].*)?$') { $t = $HOME + $Matches[1] }
-    $t = $t -replace '/', '\'
-    if ($t -match '^[a-z]:') { $t = $t.Substring(0, 1).ToUpper() + $t.Substring(1) }
-    return $t
-}
+# ConvertTo-PhoenixPath lives in scripts\phoenix-paths.ps1 (one rule for every command); load it if alone
+if (-not (Get-Command ConvertTo-PhoenixPath -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'phoenix-paths.ps1') }
 
 function Invoke-PhoenixGoto {
     [CmdletBinding()]
     param([Parameter(Position = 0)][string]$Path, [switch]$Open)
     $raw = if ($Path) { $Path } else { Get-Clipboard -Raw -ErrorAction SilentlyContinue }
     if (-not $raw) { Write-Host '  g: clipboard is empty - highlight a path first' -ForegroundColor Yellow; return }
-    $p = ConvertTo-PhoenixPath $raw
+    # g only: what Claude prints can carry <brackets>, (parens) and a :line[:col] tail - drop them first
+    $first = ($raw -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
+    $first = $first.Trim().Trim('`', '"', "'", '<', '>', '(', ')', '[', ']', ',', ';').Trim() -replace '(:\d+){1,2}$', ''
+    $p = ConvertTo-PhoenixPath $first
     $cands = @($p)
     if ($p -and -not [IO.Path]::IsPathRooted($p)) {                       # repo-relative, as Claude prints them
         $repo = [Environment]::GetEnvironmentVariable('PHOENIX_ROOT', 'User')

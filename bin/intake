@@ -6,6 +6,10 @@
 # command, `usys intake`, once sector4/intake.sh exists on the target machine)
 # ============================================================
 
+# Paths in any form (F:\x, F:/x, /f/x, /mnt/f/x, ~/x) work the same (Jerry 10/7, bin/phoenix-paths.sh)
+__phx_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$__phx_here/phoenix-paths.sh" ]]; then . "$__phx_here/phoenix-paths.sh"; phx_args "$@"; set -- "${PHX_ARGS[@]}"; fi
+
 set -euo pipefail
 
 # Source Phoenix environment

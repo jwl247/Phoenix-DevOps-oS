@@ -2279,6 +2279,8 @@ function Invoke-UsysMain {
     )
 
     Test-UsysElevation | Out-Null
+    # Paths in any form (F:\x, F:/x, /f/x, ~/x) work the same (Jerry 10/7, scripts\phoenix-paths.ps1)
+    if ($Rest -and (Get-Command Resolve-PhoenixArgs -ErrorAction SilentlyContinue)) { $Rest = Resolve-PhoenixArgs $Rest }
 
     switch ($Command.ToLowerInvariant()) {
         'init'          { Invoke-UsysInit }
@@ -2794,6 +2796,10 @@ if ($__usysDotSourced) {
     $__rot = Join-Path $PSScriptRoot 'phoenix-rotate.ps1'
     if (Test-Path $__rot) { . $__rot }
     Remove-Variable __rot -ErrorAction SilentlyContinue
+    # slash-insensitive paths (scripts\phoenix-paths.ps1): ConvertTo-PhoenixPath, px - loaded first, g uses it
+    $__paths = Join-Path $PSScriptRoot 'phoenix-paths.ps1'
+    if (Test-Path $__paths) { . $__paths }
+    Remove-Variable __paths -ErrorAction SilentlyContinue
     # g: highlight a path on screen, type g, you're there (scripts\phoenix-goto.ps1)
     $__goto = Join-Path $PSScriptRoot 'phoenix-goto.ps1'
     if (Test-Path $__goto) { . $__goto }
