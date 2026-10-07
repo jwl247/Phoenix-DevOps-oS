@@ -141,6 +141,8 @@ public partial class MainWindow : Window
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
+    private void Suits_Click(object sender, RoutedEventArgs e) => SuitLookup.Open();
+
     private void ToggleCli_Click(object sender, RoutedEventArgs e) =>
         ClaudeCodePane.Visibility = ClaudeCodePane.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
 

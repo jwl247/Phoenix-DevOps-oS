@@ -32,6 +32,7 @@ public sealed class TrayIcon : IDisposable
 
         if (p.Console) item("Open the Console", App.OpenConsole);
         item("Run…", RunBox.Open);
+        if (p.Intake) item("Suit look-up…", () => SuitLookup.Open());
         item("Chat (drop it down from the eye)", App.ToggleHud);
         if (p.Jarvis) item("Ask Jarvis…", () => App.Overlay?.StartJarvisAsk());
         item("Screenshot for Claude", SnapForClaude);

@@ -192,8 +192,14 @@ def boot():
         log.warning("  Genie control not started: %s", e)
     # ─────────────────────────────────────────────────────────────────────────
 
-    log.info("=== Phoenix Universal Kernel OPERATIONAL ===")
-    log.info("  Helix-I  intake   7701-7704")
+    if helix_i.bind_failed:
+        log.error("=== Phoenix Universal Kernel DEGRADED: Helix-I could not bind %s ===",
+                  ", ".join(map(str, helix_i.bind_failed)))
+        log.error("  another process holds those ports - stop it, then `genie restart`")
+    else:
+        log.info("=== Phoenix Universal Kernel OPERATIONAL ===")
+    log.info("  Helix-I  intake   7701-7704%s",
+             f"  (NOT bound: {', '.join(map(str, helix_i.bind_failed))})" if helix_i.bind_failed else "")
     log.info("  Helix-E  output   7805-7808")
     log.info("  Suits in closet:  %d", len(library))
 

@@ -23,13 +23,16 @@
                            FontSize="16" VerticalAlignment="Center" HorizontalAlignment="Left"/>
                 <controls:KnightRiderBar x:Name="VoiceIndicator" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 <TextBlock x:Name="ProviderLabel" Text="provider: —" Foreground="{StaticResource TextDim}"
-                           FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,126,0"/>
+                           FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,190,0"/>
                 <Button x:Name="CliToggleButton" Content="CLI" Width="40" Height="28" HorizontalAlignment="Right"
                         Margin="0,0,36,0" Style="{StaticResource HudButton}" Click="ToggleCli_Click"
                         ToolTip="Show/hide the CLAUDE CODE pane"/>
                 <Button x:Name="HudToggleButton" Content="HUD" Width="44" Height="28" HorizontalAlignment="Right"
                         Margin="0,0,82,0" Style="{StaticResource HudButton}" Click="ToggleHud_Click"
                         ToolTip="Launch / hide the HUD: see-through, chat with Claude, drop files on the left edge (Ctrl+Alt+Space)"/>
+                <Button x:Name="SuitsButton" Content="SUITS" Width="54" Height="28" HorizontalAlignment="Right"
+                        Margin="0,0,130,0" Style="{StaticResource HudButton}" Click="Suits_Click"
+                        ToolTip="Suit look-up: find a suit in the pool by name or what it does, read it, import (run) it"/>
                 <Button Content="✕" Width="28" Height="28" HorizontalAlignment="Right"
                         Style="{StaticResource HudButton}" Click="Close_Click"/>
             </Grid>

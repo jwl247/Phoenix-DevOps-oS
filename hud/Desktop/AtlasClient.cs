@@ -17,8 +17,18 @@ public static class AtlasClient
 
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
 
-    private static string? Env(string n) =>
+    internal static string? Env(string n) =>
         Environment.GetEnvironmentVariable(n, EnvironmentVariableTarget.User) ?? Environment.GetEnvironmentVariable(n);
+
+    internal static string? WorkerUrl => Env("PHOENIX_WORKER_URL")?.TrimEnd('/');
+
+    /// <summary>The worker's three credentials (bearer + Cloudflare Access), the same ones usys and intake send.</summary>
+    internal static void Sign(HttpRequestMessage req)
+    {
+        if (Env("PHOENIX_AUTH") is { Length: > 0 } a) req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {a}");
+        if (Env("CF_ACCESS_CLIENT_ID") is { Length: > 0 } id) req.Headers.TryAddWithoutValidation("CF-Access-Client-Id", id);
+        if (Env("CF_ACCESS_CLIENT_SECRET") is { Length: > 0 } s) req.Headers.TryAddWithoutValidation("CF-Access-Client-Secret", s);
+    }
 
     /// <summary>Places that are not repo directories, always offered first.</summary>
     public static IReadOnlyList<Place> FixedPlaces()
@@ -42,9 +52,7 @@ public static class AtlasClient
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, $"{url.TrimEnd('/')}/connections?q={Uri.EscapeDataString(word)}");
-            if (Env("PHOENIX_AUTH") is { Length: > 0 } a) req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {a}");
-            if (Env("CF_ACCESS_CLIENT_ID") is { Length: > 0 } id) req.Headers.TryAddWithoutValidation("CF-Access-Client-Id", id);
-            if (Env("CF_ACCESS_CLIENT_SECRET") is { Length: > 0 } s) req.Headers.TryAddWithoutValidation("CF-Access-Client-Secret", s);
+            Sign(req);
             using var resp = await Http.SendAsync(req);
             if (!resp.IsSuccessStatusCode) return (Array.Empty<Place>(), $"Atlas answered {(int)resp.StatusCode}");
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());

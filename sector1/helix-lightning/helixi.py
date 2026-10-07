@@ -243,20 +243,34 @@ class HelixI:
         Open a socket per channel so external processes can push data in.
         Each channel listens on SOCKET_BASE + channel_number.
         Non-blocking. Each channel runs its own thread.
+        The bind happens HERE, before anything reports "listening": a port another process
+        holds (2026-10-05 and 2026-10-07: tools/poc/true_double_helix.py on 7701-7704) lands in
+        self.bind_failed and the kernel says so, instead of a thread dying unseen while the
+        boot banner claims Helix-I is up. Returns the list of ports that failed.
         """
+        self.bind_failed = []
         for ch in self.channels.values():
             port = SOCKET_BASE + ch.number
+            try:
+                sock = self._bind(port)
+            except OSError as e:
+                self.bind_failed.append(port)
+                log.error(f"Helix-I ch{ch.number} could NOT bind {BIND_ADDR}:{port}: {e} - "
+                          f"another process holds it; stages sent there never reach this kernel")
+                continue
             t = threading.Thread(
                 target=self._socket_listener,
-                args=(ch, port),
+                args=(ch, sock),
                 daemon=True,
                 name=f"helix-i-ch{ch.number}"
             )
             t.start()
             ch._thread = t
             log.info(f"Helix-I ch{ch.number} (strand {ch.strand}) listening on {BIND_ADDR}:{port}")
+        return self.bind_failed
 
-    def _socket_listener(self, ch: Channel, port: int):
+    @staticmethod
+    def _bind(port: int) -> socket.socket:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Windows SO_REUSEADDR lets ANOTHER process bind this port and take the stages
         # (seen 2026-10-05: a POC on 7701-7704 beside the kernel). Exclusive there.
@@ -264,9 +278,16 @@ class HelixI:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         else:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind((BIND_ADDR, port))
-        sock.listen(8)
+        try:
+            sock.bind((BIND_ADDR, port))
+            sock.listen(8)
+        except OSError:
+            sock.close()
+            raise
         sock.setblocking(False)
+        return sock
+
+    def _socket_listener(self, ch: Channel, sock: socket.socket):
         ch._sock = sock
 
         while self._alive:
