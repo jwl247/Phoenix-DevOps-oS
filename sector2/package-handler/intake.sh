@@ -1093,20 +1093,19 @@ intake_file() {
     echo "  [1] Proceed — intake and flag sensitive"
     echo "  [2] Cancel"
     echo ""
-    # Unattended callers (watcher, pipes, usys background jobs) have no
-    # stdin: INTAKE_YES=1 means proceed (flagged sensitive, same as directory
-    # intake's choice 1); otherwise EOF on read means the safe default,
-    # cancel. Before 2026-09-29 the EOF killed the script under set -e
-    # with nothing intaked and no message (audit F08).
+    # CLAUDE.md safety rule 10 (2026-10-07): a sensitive file enters the pool ONLY on a yes typed
+    # by a human at a terminal. Never from a pipe, a flag (INTAKE_YES), a default, an agent, the
+    # HUD or Jarvis. No terminal on stdin = not intaked (HUD-S19).
     local sens_choice=""
-    if [[ "${INTAKE_YES:-0}" == "1" ]]; then
-      sens_choice="1"
-      log "INFO" "sensitive: non-interactive (INTAKE_YES=1) — proceeding, flagged sensitive"
+    if [[ ! -t 0 ]]; then
+      sens_choice="2"
+      echo " [intake:CANCEL] Sensitive file NOT intaked: it needs a yes typed at a terminal (rule 10)."
+      echo "                 Run \`intake ${orig}\` yourself in a terminal to decide."
+      log "INFO" "sensitive: refused, no terminal (rule 10): ${orig}"
     elif ! read -rp "  Choice [1/2]: " sens_choice; then
       sens_choice="2"
       echo ""
-      echo " [intake:CANCEL] No input (non-interactive) — sensitive file NOT intaked."
-      echo "                 Re-run with INTAKE_YES=1 to intake it flagged sensitive."
+      echo " [intake:CANCEL] No answer — sensitive file NOT intaked."
     fi
     if [[ "${sens_choice}" != "1" ]]; then
       echo " [intake:CANCEL] Sensitive file — intake cancelled"
@@ -1973,11 +1972,18 @@ intake_directory() {
     echo ""
   fi
 
-  # INTAKE_YES=1 bypasses the interactive prompt (unattended callers)
+  # Unattended (INTAKE_YES, a pipe, the HUD, an agent): never the sensitive files - rule 10 says
+  # only a yes typed at a terminal lets those in. The rest of the folder goes in (HUD-S19).
   local choice
-  if [[ "${INTAKE_YES:-0}" == "1" ]]; then
-    choice="1"
-    log "INFO" "dir intake: non-interactive mode (INTAKE_YES=1)"
+  if [[ "${INTAKE_YES:-0}" == "1" || ! -t 0 ]]; then
+    if [[ ${#sensitive_files[@]} -gt 0 ]]; then
+      choice="2"
+      log "INFO" "dir intake: unattended — ${#sensitive_files[@]} sensitive file(s) left out (rule 10)"
+      echo " [intake] unattended: ${#sensitive_files[@]} sensitive file(s) left out (rule 10: a yes typed at a terminal only)"
+    else
+      choice="1"
+      log "INFO" "dir intake: non-interactive mode, nothing sensitive"
+    fi
   else
     echo "  [1] Proceed — intake all files"
     echo "  [2] Exclude .env and sensitive files"

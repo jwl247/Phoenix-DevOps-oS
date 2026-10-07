@@ -148,10 +148,19 @@ public static class FileActions
             var errTask = p.StandardError.ReadToEndAsync();
             await p.WaitForExitAsync();
             var all = (await outTask) + (await errTask);
-            var ok = p.ExitCode == 0 && all.Contains("intake:OK", StringComparison.Ordinal)
-                     || all.Contains("Version   :", StringComparison.Ordinal);
+            // HUD-F17: OK only when the bytes really are in the pool (stored, or already there as an
+            // identical copy). "[intake:OK] cancelled — nothing changed", a CANCEL/STOP (e.g. a
+            // sensitive file refused under rule 10) or a non-zero exit is not OK.
+            var inPool = all.Contains("→ clonepool v", StringComparison.Ordinal)
+                         || all.Contains("Kept existing", StringComparison.Ordinal)
+                         || all.Contains("Version   :", StringComparison.Ordinal);
+            var refused = all.Contains("intake:CANCEL", StringComparison.Ordinal)
+                          || all.Contains("intake:STOP", StringComparison.Ordinal)
+                          || all.Contains("nothing changed", StringComparison.Ordinal);
+            var ok = p.ExitCode == 0 && inPool && !refused;
             var tail = string.Join(" | ", all.Split('\n').Select(l => l.Trim())
-                .Where(l => l.StartsWith("[intake:OK]") || l.StartsWith("Version") || l.Contains("ERROR")).Take(3));
+                .Where(l => l.StartsWith("[intake:OK]") || l.StartsWith("[intake:CANCEL]") || l.StartsWith("[intake:STOP]")
+                            || l.StartsWith("Version") || l.Contains("ERROR")).Take(3));
             return Done(ok, $"intake {source}: {(tail.Length > 0 ? tail : $"exit {p.ExitCode}")}");
         }
         catch (Exception e) { return Done(false, $"intake {source}: {Plain(e)}"); }
