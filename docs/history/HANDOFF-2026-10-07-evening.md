@@ -21,7 +21,7 @@ only for real decisions, in plain text, never popups.
 
 - **Slash-insensitive paths** (late): one rule in 3 copies that agree, scripts/phoenix-paths.ps1 (`px`), bin/phoenix-paths.sh, scripts/phoenix_paths.py; wired into usys, g, intake, clone. A bare `/c` is a flag, never a drive. Captured: **drives sequential on every PC** (by label; backlog; design with Jerry; rule 9).
 
-- **Jerry, last words of the night: Phoenix's WINDOWS side is primary** (HUD, Console, tools stay Windows-first). **Linux = data delivery**: Windows calls the HP for data; the HP is mostly a **storage manager**. Don't plan a Linux HUD/command set unless he asks.
+- **Jerry, last words of the night: Phoenix's WINDOWS side is primary** (HUD, Console, tools stay Windows-first). **Linux = data delivery**: Windows calls the HP for data; the HP is mostly a **storage manager**. Don't plan a Linux HUD/command set unless he asks. **Today's split stays as is** (Windows = everything Jerry touches; pbmIII + awslh = support; Cloudflare = workers; the HP off). The future architecture is a talk WITH Jerry as it develops; don't redesign it ahead of him.
 
 ## 2. Jerry's decisions today (also in memory)
 Validate once at the door, no redundant checks · next phase = BUILD (build map: https://claude.ai/artifact/DMPqiZBA7newLdjzNXGf9Y) · jerry.leftwich1 = game only · defense pieces → immutable hot-swappable suits (plan: `docs/plans/defense-suits-immutable.md`) · HUD frame + modular editions + docks on command + lockable by security · game companion is called **David** · `.lol` → usys later · live screen streaming is the sight goal (`/look` is the stopgap).
