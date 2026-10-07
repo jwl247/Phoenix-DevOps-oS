@@ -23,12 +23,19 @@ const IS_WIN = process.platform === 'win32';
 
 let consoleWin = null;
 
+// The Console's key (S34OPS-S24): made by portal/server.py, readable by this account only.
+// Handed to the page in the URL fragment, which never leaves the browser.
+function consoleKey() {
+    try { return fs.readFileSync(path.join(require('os').homedir(), '.phoenix', 'console.token'), 'ascii').trim(); }
+    catch { return ''; }
+}
+
 // ── Console ──────────────────────────────────────────────────────────────
 function consoleUp(timeoutMs = 1500) {
     return new Promise((resolve) => {
-        // /api/state is what the page itself loads; a 200 means the server is
-        // up AND answering for this Host (it refuses unknown Host headers).
-        const req = http.get({ host: '127.0.0.1', port: CONSOLE_PORT, path: '/api/state', timeout: timeoutMs,
+        // The page itself: a 200 means the server is up AND answering for this Host (it refuses
+        // unknown Host headers). /api/* now needs the console key, the page does not.
+        const req = http.get({ host: '127.0.0.1', port: CONSOLE_PORT, path: '/', timeout: timeoutMs,
                                headers: { Host: '127.0.0.1' } }, (res) => {
             res.resume();
             resolve(res.statusCode === 200);
@@ -104,7 +111,7 @@ function openConsoleWindow(BrowserWindow, shell) {
         if (!sameOrigin(url)) { e.preventDefault(); if (/^https?:/i.test(url)) shell.openExternal(url); }
     });
     consoleWin.on('closed', () => { consoleWin = null; });
-    consoleWin.loadURL(CONSOLE_URL);
+    consoleWin.loadURL(`${CONSOLE_URL}#k=${consoleKey()}`);
 }
 
 // ── HUD ──────────────────────────────────────────────────────────────────

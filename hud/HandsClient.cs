@@ -65,7 +65,11 @@ public sealed class HandsClient
         await Task.Yield();   // never finish inside RefreshAsync's lock, or _inflight would never clear
         try
         {
-            var json = await Http.GetStringAsync(_base + "/api/hands");
+            using var get = new HttpRequestMessage(HttpMethod.Get, _base + "/api/hands");
+            get.Headers.Add("X-Phoenix-Console-Token", ConsoleKey());
+            using var got = await Http.SendAsync(get);
+            got.EnsureSuccessStatusCode();
+            var json = await got.Content.ReadAsStringAsync();
             var machines = JsonSerializer.Deserialize<JsonElement>(json).GetProperty("machines");
             _snap = new Snapshot(machines, DateTime.UtcNow);
             var up = new List<string>();
@@ -139,6 +143,21 @@ public sealed class HandsClient
         return sb.ToString();
     }
 
+    // S34OPS-S24: the Console needs its key on every /api call (made by portal/server.py,
+    // readable by this account only), and a yes must carry the nonce from that action's question.
+    private static string ConsoleKey()
+    {
+        try
+        {
+            return System.IO.File.ReadAllText(System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".phoenix", "console.token")).Trim();
+        }
+        catch { return ""; }
+    }
+
+    private readonly Dictionary<string, string> _confirmNonces = new();
+    private static string ActionKey(string machine, string tool, JsonElement args) => $"{machine}\n{tool}\n{args.GetRawText()}";
+
     /// <summary>
     /// Runs one tool. confirm is set ONLY by the HUD after the user's own yes;
     /// the model's ACTION line can never carry it (AiChatService strips it).
@@ -146,13 +165,17 @@ public sealed class HandsClient
     /// </summary>
     public async Task<(int status, JsonElement body)> RunAsync(string machine, string tool, JsonElement args, bool confirm)
     {
-        var payload = JsonSerializer.Serialize(new { tool, args, confirm });
+        string nonce = "";
+        lock (_confirmNonces)
+            if (confirm && _confirmNonces.Remove(ActionKey(machine, tool, args), out var n)) nonce = n;
+        var payload = JsonSerializer.Serialize(new { tool, args, confirm, confirm_nonce = nonce });
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{_base}/api/hands/{Uri.EscapeDataString(machine)}/run")
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json"),
         };
         req.Headers.Add("X-Phoenix-Console", "1");
         req.Headers.Add("X-Phoenix-Via", "hlk");
+        req.Headers.Add("X-Phoenix-Console-Token", ConsoleKey());
         try
         {
             using var res = await Http.SendAsync(req);
@@ -160,6 +183,9 @@ public sealed class HandsClient
             JsonElement body;
             try { body = JsonSerializer.Deserialize<JsonElement>(text); }
             catch { body = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(new { ok = false, error = text })); }
+            if ((int)res.StatusCode == 409 && body.ValueKind == JsonValueKind.Object
+                && body.TryGetProperty("confirm_nonce", out var cn) && cn.ValueKind == JsonValueKind.String)
+                lock (_confirmNonces) _confirmNonces[ActionKey(machine, tool, args)] = cn.GetString()!;
             return ((int)res.StatusCode, body);
         }
         catch (Exception e)

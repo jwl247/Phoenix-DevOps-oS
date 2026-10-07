@@ -2197,6 +2197,7 @@ function Show-UsysHelp {
     watch status                 Is the watcher running?
 
   Discovery:
+    console                      Open the Phoenix Console (machines, links, hands) with its key
     search <query>               Search clonepool + catalog
     pull <suite>                 Pull suite record from D1 and stage locally
     pull <name> -Destination <d> Pull the real bytes into folder <d>, SHA3-checked
@@ -2307,6 +2308,19 @@ function Invoke-UsysMain {
             # OUT of the pool (2026-10-02; it used to put files IN — that is
             # `usys intake`/`intake` now). Same engine as the global `clone`.
             Invoke-UsysCloneOut -CloneArgs $Rest
+        }
+
+        'console' {
+            # The Console needs its key on every /api call (S34OPS-S24). It goes in the URL fragment,
+            # which the browser never sends to a server or a log.
+            $tokFile = Join-Path $HOME '.phoenix\console.token'
+            $port = if ($env:PHOENIX_CONSOLE_PORT) { $env:PHOENIX_CONSOLE_PORT } else { '8470' }
+            try { $null = Invoke-WebRequest "http://127.0.0.1:$port/" -TimeoutSec 3 -UseBasicParsing }
+            catch { Write-UsysErr "the Console isn't running on 127.0.0.1:$port (start it: schtasks /Run /TN PhoenixPortal)"; return }
+            if (-not (Test-Path $tokFile)) { Write-UsysErr "no console key at $tokFile (the Console makes it when it starts)"; return }
+            $tok = (Get-Content -Raw $tokFile).Trim()
+            Start-Process "http://127.0.0.1:$port/#k=$tok"
+            Write-Host "  Console opened in your browser (http://127.0.0.1:$port/)"
         }
 
         'search' {

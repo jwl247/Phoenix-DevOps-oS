@@ -15,12 +15,19 @@ Security:
   - The switchboard admin key (MESH_ADMIN) is read from the vault here and
     never sent to the browser; the page only gets the finished summary.
   - Host header allow-list (stops DNS-rebinding tricks from other sites).
+  - Every /api call needs the console key (S34OPS-S24): ~/.phoenix/console.token, readable
+    by this Windows account only. The page gets it in the URL fragment (#k=..., never sent
+    to a server or a log) from whoever opens it: the dashboard launcher, `usys console`, the HUD.
+  - "Ask" tools are confirmed server-side: the 409 carries a one-time nonce for that machine,
+    tool and args (2 min); confirm without it is refused.
   - Stdlib only. Idle until someone opens the page; answers are cached.
 
   python portal/server.py [--port 8470]
 """
 import argparse
 import datetime as dt
+import hashlib
+import secrets
 import http.server
 import json
 import os
@@ -348,6 +355,52 @@ def box_token_ok(header):
     return any(_s.compare_digest(got, t) for t in toks)
 
 
+# ── Console key + server-side confirm (S34OPS-S24) ──────────────────────────
+CONSOLE_TOKEN_FILE = os.environ.get("PHOENIX_CONSOLE_TOKEN_FILE") or os.path.join(
+    os.path.expanduser("~"), ".phoenix", "console.token")
+CONFIRM_TTL = 120
+_nonces = {}                     # nonce -> (expires, fingerprint of machine/tool/args)
+_nonce_lock = threading.Lock()
+
+
+def console_token():
+    """The key every /api caller must send. Made once; delete the file to rotate it."""
+    try:
+        with open(CONSOLE_TOKEN_FILE, encoding="ascii") as f:
+            tok = f.read().strip()
+        if len(tok) >= 32:
+            return tok
+    except OSError:
+        pass
+    os.makedirs(os.path.dirname(CONSOLE_TOKEN_FILE), exist_ok=True)
+    tok = secrets.token_urlsafe(32)
+    fd = os.open(CONSOLE_TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="ascii") as f:
+        f.write(tok + "\n")
+    return tok
+
+
+def _fingerprint(machine, tool, args):
+    return hashlib.sha256(json.dumps([machine, tool, args], sort_keys=True).encode()).hexdigest()
+
+
+def issue_nonce(machine, tool, args):
+    n = secrets.token_urlsafe(18)
+    with _nonce_lock:
+        now = time.time()
+        for k in [k for k, (exp, _) in _nonces.items() if exp < now]:
+            del _nonces[k]
+        _nonces[n] = (now + CONFIRM_TTL, _fingerprint(machine, tool, args))
+    return n
+
+
+def take_nonce(nonce, machine, tool, args):
+    """True once for a live nonce issued for exactly this machine/tool/args; it is spent either way."""
+    with _nonce_lock:
+        got = _nonces.pop(str(nonce or ""), None)
+    return bool(got) and got[0] >= time.time() and secrets.compare_digest(got[1], _fingerprint(machine, tool, args))
+
+
 # ── HTTP ───────────────────────────────────────────────────────────────────
 ALLOWED_HOSTS = {"precision.phx", "portal.phx", "localhost", "127.0.0.1"}
 
@@ -357,6 +410,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, *a):                   # quiet: no per-request console spam
         pass
+
+    def _key_ok(self):
+        got = self.headers.get("X-Phoenix-Console-Token") or ""
+        return secrets.compare_digest(got.encode(), console_token().encode())
 
     def _host_ok(self):
         host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
@@ -370,7 +427,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Content-Security-Policy",
-                         "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:")
+                         "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: blob:")
         self.end_headers()
         self.wfile.write(body)
 
@@ -401,6 +458,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
+        if path.startswith("/api/") and not self._key_ok():
+            return self._send(401, b'{"ok":false,"error":"console key required - open the Console from the dashboard or usys console"}',
+                              "application/json")
         if path == "/api/state":
             return self._send(200, json.dumps(build_state()).encode(), "application/json")
         if path == "/api/hands":
@@ -442,6 +502,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if (self.headers.get("X-Phoenix-Console") != "1"
                 or not (self.headers.get("Content-Type") or "").startswith("application/json")):
             return self._send(403, b'{"ok":false,"error":"console requests only"}', "application/json")
+        if not self._key_ok():
+            return self._send(401, b'{"ok":false,"error":"console key required"}', "application/json")
         m = self._hands_path(urllib.parse.urlparse(self.path).path)
         if not m or m[1] != "run":
             return self._send(404, b'{"ok":false,"error":"not found"}', "application/json")
@@ -450,9 +512,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(min(n, 65536)) or b"{}")
         except ValueError:
             return self._send(400, b'{"ok":false,"error":"body must be JSON"}', "application/json")
-        fwd = {"tool": str(body.get("tool", "")), "args": body.get("args") or {}, "confirm": body.get("confirm") is True}
+        fwd = {"tool": str(body.get("tool", "")), "args": body.get("args") or {}, "confirm": False}
+        if body.get("confirm") is True:
+            # The yes must answer a question this server asked, for this exact action.
+            if not take_nonce(body.get("confirm_nonce"), m[0], fwd["tool"], fwd["args"]):
+                return self._send(409, json.dumps({"ok": False, "needs_confirm": True,
+                                                   "error": "confirm needs the nonce from this action's question (or it expired) - ask again"}).encode(),
+                                  "application/json")
+            fwd["confirm"] = True
         via = " (H.L.K)" if self.headers.get("X-Phoenix-Via") == "hlk" else ""
         st, out, _ = hands_call(m[0], "POST", "/run", fwd, caller=f"console from {self.client_address[0]}{via}")
+        if st == 409:
+            try:
+                o = json.loads(out)
+                if o.get("needs_confirm"):
+                    o["confirm_nonce"] = issue_nonce(m[0], fwd["tool"], fwd["args"])
+                    out = json.dumps(o).encode()
+            except ValueError:
+                pass
         return self._send(st, out, "application/json")
 
 
@@ -488,6 +565,7 @@ def main():
     ap.add_argument("--port", type=int, default=8470)
     ap.add_argument("--local-only", action="store_true", help="127.0.0.1 only (a test copy)")
     a = ap.parse_args()
+    console_token()                              # make the key before the first caller needs it
     serve("127.0.0.1", a.port)
     if a.local_only:
         while True:

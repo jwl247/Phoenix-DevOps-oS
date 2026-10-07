@@ -173,9 +173,25 @@ function tick() {
   $('checked').textContent = `Checked ${s < 2 ? 'just now' : `${s} s ago`}. Refreshes every 15 s.`;
 }
 
+// ── Console key (S34OPS-S24): every /api call carries it ───────────────────
+// Whoever opens the Console (dashboard launcher, `usys console`) puts it in the URL fragment,
+// which the browser never sends anywhere; it is moved to this tab's storage and wiped from the bar.
+const KEY = (() => {
+  const m = location.hash.match(/[#&]k=([A-Za-z0-9_-]{32,})/);
+  try {
+    if (m) { sessionStorage.setItem('phx-console-key', m[1]); history.replaceState(null, '', location.pathname); }
+    return sessionStorage.getItem('phx-console-key') || '';
+  } catch (_) { return m ? m[1] : ''; }
+})();
+
+function api(url, opts = {}) {
+  return fetch(url, { cache: 'no-store', ...opts, headers: { ...(opts.headers || {}), 'X-Phoenix-Console-Token': KEY } });
+}
+
 async function load() {
   try {
-    const r = await fetch('/api/state', { cache: 'no-store' });
+    const r = await api('/api/state');
+    if (r.status === 401) throw new Error('no console key: open the Console from the dashboard or with usys console');
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const state = await r.json();
     lastFetch = Date.now();
@@ -255,24 +271,24 @@ function renderServiceList(list) {
   return [el('p', {}, `Phoenix services on ${handsMachine}`), t];
 }
 
-async function runTool(btn, b, confirm = false) {
+async function runTool(btn, b, confirm = false, nonce = '') {
   const machine = handsMachine;
   btn.disabled = true;
   try {
-    const r = await fetch(`/api/hands/${machine}/run`, {
+    const r = await api(`/api/hands/${machine}/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Phoenix-Console': '1' },
-      body: JSON.stringify({ tool: b.tool, args: b.args || {}, confirm }),
+      body: JSON.stringify({ tool: b.tool, args: b.args || {}, confirm, confirm_nonce: nonce }),
     });
     const out = await r.json();
-    if (r.status === 409 && out.needs_confirm) {           // "ask" tier: the one real decision
+    if (r.status === 409 && out.needs_confirm && out.question) {           // "ask" tier: the one real decision
       $('confirm-q').textContent = out.question;
       $('confirm-yes').textContent = b.label;
       const d = $('confirm');
       d.returnValue = '';
       d.showModal();
       d.addEventListener('close', () => {
-        if (d.returnValue === 'yes') runTool(btn, b, true);
+        if (d.returnValue === 'yes') runTool(btn, b, true, out.confirm_nonce || '');
         else showResult('', [el('p', {}, 'Nothing was done.')]);
       }, { once: true });
       return;
@@ -282,7 +298,8 @@ async function runTool(btn, b, confirm = false) {
     if (b.tool === 'status') showResult('ok', renderStatus(res));
     else if (b.tool === 'services') showResult('ok', renderServiceList(res.services));
     else if (b.tool === 'screenshot') {
-      const img = el('img', { src: `/api/hands/${machine}/shot?t=${Date.now()}`, alt: `Screenshot of ${machine}` });
+      const img = el('img', { alt: `Screenshot of ${machine}` });   // an <img src> can't carry the key: fetch it
+      api(`/api/hands/${machine}/shot`).then(x => x.ok ? x.blob() : null).then(bl => { if (bl) img.src = URL.createObjectURL(bl); });
       showResult('ok', [el('p', {}, `Screenshot saved to ${res.saved}`), img]);
     } else if (b.tool === 'open_app') showResult('ok', [el('p', {}, `Opened ${res.opened} on ${machine}.`)]);
     else if (b.tool === 'restart_service') showResult('ok', [el('p', {}, `Restarted ${SERVICE_WORDS[res.service] || res.service} on ${machine}: ${res.state === 'active' ? 'running again' : res.state}.`)]);
@@ -300,7 +317,7 @@ async function loadHandLog() {
   if (!handsMachine) return;
   const machine = handsMachine;
   try {
-    const r = await fetch(`/api/hands/${machine}/log`, { cache: 'no-store' });
+    const r = await api(`/api/hands/${machine}/log`);
     const out = await r.json();
     if (machine !== handsMachine) return;                  // switched tabs meanwhile
     const ol = $('hand-log');
@@ -351,7 +368,7 @@ function selectMachine(name) {
 
 async function loadHands() {
   try {
-    const r = await fetch('/api/hands', { cache: 'no-store' });
+    const r = await api('/api/hands');
     if (!r.ok) return;
     const { machines, here } = await r.json();
     const names = Object.keys(machines);
