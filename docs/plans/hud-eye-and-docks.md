@@ -55,3 +55,9 @@ PC; a game build ships `game` and never the full module code paths (checked at e
 "the console needs every easy button known to man, we can talk those out when the time comes." The Console
 (the HUD's button panel, MainWindow; it replaces the dashboard) gets every one-click action Jerry uses. List
 them with him first (start from what the Electron dashboard + portal Console + `pulse` already do), then build.
+
+## Sight: live screen streaming is the goal (Jerry, 2026-10-07)
+"I know the streaming is the primary goal, but we can use this for now." `/look` (and the Screenshot to Claude
+icon) is the stopgap: one still shot on request. The goal is Claude seeing the screen LIVE while working (Copilot-
+Vision-like): on only by Jerry's choice, with a visible light on the eye while it's on, private windows skipped,
+frames kept local unless a tier needs them, and a local vision fallback (no spies). Build after the Console's buttons.
