@@ -1,4 +1,4 @@
-# Ring build plan — the Conductor, the journal motor, one ring per machine
+# Ring build plan — 1 Cpt Conductor, 4 rings, the journal motor
 
 **Status: PLAN ONLY. Not being built (Jerry 2026-10-07: "make a build plan its not getting built yet,
 prefetch needs worked out").** Prefetch (§6) is the open piece and gates step 3 onward.
@@ -10,12 +10,14 @@ configuration pages (`press-room/1.jpg`-`4.jpg`), the Music ring (a guide only),
 ## 1. The rules this plan keeps (Jerry's)
 - **The spine stays:** user input → the door (Helix-I) → custody + pool + versions + glossary →
   out (Helix-E) → translate ONLY at the exit (sector3). Already real; build on it, don't redesign it.
-- **Who talks to whom:** members talk ONLY to their ring's propcoms; propcoms talks ONLY to Cpt
-  Conductor; the Conductor is the ONLY comms in and out. That is why coms is built the way it is: one
-  propcoms → one Conductor, so rings add without rewiring (J, 10/7).
+- **The structure (J, 10/7, exact):** "there is 1 cpt conductor · there is a propcoms in every ring so
+  propcoms has 6-8 members in its circle · 4 rings, 4 propcoms talk to 1 conductor · conductor is bee
+  line kernel." Members talk ONLY to their ring's propcoms; each propcoms talks ONLY to the Conductor;
+  the Conductor has the direct line to the kernel and is the ONLY comms in and out of the rings. That is
+  why coms is built the way it is.
 - **Cpt Conductor is Frank's promotion, but not where Frank5 / the Genie kernel lives (J).**
 - **The audit file is the motor: "everything written to it runs" (press-room/4.jpg).**
-- **`helix_api.py` is different per machine; everything else in the ring is typical.**
+- **`helix_api.py` is different per machine; everything else in a ring is typical.**
 - **SMB = shared memory bus**, inside one machine. Between machines: the mesh.
 - **Ring 4 (Helix) only "provided Helix is fast enough" (press-room/2.jpg)** — decided by measurement.
 - Speed is the goal: every step measured before/after (`docs/helix/BENCHMARKS.md` precision rule).
@@ -23,35 +25,37 @@ configuration pages (`press-room/1.jpg`-`4.jpg`), the Music ring (a guide only),
 
 ## 2. The shape
 ```
-            outside: other machines (signed, over the mesh) · Helix-I in · Helix-E out
-                                         │
-                                  CPT CONDUCTOR            one per machine; the only door
-                         journal (the motor) · bus owner · ring loader
-                                         │  shared memory bus (this machine only)
-                                     propcoms              the ring's hub
-              ┌──────────┬──────────┬────┴─────┬──────────┬──────────┐
-           franken  freewheeling  quadengine  new_horizon  guardian   ...   (+ helix_api for THIS box)
-           members = JSON declarations the Conductor side-loads IN-PROCESS (press-room/4.jpg)
+                        outside (mesh, Helix-I in, Helix-E out)
+                                        │
+                     KERNEL ═══ bee line ═══ CPT CONDUCTOR     ONE, the only door in/out of the rings
+                                        │                       journal (the motor) · bus owner · ring loader
+             ┌──────────────┬───────────┴──┬──────────────┐
+         propcoms        propcoms        propcoms        propcoms        one hub per ring
+          coms4           coms3           coms2           coms1
+        6-8 members     6-8 members     6-8 members     6-8 members      talk ONLY to their propcoms
+   (franken, freewheeling, quadengine, new_horizon, guardian, ... + helix_api for the box it runs on)
 ```
-The mesh is the ring of rings: PBMII, pbmIII, awslh (+ R2 as the vault). The 4-way spread that the
-breach_coms1-4 drives used to give is now across machines; the pool (R2 + D1 custody + versions)
-carries the safety the 4 drive rings used to.
+**Open (ask Jerry):** which machine the one Conductor lives on; whether the 4 rings all live on that
+machine or spread across machines (then a propcoms reaches the Conductor over the mesh, signed); what
+runs when the Conductor's machine is off (Jerry travels — a standby Conductor that takes over, or the
+rings hold until he is back).
 
 ## 3. The journal (the motor)
-- One append-only journal per machine, in the Conductor's home.
+- One append-only journal, kept by the Conductor.
 - An entry = a job: `{seq, at, who, kind, args, prev_hash}`. Writing it IS the request; the Conductor
-  runs it and appends the result entry (`{seq, result, ms, hash}`), chained by hash (tamper shows).
+  runs it (straight down the bee line to the kernel when it is kernel work, or to a ring's propcoms)
+  and appends the result entry (`{seq, result, ms, hash}`), chained by hash (tamper shows).
 - One file, three jobs: **run** (the motor), **audit** ("what did you just do" is always answerable),
-  **heal** (replay on a fresh box rebuilds it; a peer reads it to see what a box should be doing).
+  **heal** (replay rebuilds a box; anyone checking a box reads what it should be doing).
 - Who may write which kinds: the permission tiers in CLAUDE.md (base runs, deviation asks, never-auto
   refused). Sensitive = rule 10, a terminal yes, never a journal entry from an agent.
 - Same idea as a Genie stage; the journal is where stages are written down, not a second system.
 
-## 4. One ring per machine, in-process
-- The Conductor loads `team` + member declarations (JSON) and runs members as threads/tasks in his
-  process — not 8 processes, not folders, not polling.
-- Members get work from propcoms through bus slots and are WOKEN by a signal (event/semaphore), never
-  a timer. Status lives in the bus header, not status files.
+## 4. The 4 rings, members in-process
+- Each ring: one propcoms + 6-8 members, declared in JSON (press-room/4.jpg) and side-loaded as
+  threads/tasks — not 8 processes, not folders, not polling.
+- Members get work from their propcoms through bus slots and are WOKEN by a signal (event/semaphore),
+  never a timer. Status lives in the bus header, not status files.
 - Disk only for custody and the cold store, written in background batches, never in the hop path.
 - One Helix per machine, shared on the bus (not one per member).
 - `helix_api.py` per machine behind a **contract** (route, broadcast, heartbeat, cold store, bus
@@ -61,11 +65,13 @@ carries the safety the 4 drive rings used to.
   idle (never fakes work).
 
 ## 5. The bus
-- Owned by the Conductor (not the kernel's `frank5.shm`; that one is the kernel's).
+- Owned by the Conductor (not the kernel's `frank5.shm`; that one is the kernel's, reached over the
+  bee line).
 - Only the door writes into it from outside; the bus file is locked to Phoenix's own user.
-- Fix first: the kernel bus holds ONE stage per slot (`helix_ring.py` notes it) — a ring needs a real
-  ring buffer (many slots, head/tail, wake signal).
-- Cross-ring/cross-machine traffic never touches another machine's bus: Conductor → mesh → Conductor.
+- Fix first: the kernel bus holds ONE stage per slot (`helix_ring.py` notes it) — the rings need a real
+  ring buffer (many slots, head/tail, wake signal), one region per ring.
+- A ring on another machine never shares memory across the wire: its propcoms ↔ the Conductor go over
+  the mesh, signed.
 
 ## 6. PREFETCH — OPEN, must be worked out before step 3 (Jerry)
 What exists: New Horizon's "prefetch horizon σ" (predicted next access from mean ± stddev of past
@@ -93,10 +99,10 @@ and the sketch calls Prefetch "typical" on every ring. Questions to settle with 
 | 0 | Baseline today's `sector4/ring/` | per-ball in→done ms, balls/s, idle CPU, disk writes/s recorded | PBMII only, read/measure |
 | 1 | The journal motor | entries run, results chained, replay rebuilds a test home, tamper detected | PBMII |
 | 2 | The bus (ring buffer + wake) | many slots, no polling, µs hand-off measured | PBMII |
-| 3 | One in-process ring on the bus (needs §6) | all members live, same work as step 0, faster by measurement | PBMII |
+| 3 | The 4 rings in-process on the bus, 4 propcoms → 1 Conductor (needs §6) | all members live, same work as step 0, faster by measurement | the Conductor's machine |
 | 4 | `helix_api` contract + per-machine bodies | each body passes the contract test, intaked per machine | PBMII, pbmIII |
-| 5 | The ring on pbmIII | same test passes there | pbmIII — service install = rule 9, Jerry's yes first |
-| 6 | Conductor ↔ Conductor over the mesh, signed | a ball crosses boxes through both doors only | both + mesh |
+| 5 | Rings on other machines (if Jerry spreads them) | a propcoms on pbmIII reaches the Conductor over the mesh | pbmIII — service install = rule 9, Jerry's yes first |
+| 6 | The Conductor's bee line to the kernel + his standby (per Jerry's answer) | kernel work goes only Conductor → kernel; standby takes over when he stops | both + mesh |
 | 7 | Healing through the journal + per-box reference | break a node, a PEER fixes it (Jerry's test) | both |
 | 8 | Ring 4 = Helix, only if the Helix-vs-standard test says she is fast enough | decided by numbers | — |
 
