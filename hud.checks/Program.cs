@@ -42,6 +42,10 @@ Check("left dock = home", HudProfile.Current.LeftPlaces.Count == 1 && HudProfile
 Check("right dock = Phoenix root + the drives", HudProfile.Current.RightPlaces.Any(p => p.Name == "Phoenix root") && HudProfile.Current.RightPlaces.Any(p => p.Path == @"C:\"));
 Check("the full edition's dock places exist", HudProfile.Current.Places.Count > 0 && HudProfile.Current.Places.All(p => System.IO.Directory.Exists(p.Path)));
 
+Check("run box: a folder path opens", RunBox.Launch(System.IO.Path.GetTempPath()).Ok);
+Check("run box: nonsense is refused, not crashed", !RunBox.Launch("zzz-no-such-program-xyz").Ok);
+Check("the bird ships with the HUD", System.IO.File.Exists(System.IO.Path.Combine(AppContext.BaseDirectory, "phoenix.ico")) || System.IO.File.Exists(@"F:\Phoenix\Phoenix-DevOps-oS\hud\phoenix.ico"));
+
 if (args.Contains("--jarvis"))
 {
     var (jok, jtext) = await HudOverlay.AskJarvisAsync("Reply with one word: ok");

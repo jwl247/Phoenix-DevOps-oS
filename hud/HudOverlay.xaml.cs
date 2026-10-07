@@ -99,13 +99,21 @@ public partial class HudOverlay : Window
                                   Foreground = (Brush)FindResource("Amber"), FontFamily = new FontFamily("Consolas") };
         void item(string header, Action act) { var i = new MenuItem { Header = header }; i.Click += (_, _) => act(); m.Items.Add(i); }
         item(ChatPanel.IsVisible ? "Fold the chat away" : "Open the chat", ToggleChat);
-        if (_profile.Jarvis) item("Ask Jarvis…", () => { OpenChat(); ChatInput.Text = "Jarvis, "; ChatInput.CaretIndex = ChatInput.Text.Length; });
+        if (_profile.Jarvis) item("Ask Jarvis…", StartJarvisAsk);
         if (_profile.Console) item("Open the Console", App.OpenConsole);
         m.Items.Add(new Separator());
         item("Quit the HUD", () => Application.Current.Shutdown());
         m.PlacementTarget = EyeFrame;
         m.IsOpen = true;
         e.Handled = true;
+    }
+
+    /// <summary>Opens the chat with "Jarvis, " ready to finish (tray + eye menus).</summary>
+    public void StartJarvisAsk()
+    {
+        OpenChat();
+        ChatInput.Text = "Jarvis, ";
+        ChatInput.CaretIndex = ChatInput.Text.Length;
     }
 
     // ------------------------------------------------------------ the chat (drop-down)

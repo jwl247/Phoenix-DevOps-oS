@@ -18,6 +18,7 @@ public partial class App : Application
     public static AiChatService Ai { get; } = new();
     public static VoiceController? Voice { get; private set; }
     public static HudOverlay? Overlay { get; private set; }
+    private static TrayIcon? _tray;
     private static MainWindow? _console;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -41,11 +42,13 @@ public partial class App : Application
 
         Overlay = new HudOverlay();
         Overlay.Show();
+        _tray = new TrayIcon();                                         // the Console lives in the tray (Jerry 10/7)
         if (!e.Args.Contains("--eye")) OpenConsole();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _tray?.Dispose();
         Voice?.Dispose();
         base.OnExit(e);
     }
