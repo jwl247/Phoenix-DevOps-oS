@@ -74,6 +74,17 @@ rings hold until he is back).
   the mesh, signed.
 
 ## 6. PREFETCH — OPEN, must be worked out before step 3 (Jerry)
+
+**Decided (J, 10/7):** not one monolith prefetch — **three**, with **the same tiered system as Helix**
+("right exactly the prefetch has the same tiered system as helixes"): hot (RAM / Helix hot tier,
+ms-s, from what is being touched now), warm (local SSD/NVMe, s-min, from the journal: a written job's
+inputs fetched before it runs), cold (4 TB / 20 TB drive from the pool and other machines, min-h, from
+patterns). Each hands up to the tier above, so nothing is fetched twice.
+**All of it is color coded (J): the 4 rings are red, blue, yellow (+ a 4th, ask)**; the tiers carry the
+same colors. Nothing in the repo records this color code yet — it gets written here first, then into
+the ring/tier code and the QR footer tier colors (CLAUDE.md TAV: footer QR = tier color T1-T4).
+
+Still open:
 What exists: New Horizon's "prefetch horizon σ" (predicted next access from mean ± stddev of past
 intervals; `PrefetchCompressor` adaptive poll 50 ms / 200 ms / 500 ms / 2 s; `hint_prefetch` into T3),
 and the sketch calls Prefetch "typical" on every ring. Questions to settle with Jerry:
