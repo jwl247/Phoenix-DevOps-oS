@@ -1,0 +1,20 @@
+[Unit]
+Description=Jarvis - forget stored prompts and answers older than 30 days (JARVIS-S07)
+
+[Service]
+Type=oneshot
+User=jarvis
+Group=jarvis
+ExecStart=/usr/bin/python3 /opt/openjarvis/jarvis-purge
+# Same rails as Jarvis: no network at all, only his own state is writable
+IPAddressDeny=any
+RestrictAddressFamilies=AF_UNIX
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/jarvis
+PrivateTmp=yes
+PrivateDevices=yes
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+UMask=0077

@@ -77,6 +77,10 @@ install -m 644 -o jarvis -g jarvis "$HERE/config.toml" /var/lib/jarvis/.openjarv
 install -m 755 "$HERE/jarvis-gate.py" $O/jarvis-gate
 install -m 644 "$HERE/phoenix-llm.service" /etc/systemd/system/phoenix-llm.service
 install -m 644 "$HERE/openjarvis.service" /etc/systemd/system/openjarvis.service
+# JARVIS-S07 (Jerry 10/7): prompts and answers kept 30 days, then forgotten (daily timer, as jarvis, no network)
+install -m 755 "$HERE/jarvis-purge.py" $O/jarvis-purge
+install -m 644 "$HERE/jarvis-purge.service" /etc/systemd/system/jarvis-purge.service
+install -m 644 "$HERE/jarvis-purge.timer" /etc/systemd/system/jarvis-purge.timer
 
 install -d -m 700 -o jarvis-call -g jarvis-call /home/jarvis-call/.ssh
 for PUB in "$@"; do printf 'restrict,from="10.42.0.0/16",command="%s/jarvis-gate" %s\n' $O "$(cat "$PUB")"; done > /home/jarvis-call/.ssh/authorized_keys
@@ -96,6 +100,7 @@ chown jarvis-ui:jarvis-ui /home/jarvis-ui/.ssh/authorized_keys; chmod 600 /home/
 # ── 5. Start and prove: engine answers only with its key, Jarvis answers only with his ──────
 systemctl daemon-reload
 systemctl enable phoenix-llm openjarvis >/dev/null 2>&1
+systemctl enable --now jarvis-purge.timer >/dev/null 2>&1
 systemctl restart phoenix-llm
 for _ in $(seq 1 60); do curl -fs http://127.0.0.1:8080/health >/dev/null 2>&1 && break; sleep 2; done
 code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/models || true)
