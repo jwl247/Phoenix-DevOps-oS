@@ -16,7 +16,9 @@ URL = "http://127.0.0.1:8000/v1/chat/completions"
 MODEL = "llama3.2:3b"
 IDENTITY = "/opt/openjarvis/jarvis_identity.md"  # sent as the system message on EVERY ask (rail: he can't drift from it)
 MAX_TEXT = 4000
-TIMEOUT = 120
+TIMEOUT = 22          # must end BEFORE the suit gives up (WAIT 25 s): the old 120 s held Jarvis for every caller (S2APPS-F79)
+MAX_TOKENS = 300      # a reply sized to finish inside TIMEOUT on CPU
+KEY_FILE = "/etc/openjarvis/gate.key"  # 0640 root:jarvis-call - Jarvis's API refuses calls without it (JARVIS-S03)
 
 
 def log(msg):
@@ -30,6 +32,14 @@ def identity():
     except OSError:
         log("identity file missing - answering without it")
         return []
+
+
+def api_key():
+    try:
+        with open(KEY_FILE, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
 
 
 def reply(obj, code=0):
@@ -52,11 +62,15 @@ def main():
     if len(text) > MAX_TEXT:
         reply({"ok": False, "error": f"text over {MAX_TEXT} chars"}, 2)
     log(f"ask from {who}: {len(text)} chars")
-    body = json.dumps({"model": MODEL, "stream": False,
+    body = json.dumps({"model": MODEL, "stream": False, "max_tokens": MAX_TOKENS,
                        "messages": identity() + [{"role": "user", "content": text}]}).encode()
     t0 = time.time()
     try:
-        req = urllib.request.Request(URL, data=body, headers={"Content-Type": "application/json"})
+        headers = {"Content-Type": "application/json"}
+        key = api_key()
+        if key:
+            headers["Authorization"] = f"Bearer {key}"
+        req = urllib.request.Request(URL, data=body, headers=headers)
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             out = json.loads(r.read())
         answer = out["choices"][0]["message"]["content"]

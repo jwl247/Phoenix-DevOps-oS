@@ -15,7 +15,18 @@
 
 set -euo pipefail
 
-VERSION="1.7.0"
+# Every network call goes through pcurl. Under `set -euo pipefail` a bare failing
+# curl (worker down, offline, DNS, on the road) killed the whole script with no
+# message, exit 7 (2026-10-07 audit S2CORE-F42). pcurl never fails the script:
+# callers already judge the result by its HTTP code or body. Once the preflight
+# finds the worker unreachable, pcurl skips the network for the rest of the run.
+WORKER_OFFLINE=0
+pcurl() {
+  [[ "${WORKER_OFFLINE}" == "1" ]] && return 0
+  curl --connect-timeout 8 "$@" || true
+}
+
+VERSION="1.7.1"
 # Self-registration identity: the same name/hex a normal `intake intake.sh`
 # would produce (to_hex "intake.sh"), so self_register() and a real intake
 # land in the same T1/<hex> bucket and the same D1 row. The old value here was
@@ -303,13 +314,24 @@ next_version_for() {
 _ident_tail() { local p="${1//\\//}"; p="${p%/}"; local f="${p##*/}"; local d="${p%/*}"; [[ "${d}" == "${p}" ]] && d=""; echo "${d##*/}/${f}"; }
 same_name_guard() {
   local filepath="$1" hex="$2" orig="$3"
-  [[ -z "${PHOENIX_AUTH}" || "${INTAKE_SAME_NAME_OK:-0}" == "1" ]] && return 0
-  local meta prev
-  meta=$(curl -s -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null || true)
-  prev=$(grep -o '"source_path"[[:space:]]*:[[:space:]]*"[^"]*"' <<< "${meta}" | head -1 | sed -E 's/.*"([^"]*)"$/\1/' || true)
-  [[ -z "${prev}" ]] && return 0
+  [[ "${INTAKE_SAME_NAME_OK:-0}" == "1" ]] && return 0
+  # Where the pool's copy came from: D1 when online, else the pool's own
+  # .source_path note, so the guard also works offline (2026-10-07 S2CORE-F43).
+  local meta="" prev="" known=0
+  if [[ -n "${PHOENIX_AUTH}" && "${WORKER_OFFLINE}" != "1" ]]; then
+    meta=$(pcurl -s -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
+    [[ "${meta}" == *'"hex_id"'* ]] && known=1
+    prev=$(grep -o '"source_path"[[:space:]]*:[[:space:]]*"[^"]*"' <<< "${meta}" | head -1 | sed -E 's/.*"([^"]*)"$/\1/' || true)
+  fi
+  local note="${CLONEPOOL_DIR}/T1/${hex}/.source_path"
+  if [[ -z "${prev}" && -f "${note}" ]]; then prev=$(head -1 "${note}"); known=1; fi
+  [[ "${known}" == "0" ]] && return 0          # nothing in the pool by this name: a first intake
   local was now; was=$(_ident_tail "${prev}"); now=$(_ident_tail "${filepath}")
-  [[ "${was,,}" == "${now,,}" ]] && return 0
+  # A record with no folder ("a.py" from a relative-path intake, or none at all)
+  # can't prove it's the same file: ask, never assume. Assuming is how 40
+  # different READMEs became v1-v40 of one file.
+  [[ "${prev}" == */* && "${was,,}" == "${now,,}" ]] && return 0
+  [[ -z "${prev}" ]] && prev="(origin not recorded)"
   echo ""
   echo "[intake:NAME] '${orig}' is already in the pool from: ${prev}"
   echo "              this one is from:                  ${filepath}"
@@ -545,7 +567,7 @@ SQL
 # stops the whole run with one unmissable message instead of that.
 check_whoami() {
   local url="$1"
-  curl -s -o /dev/null -w "%{http_code}" \
+  pcurl -s -o /dev/null -w "%{http_code}" \
     -H @"${AUTH_HDR_FILE}" \
     "${url}/whoami" 2>/dev/null
 }
@@ -567,8 +589,13 @@ preflight_auth() {
     echo ""
     exit 1
   fi
-  # Non-401 failures (network down, DNS, timeout) are not treated as fatal —
-  # intake should still work offline/local-only.
+  # Non-401 failures (network down, DNS, timeout) are not fatal: intake keeps
+  # working local-only, and says so once instead of dying silently (S2CORE-F42).
+  if [[ -z "${d1_code}" || "${d1_code}" == "000" ]]; then
+    WORKER_OFFLINE=1
+    echo " [intake:OFFLINE] packages-worker unreachable (${WORKER_URL}) — local only this run;" >&2
+    echo "                  D1 custody and R2 bytes are NOT updated. Re-run when online to sync." >&2
+  fi
 }
 
 # ── D1 reporter ───────────────────────────────────────────────
@@ -576,7 +603,7 @@ post_to_d1() {
   local endpoint="$1" payload="$2"
   [[ -z "${PHOENIX_AUTH}" ]] && { log "WARN" "PHOENIX_AUTH not set — skipping D1 report"; return 0; }
   local response http_code body
-  response=$(curl -s -w "\n%{http_code}" \
+  response=$(pcurl -s -w "\n%{http_code}" \
     -X POST \
     -H "Content-Type: application/json" \
     -H @"${AUTH_HDR_FILE}" \
@@ -613,26 +640,26 @@ r2_put() {
   _r2_auth
   size=$(get_size "${filepath}")
   if (( size <= R2_SINGLE_MAX )); then
-    code=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "${_auth_hdrs[@]}" -H "X-Phoenix-SHA3: ${sha3}" \
+    code=$(pcurl -s -o /dev/null -w "%{http_code}" -X PUT "${_auth_hdrs[@]}" -H "X-Phoenix-SHA3: ${sha3}" \
            --data-binary "@${filepath}" "${WORKER_URL}/clonepool/${key}" 2>/dev/null)
     [[ "${code}" == "200" ]]
     return
   fi
   local uid n=1 parts="" part resp etag nparts
   nparts=$(( (size + R2_PART - 1) / R2_PART ))
-  uid=$(curl -s -X POST "${_auth_hdrs[@]}" -H "Content-Type: application/json" -d "{\"sha3\":\"${sha3}\"}" \
+  uid=$(pcurl -s -X POST "${_auth_hdrs[@]}" -H "Content-Type: application/json" -d "{\"sha3\":\"${sha3}\"}" \
         "${WORKER_URL}/clonepool/${key}/mpu" 2>/dev/null | grep -o '"uploadId"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)"$/\1/' || true)
   [[ -z "${uid}" ]] && { log "WARN" "R2 multipart: could not start ${key}"; return 1; }
   part=$(mktemp)
   while (( n <= nparts )); do
     dd if="${filepath}" of="${part}" bs="${R2_PART}" skip=$((n - 1)) count=1 iflag=fullblock status=none 2>/dev/null \
       || dd if="${filepath}" of="${part}" bs="${R2_PART}" skip=$((n - 1)) count=1 status=none
-    resp=$(curl -s -X PUT "${_auth_hdrs[@]}" --data-binary "@${part}" \
+    resp=$(pcurl -s -X PUT "${_auth_hdrs[@]}" --data-binary "@${part}" \
            "${WORKER_URL}/clonepool/${key}/mpu/${uid}/${n}" 2>/dev/null)
     etag=$(grep -o '"etag"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${resp}" | sed -E 's/.*"([^"]*)"$/\1/' || true)
     if [[ -z "${etag}" ]]; then
       rm -f "${part}"
-      curl -s -o /dev/null -X DELETE "${_auth_hdrs[@]}" "${WORKER_URL}/clonepool/${key}/mpu/${uid}" 2>/dev/null
+      pcurl -s -o /dev/null -X DELETE "${_auth_hdrs[@]}" "${WORKER_URL}/clonepool/${key}/mpu/${uid}" 2>/dev/null
       log "WARN" "R2 multipart: part ${n}/${nparts} of ${key} failed — aborted"
       return 1
     fi
@@ -640,7 +667,7 @@ r2_put() {
     n=$((n + 1))
   done
   rm -f "${part}"
-  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${_auth_hdrs[@]}" -H "Content-Type: application/json" \
+  code=$(pcurl -s -o /dev/null -w "%{http_code}" -X POST "${_auth_hdrs[@]}" -H "Content-Type: application/json" \
          -d "{\"parts\":[${parts%,}]}" "${WORKER_URL}/clonepool/${key}/mpu/${uid}/complete" 2>/dev/null)
   [[ "${code}" == "200" ]] && log "INFO" "R2 multipart OK → ${key} (${nparts} parts, ${size} bytes)"
   [[ "${code}" == "200" ]]
@@ -697,7 +724,7 @@ upload_version_to_r2() {
   local key="${hex}/versions/${sha3:0:16}" code
   if [[ "${mode}" == "copy" ]]; then
     _r2_auth
-    code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${_auth_hdrs[@]}" -H "Content-Type: application/json" \
+    code=$(pcurl -s -o /dev/null -w "%{http_code}" -X POST "${_auth_hdrs[@]}" -H "Content-Type: application/json" \
            -d "{\"from\":\"${hex}\",\"sha3\":\"${sha3}\"}" "${WORKER_URL}/clonepool/${key}/copy" 2>/dev/null)
     if [[ "${code}" == "200" ]]; then log "INFO" "R2 version OK (server copy) → ${key}"; return 0; fi
   fi
@@ -852,7 +879,7 @@ verify_clonepool_copy() {
   local hex="$1" filepath="$2" name="${3:-}"
   [[ -z "${PHOENIX_AUTH}" || ! -f "${filepath}" ]] && { echo "no_baseline"; return; }
   local meta
-  meta=$(curl -s -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
+  meta=$(pcurl -s -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
   local baseline_sha3
   baseline_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' || true)
   [[ -z "${baseline_sha3}" ]] && { echo "no_baseline"; return; }
@@ -865,7 +892,7 @@ verify_clonepool_copy() {
     # sha3 alone flipped qr_valid to 0 on every successful verification.
     local actual_blake2
     actual_blake2=$(openssl dgst -blake2b512 -r "${filepath}" 2>/dev/null | awk '{print $1}')
-    curl -s -o /dev/null -X POST -H @"${AUTH_HDR_FILE}" -H "Content-Type: application/json" \
+    pcurl -s -o /dev/null -X POST -H @"${AUTH_HDR_FILE}" -H "Content-Type: application/json" \
       -d "{\"hash_sha3\":\"${actual_sha3}\",\"hash_blake2\":\"${actual_blake2}\"}" "${WORKER_URL}/clonepool/${hex}/validate" 2>/dev/null
     echo "valid"
   elif [[ -n "${actual_sha3}" && -n "${name}" ]] && version_hash_recorded "${hex}" "${name}" "${actual_sha3}"; then
@@ -881,7 +908,7 @@ verify_clonepool_copy() {
 fetch_versions_json() {
   local name="$1"
   local enc_name; enc_name=$(url_encode "${name}")
-  curl -s -H @"${AUTH_HDR_FILE}" \
+  pcurl -s -H @"${AUTH_HDR_FILE}" \
     "${WORKER_URL}/versions?package=${enc_name}&limit=1000" 2>/dev/null
 }
 
@@ -986,7 +1013,7 @@ self_register() {
   # running copy goes in only if it IS Phoenix's current intake.sh.
   if [[ -n "${PHOENIX_AUTH}" ]]; then
     local meta d1_sha3
-    meta=$(curl -s -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${SCRIPT_HEX}?meta=true" 2>/dev/null)
+    meta=$(pcurl -s -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${SCRIPT_HEX}?meta=true" 2>/dev/null)
     d1_sha3=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"hash_sha3"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' || true)
     if [[ -n "${d1_sha3}" ]]; then
       mkdir -p "${dir}"
@@ -1029,6 +1056,9 @@ intake_file() {
 
   [[ -z "${filepath}" ]] && { echo "[intake] Usage: intake <file> [backend] [notes]"; return 1; }
   [[ ! -f "${filepath}" ]] && { echo "[intake:MISS] File not found: ${filepath}"; return 1; }
+  # Record the full path, never what was typed: `intake a.py` from two folders
+  # looked like one file to the same-name guard (2026-10-07 S2CORE-F43).
+  filepath="$(cd "$(dirname "${filepath}")" && pwd)/$(basename "${filepath}")"
 
   local orig; orig=$(basename "${filepath}")
   local hex;  hex=$(to_hex "${orig}")
@@ -1145,6 +1175,7 @@ intake_file() {
     "${filepath}" "${pool_dir}/${version}_${orig}" "white" "${backend}"
   report_clonepool "${hex}" "${orig}" "${version}" "white" \
     "${pool_dir}" "${sidecar}" "1" "${size}" "${sensitive}" "${pool_dir}/${version}_${orig}" "${filepath}"
+  printf '%s\n' "${filepath}" > "${pool_dir}/.source_path"
   upload_to_r2 "${hex}" "${pool_dir}/${version}_${orig}"
   report_custody  "${hex}" "${orig}" "intake" "white" "${backend}" "${filepath}"
   report_glossary "${hex}" "${orig}" "Intaked via ${backend}: ${filetype}" \
@@ -1198,7 +1229,7 @@ fetch_r2_fallback() {
   [[ -z "${PHOENIX_AUTH}" ]] && return 1
 
   local meta
-  meta=$(curl -s -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
+  meta=$(pcurl -s -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
   [[ -z "${meta}" ]] && return 1
 
   local remote_version
@@ -1228,7 +1259,7 @@ fetch_r2_fallback() {
   remote_version="${fetched_version}"
 
   local http_code
-  http_code=$(curl -s -o "${tmp}" -w "%{http_code}" -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${r2_key}" 2>/dev/null)
+  http_code=$(pcurl -s -o "${tmp}" -w "%{http_code}" -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${r2_key}" 2>/dev/null)
   if [[ "${http_code}" != "200" ]]; then
     rm -f "${tmp}"
     rmdir "${pool_dir}" 2>/dev/null || true   # don't leave an empty bucket that hides R2 next time
@@ -1284,7 +1315,7 @@ intake_clone_ledger_version() {
   if [[ -z "${src}" ]]; then
     tmp=$(mktemp "${TMPDIR:-/tmp}/intake-clone.XXXXXX")
     local code
-    code=$(curl -s -o "${tmp}" -w "%{http_code}" -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${store_path}" 2>/dev/null)
+    code=$(pcurl -s -o "${tmp}" -w "%{http_code}" -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${store_path}" 2>/dev/null)
     if [[ "${code}" != "200" ]]; then
       rm -f "${tmp}"
       echo "[intake:MISS] ${name} ${label}: no local copy with its hash, and R2 returned ${code:-no answer}"
@@ -1560,7 +1591,7 @@ rotate_clonepool_tiers() {
         mkdir -p "${dest_root}"
         mv "${entry_dir%/}" "${dest_root}/${hex}"
         log "INFO" "tier rotate: ${hex} T${from_num} -> T${to_num} (${age_days}d old)"
-        [[ -n "${PHOENIX_AUTH}" ]] && curl -s -o /dev/null -X PATCH \
+        [[ -n "${PHOENIX_AUTH}" ]] && pcurl -s -o /dev/null -X PATCH \
           -H @"${AUTH_HDR_FILE}" -H "Content-Type: application/json" \
           -d "{\"tier\":${to_num},\"pool_path\":\"$(json_escape "${dest_root}/${hex}")\"}" \
           "${WORKER_URL}/clonepool/${hex}/tier" 2>/dev/null
@@ -1568,7 +1599,7 @@ rotate_clonepool_tiers() {
       elif (( from_num == 4 && age_days > total_window )); then
         rm -rf "${entry_dir%/}"
         log "INFO" "tier evict: ${hex} (${age_days}d old, past ${total_window}-day window) — local copy cleared, D1 flagged black"
-        [[ -n "${PHOENIX_AUTH}" ]] && curl -s -o /dev/null -X PATCH \
+        [[ -n "${PHOENIX_AUTH}" ]] && pcurl -s -o /dev/null -X PATCH \
           -H @"${AUTH_HDR_FILE}" -H "Content-Type: application/json" \
           -d '{"tier":4,"pool_path":"evicted","state":"black"}' \
           "${WORKER_URL}/clonepool/${hex}/tier" 2>/dev/null
@@ -2092,15 +2123,15 @@ fetch_dir_r2_fallback() {
   # Probe the first bytes only: a manifest opens with "type": "directory", and
   # anything else (every plain file) must not cost a second full download.
   local probe
-  probe=$(curl -s "${auth[@]}" "${WORKER_URL}/clonepool/${hex}" 2>/dev/null | head -c 120)
+  probe=$(pcurl -s "${auth[@]}" "${WORKER_URL}/clonepool/${hex}" 2>/dev/null | head -c 120)
   grep -q '"type": "directory"' <<<"${probe}" || return 1
   local meta want
-  meta=$(curl -s "${auth[@]}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
+  meta=$(pcurl -s "${auth[@]}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
   want=$(echo "${meta}" | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/' || true)
   [[ ${#want} -lt 64 ]] && return 1        # no manifest hash in D1: nothing to trust
   local tmp code got
   tmp=$(mktemp)
-  code=$(curl -s -o "${tmp}" -w "%{http_code}" "${auth[@]}" "${WORKER_URL}/clonepool/${hex}" 2>/dev/null)
+  code=$(pcurl -s -o "${tmp}" -w "%{http_code}" "${auth[@]}" "${WORKER_URL}/clonepool/${hex}" 2>/dev/null)
   if [[ "${code}" != "200" ]] || ! grep -q '"type": "directory"' "${tmp}"; then rm -f "${tmp}"; return 1; fi
   got=$(openssl dgst -sha3-512 -r "${tmp}" 2>/dev/null | awk '{print $1}')
   if [[ "${got}" != "${want}" ]]; then
@@ -2169,7 +2200,7 @@ intake_clone_directory() {
   if [[ -f "${sidecar}" && "${version}" == "latest" && -n "${PHOENIX_AUTH}" ]] \
      && grep -q '"type": "directory"' "${sidecar}" 2>/dev/null; then
     local d1_manifest local_manifest
-    d1_manifest=$(curl -s -H @"${AUTH_HDR_FILE}" \
+    d1_manifest=$(pcurl -s -H @"${AUTH_HDR_FILE}" \
                   "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null \
                   | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[0-9a-f]*"' | head -1 | grep -o '[0-9a-f]\{64,\}' || true)
     local_manifest=$(openssl dgst -sha3-512 -r "${sidecar}" 2>/dev/null | awk '{print $1}')

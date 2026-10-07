@@ -3,10 +3,12 @@
 # The network lock is in openjarvis.service (IPAddressDeny=any): even a bad setting here can't reach out.
 
 [engine]
-default = "ollama"
+default = "llamacpp"
 
-[engine.ollama]
-host = "http://127.0.0.1:11434"
+# llama.cpp llama-server (phoenix-llm.service). Ollama removed 2026-10-07: it phoned home.
+# The engine key comes from LLAMACPP_API_KEY in /etc/openjarvis/api.env, never this file.
+[engine.llamacpp]
+host = "http://127.0.0.1:8080"
 
 [intelligence]
 default_model = "llama3.2:3b"

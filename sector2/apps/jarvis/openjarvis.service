@@ -1,7 +1,7 @@
 [Unit]
-Description=Jarvis (OpenJarvis on local Ollama) - localhost only, no network out
-After=ollama.service
-Wants=ollama.service
+Description=Jarvis (OpenJarvis on the local llama.cpp engine) - localhost only, no network out, key required
+After=phoenix-llm.service
+Wants=phoenix-llm.service
 
 [Service]
 User=jarvis
@@ -10,6 +10,8 @@ Environment=HOME=/var/lib/jarvis
 Environment=OPENJARVIS_NO_UPDATE_CHECK=1
 Environment=DO_NOT_TRACK=1
 Environment=HF_HUB_OFFLINE=1
+# OPENJARVIS_API_KEY (callers must send it) + LLAMACPP_API_KEY (Jarvis -> engine). 0600 root.
+EnvironmentFile=/etc/openjarvis/api.env
 ExecStart=/opt/openjarvis/venv/bin/jarvis serve --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5
@@ -21,6 +23,9 @@ ProtectSystem=strict
 ProtectHome=yes
 ReadWritePaths=/var/lib/jarvis
 PrivateTmp=yes
+PrivateDevices=yes
+CapabilityBoundingSet=
+LockPersonality=yes
 
 [Install]
 WantedBy=multi-user.target
