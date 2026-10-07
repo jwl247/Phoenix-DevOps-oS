@@ -282,7 +282,9 @@ detect_companions() {
     local candidate="${dir}/${name}.${ext}"
     if [[ -f "${candidate}" && "$(realpath "${candidate}" 2>/dev/null || echo "${candidate}")" != "$(realpath "${filepath}" 2>/dev/null || echo "${filepath}")" ]]; then
       echo "${candidate}"
-      log "INFO" "companion found: ${candidate}"
+      # stderr: stdout IS the companion list (captured by the caller); a log line
+      # there became a "path" and failed every intake with a companion (2026-10-07).
+      log "INFO" "companion found: ${candidate}" >&2
     fi
   done
 }
