@@ -115,6 +115,7 @@ def fingerprint(signals):
 
 # ── Auth DB ──────────────────────────────────────────────────
 def auth_db_init():
+    os.makedirs(os.path.dirname(AUTH_DB), exist_ok=True)  # fresh box has no ~/.catalog (S1-F41)
     conn = sqlite3.connect(AUTH_DB)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS authorized_machines (

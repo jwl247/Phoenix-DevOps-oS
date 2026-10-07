@@ -24,6 +24,10 @@ set -euo pipefail
 
 WD=${1:?usage: roadtest-measure.sh <workdir>}
 URL=$(cat ~/.phoenix-worker/url); AUTH=$(cat ~/.phoenix-worker/auth)
+# Keys never go on curl's argv (visible in ps / /proc to every user, A2-N1): headers come from a
+# 0600 file written with the printf builtin and removed on exit.
+HDR=$(umask 077; mktemp); trap 'rm -f "$HDR"' EXIT
+printf 'Authorization: Bearer %s\n' "$AUTH" > "$HDR"
 M="$WD/measure"; rm -rf "$M"; mkdir -p "$M/pool" "$M/home" "$M/out"
 RES="$M/results.jsonl"; : > "$RES"
 INTAKE="$WD/bin/intake.sh"
@@ -94,9 +98,9 @@ for kb in 1 16 256 1024; do
   f="$M/src/rt-small-${kb}k.bin.txt"; gen $((kb*1024)) "$f"
   intake "$f" roadtest "M3 source" >/dev/null 2>&1
   h=$(hexof "rt-small-${kb}k.bin.txt")
-  fresh=$(for i in $(seq 1 20); do curl -s -o /dev/null -w '%{time_total}\n' -H "Authorization: Bearer $AUTH" "$URL/clonepool/$h"; done)
+  fresh=$(for i in $(seq 1 20); do curl -s -o /dev/null -w '%{time_total}\n' -H @"$HDR" "$URL/clonepool/$h"; done)
   args=(); for i in $(seq 1 20); do args+=(-o /dev/null "$URL/clonepool/$h"); done
-  kept=$(curl -s -w '%{time_total}\n' -H "Authorization: Bearer $AUTH" "${args[@]}")
+  kept=$(curl -s -w '%{time_total}\n' -H @"$HDR" "${args[@]}")
   line=$(python3 - "$kb" "$fresh" "$kept" <<'PY'
 import sys,statistics as st
 kb=sys.argv[1]
@@ -112,13 +116,13 @@ snap after-M3
 
 # ── M5: tamper ────────────────────────────────────────────────────────────
 h=$(hexof rt-small-16k.bin.txt)
-curl -s -H "Authorization: Bearer $AUTH" "$URL/clonepool/$h" -o "$M/tamper.orig"
+curl -s -H @"$HDR" "$URL/clonepool/$h" -o "$M/tamper.orig"
 printf 'altered by roadtest-measure M5\n' > "$M/tamper.bad"
-curl -s -X PUT -H "Authorization: Bearer $AUTH" --data-binary "@$M/tamper.bad" "$URL/clonepool/$h" >/dev/null
+curl -s -X PUT -H @"$HDR" --data-binary "@$M/tamper.bad" "$URL/clonepool/$h" >/dev/null
 rm -rf "$M/pool"/* "$M/out"/*
 (cd "$M/out" && intake clone rt-small-16k.bin.txt >"$M/tamper.log" 2>&1) || true
 if [[ -f "$M/out/rt-small-16k.bin.txt" ]]; then refused=false; else refused=true; fi
-curl -s -X PUT -H "Authorization: Bearer $AUTH" --data-binary "@$M/tamper.orig" "$URL/clonepool/$h" >/dev/null
+curl -s -X PUT -H @"$HDR" --data-binary "@$M/tamper.orig" "$URL/clonepool/$h" >/dev/null
 rm -rf "$M/pool"/* "$M/out"/*
 (cd "$M/out" && intake clone rt-small-16k.bin.txt >"$M/tamper-restored.log" 2>&1) || true
 [[ -f "$M/out/rt-small-16k.bin.txt" ]] && restored=true || restored=false

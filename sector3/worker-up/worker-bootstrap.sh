@@ -20,6 +20,10 @@ WD=${1:?usage: worker-bootstrap.sh <workdir> <name> [<name> ...]}; shift
 CRED="$HOME/.phoenix-worker"
 URL=$(cat "$CRED/url"); AUTH=$(cat "$CRED/auth")
 [[ -n "$URL" && -n "$AUTH" ]] || { echo "no box credential in $CRED"; exit 1; }
+# Keys never go on curl's argv (visible in ps / /proc to every user, A2-N1): headers come from a
+# 0600 file written with the printf builtin and removed on exit.
+HDR=$(umask 077; mktemp); trap 'rm -f "$HDR"' EXIT
+printf 'Authorization: Bearer %s\n' "$AUTH" > "$HDR"
 mkdir -p "$WD/bin" "$WD/pool" "$WD/home" "$WD/ops"
 LOG="$WD/bootstrap.jsonl"
 now() { date +%s%N; }
@@ -29,9 +33,9 @@ t0=$(now)
 # ── 1. intake.sh itself, from R2, checked against D1 ─────────────────────
 H=$(printf 'intake.sh' | od -An -tx1 | tr -d ' \n')
 s=$(now)
-want=$(curl -s -H "Authorization: Bearer $AUTH" "$URL/clonepool/$H?meta=true" \
+want=$(curl -s -H @"$HDR" "$URL/clonepool/$H?meta=true" \
        | grep -o '"hash_sha3"[[:space:]]*:[[:space:]]*"[0-9a-f]*"' | head -1 | grep -o '[0-9a-f]\{64,\}')
-curl -s -f -H "Authorization: Bearer $AUTH" "$URL/clonepool/$H" -o "$WD/bin/intake.sh.part"
+curl -s -f -H @"$HDR" "$URL/clonepool/$H" -o "$WD/bin/intake.sh.part"
 got=$(openssl dgst -sha3-512 -r "$WD/bin/intake.sh.part" | awk '{print $1}')
 if [[ -z "$want" || "$got" != "$want" ]]; then
   rm -f "$WD/bin/intake.sh.part"; rec intake.sh $(( $(now) - s )) false "sha3 mismatch or no D1 hash"

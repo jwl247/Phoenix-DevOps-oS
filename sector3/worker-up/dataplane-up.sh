@@ -34,15 +34,19 @@ SCHEMA="$WORKER_DIR/schema-d1.sql"
 STATE="$HOME/.phoenix/worker-up/$NAME"
 API="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID"
 mkdir -p "$STATE"; chmod 700 "$STATE" 2>/dev/null || true
+# Keys never go on curl's argv (visible in ps / /proc to every user, A2-N1): headers come from
+# 0600 files written with the printf builtin and removed on exit.
+HDRD=$(umask 077; mktemp -d); trap 'rm -rf "$HDRD"' EXIT
+printf 'Authorization: Bearer %s\n' "$CF_API_TOKEN" > "$HDRD/cf"
 
 say()  { printf '  %-10s %s\n' "$1" "$2"; }
 die()  { say "FAIL" "$*"; exit 1; }
 api()  { # method path [json-body] -> response body on stdout
   local m=$1 p=$2
   if [[ $# -ge 3 ]]; then
-    curl -s -X "$m" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" "$API$p" --data "$3"
+    curl -s -X "$m" -H @"$HDRD/cf" -H "Content-Type: application/json" "$API$p" --data "$3"
   else
-    curl -s -X "$m" -H "Authorization: Bearer $CF_API_TOKEN" "$API$p"
+    curl -s -X "$m" -H @"$HDRD/cf" "$API$p"
   fi
 }
 jq_py() { python -c "import json,sys; d=json.load(sys.stdin); $1"; }
@@ -134,7 +138,8 @@ URL="https://$NAME.$SUB.workers.dev"; echo "$URL" > "$STATE/url"
 h=""; for i in 1 2 3 4 5 6; do h=$(curl -s -o /dev/null -w '%{http_code}' "$URL/health"); [[ $h == 200 ]] && break; sleep 5; done
 [[ $h == 200 ]] || die "$URL/health -> $h"
 # A new secret can take a few seconds to reach every edge: retry before failing.
-a=""; for i in 1 2 3 4 5 6 7 8; do a=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $(cat "$STATE/auth")" "$URL/stats"); [[ $a == 200 ]] && break; sleep 5; done
+printf 'Authorization: Bearer %s\n' "$(cat "$STATE/auth")" > "$HDRD/auth"
+a=""; for i in 1 2 3 4 5 6 7 8; do a=$(curl -s -o /dev/null -w '%{http_code}' -H @"$HDRD/auth" "$URL/stats"); [[ $a == 200 ]] && break; sleep 5; done
 n=$(curl -s -o /dev/null -w '%{http_code}' "$URL/stats")
 [[ $a == 200 ]] || die "$URL/stats with auth -> $a"
 [[ $n == 401 ]] || die "$URL/stats WITHOUT auth -> $n (must be 401)"
