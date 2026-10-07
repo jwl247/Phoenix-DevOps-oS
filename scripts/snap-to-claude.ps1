@@ -34,16 +34,23 @@ $g.Dispose()
 
 $dir = Join-Path $HOME '.phoenix\screenshots'
 New-Item -ItemType Directory -Force $dir | Out-Null
+# Jerry 10/7: screens can show keys - only his Windows account may open these. No inherited rights,
+# no Administrators/SYSTEM/Users entries; files made inside inherit the same. Re-applied every shot.
+& icacls $dir /inheritance:r /grant:r "$($env:USERDOMAIN)\$($env:USERNAME):(OI)(CI)F" /Q | Out-Null
 $file = Join-Path $dir ("snap-{0:yyyyMMdd-HHmmss}.png" -f (Get-Date))
 $bmp.Save($file, [System.Drawing.Imaging.ImageFormat]::Png)
 Copy-Item $file (Join-Path $dir 'latest.png') -Force
-[System.Windows.Forms.Clipboard]::SetImage($bmp)
+$onClip = $false
+foreach ($try in 1..5) {                                       # another app can hold the clipboard for a moment
+    try { [System.Windows.Forms.Clipboard]::SetImage($bmp); $onClip = $true; break } catch { Start-Sleep -Milliseconds 200 }
+}
 $bmp.Dispose()
 Get-ChildItem $dir -Filter 'snap-*.png' | Sort-Object LastWriteTime -Descending | Select-Object -Skip 20 | Remove-Item -Force
 
 $tip = New-Object System.Windows.Forms.NotifyIcon
 $tip.Icon = [System.Drawing.SystemIcons]::Information
 $tip.Visible = $true
-$tip.ShowBalloonTip(4000, 'Screenshot ready for Claude', 'Alt+V in Claude Code to paste it, or just say "look".', 'Info')
+$how = if ($onClip) { 'Alt+V in Claude Code to paste it, or just say "look".' } else { 'Saved (clipboard was busy): say "look" in Claude Code.' }
+$tip.ShowBalloonTip(4000, 'Screenshot ready for Claude', $how, 'Info')
 Start-Sleep -Seconds 4
 $tip.Dispose()
