@@ -59,12 +59,17 @@ echo "Generated a new 64-char token (not printed)."
 # added, every rotation pushed the new secret to packages-worker, then
 # "failed" verification and aborted with the registry still on the OLD token
 # — i.e. the script itself caused exactly the drift it exists to prevent.
+# Headers go through a 0600 file, never curl's argv: anything on the command line
+# is readable by every local process while it runs (A2-N1, S2CORE-S29).
+HDR_FILE="$(mktemp)"; chmod 600 "${HDR_FILE}"
+trap 'rm -f "${HDR_FILE}"' EXIT
+{
+  printf 'Authorization: Bearer %s\n' "${NEW_TOKEN}"
+  [[ -n "${CF_ACCESS_CLIENT_ID:-}" ]] && printf 'CF-Access-Client-Id: %s\n' "${CF_ACCESS_CLIENT_ID}"
+  [[ -n "${CF_ACCESS_CLIENT_SECRET:-}" ]] && printf 'CF-Access-Client-Secret: %s\n' "${CF_ACCESS_CLIENT_SECRET}"
+} > "${HDR_FILE}"
 check_whoami() {
-  curl -s -o /dev/null -w "%{http_code}" \
-    -H "Authorization: Bearer ${NEW_TOKEN}" \
-    -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" \
-    -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
-    "$1/whoami" 2>/dev/null
+  curl -s -o /dev/null -w "%{http_code}" -H @"${HDR_FILE}" "$1/whoami" 2>/dev/null || true
 }
 
 # Cloudflare secret writes can take a few seconds to reach every edge —
@@ -125,6 +130,20 @@ echo "  pbm-radar-worker verified (/whoami → 200)"
 # ── Only now touch the local registry value ───────────────────
 setx PHOENIX_AUTH "${NEW_TOKEN}" >/dev/null
 export PHOENIX_AUTH="${NEW_TOKEN}"
+
+# ── The vault master copy (boxes pull PHOENIX_AUTH from it) ───────────────
+# Before 2026-10-07 a rotation left the vault on the OLD key, so the next box
+# to `phoenix_vault.py pull` got a dead token. The value goes in through the
+# environment (awk ENVIRON), never argv.
+VAULT_DIR="${PHOENIX_VAULT_SECRETS:-/f/Phoenix/Vault/secrets}"
+vault_hits=0
+if [[ -d "${VAULT_DIR}" ]]; then
+  while IFS= read -r vf; do
+    ( umask 077; NT="${NEW_TOKEN}" awk '/^PHOENIX_AUTH=/{print "PHOENIX_AUTH=" ENVIRON["NT"]; next} {print}' "${vf}" > "${vf}.rot.$$" ) \
+      && mv "${vf}.rot.$$" "${vf}" && vault_hits=$((vault_hits + 1)) && echo "  vault: updated $(basename "${vf}")"
+  done < <(grep -l '^PHOENIX_AUTH=' "${VAULT_DIR}"/* 2>/dev/null | grep -v '\.template$' || true)   # never a real key into a template
+fi
+[[ "${vault_hits}" == "0" ]] && echo "  vault: no PHOENIX_AUTH= line found in ${VAULT_DIR} - update it by hand"
 echo "  Registry (HKCU\\Environment) updated for this Windows user."
 
 echo ""
@@ -133,4 +152,8 @@ echo "This Git Bash session already has the new token exported."
 echo "Any OTHER already-open terminal (PowerShell, another Git Bash) needs to"
 echo "be closed and reopened to pick up the new registry value — that's a"
 echo "normal Windows env-var limitation, not a rotation failure."
+echo ""
+echo "LAST STEP - the cloud copy of the vault (boxes pull from it):"
+echo "  PBMII, PowerShell 7:  cd F:\Phoenix\Phoenix-DevOps-oS ; python scripts\phoenix_vault.py push"
+echo "  then on any box that holds the key:  python3 phoenix_vault.py pull --keys PHOENIX_AUTH,PHOENIX_WORKER_URL --dest /etc/phoenix/secrets"
 echo ""

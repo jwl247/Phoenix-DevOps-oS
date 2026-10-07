@@ -1337,6 +1337,14 @@ intake_clone_ledger_version() {
 
   local dest="${PWD}/${name}"
   [[ -f "${dest}" ]] && echo "[intake:WARN] '${name}' already exists here — overwriting with ${label}"
+  # A FOLDER's ledger row holds its manifest, not a file. Copying it out wrote JSON
+  # named like the folder and printed "restored" (2026-10-07 audit S2CORE-F44).
+  if head -c 600 "${src}" | grep -q '"type"[[:space:]]*:[[:space:]]*"directory"'; then
+    [[ -n "${tmp}" ]] && rm -f "${tmp}"
+    echo "[intake:STOP] '${name}' ${label} is a FOLDER snapshot. Restoring an older folder version"
+    echo "              isn't built yet, so nothing was written. 'intake clone ${name}' restores the latest folder."
+    return 1
+  fi
   cp "${src}" "${dest}"
   [[ -n "${tmp}" ]] && rm -f "${tmp}"
   echo "[intake:OK] Integrity verified — matches D1 ledger ${label} (sha3 ${want:0:16}…)"
@@ -2339,7 +2347,7 @@ case "${1:-help}" in
     # called intake_clone_project, which was never defined anywhere in git
     # history: exit 127 "command not found". Removed 2026-09-29, audit F06;
     # restore a whole tree with `intake clone <dir>`.)
-    intake_clone_directory "${name}" "${version}" 2>/dev/null \
+    intake_clone_directory "${name}" "${version}" \
       || intake_clone "${name}" "${version}"
     ;;
   prune)          intake_prune ;;
