@@ -87,7 +87,13 @@ tier2, tertiary colors tier3":
 | T1 (hot) | primary | red, blue, yellow |
 | T2 (warm) | secondary | orange, green, purple |
 | T3 (cold) | tertiary | red-orange, yellow-orange, yellow-green, blue-green, blue-violet, red-violet |
-The family says the tier at a glance; the hue inside it says which ring/lane. The rings are red, blue,
+The family says the tier at a glance; the hue inside it says which ring/lane.
+**The QR codes reference the colors — the BOTTOM QR (footer: location + tier) (J).** Today (checked 10/7)
+the footer is text only, `USYS:<b58>:FOOTER:<hex>:<loc_hex>` in D1 (`intake.sh` report_clonepool), with
+no color field, and no QR image is ever rendered for pool files (the only qrcode code is
+`sector3/phoenix-net/phoenix-net.py`, for something else). To build: a color field in the footer
+(family = tier, hue = ring/lane) and the rendered footer QR drawn in that color; header QR keeps its
+state colors (white/grey/black). Footer AFTER hashing, header BEFORE (CLAUDE.md rule 7) — unchanged. The rings are red, blue,
 yellow (J) — three primaries for four rings: ask whether ring 4 (Helix, "provided she is fast enough")
 is the one without a color until she earns it. Nothing in the repo records this color code yet — it gets written here first, then into
 the ring/tier code and the QR footer tier colors (CLAUDE.md TAV: footer QR = tier color T1-T4).
