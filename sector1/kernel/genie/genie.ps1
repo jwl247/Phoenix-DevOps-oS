@@ -407,7 +407,8 @@ function Invoke-GenieClone([string]$Id, [string]$To, [switch]$Force) {
 
     $destDir = if ($To) { $To } else { $script:GenieCloset }
     New-Item -ItemType Directory -Force -Path $destDir | Out-Null
-    $dest = Join-Path $destDir $row.name
+    # A name can carry folders (kernel/main_kernel.py: another file holds the bare name); on disk it is the file name.
+    $dest = Join-Path $destDir (Split-Path ([string]$row.name) -Leaf)
     $part = "$dest.genie-part"
     [System.IO.File]::WriteAllBytes($part, $bytes)
     Move-Item -LiteralPath $part -Destination $dest -Force       # atomic swap, never a half file
@@ -593,7 +594,7 @@ function genie {
                         $body = @{ hex = $row.hex_id; sector = $Sector; family = $Family; write = [bool]$Write }
                         if ($row.PSObject.Properties['hash_sha3'] -and $row.hash_sha3) { $body.sha3_512 = ([string]$row.hash_sha3).ToLowerInvariant() }
                         if ($Type) { $body.suit_type = $Type }
-                        if ($Name) { $body.name = $Name } elseif ($row.name) { $body.name = ([string]$row.name) }
+                        if ($Name) { $body.name = $Name } elseif ($row.name) { $body.name = (Split-Path ([string]$row.name) -Leaf) }   # the suit's name, without the pool's folder part
                         $r = Invoke-GenieControl POST '/suits' $body
                         if (-not $r.in_ram) { G-Warn "$($r.name) was written to the closet on disk, not loaded in RAM" }
                         G-Ok ("loaded: {0}  [{1}] sector {2} ring {3}  {4}  closet now {5} suits" -f $r.name, $r.suit_type, $r.sector, $r.ring_pos,

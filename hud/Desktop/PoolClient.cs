@@ -79,14 +79,17 @@ public static class PoolClient
             string? atlasErr = null;
             try { atlas = await atlasTask; } catch (Exception e) { atlasErr = e.Message; }
 
-            // What each file does, by its file name, from Atlas.
+            // What each file does, from Atlas, by its repo path. A pool name is the file name, or
+            // folder/name when another file holds the bare name, so it matches the END of a path.
             var what = new Dictionary<string, (string desc, string path)>(StringComparer.OrdinalIgnoreCase);
+            static bool Covers(string poolName, string repoPath) =>
+                ("/" + repoPath).EndsWith("/" + poolName, StringComparison.OrdinalIgnoreCase);
             if (atlas.ValueKind == JsonValueKind.Object && atlas.TryGetProperty("connections", out var conns))
                 foreach (var c in conns.EnumerateArray())
                 {
                     var path = Str(c, "path");
                     var file = Path.GetFileName(path);
-                    if (IsSuitName(file)) what.TryAdd(file, (Str(c, "description"), path));
+                    if (IsSuitName(file)) what.TryAdd(path, (Str(c, "description"), path));
                 }
             // The glossary's own description, unless it is the intake placeholder.
             var gloss = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -103,27 +106,28 @@ public static class PoolClient
             {
                 var name = Str(r, "name");
                 if (!IsSuitName(name) || !seen.Add(Str(r, "hex_id"))) return;
-                var (desc, path) = what.TryGetValue(name, out var w) ? w : (gloss.GetValueOrDefault(name, ""), "");
+                var hit = what.Values.FirstOrDefault(w => Covers(name, w.path));
+                var (desc, path) = hit.path is not null ? hit : (gloss.GetValueOrDefault(name, ""), "");
                 found.Add(Row(r, desc, path));
             }
             if (pool.TryGetProperty("clonepool", out var cp)) foreach (var r in cp.EnumerateArray()) Add(r);
 
             // Files Atlas matched by what they do but the pool didn't match by name: look each up by name.
-            var missing = what.Keys.Where(n => !found.Any(s => s.Name.Equals(n, StringComparison.OrdinalIgnoreCase))).Take(8).ToList();
-            var extra = await Task.WhenAll(missing.Select(async n =>
+            var missing = what.Keys.Where(p => !found.Any(s => Covers(s.Name, p))).Take(8).ToList();
+            var extra = await Task.WhenAll(missing.Select(async p =>
             {
-                try { return (n, await GetJson($"/search?q={Uri.EscapeDataString(n)}")); }
-                catch { return (n, default(JsonElement)); }
+                try { return (p, await GetJson($"/search?q={Uri.EscapeDataString(Path.GetFileName(p))}")); }
+                catch { return (p, default(JsonElement)); }
             }));
-            foreach (var (n, j) in extra)
+            foreach (var (p, j) in extra)
                 if (j.ValueKind == JsonValueKind.Object && j.TryGetProperty("clonepool", out var rows))
                     foreach (var r in rows.EnumerateArray())
-                        if (Str(r, "name").Equals(n, StringComparison.OrdinalIgnoreCase)) Add(r);
+                        if (Covers(Str(r, "name"), p)) Add(r);
 
             // Described in Atlas but never intaked: still listed, so the look-up says so instead of "no suits".
-            foreach (var (n, (desc, path)) in what)
-                if (!found.Any(s => s.Name.Equals(n, StringComparison.OrdinalIgnoreCase)))
-                    found.Add(new Suit(n, "", "", 0, "", desc, path));
+            foreach (var (p, (desc, path)) in what)
+                if (!found.Any(s => Covers(s.Name, p)))
+                    found.Add(new Suit(Path.GetFileName(p), "", "", 0, "", desc, path));
 
             // In the pool first, then described, then by name.
             var ordered = found.OrderBy(s => !s.InPool).ThenBy(s => s.What.Length == 0).ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase).ToList();

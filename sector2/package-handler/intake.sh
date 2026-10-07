@@ -306,20 +306,31 @@ next_version_for() {
   (( n_ledger > n_local )) && echo "v${n_ledger}" || echo "v${n_local}"
 }
 
-# Identity is the file NAME (hex = to_hex(basename)), so a different file that
-# happens to share a name would silently become this one's next version and
-# `clone` would hand back the wrong file (2026-10-03 walk: other/a.py became
-# v4 of app/a.py). Compare where it came from: the last two path parts
-# (folder/name) must match what D1 recorded, or intake stops and asks.
-# A moved repo (F:\…\sector3\x.py → D:\…\sector3\x.py) still matches.
-# Unattended runs refuse; INTAKE_SAME_NAME_OK=1 accepts on purpose.
+# Identity is a NAME and hex = to_hex(name). The name starts as the bare file
+# name; when a DIFFERENT file already holds it, the newcomer takes the next longer
+# name instead (folder/name, then parent/folder/name ...), so two main_kernel.py
+# are two rows, never one file's versions (2026-10-03 walk: other/a.py became v4
+# of app/a.py; 2026-10-07: 830 shared names in the repo, Jerry: "yes fix it").
+# Same file = the last two path parts match what D1 recorded (a moved repo,
+# F:\...\sector3\x.py -> D:\...\sector3\x.py, still matches). INTAKE_SAME_NAME_OK=1
+# forces the bare name (the old "same file, moved" answer).
 _ident_tail() { local p="${1//\\//}"; p="${p%/}"; local f="${p##*/}"; local d="${p%/*}"; [[ "${d}" == "${p}" ]] && d=""; echo "${d##*/}/${f}"; }
-same_name_guard() {
-  local filepath="$1" hex="$2" orig="$3"
-  [[ "${INTAKE_SAME_NAME_OK:-0}" == "1" ]] && return 0
-  # Where the pool's copy came from: D1 when online, else the pool's own
-  # .source_path note, so the guard also works offline (2026-10-07 S2CORE-F43).
-  local meta="" prev="" known=0
+# The last N parts of a path, joined by "/".
+_ident_key() {
+  local p="${1//\\//}" n="$2" out="" part i
+  IFS='/' read -r -a _parts <<< "${p#/}"
+  local total=${#_parts[@]}
+  (( n > total )) && n=${total}
+  for (( i = total - n; i < total; i++ )); do
+    part="${_parts[$i]}"
+    out="${out:+${out}/}${part}"
+  done
+  echo "${out}"
+}
+# Where the pool's copy of <hex> came from: D1 when online, else the pool's own
+# .source_path note (works offline, S2CORE-F43). Prints "known|<source>" or "free|".
+_pool_origin() {
+  local hex="$1" meta="" prev="" known=0
   if [[ -n "${PHOENIX_AUTH}" && "${WORKER_OFFLINE}" != "1" ]]; then
     meta=$(pcurl -s -H @"${AUTH_HDR_FILE}" "${WORKER_URL}/clonepool/${hex}?meta=true" 2>/dev/null)
     [[ "${meta}" == *'"hex_id"'* ]] && known=1
@@ -327,26 +338,41 @@ same_name_guard() {
   fi
   local note="${CLONEPOOL_DIR}/T1/${hex}/.source_path"
   if [[ -z "${prev}" && -f "${note}" ]]; then prev=$(head -1 "${note}"); known=1; fi
-  [[ "${known}" == "0" ]] && return 0          # nothing in the pool by this name: a first intake
-  local was now; was=$(_ident_tail "${prev}"); now=$(_ident_tail "${filepath}")
-  # A record with no folder ("a.py" from a relative-path intake, or none at all)
-  # can't prove it's the same file: ask, never assume. Assuming is how 40
-  # different READMEs became v1-v40 of one file.
-  [[ "${prev}" == */* && "${was,,}" == "${now,,}" ]] && return 0
-  [[ -z "${prev}" ]] && prev="(origin not recorded)"
-  echo ""
-  echo "[intake:NAME] '${orig}' is already in the pool from: ${prev}"
-  echo "              this one is from:                  ${filepath}"
-  echo "  A different file with the same name would become its next version."
-  echo "  [1] Cancel                     (default)"
-  echo "  [2] Same file, moved — version it"
-  local choice="1"
-  if [[ "${INTAKE_YES:-0}" == "1" ]] || ! read -rp "Choice [1/2]: " choice; then
-    echo "[intake:STOP] refused (unattended). Rename the file, or set INTAKE_SAME_NAME_OK=1 if it really is the same file."
+  [[ "${known}" == "1" ]] && echo "known|${prev}" || echo "free|"
+}
+# 0 = <filepath> may use <hex> (free, or the same file); 1 = a different file holds it.
+# A record with no folder can't prove it's the same file. Then the CONTENT decides:
+# bytes that were ever a logged version of that row are the same file; anything else
+# is treated as a different file (it gets its own longer name, nothing is lost).
+_name_is_mine() {
+  local filepath="$1" hex="$2" key="$3" o prev
+  o=$(_pool_origin "${hex}"); prev="${o#*|}"
+  [[ "${o}" == free\|* ]] && return 0
+  if [[ "${prev}" == */* ]]; then
+    [[ "$(_ident_tail "${prev}" | tr '[:upper:]' '[:lower:]')" == "$(_ident_tail "${filepath}" | tr '[:upper:]' '[:lower:]')" ]] && return 0
     return 1
   fi
-  [[ "${choice}" == "2" ]] && { log "INFO" "same-name intake accepted by user: ${filepath} (was ${prev})"; return 0; }
-  echo "[intake:OK] cancelled — nothing changed"
+  local sha3; sha3=$(openssl dgst -sha3-512 -r "${filepath}" 2>/dev/null | awk '{print $1}')
+  [[ -n "${sha3}" ]] && version_hash_recorded "${hex}" "${key}" "${sha3}" && return 0
+  return 1
+}
+# Prints the identity name for <filepath>: the bare file name when it is free or
+# already this file's, else the shortest longer name that is.
+resolve_identity() {
+  local filepath="$1" base; base=$(basename "${filepath}")
+  if [[ "${INTAKE_SAME_NAME_OK:-0}" == "1" ]]; then echo "${base}"; return 0; fi
+  local depth=1 key hex parts
+  parts=$(tr -cd '/' <<< "${filepath#/}" | wc -c); parts=$(( parts + 1 ))
+  while (( depth <= parts )); do
+    key=$(_ident_key "${filepath}" "${depth}")
+    hex=$(to_hex "${key}")
+    if _name_is_mine "${filepath}" "${hex}" "${key}"; then
+      (( depth > 1 )) && log "INFO" "name '${base}' is another file's in the pool; this one is '${key}'" >&2
+      echo "${key}"; return 0
+    fi
+    depth=$(( depth + 1 ))
+  done
+  echo "[intake:STOP] every name for ${filepath} is taken by another file" >&2
   return 1
 }
 
@@ -994,6 +1020,13 @@ verify_directory_snapshot() {
     (
       fname=$(basename "${f}")
       r=$(verify_clonepool_copy "$(to_hex "${fname}")" "${f}" "${fname}")
+      d=2
+      while [[ "${r}" != valid ]] && (( d <= 4 )); do
+        k=$(_ident_key "${f}" "${d}"); [[ "${k}" == "${fname}" || "${k}" != */* ]] && break
+        r2=$(verify_clonepool_copy "$(to_hex "${k}")" "${f}" "${k}")
+        [[ "${r2}" == valid ]] && r=valid
+        d=$(( d + 1 ))
+      done
       [[ "${r}" == CORRUPT ]] && echo "  [CORRUPT] ${fname}" >&2
       echo "${r}" >> "${results}"
     ) &
@@ -1078,11 +1111,7 @@ intake_file() {
   filepath="$(cd "$(dirname "${filepath}")" && pwd)/$(basename "${filepath}")"
 
   local orig; orig=$(basename "${filepath}")
-  local hex;  hex=$(to_hex "${orig}")
-  local pool_dir="${CLONEPOOL_DIR}/T1/${hex}"
-  local sidecar="${pool_dir}/${hex}.sidecar.json"
-
-  mkdir -p "${pool_dir}"
+  local name hex pool_dir sidecar
 
   # ── Sensitive-name check ──────────────────────────────────────
   local sensitive="false"
@@ -1116,8 +1145,12 @@ intake_file() {
     sensitive="true"
   fi
 
-  # ── Same name, different file? ─────────────────────────────
-  same_name_guard "${filepath}" "${hex}" "${orig}" || return 1
+  # ── Identity: the bare name, or a longer one if another file holds it ──
+  name=$(resolve_identity "${filepath}") || return 1
+  hex=$(to_hex "${name}")
+  pool_dir="${CLONEPOOL_DIR}/T1/${hex}"
+  sidecar="${pool_dir}/${hex}.sidecar.json"
+  mkdir -p "${pool_dir}"
 
   # ── Duplicate check ────────────────────────────────────────
   local dup_result
@@ -1167,13 +1200,13 @@ intake_file() {
     esac
   fi
 
-  local version; version=$(next_version_for "${orig}" "${pool_dir}")
+  local version; version=$(next_version_for "${name}" "${pool_dir}")
   local filetype; filetype=$(detect_filetype "${orig}")
   local category_hex; category_hex=$(filetype_to_category "${filetype}")
   local size; size=$(get_size "${filepath}")
   local checksum; checksum=$(get_checksum "${filepath}")
 
-  log "INFO" "intaking: ${orig} (${filetype}) as ${version}"
+  log "INFO" "intaking: ${name} (${filetype}) as ${version}"
 
   local companion_list=""
   companion_list=$(detect_companions "${filepath}" || true)
@@ -1190,17 +1223,17 @@ intake_file() {
   cp "${filepath}" "${pool_dir}/${version}_${orig}"
   log "INFO" "stored: ${pool_dir}/${version}_${orig}"
 
-  write_sidecar_basic "${sidecar}" "${hex}" "${orig}" "${version}" \
+  write_sidecar_basic "${sidecar}" "${hex}" "${name}" "${version}" \
     "${filetype}" "${category_hex}" "${size}" "${backend}" "${notes}" "${checksum}" "${sensitive}"
   enrich_sidecar_companions "${sidecar}" "${companion_list}"
-  custody_log_local "${hex}" "${orig}" "intake" "${version}" \
+  custody_log_local "${hex}" "${name}" "intake" "${version}" \
     "${filepath}" "${pool_dir}/${version}_${orig}" "white" "${backend}"
-  report_clonepool "${hex}" "${orig}" "${version}" "white" \
+  report_clonepool "${hex}" "${name}" "${version}" "white" \
     "${pool_dir}" "${sidecar}" "1" "${size}" "${sensitive}" "${pool_dir}/${version}_${orig}" "${filepath}"
   printf '%s\n' "${filepath}" > "${pool_dir}/.source_path"
   upload_to_r2 "${hex}" "${pool_dir}/${version}_${orig}"
-  report_custody  "${hex}" "${orig}" "intake" "white" "${backend}" "${filepath}"
-  report_glossary "${hex}" "${orig}" "Intaked via ${backend}: ${filetype}" \
+  report_custody  "${hex}" "${name}" "intake" "white" "${backend}" "${filepath}"
+  report_glossary "${hex}" "${name}" "Intaked via ${backend}: ${filetype}" \
     "${category_hex}" "${version}" "${size}" "${pool_dir}"
 
   # ── Auto evict old versions for this file ─────────────────
@@ -1229,7 +1262,7 @@ intake_file() {
     fi
   fi
 
-  echo "[intake:OK] ${orig} → clonepool ${version}"
+  echo "[intake:OK] ${name} → clonepool ${version}"
   echo "[intake:OK] hex:      ${hex}"
   echo "[intake:OK] type:     ${filetype}"
   echo "[intake:OK] sha256:   ${checksum:0:16}..."
@@ -1277,7 +1310,7 @@ fetch_r2_fallback() {
 
   local pool_dir="${CLONEPOOL_DIR}/T1/${hex}"
   mkdir -p "${pool_dir}"
-  local tmp; tmp="${pool_dir}/.r2-fetch-${fetched_version}_${name}.tmp"
+  local tmp; tmp="${pool_dir}/.r2-fetch-${fetched_version}_${name##*/}.tmp"
   remote_version="${fetched_version}"
 
   local http_code
@@ -1325,7 +1358,7 @@ intake_clone_ledger_version() {
 
   local src="" f
   if [[ -d "${pool_dir}" ]]; then
-    for f in "${pool_dir}"/v*_"${name}"; do
+    for f in "${pool_dir}"/v*_"${name##*/}"; do
       [[ -f "${f}" ]] || continue
       if [[ "$(openssl dgst -sha3-512 -r "${f}" 2>/dev/null | awk '{print $1}')" == "${want}" ]]; then
         src="${f}"; break
@@ -1357,7 +1390,7 @@ intake_clone_ledger_version() {
     return 1
   fi
 
-  local dest="${PWD}/${name}"
+  local dest="${PWD}/${name##*/}"
   [[ -f "${dest}" ]] && echo "[intake:WARN] '${name}' already exists here — overwriting with ${label}"
   # A FOLDER's ledger row holds its manifest, not a file. Copying it out wrote JSON
   # named like the folder and printed "restored" (2026-10-07 audit S2CORE-F44).
@@ -1419,7 +1452,7 @@ intake_clone() {
   # Resolve the target file — latest or specific version
   local target
   if [[ "${req_version}" == "latest" ]]; then
-    target=$(get_latest_file "${pool_dir}" "${name}") || target=""   # empty bucket: ls fails under pipefail
+    target=$(get_latest_file "${pool_dir}" "${name##*/}") || target=""   # empty bucket: ls fails under pipefail
     if [[ -z "${target}" ]] && fetch_r2_fallback "${name}" "${hex}" "latest" >/dev/null && [[ -f "${LAST_R2_FETCHED}" ]]; then
       target="${LAST_R2_FETCHED}"   # bucket exists (sidecar only) but holds no copy yet
     fi
@@ -1428,11 +1461,11 @@ intake_clone() {
       return 1
     fi
   else
-    target="${pool_dir}/${req_version}_${name}"
+    target="${pool_dir}/${req_version}_${name##*/}"
     if [[ ! -f "${target}" ]]; then
       echo "[intake:MISS] Version '${req_version}' of '${name}' not found in clonepool"
       echo "  Available versions:"
-      ls "${pool_dir}"/v*_"${name}" 2>/dev/null \
+      ls "${pool_dir}"/v*_"${name##*/}" 2>/dev/null \
         | while read -r f; do
             num=$(basename "${f}" | grep -o '^v[0-9]*' || true)
             echo "    ${num}"
@@ -1442,7 +1475,7 @@ intake_clone() {
   fi
 
   local version; version=$(basename "${target}" | grep -o '^v[0-9]*' || true)
-  local dest="${PWD}/${name}"
+  local dest="${PWD}/${name##*/}"
 
   local verify_result; verify_result=$(verify_clonepool_copy "${hex}" "${target}" "${name}")
   # Phoenix is the authority. A local copy that no longer matches D1's CURRENT
@@ -2034,7 +2067,10 @@ intake_directory() {
   for f in "${known_files[@]}"; do
     local rel="${f#${dirpath}/}"
     local file_orig; file_orig=$(basename "${f}")
-    local file_hex;  file_hex=$(to_hex "${file_orig}")
+    # Same identity rule as a single-file intake: the bare name unless another
+    # file holds it (a folder intake had no guard at all; 2026-10-07).
+    local file_name; file_name=$(resolve_identity "${f}") || { (( failed++ )) || true; continue; }
+    local file_hex;  file_hex=$(to_hex "${file_name}")
     local file_pool="${CLONEPOOL_DIR}/T1/${file_hex}"
     local file_version; file_version=$(get_next_version "${file_pool}")
     local filetype;  filetype=$(detect_filetype "${file_orig}")
@@ -2076,17 +2112,18 @@ intake_directory() {
     cp "${f}" "${snapshot_dir}/${rel}"
 
     local sidecar="${file_pool}/${file_hex}.sidecar.json"
-    write_sidecar_basic "${sidecar}" "${file_hex}" "${file_orig}" \
+    write_sidecar_basic "${sidecar}" "${file_hex}" "${file_name}" \
       "${file_version}" "${filetype}" "${category_hex}" "${size}" \
       "${backend}" "dir:${dirname}/${rel}" "${checksum}" "${file_sensitive}"
 
-    custody_log_local "${file_hex}" "${file_orig}" "dir_intake" \
+    custody_log_local "${file_hex}" "${file_name}" "dir_intake" \
       "${file_version}" "${f}" "${file_pool}/${file_version}_${file_orig}" \
       "white" "${backend}"
-    report_clonepool "${file_hex}" "${file_orig}" "${file_version}" "white" \
-      "${file_pool}" "${sidecar}" "1" "${size}" "${file_sensitive}" "${file_pool}/${file_version}_${file_orig}" "${rel}"
+    report_clonepool "${file_hex}" "${file_name}" "${file_version}" "white" \
+      "${file_pool}" "${sidecar}" "1" "${size}" "${file_sensitive}" "${file_pool}/${file_version}_${file_orig}" "${f}"
     upload_to_r2 "${file_hex}" "${file_pool}/${file_version}_${file_orig}"
-    report_custody "${file_hex}" "${file_orig}" "dir_intake" "white" "${backend}" "${rel}"
+    report_custody "${file_hex}" "${file_name}" "dir_intake" "white" "${backend}" "${rel}"
+    printf '%s\n' "${f}" > "${file_pool}/.source_path"
 
     # Auto evict old versions
     evict_old_versions "${file_pool}" "${file_orig}" "true"
@@ -2308,7 +2345,7 @@ intake_clone_directory() {
   fi
 
   local ver; ver=$(basename "${snapshot}" | grep -o '^v[0-9]*' || true)
-  local dest="${PWD}/${name}"
+  local dest="${PWD}/${name##*/}"
 
   echo "[intake] Verifying snapshot integrity..."
   local vresult; vresult=$(verify_directory_snapshot "${snapshot}")
