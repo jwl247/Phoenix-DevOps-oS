@@ -27,6 +27,21 @@ Jerry as it develops — do not build ahead of him.
   Uncommitted; PARKED by Jerry ("the rest of this has to run correctly and the easy put in first").
 - Jerry's standing call: ONE ring in the pool, imported 4x (coms1-4) by each machine.
 
+## Who talks to whom (J, 10/7 — the rule)
+- **Members talk ONLY to their ring's propcoms** (a star inside each ring, propcoms is the hub).
+- **Propcoms talks ONLY to Cpt Conductor** (= Frank), who is in charge of all 4 rings.
+- **The Conductor is the ONLY comms in and out of the rings** (other machines, Helix-I/E, the mesh).
+  Ring-to-ring (coms4 -> 3 -> 2 -> 1) goes through him too.
+- Fits the code: Frank5 already owns the kernel's `SharedMemoryBus`; one door = validate once there.
+- **Today's `sector4/ring/member.py` breaks this** (fix when unparked): members relay balls to each other
+  (a conveyor belt), propcoms writes straight into the next ring's doors/in, and `conductor_sync` sits
+  inside each ring as a member (ask J: the Conductor's hand in the ring, or out of the rings?).
+- What slows it today (read 10/7): file-per-ball folders + 0.25 s polling per hop, ~30 status-file
+  writes/s idle, seen-marker files, freewheeling's 3 saves in the hop path, pretty JSON, cross-drive
+  escalation, 8 processes each with its own Helix; original propcoms re-reads/writes its tuning file per
+  ball and snaps through 3 buffer FILES. Fix: the bus, wake-on-signal, status in the bus header, disk
+  only for custody/cold store in background batches. Measure before/after (BENCHMARKS precision rule).
+
 ## Design notes from the talk (Claude's, for Jerry to accept or change)
 - Make the center a ROLE any node can take (Jerry travels; PBMII may be off).
 - Shared memory works inside one machine only: one bus per ring; ring-to-ring over signed mesh doors.
