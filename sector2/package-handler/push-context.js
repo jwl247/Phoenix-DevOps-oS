@@ -57,7 +57,7 @@ async function metaPut(key, data) {
       const d = JSON.parse(text);
       log(`  stored: ${d.bytes ?? '?'} bytes`);
     } else if (text.includes('Cloudflare Access') || text.includes('Sign in')) {
-      log(`  BLOCKED by Cloudflare Access — remove Access policy in dashboard`);
+      log(`  BLOCKED by Cloudflare Access — set CF_ACCESS_CLIENT_ID + CF_ACCESS_CLIENT_SECRET (the usys-cli service token). Never remove the Access policy (XCUT-S16).`);
     } else {
       log(`  ERROR ${res.status}: ${text.slice(0,100)}`);
     }

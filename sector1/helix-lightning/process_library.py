@@ -624,9 +624,14 @@ class ProcessLibrary:
             hex_id = name.encode("utf-8").hex()  # matches intake.sh's to_hex()
             url = f"{worker_url}/clonepool/{hex_id}"
 
-            req = urllib.request.Request(
-                url, method="GET", headers={"Authorization": f"Bearer {auth_token}"}
-            )
+            headers = {"Authorization": f"Bearer {auth_token}"}
+            # packages-worker sits behind Cloudflare Access (Security Gap 1): send the service
+            # token too, or Access answers with a login page instead of the suit.
+            for env_name, header in (("CF_ACCESS_CLIENT_ID", "CF-Access-Client-Id"),
+                                     ("CF_ACCESS_CLIENT_SECRET", "CF-Access-Client-Secret")):
+                if os.environ.get(env_name):
+                    headers[header] = os.environ[env_name]
+            req = urllib.request.Request(url, method="GET", headers=headers)
             with urllib.request.urlopen(req, timeout=10) as resp:
                 if resp.status == 200:
                     data = resp.read()
