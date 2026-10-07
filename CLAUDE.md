@@ -381,7 +381,7 @@ Push.
 
 ## NEXT SESSION (top items — full list in docs/history/NEXT-SESSION-BACKLOG.md)
 - **READ FIRST: `docs/history/HANDOFF-2026-10-07.md` §4-7 + `docs/compliance/pentest/2026-10-07-round4-addendum-4.md`.**
-- **HUD BUILT 10/7 (fbdc0f8): the eye + docks** (`docs/plans/hud-eye-and-docks.md`, Jerry framed it). Starts at logon (`Hud.exe --eye`). NEXT: Jerry tries voice (Right Ctrl) + "open the dock"; then **talk out the Console's easy buttons** with him, then build them.
+- **HUD BUILT 10/7 (fbdc0f8): the eye + docks** (`docs/plans/hud-eye-and-docks.md`, Jerry framed it). Starts at logon (`Hud.exe --eye`). Jerry confirmed voice + "open the dock" work (10/7). NEXT: **talk out the Console's easy buttons** with him, then build them.
 - **FIX WAVES (10/7): everything Claude can do is done** (addendum-4). What is left needs Jerry (list below + addendum-4 "Still open"). Then the **next phase = build**, mapped in the workflow graph (ask for the link).
 - **Jerry only:** Windows local engine for PBMII (cross-compile on pbmIII, or use pbmIII's over the mesh) · pbmIII box fixes (harden/shares/recover, apache purge) · DASH-F24 · Radar cancel path · qcow2 + vault.enc sensitive · delete `C:\Program Files\Git\opt\` · Android or iPhone (phone node) · HUD: what it does + looks like (boots into it)
 - **TRUST RULE (Jerry, 2026-10-05): no documentation from ~09-21 → 10-05 can be trusted** (CONNECTIONS, session log, handoffs, COMMANDS, BUILD STATUS, "proven/live/DONE" claims). Verify by running it as a user would before building on it or reporting it works; correct wrong docs in place.
