@@ -11,6 +11,7 @@
 #   glog  gst      short git log / git status
 #   here           this folder in Explorer
 #   pool <text>    search the clone pool (usys search)
+#   security <x>   the file sensor: status, scan, alerts, verify, lock-hud, unlock-hud, off, on
 
 $script:PhxRepo = [Environment]::GetEnvironmentVariable('PHOENIX_ROOT', 'User')
 if (-not $script:PhxRepo) { $script:PhxRepo = Split-Path $PSScriptRoot }
@@ -22,6 +23,11 @@ function global:here { Start-Process explorer.exe -ArgumentList "`"$((Get-Locati
 function global:glog { git log --oneline -15 @args }
 function global:gst { git status -sb @args }
 function global:pool { Invoke-UsysMain search @args }
+function global:security {
+    $sec = Join-Path $HOME '.phoenix\security\bin\security.py'          # the installed sensor (install-security.ps1)
+    if (-not (Test-Path $sec)) { Write-Host '  security: sensor not installed (sector2\apps\security\install-security.ps1)' -ForegroundColor Yellow; return }
+    python $sec @args
+}
 
 function global:snap { pwsh -NoProfile -Sta -ExecutionPolicy Bypass -File (Join-Path $script:PhxRepo 'scripts\snap-to-claude.ps1') }
 function global:lastsnap {
