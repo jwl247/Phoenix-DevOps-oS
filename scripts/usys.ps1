@@ -2794,6 +2794,10 @@ if ($__usysDotSourced) {
     $__rot = Join-Path $PSScriptRoot 'phoenix-rotate.ps1'
     if (Test-Path $__rot) { . $__rot }
     Remove-Variable __rot -ErrorAction SilentlyContinue
+    # g: highlight a path on screen, type g, you're there (scripts\phoenix-goto.ps1)
+    $__goto = Join-Path $PSScriptRoot 'phoenix-goto.ps1'
+    if (Test-Path $__goto) { . $__goto }
+    Remove-Variable __goto -ErrorAction SilentlyContinue
 } else {
     # Direct script invocation (shim mode): run once, define nothing global.
     $cmd  = $args[0]
