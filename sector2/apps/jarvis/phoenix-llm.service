@@ -32,6 +32,19 @@ ProtectKernelModules=yes
 ProtectControlGroups=yes
 LockPersonality=yes
 ReadOnlyPaths=/var/lib/llm/models
+# JARVIS-S09 (2026-10-07): kernel/proc/syscall surface closed too
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+UMask=0077
+MemoryDenyWriteExecute=yes
 
 [Install]
 WantedBy=multi-user.target

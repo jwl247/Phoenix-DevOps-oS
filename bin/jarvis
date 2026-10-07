@@ -8,15 +8,28 @@ Phoenix DevOps OS | jwl247 | GPL v3
   jarvis ui                         open his web screen (SSH tunnel to pbmIII, nothing exposed)
 
 Path: SSH over the Phoenix Mesh as jarvis-call (forced command, no shell) -> jarvis-gate -> Jarvis
--> local Ollama. On pbmIII itself it talks to the gate directly. Same door the Genie suit uses.
+-> the local llama.cpp engine. On pbmIII itself it talks to the gate directly. Same door the Genie suit uses.
 Env: JARVIS_HOST (default jarvis-call@10.42.0.10), JARVIS_KEY (default ~/.ssh/phoenix_jarvis_ed25519)
-     ui: JARVIS_UI_HOST (default a@10.42.0.10), JARVIS_UI_KEY (default ~/.ssh/phoenix_third_debian_ed25519),
+     ui: JARVIS_UI_HOST (default jarvis-ui@10.42.0.10), JARVIS_UI_KEY (default ~/.ssh/phoenix_jarvis_ui_ed25519),
          JARVIS_UI_PORT (default 8800 on this machine)
 """
 import json, os, subprocess, sys
 from pathlib import Path
 
 GATE = "/opt/openjarvis/jarvis-gate"
+
+# JARVIS-S10: pbmIII's host key, pinned (was trust-on-first-use, so a first connection could be
+# intercepted). Taken 2026-10-07 from the box over an already-trusted admin session; matches
+# PBMII's known_hosts for both 10.42.0.10 and 192.168.1.192. If pbmIII is rebuilt, update this.
+PBMIII_HOST_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKuW0yBPHUTtwQ3H6/X1LGxmWTMUD9Cai4HrQlWDsicG"
+
+
+def pinned_known_hosts() -> str:
+    """A known_hosts file holding only pbmIII's pinned key (rewritten each call, so it can't drift)."""
+    p = Path.home() / ".ssh" / "phoenix_jarvis_known_hosts"
+    p.parent.mkdir(mode=0o700, exist_ok=True)
+    p.write_text(f"10.42.0.10 {PBMIII_HOST_KEY}\n", encoding="ascii")
+    return str(p)
 
 
 def ui() -> int:
@@ -26,10 +39,12 @@ def ui() -> int:
     url = f"http://127.0.0.1:{port}/"
     if os.path.exists(GATE):
         print("on pbmIII: http://127.0.0.1:8000/"); return 0
-    key = os.environ.get("JARVIS_UI_KEY", str(Path.home() / ".ssh" / "phoenix_third_debian_ed25519"))
+    # JARVIS-S06: a tunnel-only key on a no-shell user (was the admin `a` key = root via sudo)
+    key = os.environ.get("JARVIS_UI_KEY", str(Path.home() / ".ssh" / "phoenix_jarvis_ui_ed25519"))
     tun = subprocess.Popen(["ssh", "-i", key, "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
+                            "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={pinned_known_hosts()}",
                             "-N", "-L", f"127.0.0.1:{port}:127.0.0.1:8000",
-                            os.environ.get("JARVIS_UI_HOST", "a@10.42.0.10")])
+                            os.environ.get("JARVIS_UI_HOST", "jarvis-ui@10.42.0.10")])
     for _ in range(40):
         if tun.poll() is not None:
             print(f"jarvis ui: tunnel failed (port {port} busy? mesh up?)", file=sys.stderr); return 1
@@ -62,7 +77,7 @@ def main() -> int:
     else:
         key = os.environ.get("JARVIS_KEY", str(Path.home() / ".ssh" / "phoenix_jarvis_ed25519"))
         cmd = ["ssh", "-i", key, "-o", "BatchMode=yes", "-o", "ConnectTimeout=6",
-               "-o", "StrictHostKeyChecking=accept-new",
+               "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={pinned_known_hosts()}",
                os.environ.get("JARVIS_HOST", "jarvis-call@10.42.0.10"), "ask"]
     try:
         p = subprocess.run(cmd, input=stage, capture_output=True, text=True, encoding="utf-8", timeout=150)

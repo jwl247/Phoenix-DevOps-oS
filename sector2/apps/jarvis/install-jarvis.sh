@@ -46,7 +46,8 @@ id jarvis >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin -d /var/lib/jarvis 
 id jarvis-call >/dev/null 2>&1 || useradd -r -s /bin/sh -d /home/jarvis-call -m jarvis-call
 install -d -m 755 /opt/phoenix-llm /var/lib/llm /var/lib/llm/models
 install -m 755 -o root -g root "$ENGINE" /opt/phoenix-llm/llama-server        # root-owned: the service can't rewrite its own code
-install -m 644 -o root -g root "$MODEL" /var/lib/llm/models/llama3.2-3b-q4km.gguf
+# a re-run may name the installed copy itself (the only one left once Ollama is gone): pinned already, keep it
+[[ "$MODEL" -ef /var/lib/llm/models/llama3.2-3b-q4km.gguf ]] || install -m 644 -o root -g root "$MODEL" /var/lib/llm/models/llama3.2-3b-q4km.gguf
 
 # ── 3. Keys (generated once, kept on re-run; never echoed) ──────────────────────────────────
 install -d -m 750 -o root -g llm /etc/phoenix-llm
@@ -80,6 +81,17 @@ install -m 644 "$HERE/openjarvis.service" /etc/systemd/system/openjarvis.service
 install -d -m 700 -o jarvis-call -g jarvis-call /home/jarvis-call/.ssh
 for PUB in "$@"; do printf 'restrict,from="10.42.0.0/16",command="%s/jarvis-gate" %s\n' $O "$(cat "$PUB")"; done > /home/jarvis-call/.ssh/authorized_keys
 chown jarvis-call:jarvis-call /home/jarvis-call/.ssh/authorized_keys; chmod 600 /home/jarvis-call/.ssh/authorized_keys
+
+# The web screen (`jarvis ui`): a tunnel-only user, no shell, may open 127.0.0.1:8000 and nothing else
+# (JARVIS-S06: the tunnel used the admin key, which is root via sudo). Keys: ui-*.pub beside this script.
+id jarvis-ui >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin -d /home/jarvis-ui -m jarvis-ui
+install -d -m 700 -o jarvis-ui -g jarvis-ui /home/jarvis-ui/.ssh
+: > /home/jarvis-ui/.ssh/authorized_keys
+for PUB in "$HERE"/ui-*.pub; do
+  [[ -f "$PUB" ]] || continue
+  printf 'restrict,port-forwarding,permitopen="127.0.0.1:8000",from="10.42.0.0/16",command="/bin/false" %s\n' "$(cat "$PUB")" >> /home/jarvis-ui/.ssh/authorized_keys
+done
+chown jarvis-ui:jarvis-ui /home/jarvis-ui/.ssh/authorized_keys; chmod 600 /home/jarvis-ui/.ssh/authorized_keys
 
 # ── 5. Start and prove: engine answers only with its key, Jarvis answers only with his ──────
 systemctl daemon-reload

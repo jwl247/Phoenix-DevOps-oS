@@ -10,7 +10,7 @@ and gets ONE JSON object back:
   {"ok": true, "answer": "...", "model": "llama3.2:3b", "ms": 4210}
 The gate only talks to Jarvis on 127.0.0.1:8000. Every call is journaled: journalctl -t jarvis-gate
 """
-import json, os, subprocess, sys, time, urllib.error, urllib.request
+import fcntl, json, os, re, subprocess, sys, time, urllib.error, urllib.request
 
 URL = "http://127.0.0.1:8000/v1/chat/completions"
 MODEL = "llama3.2:3b"
@@ -62,6 +62,17 @@ def main():
         reply({"ok": False, "error": "need {\"text\": \"...\"}"}, 2)
     if len(text) > MAX_TEXT:
         reply({"ok": False, "error": f"text over {MAX_TEXT} chars"}, 2)
+    if not WARM:
+        # JARVIS-S11: one ask at a time per calling box (OpenJarvis's own limiter doesn't load);
+        # a second ask while the first runs is refused at once instead of queueing behind it.
+        locks = os.path.expanduser("~/.gate-locks")
+        os.makedirs(locks, mode=0o700, exist_ok=True)
+        lock = open(os.path.join(locks, re.sub(r"[^0-9A-Za-z.:-]", "_", who) + ".lock"), "w")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            log(f"busy: {who} already has an ask running")
+            reply({"ok": False, "error": "busy: your previous ask is still running"}, 3)
     log(f"ask from {who}: {len(text)} chars")
     body = json.dumps({"model": MODEL, "stream": False, "max_tokens": MAX_TOKENS,
                        "messages": identity() + [{"role": "user", "content": text}]}).encode()
