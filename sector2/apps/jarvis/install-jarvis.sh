@@ -5,7 +5,7 @@
 # Run as root on the box (pbmIII), from a folder holding this sector2/apps/jarvis/ set:
 #   sudo bash install-jarvis.sh <openjarvis-src.tar.gz> <llama-server> <model.gguf> <caller-pubkey> [more pubkeys...]
 # Get the engine and the model from the clone pool (import, don't download): `intake clone llama-server-avx`
-# (or -baseline on a CPU without AVX) and `intake clone llama3.2-3b-q4km.gguf`.
+# (a NATIVE build per box: llama-server-native-<box>; portable builds SIGILL'd on pbmIII 2026-10-07) and `intake clone llama3.2-3b-q4km.gguf`.
 # One key per calling box (PBMII, awslh, ...); each gets the same forced command. Re-runnable.
 #
 # Rails (Jerry 2026-10-06/07: "no spies"):
