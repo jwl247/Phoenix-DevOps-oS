@@ -12,6 +12,8 @@
 # Loaded by the PS7 profile (scripts\usys.ps1 dot-sources it). Steps it runs:
 #   1. sector2/package-handler/rotate-phoenix-auth.sh in Git Bash: new key -> packages-worker,
 #      office-notify-worker, pbm-radar-worker (each verified) -> HKCU\Environment -> vault master
+#   1b. sector2/package-handler/rotate-access-token.sh: new Cloudflare Access service-token secret
+#      (usys-cli) -> proven on packages-worker -> HKCU\Environment -> vault master (old secret ends in 1 h)
 #   2. scripts/phoenix_vault.py push (the cloud copy boxes pull from)
 #   3. this window picks up the new key; other windows need reopening
 # The key is never printed. The passphrase never touches a command line.
@@ -36,7 +38,7 @@ function Invoke-PhoenixRotate {
     }
     # 3. typed on purpose
     if (-not $ForgetKey) {
-        $typed = Read-Host '  This replaces PHOENIX_AUTH on every worker, this PC and the vault. Type ROTATE to go'
+        $typed = Read-Host '  This replaces PHOENIX_AUTH and the Cloudflare Access token secret on every worker, this PC and the vault. Type ROTATE to go'
         if ($typed -cne 'ROTATE') { Write-Host '  rotate-key: cancelled - nothing changed' -ForegroundColor Yellow; return }
     }
 
@@ -56,6 +58,11 @@ function Invoke-PhoenixRotate {
     $sh = (Join-Path $repo 'sector2\package-handler\rotate-phoenix-auth.sh') -replace '\\', '/'
     & $bash -lc "exec bash `"$sh`""
     if ($LASTEXITCODE -ne 0) { Write-Host '  rotate-key: rotation stopped - see above; vault NOT pushed' -ForegroundColor Red; return }
+
+    # 1b. the Cloudflare Access service token (Jerry 10/7: "it needs added to the rotate list")
+    $ash = (Join-Path $repo 'sector2\package-handler\rotate-access-token.sh') -replace '\\', '/'
+    & $bash -lc "exec bash `"$ash`""
+    if ($LASTEXITCODE -ne 0) { Write-Host '  rotate-key: Access token not rotated - see above. PHOENIX_AUTH IS rotated; the vault push still runs.' -ForegroundColor Yellow }
 
     # 2. push the vault; passphrase from the DPAPI file if you saved one, else asked
     $pass = $null
@@ -78,6 +85,7 @@ function Invoke-PhoenixRotate {
 
     # 3. this window gets the new key now
     $env:PHOENIX_AUTH = [Environment]::GetEnvironmentVariable('PHOENIX_AUTH', 'User')
+    $env:CF_ACCESS_CLIENT_SECRET = [Environment]::GetEnvironmentVariable('CF_ACCESS_CLIENT_SECRET', 'User')
     Write-Host '  rotate-key: done - workers, this PC, vault master and the cloud vault all hold the new key. Reopen other windows.' -ForegroundColor Green
 }
 Set-Alias -Name rotate-key -Value Invoke-PhoenixRotate -Scope Global -Force
