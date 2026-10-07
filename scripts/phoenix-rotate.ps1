@@ -6,6 +6,9 @@
 #                           Windows account (DPAPI): only you, logged in as you, on this PC can open it
 #   rotate-key -ForgetKey   delete the saved passphrase
 #
+# ONLY JERRY: refused unless it is his Windows account (SID), a person at a real PS7 console
+# (never Claude Code, Jarvis, a script or a pipe), and he types ROTATE.
+#
 # Loaded by the PS7 profile (scripts\usys.ps1 dot-sources it). Steps it runs:
 #   1. sector2/package-handler/rotate-phoenix-auth.sh in Git Bash: new key -> packages-worker,
 #      office-notify-worker, pbm-radar-worker (each verified) -> HKCU\Environment -> vault master
@@ -14,10 +17,28 @@
 # The key is never printed. The passphrase never touches a command line.
 
 $script:PhoenixVaultPassFile = Join-Path $HOME '.phoenix\vault-pass.dpapi.xml'
+$script:PhoenixRotateOwnerSid = 'S-1-5-21-1896517873-2457859212-3872445003-1001'   # Jerry (jwlef) on PBMII — not a secret
 
 function Invoke-PhoenixRotate {
     [CmdletBinding()]
     param([switch]$SaveKey, [switch]$ForgetKey)
+
+    # ── Only Jerry (2026-10-07: "a ps7 command that rotates the keys that only I can use") ──
+    # 1. his Windows account, by SID (a name can be reused; the SID can't)
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    if ($me -ne $script:PhoenixRotateOwnerSid) {
+        Write-Host '  rotate-key: refused - this command belongs to Jerry''s Windows account only' -ForegroundColor Red; return
+    }
+    # 2. a person at a real console: never an AI session, a script, a scheduled task or a remote pipe
+    if ($env:CLAUDECODE -or $env:CLAUDE_CODE_ENTRYPOINT -or -not [Environment]::UserInteractive -or
+        $Host.Name -ne 'ConsoleHost' -or [Console]::IsInputRedirected) {
+        Write-Host '  rotate-key: refused - run it yourself in a PowerShell 7 window (not from Claude, Jarvis or a script)' -ForegroundColor Red; return
+    }
+    # 3. typed on purpose
+    if (-not $ForgetKey) {
+        $typed = Read-Host '  This replaces PHOENIX_AUTH on every worker, this PC and the vault. Type ROTATE to go'
+        if ($typed -cne 'ROTATE') { Write-Host '  rotate-key: cancelled - nothing changed' -ForegroundColor Yellow; return }
+    }
 
     if ($ForgetKey) {
         Remove-Item $script:PhoenixVaultPassFile -ErrorAction SilentlyContinue

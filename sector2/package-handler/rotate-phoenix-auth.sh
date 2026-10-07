@@ -25,6 +25,11 @@
 
 set -euo pipefail
 
+# Only Jerry, by hand (2026-10-07): never from an AI session (Claude Code sets CLAUDECODE) or a
+# non-interactive pipe. In PS7 use `rotate-key`, which also pins his Windows account.
+if [[ -n "${CLAUDECODE:-}${CLAUDE_CODE_ENTRYPOINT:-}" || ! -t 0 ]]; then
+  echo "rotate-phoenix-auth: refused - Jerry runs this himself, in a terminal (rotate-key in PS7)"; exit 1
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 D1_WORKER_DIR="${SCRIPT_DIR}/worker"
 OFFICE_WORKER_DIR="${SCRIPT_DIR}/../apps/office/notify-worker"
