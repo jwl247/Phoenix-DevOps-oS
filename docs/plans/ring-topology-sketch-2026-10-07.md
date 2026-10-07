@@ -20,9 +20,12 @@ Jerry as it develops — do not build ahead of him.
   The ring members do not use it today ("it dont", J).
 - `C:\Users\jwlef\Music` ring = **a guide only (J): "we know more now and things are different."**
   `helixaudit.sh` and rebound are old architecture, not installed. The audit was (or should have been)
-  the motor that starts and stops everything in the ring folder (J); neither copy has that motor.
-- `sector4/ring/` = a 10/7 working copy (bug fixes to `helix_api.py`: cold store, RESPONSIBILITY_PATH,
-  `ket`→`key`, memory_bank role; adds `member.py`, `ringhome.py`, `rebound.py`). Uncommitted, untested.
+  the motor that starts and stops everything in the ring folder (J); the Music copy has no motor; `sector4/ring/rebound.py` is today's start/stop.
+- `sector4/ring/` = built + tested on PBMII the morning of 10/7 (rebound.py runs team.json through
+  member.py: all 8 alive 35 s, balls validated and escalated coms4->3->2->1, kill -> restart, clean stop;
+  bug fixes to `helix_api.py`: cold store, RESPONSIBILITY_PATH, `ket`->`key`, memory_bank role).
+  Uncommitted; PARKED by Jerry ("the rest of this has to run correctly and the easy put in first").
+- Jerry's standing call: ONE ring in the pool, imported 4x (coms1-4) by each machine.
 
 ## Design notes from the talk (Claude's, for Jerry to accept or change)
 - Make the center a ROLE any node can take (Jerry travels; PBMII may be off).
