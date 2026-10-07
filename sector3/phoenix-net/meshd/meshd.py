@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""phoenix-meshd — the Phoenix Mesh agent. One per machine (Linux or Windows).
+"""phoenix-meshd — the OLD Phoenix Mesh agent (WireGuard, 10.47.0.x). RETIRED.
 
 UnitedSys — United Systems | jwl247 | GPL-3.0
+
+RETIRED 2026-10-05 (Jerry's call): the WireGuard mesh and Tailscale were replaced
+by Nebula, 10.42.0.0/16. The live mesh is sector3/mesh/ (phoenix_net.py,
+hosts.json). Kept for history, not deleted (no-delete rule); do not deploy it.
 
 Phoenix Mesh = our own ZeroTier-style network: WireGuard links run DIRECT
 between Phoenix machines; the phoenix-mesh-worker (Cloudflare) is only the

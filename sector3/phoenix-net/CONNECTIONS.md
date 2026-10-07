@@ -1,4 +1,13 @@
-# phoenix-net — Phoenix Mesh (own WireGuard mesh) + its switchboard
+# phoenix-net — RETIRED: the old Phoenix Mesh (own WireGuard mesh, 10.47.0.x) + its switchboard
+
+> **RETIRED 2026-10-05 (Jerry's call).** The WireGuard mesh (meshd, `wg-phx.conf`, 10.47.0.x) and
+> Tailscale were replaced by **Nebula, 10.42.0.0/16**. The live Phoenix Mesh is **`sector3/mesh/`**
+> (`phoenix_net.py`, `hosts.json`: pbmii 10.42.0.1, pbmiii 10.42.0.10, awslh lighthouse). Files here
+> are kept for history (no-delete rule), not deployed. hands, the Console and H.L.K now read their
+> mesh address from the Nebula interface (`nebula1` / Windows adapter `PhoenixMesh`), not meshd.
+> **Still using this folder:** `portal/server.py` reads its machine/link list from
+> `phoenix-mesh-worker` (`/devices`, `/links`), which nothing feeds now that meshd is retired;
+> moving that list to Nebula is open (S34OPS-F47). Everything below describes the retired system.
 
 Written 2026-09-29 (Round 2 fix pass, CONN-F01) from the code in this folder; re-checked 2026-09-30
 (no code changes since; tests 12/12 and 9/9 re-run). Verify against current code before trusting a

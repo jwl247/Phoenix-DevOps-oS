@@ -30,11 +30,12 @@ CF_ACCESS_*); `~/.phoenix/hands.token` and `~/.phoenix/hands-tokens.json` for ha
 - `portal/web/app.js` → `portal/server.py` (same-origin JSON API only).
 
 ## Known issues (verified, not guessed)
-- **Still on WireGuard, which was retired 2026-10-01** (found 2026-10-03): `server.py` binds only 127.0.0.1 and the
-  10.47.0.x address it reads from `wg-phx.conf` (`MESH_PREFIX`, `mesh_address()`), the firewall rule allows only
-  10.47.0.0/24, the Host allow-list takes `10.47.0.*`, and the Compaq/pbm3 hands answer only 10.47.0.2. Result: the
-  Console works on PBMII alone and can't reach the Compaq. Fix: Tailscale address (100.64.0.0/10, `tailscale ip -4`),
-  machines/links from `tailscale status --json`, firewall + hands allow-list to the tailnet, same per-machine tokens.
+- **Mesh = Nebula 10.42.0.0/16** (`sector3/mesh/`; WireGuard 10.47.0.x and Tailscale RETIRED 2026-10-05).
+  Fixed 2026-10-07 (S34OPS-F45): `server.py` binds 127.0.0.1 + the 10.42.x address read from the Nebula adapter
+  (`PhoenixMesh` on Windows, `nebula1` on Linux; `MESH_PREFIX`, `mesh_address()`), the Host allow-list takes `10.42.*`,
+  and the boxes' hands answer only 10.42.0.1 (PBMII). Still open: the Windows firewall rule "Phoenix Portal (mesh
+  only)" on PBMII still allows TCP 8470 from 10.47.0.0/24 only (needs Jerry: firewall change), and the machine/link
+  list still comes from `phoenix-mesh-worker`, which nothing feeds since meshd retired (S34OPS-F47).
 - No `/health` route; `/api/state` answers 200 even when the vault/switchboard is unreachable (the dashboard's
   CONSOLE button uses it as the up-check).
 - Otherwise none open in code; README/footer wording was brought in line with the live Actions tab and

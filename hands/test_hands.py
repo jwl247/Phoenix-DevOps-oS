@@ -65,9 +65,9 @@ def bad_args_refused():
 
 
 def every_call_is_logged():
-    hands.run("status", {}, None, "console from 10.47.0.1")
+    hands.run("status", {}, None, "console from 10.42.0.1")
     last = hands.recent(1)[0]
-    assert last["tool"] == "status" and last["ok"] and last["caller"] == "console from 10.47.0.1", last
+    assert last["tool"] == "status" and last["ok"] and last["caller"] == "console from 10.42.0.1", last
     hands.run("restart_pc", {}, None, "test")
     last = hands.recent(1)[0]
     assert last["tool"] == "restart_pc" and not last["ok"] and "confirmation" in last["error"], last

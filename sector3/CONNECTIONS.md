@@ -108,9 +108,10 @@ Verify against current code before trusting a specific line number.
   (a user unit for the dashboard Help Desk, written by `deploy-dashboard.sh`) and the box-level
   unit `model-up.sh` generates for H.L.K. Different scopes, so they don't overwrite each other,
   but don't confuse them.
-- `phoenix-hands` on pbm-compaq restart-loops (~11×, Errno 99) after boot until meshd has brought
-  the mesh address up, then runs — it binds the mesh IP before it exists. Self-heals; wants an
-  ExecStartPre wait for the address (A2-N6). `phoenix-hlk.service` binds the mesh address the same
+- `phoenix-hands` used to restart-loop (~11×, Errno 99) after boot until meshd (RETIRED) brought
+  the mesh address up. Since 2026-10-07 (S34OPS-F45) it reads its 10.42.x address from Nebula's
+  `nebula1` and waits (logging every 5 min) until it exists before binding; unit is `After=nebula.service`
+  (A2-N6). `phoenix-hlk.service` binds the mesh address the same
   way (`--bind`) and relies on the same restart-until-it-works.
 - The planned `usys worker up/down` entry point and its runbook (`docs/runbooks/worker-up.md`) do
   not exist yet; the steps above are run by hand.

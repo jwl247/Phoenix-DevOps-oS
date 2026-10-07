@@ -5,12 +5,12 @@ UnitedSys — United Systems | jwl247 | GPL-3.0
 
 Jerry, 2026-09-26: "everyone dont need a dash board we will have this here".
 One web page on the net, opened from any Phoenix machine at
-http://precision.phx:8470 . v0 is read-only: who's online, every link's
+http://10.42.0.1:8470 (PBMII on the Nebula mesh). v0 is read-only: who's online, every link's
 health, and whether each Phoenix service is up. Buttons come later, through
 H.L.K's hands (docs/plans/phoenix-portal-plan.md).
 
 Security:
-  - Listens on 127.0.0.1 and the mesh address only (10.47.0.x), never on the
+  - Listens on 127.0.0.1 and the mesh address only (Nebula 10.42.x), never on the
     LAN or the internet. The Windows firewall rule allows the mesh range only.
   - The switchboard admin key (MESH_ADMIN) is read from the vault here and
     never sent to the browser; the page only gets the finished summary.
@@ -44,7 +44,8 @@ from concurrent.futures import ThreadPoolExecutor
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB = os.environ.get("PHOENIX_CONSOLE_WEB") or os.path.join(HERE, "web")   # a test copy can serve web-next/
 VAULT = os.environ.get("PHOENIX_SECRETS", r"F:\Phoenix\Vault\secrets\phoenix-secrets.env")
-MESH_PREFIX = "10.47.0."
+MESH_PREFIX = "10.42."             # Phoenix Mesh = Nebula 10.42.0.0/16 (sector3/mesh/hosts.json)
+MESH_DEV = "PhoenixMesh" if platform.system() == "Windows" else "nebula1"   # sector3/mesh/phoenix_net.py
 ONLINE_S = 90            # a machine that checked in within 90 s is online (agents beat every 30 s)
 STATE_TTL = 10           # seconds a built summary is reused
 SERVICE_TTL = 30
@@ -219,7 +220,7 @@ MACHINE_RE = __import__("re").compile(r"^[a-z][a-z0-9-]{1,30}$")
 
 def _name_from_hosts():
     """This PC's Phoenix name, readable without admin: the mesh agent writes
-    '10.47.0.x<TAB>name.phx' for every member into the hosts file (a public
+    '10.42.x.x<TAB>name.phx' for every member into the hosts file (a public
     file, no secrets), and this PC's own mesh address picks our line."""
     try:
         mine = {i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)}
@@ -231,7 +232,7 @@ def _name_from_hosts():
         with open(hosts, encoding="utf-8", errors="replace") as f:
             for line in f:
                 parts = line.split()
-                if len(parts) >= 2 and parts[0] in mine and parts[0].startswith("10.47.0.") and parts[1].endswith(".phx"):
+                if len(parts) >= 2 and parts[0] in mine and parts[0].startswith(MESH_PREFIX) and parts[1].endswith(".phx"):
                     return parts[1][:-4]
     except OSError:
         pass
@@ -402,7 +403,7 @@ def take_nonce(nonce, machine, tool, args):
 
 
 # ── HTTP ───────────────────────────────────────────────────────────────────
-ALLOWED_HOSTS = {"precision.phx", "portal.phx", "localhost", "127.0.0.1"}
+ALLOWED_HOSTS = {"pbmii.phx", "precision.phx", "portal.phx", "localhost", "127.0.0.1"}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -534,21 +535,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def mesh_address():
-    """This machine's 10.47.0.x, once the mesh interface is up."""
+    """This machine's Nebula 10.42.x address, read from the Nebula interface
+    (Windows adapter `PhoenixMesh`, Linux `nebula1`); else any local 10.42.x.
+    None while the mesh is down. (The old WireGuard mesh, 10.47.0.x, is retired.)"""
+    import re
+    cmds = ([["netsh", "interface", "ipv4", "show", "addresses", f"name={MESH_DEV}"]]
+            if platform.system() == "Windows"
+            else [["ip", "-4", "-o", "addr", "show", "dev", MESH_DEV], ["ip", "-4", "-o", "addr", "show"]])
+    for cmd in cmds:
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=5,
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        m = re.search(r"\b(10\.42\.\d{1,3}\.\d{1,3})\b", out)
+        if m:
+            return m.group(1)
     try:
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
             if info[4][0].startswith(MESH_PREFIX):
                 return info[4][0]
-    except OSError:
-        pass
-    try:                                         # the WireGuard config meshd writes: "Address = 10.47.0.x/24"
-        conf = (os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "PhoenixMesh", "wg-phx.conf")
-                if platform.system() == "Windows" else "/etc/phoenix-mesh/wg-phx.conf")
-        with open(conf, encoding="utf-8") as f:
-            for line in f:
-                k, _, v = line.partition("=")
-                if k.strip() == "Address" and v.strip().startswith(MESH_PREFIX):
-                    return v.strip().split("/")[0]
     except OSError:
         pass
     return None

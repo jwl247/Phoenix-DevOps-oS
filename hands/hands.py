@@ -27,6 +27,7 @@ import http.server
 import json
 import os
 import platform
+import re
 import secrets
 import shutil
 import socket
@@ -173,8 +174,9 @@ def tool_cancel_restart():
 
 
 # ── Linux (the headless boxes: no screen, so no open_app / screenshot) ─────
-LINUX_SERVICES = ["phoenix-meshd", "helix", "phoenix-paging", "ollama", "ssh", "nftables"]
-RESTARTABLE = {"phoenix-meshd": "the mesh agent", "ollama": "Ollama (the local AI)"}
+LINUX_SERVICES = ["nebula", "helix", "phoenix-paging", "phoenix-llm", "openjarvis", "ssh", "nftables"]  # Ollama removed 2026-10-07
+RESTARTABLE = {"nebula": "the mesh agent (Nebula)", "phoenix-llm": "the local AI engine (llama.cpp)",
+               "openjarvis": "Jarvis"}
 
 
 def tool_status_linux():
@@ -254,19 +256,22 @@ else:
 
 def _name_from_hosts():
     """This PC's Phoenix name, readable without admin: the mesh agent writes
-    '10.47.0.x<TAB>name.phx' for every member into the hosts file (a public
+    '10.42.x.x<TAB>name.phx' for every member into the hosts file (a public
     file, no secrets), and this PC's own mesh address picks our line."""
     try:
         mine = {i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)}
     except OSError:
-        return None
+        mine = set()
+    ip = mesh_ip()
+    if ip:
+        mine.add(ip)
     hosts = (os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "drivers", "etc", "hosts")
              if platform.system() == "Windows" else "/etc/hosts")
     try:
         with open(hosts, encoding="utf-8", errors="replace") as f:
             for line in f:
                 parts = line.split()
-                if len(parts) >= 2 and parts[0] in mine and parts[0].startswith("10.47.0.") and parts[1].endswith(".phx"):
+                if len(parts) >= 2 and parts[0] in mine and parts[0].startswith(MESH_PREFIX) and parts[1].endswith(".phx"):
                     return parts[1][:-4]
     except OSError:
         pass
@@ -274,7 +279,7 @@ def _name_from_hosts():
 
 
 def phoenix_name():
-    """This PC's Phoenix name (precision, compaq...) from the mesh agent; else the OS name."""
+    """This PC's Phoenix name (pbmii, pbmiii...) from the mesh agent; else the OS name."""
     conf = (os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "PhoenixMesh", "device.json")
             if IS_WIN else "/etc/phoenix-mesh/device.json")
     try:
@@ -461,16 +466,30 @@ def update_loop(url, token):
         time.sleep(UPDATE_EVERY_S)
 
 
+MESH_PREFIX = "10.42."                  # Phoenix Mesh = Nebula 10.42.0.0/16 (sector3/mesh/hosts.json)
+MESH_DEV = "PhoenixMesh" if IS_WIN else "nebula1"   # the Nebula interface (sector3/mesh/phoenix_net.py)
+_IPV4_RE = re.compile(r"\b(10\.42\.\d{1,3}\.\d{1,3})\b")
+
+
 def mesh_ip():
-    """This machine's 10.47.0.x from the mesh agent's WireGuard config (root-readable on Linux)."""
-    conf = (os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "PhoenixMesh", "wg-phx.conf")
-            if IS_WIN else "/etc/phoenix-mesh/wg-phx.conf")
+    """This machine's Nebula 10.42.x address, read from the Nebula interface
+    (Linux `nebula1`, Windows adapter `PhoenixMesh`); else any local 10.42.x.
+    None while the mesh is down. (The old WireGuard mesh, 10.47.0.x, is retired.)"""
+    cmds = ([["netsh", "interface", "ipv4", "show", "addresses", f"name={MESH_DEV}"]] if IS_WIN
+            else [["ip", "-4", "-o", "addr", "show", "dev", MESH_DEV], ["ip", "-4", "-o", "addr", "show"]])
+    for cmd in cmds:
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=5,
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        m = _IPV4_RE.search(out)
+        if m:
+            return m.group(1)
     try:
-        with open(conf, encoding="utf-8") as f:
-            for line in f:
-                k, _, v = line.partition("=")
-                if k.strip() == "Address" and v.strip().startswith("10.47.0."):
-                    return v.strip().split("/")[0]
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            if info[4][0].startswith(MESH_PREFIX):
+                return info[4][0]
     except OSError:
         pass
     return None
@@ -481,7 +500,7 @@ def main():
     ap.add_argument("--port", type=int, default=8471)
     ap.add_argument("--mesh", action="store_true", help="also listen on this machine's mesh address (the headless boxes)")
     ap.add_argument("--allow-from", default="", help="comma list of mesh IPs allowed to call (the Console's PC)")
-    ap.add_argument("--update-from", default="", help="the hub's clone-pool relay, e.g. http://precision.phx:8470/pool/hands.py")
+    ap.add_argument("--update-from", default="", help="the hub's clone-pool relay, e.g. http://10.42.0.1:8470/pool/hands.py")
     a = ap.parse_args()
     allow = tuple(x.strip() for x in a.allow_from.split(",") if x.strip())
     if a.mesh and not allow:
@@ -492,9 +511,14 @@ def main():
         threading.Thread(target=update_loop, args=(a.update_from, token), daemon=True).start()
     addrs = ["127.0.0.1"]
     if a.mesh:
-        while not mesh_ip():                      # the mesh can come up after us
+        ip, waited = mesh_ip(), 0
+        while not ip:                             # Nebula can come up after us; say so instead of hanging silently
+            if waited % 300 == 0:
+                print(f"hands: waiting for the Phoenix Mesh (Nebula {MESH_DEV}, {MESH_PREFIX}x) to come up", flush=True)
             time.sleep(10)
-        addrs.append(mesh_ip())
+            waited += 10
+            ip = mesh_ip()
+        addrs.append(ip)
     for addr in addrs[:-1]:
         srv = http.server.ThreadingHTTPServer((addr, a.port), handler)
         threading.Thread(target=srv.serve_forever, daemon=True).start()

@@ -229,8 +229,9 @@ const GROUPS = [
     { label: 'Take a screenshot', tool: 'screenshot' },
   ] },
   { title: 'Services', buttons: [
-    { label: 'Restart the mesh agent', tool: 'restart_service', args: { service: 'phoenix-meshd' }, danger: true },
-    { label: 'Restart Ollama', tool: 'restart_service', args: { service: 'ollama' }, danger: true },
+    { label: 'Restart the mesh agent', tool: 'restart_service', args: { service: 'nebula' }, danger: true },
+    { label: 'Restart the local AI', tool: 'restart_service', args: { service: 'phoenix-llm' }, danger: true },
+    { label: 'Restart Jarvis', tool: 'restart_service', args: { service: 'openjarvis' }, danger: true },
   ] },
   { title: 'Power', buttons: [
     { label: 'Restart in a minute', tool: 'restart_pc', danger: true },
@@ -258,8 +259,8 @@ function renderStatus(s) {
   return [el('p', {}, `Status of ${handsMachine}`), t];
 }
 
-const SERVICE_WORDS = { 'phoenix-meshd': 'Mesh agent', helix: 'Helix', 'phoenix-paging': 'Paging manager',
-                        ollama: 'Ollama (local AI)', ssh: 'SSH', nftables: 'Firewall' };
+const SERVICE_WORDS = { nebula: 'Mesh agent (Nebula)', helix: 'Helix', 'phoenix-paging': 'Paging manager',
+                        'phoenix-llm': 'Local AI engine', openjarvis: 'Jarvis', ssh: 'SSH', nftables: 'Firewall' };
 function renderServiceList(list) {
   const t = el('table');
   for (const x of list) {

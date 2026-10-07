@@ -617,41 +617,26 @@ def make_handler(token, allow_from):
     return H
 
 
+MESH_PREFIX = "10.42."      # Phoenix Mesh = Nebula 10.42.0.0/16 (sector3/mesh/hosts.json)
+MESH_DEV = "nebula1"        # the Nebula interface on Linux (sector3/mesh/phoenix_net.py)
+
+
 def mesh_ip():
-    """Return this machine's mesh IP address.
+    """Return this machine's Phoenix Mesh (Nebula) address, 10.42.x.
 
-    Tries Tailscale first (100.x.x.x) — the active mesh transport.
-    Falls back to WireGuard config for the transition period while any
-    legacy nodes still run wg-phx.  Returns None if neither is up yet;
-    callers should retry (see startup loop in main()).
+    Read from the Nebula interface (`nebula1`); else any local 10.42.x
+    address. Returns None while the mesh is down; callers retry (see the
+    startup loop in main()). Tailscale and the WireGuard mesh (10.47.0.x)
+    are retired (JW, 2026-10-05) and no longer tried.
     """
-    # ── Tailscale (primary — 100.x.x.x) ──────────────────────────────────
-    try:
-        import subprocess as _sp
-        result = _sp.run(
-            ["tailscale", "ip", "-4"],
-            capture_output=True, text=True, timeout=3
-        )
-        addr = result.stdout.strip()
-        if addr.startswith("100."):
-            return addr
-    except FileNotFoundError:
-        pass  # tailscale binary not installed
-    except OSError:
-        pass
-    except Exception:
-        pass
-
-    # ── WireGuard fallback (legacy / transition) ──────────────────────────
-    try:
-        with open("/etc/phoenix-mesh/wg-phx.conf", encoding="utf-8") as f:
-            for line in f:
-                k, _, v = line.partition("=")
-                if k.strip() == "Address" and v.strip().startswith("10.47.0."):
-                    return v.strip().split("/")[0]
-    except OSError:
-        pass
-
+    for cmd in (["ip", "-4", "-o", "addr", "show", "dev", MESH_DEV], ["ip", "-4", "-o", "addr", "show"]):
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        m = re.search(r"\b(10\.42\.\d{1,3}\.\d{1,3})\b", out)
+        if m:
+            return m.group(1)
     return None
 
 
@@ -673,9 +658,14 @@ def main():
     if a.bind:
         addrs.append(a.bind)
     elif a.mesh:
-        while not mesh_ip():                         # the mesh can come up after us
+        ip, waited = mesh_ip(), 0
+        while not ip:                                # Nebula can come up after us; say so, don't hang silently
+            if waited % 300 == 0:
+                print(f"hlk: waiting for the Phoenix Mesh (Nebula {MESH_DEV}, {MESH_PREFIX}x) to come up", flush=True)
             time.sleep(10)
-        addrs.append(mesh_ip())
+            waited += 10
+            ip = mesh_ip()
+        addrs.append(ip)
     for addr in addrs[:-1]:
         srv = http.server.ThreadingHTTPServer((addr, a.port), handler)
         threading.Thread(target=srv.serve_forever, daemon=True).start()

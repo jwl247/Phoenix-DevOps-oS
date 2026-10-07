@@ -83,7 +83,8 @@ def http_guard_and_routes():
     st, h, body = get("/", f"precision.phx:{port}")
     assert st == 200 and b"Phoenix Net" in body
     assert "default-src 'self'" in h["Content-Security-Policy"]
-    assert get("/", "10.47.0.2")[0] == 200, "mesh address allowed"
+    assert get("/", "10.42.0.1")[0] == 200, "Nebula mesh address allowed"
+    assert get("/", "10.47.0.2")[0] == 421, "retired WireGuard mesh range refused"
     assert get("/../server.py", "localhost")[0] == 404, "no files outside the page"
     httpd.shutdown()
 

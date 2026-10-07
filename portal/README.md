@@ -22,8 +22,8 @@ hands offer (`hands/hands.py`):
 - **precision** (this PC, task `PhoenixHands`, 127.0.0.1): open Office / the
   HUD / PowerShell / Explorer, status, screenshot, restart (asks first).
 - **compaq, pbm3** (service `phoenix-hands`, on their mesh address, answer
-  ONLY 10.47.0.2 and only with their own token): status, Phoenix services,
-  restart the mesh agent or Ollama (asks first), restart (asks first).
+  ONLY 10.42.0.1 (PBMII, Nebula) and only with their own token): status, Phoenix services,
+  restart the mesh agent (Nebula) or Ollama (asks first), restart (asks first).
   Installed with `python hands/install_remote.py NAME --ssh ALIAS`; tokens in
   `~/.phoenix/hands-tokens.json` on this PC (owner-only).
 Every action lands in that machine's own log (Recent actions). One live page;
@@ -36,7 +36,8 @@ a test copy can serve `web-next/` via `PHOENIX_CONSOLE_WEB` and run with
   only the finished summary. The key never reaches a browser.
 - Listens on `127.0.0.1` and this machine's mesh address only, never the LAN
   or the internet. Firewall rule "Phoenix Portal (mesh only)": TCP 8470 from
-  10.47.0.0/24. Requests with a foreign Host header get 421.
+  the Nebula mesh, 10.42.0.0/16 (the live rule on PBMII still says 10.47.0.0/24, the retired
+  WireGuard range: needs updating). Requests with a foreign Host header get 421.
 - Answers are cached (10 s state, 30 s service checks), so it's idle-light.
 - Starts at logon: Windows task `PhoenixPortal` (pythonw, runs as the user
   because the vault is owner-only).

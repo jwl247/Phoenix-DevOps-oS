@@ -4,7 +4,7 @@
 # a worker on the ground" (docs/plans/compaq-road-test-plan.md, Phase 3).
 # Run as root:
 #   hlk-up.sh <user> <workdir> <egress-dir> <allow-from-mesh-ip>
-#   e.g. hlk-up.sh a /srv/helix-ingress/phoenix-roadtest /srv/helix-egress/phoenix-roadtest-out 10.47.0.2
+#   e.g. hlk-up.sh a /srv/helix-ingress/phoenix-roadtest /srv/helix-egress/phoenix-roadtest-out 10.42.0.1
 # Re-runnable. H.L.K runs as <user> (it reads Helix counters through
 # `sudo -n dmsetup status`, so <user> needs that). It listens on 127.0.0.1 and
 # this box's mesh address only; <allow-from> is the only remote caller.
