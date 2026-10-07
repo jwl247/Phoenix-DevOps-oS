@@ -29,10 +29,12 @@ Jerry as it develops — do not build ahead of him.
 
 ## Who talks to whom (J, 10/7 — the rule)
 - **Members talk ONLY to their ring's propcoms** (a star inside each ring, propcoms is the hub).
-- **Propcoms talks ONLY to Cpt Conductor** (= Frank), who is in charge of all 4 rings.
+- **Propcoms talks ONLY to Cpt Conductor** (Frank's promotion), who is in charge of all 4 rings.
 - **The Conductor is the ONLY comms in and out of the rings** (other machines, Helix-I/E, the mesh).
   Ring-to-ring (coms4 -> 3 -> 2 -> 1) goes through him too.
-- Fits the code: Frank5 already owns the kernel's `SharedMemoryBus`; one door = validate once there.
+- Frank was PROMOTED to Cpt Conductor, but the Conductor is NOT in the same place as Frank5 / the Genie
+  kernel (J). The kernel's `SharedMemoryBus` is not automatically the rings' bus. Where the Conductor
+  lives = open question. One door = validate once there.
 - **Today's `sector4/ring/member.py` breaks this** (fix when unparked): members relay balls to each other
   (a conveyor belt), propcoms writes straight into the next ring's doors/in, and `conductor_sync` sits
   inside each ring as a member (ask J: the Conductor's hand in the ring, or out of the rings?).
