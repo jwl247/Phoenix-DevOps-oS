@@ -16,7 +16,7 @@ you ──stage──▶ Helix-I (7701) ──▶ Frank wears the suit ──▶
 
 | Machine has | Can write a suit | Can put it in Phoenix | Can run it |
 |---|---|---|---|
-| **Full Genie** (`genie.ps1` + the kernel, e.g. PBMII) | yes | `intake <file>` | yes: `genie import`, then `genie send` |
+| **Full Genie** (`genie.ps1` + the kernel, e.g. PBMII) | yes | `genie import <file>` (does it all) | yes: same command |
 | **Cloud Genie** (`genie-cloud.ps1`, e.g. a member like JW's son) | yes | `genie intake <file>` | not on that machine: no kernel there. The owner imports it on a kernel |
 
 **Owner, before you import someone else's suit:** importing runs their code on your
@@ -84,56 +84,48 @@ python my_suit.py '{"text": "hello"}'
 ```
 You should see your JSON answer. If this fails, the kernel will fail the same way. Fix it here.
 
-## 3. Put it in Phoenix (intake)
+## 3. Import it — the only step
 
-This gives it custody: a SHA3-512 fingerprint in D1 and the bytes in R2.
-
-| Who | Where | Command |
-|---|---|---|
-| Owner (JW) | PBMII, PowerShell 7, in the folder holding the file | `intake .\my_suit.py` |
-| Member (cloud Genie) | your PC, PowerShell 7 | `genie intake .\my_suit.py` |
-
-Look for `[intake:OK] my_suit.py → clonepool v1`. Each re-intake of changed bytes makes the
-next version (v2, v3 …); the old ones stay in the ledger.
-
-## 4. Load it into the running kernel (import)
-
-Where: the machine running the full Genie kernel, in PowerShell 7 with Genie loaded.
+Where: PBMII (the machine running the full Genie kernel), PowerShell 7, in the folder holding the file.
 
 ```powershell
-genie up                       # if the kernel isn't running
-genie import my_suit.py        # clone from Phoenix → SHA3 check → closet → hot-load
-genie closet                   # it's listed, green = imported by Genie
+genie import .\my_suit.py '{"text": "hello"}'
 ```
 
-What `import` checks: the bytes are pulled from R2 and must match the SHA3-512 in custody
-before they're written. The kernel then re-hashes the closet file and refuses on any
-mismatch. A tampered file never runs.
+That one command does everything, in order:
+
+1. **Intake.** The file goes into custody (SHA3-512 in D1, bytes in R2): v1, or the next version if
+   the bytes changed. Identical bytes keep the existing version. A file flagged sensitive, or a
+   *different* file with a name already in the pool, is refused, and nothing is loaded.
+2. **Load.** The kernel pulls the bytes from R2 **straight into RAM**, checks them against the
+   custody SHA3, and wears them. They are never written to this disk (`loaded: … R2 -> RAM,
+   nothing on disk`). A tampered file never runs.
+3. **Run.** The stage you gave (or `{}`) is sent, and the suit's answer is printed.
+
+The kernel is started first if it's down. Loaded suits come back when the kernel restarts.
+Already in the pool? `genie import my_suit.py` (by name) loads and runs it without the intake.
 
 Options: `-Sector 1-4` (default 2), `-Family user|ai|network|assets|physics|system` (default
-`user`), `-Name <other name>`, `-Write` (records that the suit may write; default
-read-only). Imports are remembered and re-loaded when the kernel restarts.
+`user`), `-Name <other name>`, `-Write` (records that the suit may write; default read-only),
+`-Wait 60`, `-Channel 1-4`.
 
-## 5. Run it (send a stage)
+Members (cloud Genie, no kernel on that machine): `genie intake .\my_suit.py` puts it in Phoenix.
+The owner then runs `genie import my_suit.py` on a kernel.
 
-Same machine, same window:
+## 4. Run it again with a new stage
 
 ```powershell
-genie send my_suit '{"text": "hello"}'
+genie send my_suit '{"text": "again"}'
 ```
 
-You get the suit's answer printed as JSON. Options: `-Wait 60` (seconds), `-Channel 1-4`
-(Helix-I door 7701–7704; the answer comes out of 7805–7808).
-
-From another machine or a program, send the same JSON (with `"suit": "my_suit"`) into
-Helix-I and read Helix-E. That's what the phone node does
+From another machine or a program, send the same JSON (with `"suit": "my_suit"`) into Helix-I
+(7701–7704) and read Helix-E (7805–7808). That's what the phone node does
 (`sector3/phone-node/phoenix_phone.py`). Off the box, the kernel needs `HELIX_SOCKET_TOKEN`
 set. The client's first line is then `HXT <token>`, and the doors open on the mesh address.
 
-## 6. Change it
+## 5. Change it
 
-Edit, then repeat steps 2, 3 and 4 (test, `intake`, `genie import`). The import re-verifies
-the new version. If the kernel still answers the old way, run `genie restart`.
+Edit, test (step 2), then `genie import .\my_suit.py` again: it intakes the new version, loads it and runs it. If the kernel still answers the old way, run `genie restart`.
 
 ---
 

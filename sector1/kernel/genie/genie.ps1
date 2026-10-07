@@ -25,7 +25,10 @@
 #     unless you set them yourself. No Python edited.
 # =============================================================================
 
-Set-StrictMode -Version Latest
+# StrictMode is set INSIDE `genie` (below), not here: this file is dot-sourced
+# from the PS7 profile, and a script-scope Set-StrictMode would switch it on for
+# the user's whole session and break other tools (usys pull/.lol, 2026-10-07
+# audit CMDWALK-F01/F02, S1-F44).
 
 # ── Locations ────────────────────────────────────────────────────────────────
 # This file lives at <repo>\sector1\kernel\genie\genie.ps1
@@ -322,6 +325,50 @@ function Get-GenieSha3([byte[]]$Bytes) {
     } finally { Remove-Item $tmp -ErrorAction SilentlyContinue }
 }
 
+function Get-GenieBash {
+    if ($env:PHOENIX_BASH -and (Test-Path $env:PHOENIX_BASH)) { return $env:PHOENIX_BASH }
+    foreach ($c in @("$env:ProgramFiles\Git\bin\bash.exe", "${env:ProgramFiles(x86)}\Git\bin\bash.exe")) {
+        if ($c -and (Test-Path $c)) { return $c }
+    }
+    $b = Get-Command bash -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($b) { return $b.Source }
+    return $null
+}
+
+function ConvertTo-GenieBashPath([string]$p) {
+    # E:\x\y or E:/x/y -> /e/x/y for Git Bash; Linux paths pass through.
+    if ($p -match '^([A-Za-z]):[\\/](.*)$') { return '/' + $Matches[1].ToLowerInvariant() + '/' + ($Matches[2] -replace '\\', '/') }
+    return $p
+}
+
+function Invoke-GenieIntakeLocal([string]$Path) {
+    # IN: the same Sector 2 pipeline as `intake <file>`, run unattended. With no stdin,
+    # intake takes its safe defaults: a sensitive file is refused, an identical file
+    # keeps the version already in the pool, a different file with the same name is
+    # refused. Afterwards custody must hold THESE bytes, or nothing is loaded.
+    $full = (Resolve-Path -LiteralPath $Path).Path
+    $bash = Get-GenieBash
+    if (-not $bash) { throw 'bash not found (Windows: install Git for Windows, or set PHOENIX_BASH)' }
+    $intakeSh = Join-Path $script:GenieRepo 'sector2/package-handler/intake.sh'
+    if (-not (Test-Path $intakeSh)) { throw "intake.sh not found: $intakeSh" }
+    $prevPool = $env:CLONEPOOL_DIR
+    if ($env:CLONEPOOL_DIR) { $env:CLONEPOOL_DIR = ConvertTo-GenieBashPath $env:CLONEPOOL_DIR }
+    try {
+        $out = @($null | & $bash (ConvertTo-GenieBashPath $intakeSh) (ConvertTo-GenieBashPath $full) 2>&1 | ForEach-Object { "$_" })
+    } finally { $env:CLONEPOOL_DIR = $prevPool }
+    $out | Where-Object { $_ -match '\[intake:' } | ForEach-Object { G-Info $_.Trim() }
+    $name = [System.IO.Path]::GetFileName($full)
+    $row = Resolve-GenieRow $name
+    $mine = Get-GenieSha3 ([System.IO.File]::ReadAllBytes($full))
+    $theirs = if ($row.PSObject.Properties['hash_sha3']) { ([string]$row.hash_sha3).ToLowerInvariant() } else { '' }
+    if ($mine -ne $theirs) {
+        $why = ($out | Where-Object { $_ -match '\[intake:(CANCEL|STOP|ERROR|FAIL)' } | Select-Object -First 1)
+        throw ("the pool's $name is not this file, so nothing was loaded." +
+               $(if ($why) { " intake said: $($why.Trim())" } else { " Run: intake $Path   to see why." }))
+    }
+    return $name
+}
+
 function Resolve-GenieRow([string]$Id) {
     # Exact hex_id wins; a bare name must match exactly one row (no silent guessing).
     $q = [uri]::EscapeDataString($Id)
@@ -502,6 +549,7 @@ function genie {
         [ValidateRange(1, 4)][int]$Channel = 1,
         [ValidateRange(1, 600)][int]$Wait = 30
     )
+    Set-StrictMode -Version Latest   # this call and the helpers it runs only
     try {
         switch ($Command) {
             'up'      { [void](Start-GenieKernel) }
@@ -528,23 +576,31 @@ function genie {
                 }
             }
             'import'  {
-                if (-not $Args2) { throw 'usage: genie import <name|hex_id> [-Sector 1-4] [-Family user] [-Type PYTHON] [-Name suit] [-Write]' }
-                if ($Name -and $Args2.Count -gt 1) { throw '-Name only works with a single import' }
-                if (-not (Test-GenieHealth)) { throw 'kernel is down — genie up first' }
-                foreach ($id in $Args2) {
+                # A suit has ONE step: import. A local file is intaked (custody, R2), then the
+                # kernel LOADS it: pulled from R2 straight into RAM, SHA3-checked against custody,
+                # never written to this disk. Then it runs once and its answer is printed.
+                #   genie import .\my_suit.py ['{"stage": "json"}']      genie import my_suit.py
+                if (-not $Args2) { throw 'usage: genie import <file|name|hex_id> [''{json stage}''] [-Sector 1-4] [-Family user] [-Type PYTHON] [-Name suit] [-Write]' }
+                $stageJson = (@($Args2 | Where-Object { $_.TrimStart().StartsWith('{') }) -join ' ')
+                $ids = @($Args2 | Where-Object { -not $_.TrimStart().StartsWith('{') })
+                if ($Name -and $ids.Count -gt 1) { throw '-Name only works with a single import' }
+                if (-not (Test-GenieHealth)) { G-Info 'kernel is down — starting it'; Start-GenieKernel }
+                if (-not (Test-GenieHealth)) { throw 'kernel did not come up — see genie log' }
+                foreach ($id in $ids) {
                     try {
-                        # In-RAM import: resolve the clonepool row (metadata only — NO byte download here),
-                        # hand the kernel the hex + custody SHA3, and it pulls from R2 + verifies + execs in
-                        # memory. The bytes never touch this machine's disk. Custody is mandatory: no -Force.
+                        if (Test-Path -LiteralPath $id -PathType Leaf) { $id = Invoke-GenieIntakeLocal $id }
                         $row = Resolve-GenieRow $id
                         $body = @{ hex = $row.hex_id; sector = $Sector; family = $Family; write = [bool]$Write }
                         if ($row.PSObject.Properties['hash_sha3'] -and $row.hash_sha3) { $body.sha3_512 = ([string]$row.hash_sha3).ToLowerInvariant() }
                         if ($Type) { $body.suit_type = $Type }
                         if ($Name) { $body.name = $Name } elseif ($row.name) { $body.name = ([string]$row.name) }
                         $r = Invoke-GenieControl POST '/suits' $body
-                        $where = if ($r.in_ram) { 'IN-RAM (nothing on disk)' } else { 'closet' }
-                        G-Ok ("imported: {0}  [{1}] sector {2} ring {3}  {4}  closet now {5} suits" -f $r.name, $r.suit_type, $r.sector, $r.ring_pos,
-                              $where, $r.suits_in_closet)
+                        if (-not $r.in_ram) { G-Warn "$($r.name) was written to the closet on disk, not loaded in RAM" }
+                        G-Ok ("loaded: {0}  [{1}] sector {2} ring {3}  {4}  closet now {5} suits" -f $r.name, $r.suit_type, $r.sector, $r.ring_pos,
+                              $(if ($r.in_ram) { 'R2 -> RAM, nothing on disk' } else { 'closet (disk)' }), $r.suits_in_closet)
+                        $suitName = [System.IO.Path]::GetFileNameWithoutExtension([string]$r.name)
+                        $ans = Send-GenieStage -Suit $suitName -Json $stageJson -Channel $Channel -Wait $Wait
+                        $ans | ConvertTo-Json -Depth 10 | Write-Host
                     } catch { G-Err "$id — $($_.Exception.Message)" }
                 }
             }
@@ -592,10 +648,11 @@ function genie {
   genie doctor                     python, kernel, sha3, auth, worker, kernel health
   genie find <term>                search the clonepool (D1)
   genie clone <name|hex> [-To d]   pull from R2, SHA3-512 verified before write
-  genie import <name|hex> [...]    clone + verify + hot-load into the RUNNING kernel's closet
+  genie import <file|name> ['{json}']  THE one step for a suit: a local file is intaked, then
+                                   loaded R2 -> RAM (SHA3-checked, never on disk) and run once
                                    [-Sector 1-4] [-Family user] [-Type PYTHON] [-Name s] [-Write]
   genie closet                     every suit in the live closet (green = imported by Genie)
-  genie send <suit> ['{json}']      send a stage to an imported suit, print its answer [-Channel 1-4] [-Wait s]
+  genie send <suit> ['{json}']      run an already-loaded suit again with a new stage [-Channel 1-4] [-Wait s]
   genie custody                    audit clonepool rows with no SHA3 baseline; writes a reviewed re-intake script
   genie profile                    load Genie (and auto-boot) in every PS7 window
 '@ | Write-Host

@@ -428,6 +428,8 @@ function Invoke-UsysStatus {
     foreach ($var in @('PHOENIX_AUTH', 'PHOENIX_WORKER_URL', 'CLONEPOOL_DIR', 'PHOENIX_INTAKE', 'PHOENIX_ROOT')) {
         $val = [Environment]::GetEnvironmentVariable($var, 'User')
         if (-not $val) { $val = [Environment]::GetEnvironmentVariable($var, 'Process') }
+        # Secrets: say whether they're set, never print them (2026-10-07 audit S21/XCUT-S17/CMDWALK-S01)
+        if ($val -and $var -eq 'PHOENIX_AUTH') { $val = "set ($($val.Length) chars, hidden)" }
         Write-Host "    $var : $(if ($val) { $val } else { '(not set)' })"
     }
     Write-Host ''
@@ -2259,9 +2261,12 @@ function Show-UsysHelp {
 }
 
 # =============================================================================
-# MAIN DISPATCHER — global function exported on dot-source
+# MAIN DISPATCHER. On dot-source (the profile) it is exported as `usys`; as a
+# PATH script it is called directly. It is never left behind as a global function
+# whose script-scope helpers are gone: that broke every second `usys` in a window
+# opened without the profile (2026-10-07 audit XCUT-F35).
 # =============================================================================
-function global:usys {
+function Invoke-UsysMain {
     [CmdletBinding()]
     param(
         [Parameter(Position = 0)]
@@ -2580,7 +2585,7 @@ Set-Alias -Name phx -Value usys -Scope Global -Force -ErrorAction SilentlyContin
 # =============================================================================
 # COMMAND: download — Invoke-WebRequest wrapper that auto-intakes the result
 # =============================================================================
-function global:Invoke-UsysDownload {
+function Invoke-UsysDownload {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory, Position = 0)][string]$Uri,
@@ -2605,7 +2610,7 @@ function global:Invoke-UsysDownload {
         if (Invoke-UsysIntakeFile -Path $OutFile) { Write-UsysOk "Intaked: $OutFile" }
     }
 }
-Set-Alias -Name usys-download -Value Invoke-UsysDownload -Scope Global -Force -ErrorAction SilentlyContinue
+
 
 # =============================================================================
 # COMMAND: watch — filesystem watcher on Downloads\ that auto-intakes new files
@@ -2761,14 +2766,21 @@ function Invoke-UsysCloneOut {
     $env:CLONEPOOL_DIR = ConvertTo-GitBashPath $env:CLONEPOOL_DIR
     try { & $bash (ConvertTo-GitBashPath $cloneSh) @CloneArgs } finally { $env:CLONEPOOL_DIR = $prevPool }
 }
-function global:clone { Invoke-UsysCloneOut -CloneArgs $args }
-Set-Alias -Name phx-clone -Value clone -Scope Global -Force -ErrorAction SilentlyContinue
+function Invoke-UsysCloneCmd { Invoke-UsysCloneOut -CloneArgs $args }
 
-# Direct script invocation (shim mode)
-if ($MyInvocation.InvocationName -ne '.' -and $MyInvocation.Line -notmatch '^\s*\.\s') {
+$__usysDotSourced = ($MyInvocation.InvocationName -eq '.' -or $MyInvocation.Line -match '^\s*\.\s')
+if ($__usysDotSourced) {
+    # Profile load: everything above now lives in the caller's (global) scope.
+    Set-Alias -Name usys          -Value Invoke-UsysMain     -Scope Global -Force
+    Set-Alias -Name usys-download -Value Invoke-UsysDownload -Scope Global -Force -ErrorAction SilentlyContinue
+    Set-Alias -Name clone         -Value Invoke-UsysCloneCmd -Scope Global -Force -ErrorAction SilentlyContinue
+    Set-Alias -Name phx-clone     -Value Invoke-UsysCloneCmd -Scope Global -Force -ErrorAction SilentlyContinue
+} else {
+    # Direct script invocation (shim mode): run once, define nothing global.
     $cmd  = $args[0]
     $rest = @()
     if ($args.Count -gt 1) { $rest = $args[1..($args.Count - 1)] }
     if (-not $cmd) { Show-UsysHelp; return }
-    usys -Command $cmd -Rest $rest
+    Invoke-UsysMain -Command $cmd -Rest $rest
 }
+Remove-Variable __usysDotSourced -ErrorAction SilentlyContinue
