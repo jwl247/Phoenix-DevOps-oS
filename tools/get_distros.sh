@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 # ============================================================
 # get_distros.sh — Download top 10 Linux ISOs to Ventoy
-# Usage: sudo bash get_distros.sh [destination]
-# Default destination: /opt/ventoy
+# Usage: sudo bash get_distros.sh <destination> --yes
+# Nothing downloads without both (S34OPS-F51).
 # ============================================================
 
-DEST="${1:-/opt/ventoy}"
+# It downloads ~10 Linux ISOs (tens of GB). Never on a bare run: it needs a
+# destination AND --yes (2026-10-07 audit S34OPS-F51 — a no-arg run started
+# downloading into C:\Program Files\Git\opt\ventoy on Windows).
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || $# -lt 2 || "${2:-}" != "--yes" ]]; then
+    echo "Usage: get_distros <destination> --yes"
+    echo "  Downloads ~10 Linux ISOs (tens of GB) into <destination> for Ventoy."
+    echo "  Nothing is downloaded without both the destination and --yes."
+    exit 0
+fi
+command -v wget >/dev/null 2>&1 || { echo "wget not found - install it first"; exit 1; }
+DEST="$1"
 LOG="$DEST/download.log"
 FAIL=()
 

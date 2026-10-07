@@ -1440,7 +1440,27 @@ intake_clone() {
       return 1
       ;;
     no_baseline)
-      echo "[intake:WARN] No integrity baseline yet for '${name}' — cloning unverified"
+      # Never hand out bytes nobody can vouch for (2026-10-07 audit CMDWALK-S03).
+      # Offline: check against the SHA-256 the pool's own sidecar recorded at intake.
+      local side_sha="" have_sha=""
+      local side; side="$(dirname "${target}")/${hex}.sidecar.json"
+      [[ -f "${side}" ]] && side_sha=$(grep -o '"sha256"[[:space:]]*:[[:space:]]*"[0-9a-f]*"' "${side}" | head -1 | grep -o '[0-9a-f]\{64\}' || true)
+      [[ -n "${side_sha}" ]] && have_sha=$(sha256sum "${target}" | awk '{print $1}')
+      if [[ "${WORKER_OFFLINE}" == "1" && -n "${side_sha}" && "${side_sha}" == "${have_sha}" ]]; then
+        echo "[intake:OK] Offline: checked against this pool's own intake record (sha256), not D1"
+      elif [[ "${WORKER_OFFLINE}" == "1" && -n "${side_sha}" ]]; then
+        echo "[intake:STOP] '${name}' does not match this pool's own intake record — refusing (offline, can't ask D1)"
+        log "WARN" "clone out BLOCKED (offline, sidecar sha256 mismatch): ${name}"
+        return 1
+      elif [[ "${INTAKE_UNVERIFIED_OK:-0}" == "1" ]]; then
+        echo "[intake:WARN] No integrity baseline for '${name}' — cloning UNVERIFIED because INTAKE_UNVERIFIED_OK=1"
+        log "WARN" "clone out UNVERIFIED by request: ${name}"
+      else
+        echo "[intake:STOP] No integrity baseline for '${name}' — nothing to check it against, so it was not cloned."
+        echo "              Re-intake it to record one, or set INTAKE_UNVERIFIED_OK=1 to take it anyway."
+        log "WARN" "clone out BLOCKED (no baseline): ${name}"
+        return 1
+      fi
       ;;
     valid)
       echo "[intake:OK] Integrity verified — matches D1 baseline"

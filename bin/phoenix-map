@@ -159,6 +159,15 @@ def render(name: str, data: dict) -> None:
 
 
 def main(argv) -> int:
+    if "-h" in argv or "--help" in argv:
+        print("usage: phoenix-map [host] [--json]\n"
+              "  Read-only map of what Phoenix runs where: this PC, then every Linux host in\n"
+              "  sector3/mesh/hosts.json over SSH. Name one host to probe only that one.")
+        return 0
+    unknown = [a for a in argv[1:] if a.startswith("-") and a != "--json"]
+    if unknown:
+        print(f"phoenix-map: unknown option {unknown[0]} (try --help)")
+        return 2
     want_json = "--json" in argv
     args = [a for a in argv[1:] if not a.startswith("--")]
     hs = hosts()

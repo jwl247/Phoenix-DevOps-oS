@@ -31,8 +31,9 @@ pin() {  # pin <file> <name-in-pins.sha256>
 }
 pin "$SRC" openjarvis-src.tar.gz
 pin "$MODEL" llama3.2-3b-q4km.gguf
-ENGINE_PIN=$(awk '$2 ~ /^llama-server-/ {print $2}' "$HERE/pins.sha256" | while read -r n; do
-  w=$(awk -v n="$n" '$2==n {print $1}' "$HERE/pins.sha256"); [[ "$(sha256sum "$ENGINE" | awk '{print $1}')" == "$w" ]] && echo "$n"; done | head -1)
+# which engine build is this? (no pipeline/&& tricks: a non-match must not trip set -e silently)
+ENGINE_SHA=$(sha256sum "$ENGINE" | awk '{print $1}')
+ENGINE_PIN=$(awk -v h="$ENGINE_SHA" '$1==h && $2 ~ /^llama-server-/ {print $2; exit}' "$HERE/pins.sha256")
 [[ -n "$ENGINE_PIN" ]] || { echo "PIN MISMATCH: $ENGINE matches no llama-server-* pin - refusing"; exit 1; }
 echo "pin ok: $ENGINE_PIN"
 if [[ "$ENGINE_PIN" == *-avx ]] && ! grep -qw avx /proc/cpuinfo; then
@@ -67,6 +68,7 @@ dpkg -s python3-venv >/dev/null 2>&1 || DEBIAN_FRONTEND=noninteractive apt-get -
 [[ -x $O/venv/bin/python ]] || python3 -m venv $O/venv
 $O/venv/bin/pip install -q "$O/src[server]"
 $O/venv/bin/pip freeze > $O/installed-requirements.txt          # what actually got installed, for the record
+chown -R root:root $O/venv $O/src                               # Jarvis can't rewrite his own code (JARVIS-S08)
 echo "deps recorded: $O/installed-requirements.txt sha256 $(sha256sum $O/installed-requirements.txt | cut -c1-16)"
 
 install -m 644 "$HERE/jarvis_identity.md" $O/jarvis_identity.md

@@ -1,3 +1,5 @@
 fd4f17efad5c3bd1f6ae5612fc56b358eea5e9c3dc794774da54d14cbc0f8007  openjarvis-src.tar.gz
 dde5aa3fc5ffc17176b5e8bdc82f587b24b2678c6c66101bf7da77af9f7ccdff  llama3.2-3b-q4km.gguf
 09b36dba235fcac180efff18514da7038e65d8e5b9e4aefa59238468abfdec12  llama.cpp-v0.6.0-src.tar.gz
+4a3dd64f1c7ca65e9bc6a3b8f091d9aaccfe2623701b422b44fbb4dfc762c8d0  llama-server-avx
+dc99f51efdee0ec62f1b3b101585622c0e7dc7c767d1bda0793035e02242d88a  llama-server-baseline
