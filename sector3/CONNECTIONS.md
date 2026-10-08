@@ -85,7 +85,7 @@ Verify against current code before trusting a specific line number.
 - `sector3/hlk/eval_models.py` → `sector3/hlk/hlk.py` (uses its real decision path); `sector3/hlk/test_hlk.py` → `sector3/hlk/hlk.py`.
 
 ## Known issues (verified, not guessed)
-- `romeo_juliet/romeo.py` and `juliet.py` crash at start on a machine with no `~/.catalog/` (`sqlite3.OperationalError: unable to open database file`) — neither creates the folder before `catalog_init()`. PBMII has it; a fresh box (phone node, compaq) does not. Fix: `os.makedirs(os.path.dirname(CATALOG_DB), exist_ok=True)` before the connect (found 2026-10-03, not yet applied).
+- `romeo_juliet/romeo.py` and `juliet.py` crash at start on a machine with no `~/.catalog/` (`sqlite3.OperationalError: unable to open database file`) — neither creates the folder before `catalog_init()`. PBMII has it; a fresh box (phone node, compaq) does not. Fix: `os.makedirs(os.path.dirname(CATALOG_DB), exist_ok=True)` before the connect (found 2026-10-03; **fixed 2026-10-07**, tested with an empty home).
 - Helix-E (`sector1/helix-lightning/helixe.py`) and Juliet both describe themselves as THE output-translation boundary — two egress paths claim the same rule. Which owns it is Jerry's call (2026-10-03).
 - **`sector3/workers/packages-worker/` is a stale duplicate.** The live worker is
   `sector2/package-handler/worker/index.js`. It shares the name `packages-worker` and has no

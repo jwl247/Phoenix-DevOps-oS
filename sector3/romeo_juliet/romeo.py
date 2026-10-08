@@ -60,6 +60,8 @@ log = logging.getLogger("romeo")
 
 # ── Catalog ──────────────────────────────────────────────────
 def catalog_init():
+    # a fresh box has no ~/.catalog yet: sqlite won't create the folder (crashed at start, found 2026-10-03)
+    os.makedirs(os.path.dirname(CATALOG_DB), exist_ok=True)
     conn = sqlite3.connect(CATALOG_DB)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS romeo_ingress (
