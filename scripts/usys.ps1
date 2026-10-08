@@ -2081,6 +2081,17 @@ function Invoke-UsysKernel {
     genie @KernelArgs
 }
 
+function ConvertTo-UsysStage([string[]]$Words) {
+    # What follows the suit becomes its stage. Valid JSON passes as-is; anything else (plain words, or
+    # JSON whose quotes Windows stripped on the way through usys.cmd - seen 2026-10-08) becomes
+    # {"text": "..."}, so `usys import jarvis.py say hi to Laurie` just works.
+    $joined = (@($Words) -join ' ').Trim()
+    if (-not $joined) { return @() }
+    try { $null = $joined | ConvertFrom-Json -ErrorAction Stop; if ($joined.StartsWith('{')) { return @($joined) } } catch {}
+    $text = $joined -replace '^\{\s*', '' -replace '\s*\}$', '' -replace '^\s*"?text"?\s*:\s*', ''
+    return @((@{ text = $text.Trim(' ', '"') } | ConvertTo-Json -Compress))
+}
+
 function Test-UsysSuitFile([string]$Path) {
     return $script:UsysSuitExt -contains ([System.IO.Path]::GetExtension($Path)).ToLowerInvariant()
 }
@@ -2616,8 +2627,8 @@ function Invoke-UsysMain {
         'intakes' { Invoke-UsysIntakeSuit -Path ($Rest | Select-Object -First 1) }
         'intakec' { Invoke-UsysIntakePool -Path ($Rest | Select-Object -First 1) }
         'import'  {
-            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys import <suit name | file>   (R2 -> memory -> run, never on disk)'; return }
-            Invoke-UsysKernel (@('import') + $Rest)
+            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys import <suit name | file> [words or {json}]   (R2 -> memory -> run, never on disk)'; return }
+            Invoke-UsysKernel (@('import', $Rest[0]) + @(ConvertTo-UsysStage ($Rest | Select-Object -Skip 1)))
         }
         'get'     {
             if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys get <name>   (a hash-checked copy into this folder)'; return }
