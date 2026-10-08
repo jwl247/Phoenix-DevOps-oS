@@ -70,6 +70,10 @@ was built by Jerry in Meld from separate parts — the Helix VRAM/cache (from th
 malloc/open/read/write with pointers and fds → Helix's language and back; `heix/kernel/core/helix_translator.py`),
 the AgnosticLayer (its own file, `heix/kernel/core/agnostic_layer.py`), and HelixSync (Syncthing, ported
 from `heix_syncthing_module.js`) — all in `archive/fossil-consolidation-20260819-210541/SECTOR4/heix/`.
+The only Helix part in his "Helix" block is her **tiered eviction** — and that block is really
+**the STORAGE SYSTEM (J, 10/7)**: tiers + eviction ladder + compression + virtual RAM + file cache. Keep the
+names apart: **Helix** = two strands side by side, the Dandelion, rungs, quad; **the storage system** = the
+tiers (T1/T2/T3, color coded), eviction down, prefetch up.
 Take those out and what is left is **the assembler**: start the parts, wire them, give apps one door
 (5 calls). That is the Conductor's job. Two false claims in what is left, not to carry forward: it prints
 "Core 3, Real-time priority" but sets neither; it prints "ALL TESTS PASSED" without checking anything.
