@@ -2808,6 +2808,10 @@ if ($__usysDotSourced) {
     $__al = Join-Path $PSScriptRoot 'phoenix-aliases.ps1'
     if (Test-Path $__al) { . $__al }
     Remove-Variable __al -ErrorAction SilentlyContinue
+    # "Phoenix Commands.txt" on the Desktop, rebuilt from the repo when it changed (scripts\phoenix-commands-sheet.ps1)
+    $__cs = Join-Path $PSScriptRoot 'phoenix-commands-sheet.ps1'
+    if (Test-Path $__cs) { . $__cs }
+    Remove-Variable __cs -ErrorAction SilentlyContinue
 } else {
     # Direct script invocation (shim mode): run once, define nothing global.
     $cmd  = $args[0]

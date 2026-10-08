@@ -1,4 +1,4 @@
-# Phoenix Commands — what each one does (as of 2026-10-07)
+# Phoenix Commands — what each one does (as of 2026-10-07 night)
 
 Global = works from any folder in any terminal. On this PC: `F:\Phoenix\Phoenix-DevOps-oS\bin`,
 `...\scripts` and `C:\Users\jwlef\.usys\bin` are on PATH (`.usys\bin` = forwarders that run the repo's
@@ -19,7 +19,7 @@ Status: ✅ tested working · ❌ tested broken · ⚠ works but wrong/confusing
 ## Clone pool — IN
 | Command | Does | Status |
 |---|---|---|
-| `intake <file> [backend] [notes]` | File into the pool (PS7: `scripts\intake.ps1` → `intake.sh`). Version comes from the D1 ledger; a different file with the same name is refused unless `INTAKE_SAME_NAME_OK=1` | ✅ |
+| `intake <file> [backend] [notes]` | File into the pool (PS7: `scripts\intake.ps1` → `intake.sh`). Version comes from the D1 ledger; a DIFFERENT file whose name is taken gets a longer name (`folder/name`, then `parent/folder/name`) — never refused or merged (2026-10-07) | ✅ |
 | `intake <folder>/` | Whole folder into the pool, with preview. Each re-intake is a new snapshot (was: stuck at v1, overwritten) | ✅ |
 | `intake backend <pkg> <be> <ver>` | Register a package installed by a backend (winget, apt…) | ✅ |
 | `intake.cmd <file>` (repo `bin\intake.cmd`) | Same as `intake`, from CMD | ✅ 2026-10-07 |
@@ -205,3 +205,15 @@ The setup for a second person is in its `README.md`.
 | `python sector1/helix/test_helix_vram.py` | Helix tiers, Dandelion, Strand B: 11 checks | — |
 | `node tentative-wares/peer-review/test/sha3.test.mjs` · `webauthn.test.mjs` · `discord.test.mjs` · `python .../schema.test.py` | Peer Review blocks: 12 · 12 · 22 · 47 | — |
 | `python portal/test_server.py` | Console summary logic + HTTP guard: 4 checks | — |
+
+## Added 2026-10-07 (night)
+| Command | Does | Status |
+|---|---|---|
+| `bash scripts/pool-bundles.sh [sector1..4 \| system]` | The repo section of the pool: `phoenix-sector1..4.tar` + `phoenix-system.tar` (the complete Phoenix). Same files = same bytes, so a rerun is "unchanged", not a new version | ✅ |
+| `python scripts/heal_check.py --box pbmiii \| pbmii` | Healing step 1, CHECK ONLY: what's deployed vs the repo vs the pool; reference + drift report in `docs/heal/`. Changes nothing | ✅ pbmiii |
+| HUD tray **Suit look-up…** / Console **SUITS** | Find a suit by name or what it does, read its code (custody-checked), Import (= `genie import`) | ✅ |
+| HUD tray **Hide the eye / Show the eye** | Eye out of the way; it also hides by itself behind full-screen windows | ✅ |
+| `python sector1/helix/bench_three.py [--only x] [--hold s] [--check]` | Storage bench: Frank, New Horizon, OG, Freewheeling, OG-original — same test, every answer checked | ✅ |
+| `python sector1/helix/bench_routers.py [--only x] [--check]` | Router bench: Capulet, Slim, FrankenHelix — msgs/s, delay, lost | ✅ |
+| `python sector4/ring/bench_ring.py` | Ring baseline: one ball at a time + a burst, in a scratch home (never a breach drive) | ✅ |
+| `ssh pbm-compaq` | The Compaq (user a; same key as `pb3`) | ✅ |
