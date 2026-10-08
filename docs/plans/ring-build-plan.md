@@ -88,6 +88,15 @@ Take those out and what is left is **the assembler**: start the parts, wire them
 **Captured, not designed (J, 10/7): "we can make the helix kernel pure C, a namespace kernel, and go with
 it — I'm not being sarcastic."** Talk it through with Jerry before anything is built.
 
+**Useful finds in the Gemini-era heix archive (10/7, `archive/fossil-consolidation-20260819-210541/SECTOR4/heix/`;
+much of that folder is hollow — Jerry: "some of this is Gemini hallucinations"):** (1) `GemIIIDev J4 Approved.c`
+("Encompass") = a working kernel-module skeleton that shares ONE kernel buffer with every process via
+`/dev/encompass` + mmap — the pattern for a kernel-level shared memory bus (members as separate processes,
+or the Conductor's bee line to the kernel); needs error checks + the 6.4+ class_create fix. (2) `libhelix`'s
+register / declare_hot / declare_cold / mem_sync — apps telling Helix what they will need (prefetch hints),
+already carried into `sector1/kernels/libhelix/`. Hollow, do not build on: `helix_kernel.c` (store() is a
+comment; mallocs 16 GB unused). The working pure-C Helix is `sector1/kernels/` (dm_helix.c, helix_kmod.c).
+
 ## 3. The journal (the motor)
 - One append-only journal, kept by the Conductor.
 - An entry = a job: `{seq, at, who, kind, args, prev_hash}`. Writing it IS the request; the Conductor
