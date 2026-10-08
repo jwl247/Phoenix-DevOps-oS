@@ -92,13 +92,15 @@ public partial class MainWindow : Window
         // CLAUDE CODE pane height comes from its XAML margins now — it
         // stretches to fill the right column between LIVE MONITOR and H.L.K-10.
 
-        // Fill the work area, not the whole screen — at full screen height the
-        // bottom-anchored H.L.K-10 panel's input row sat behind the taskbar.
+        // As wide as the button field, Jarvis under it (Jerry 10/8). Width + height come from the
+        // XAML (SizeToContent); it opens at the top-left of the work area, clear of the taskbar.
         var work = SystemParameters.WorkArea;
-        Left = work.Left;
-        Top = work.Top;
-        Width = work.Width;
-        Height = work.Height;
+        Left = work.Left + 16;
+        Top = work.Top + 16;
+        JarvisLog.Text = HudProfile.Current.Jarvis
+            ? "Ask Jarvis anything below. He answers through his gate on pbmIII."
+            : "Jarvis isn't part of this edition.";
+        JarvisInput.IsEnabled = JarvisAskButton.IsEnabled = HudProfile.Current.Jarvis;
 
         // Same reason dashboard/terminal-pty.js's cleanEnv() strips these:
         // if Hud.exe itself ever gets launched from inside a running Claude
@@ -146,6 +148,26 @@ public partial class MainWindow : Window
     private void Files_Click(object sender, RoutedEventArgs e) => ConsoleActions.OpenExplorer();
     private void Terminal_Click(object sender, RoutedEventArgs e) => ConsoleActions.OpenTerminal();
     private void Commands_Click(object sender, RoutedEventArgs e) => CheatSheet.Open();
+
+    // ---- Jarvis, under the buttons: the same gate the eye and `jarvis` use (HudOverlay.AskJarvisAsync)
+    private void JarvisInput_KeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) _ = AskJarvis(); }
+    private void JarvisAsk_Click(object sender, RoutedEventArgs e) => _ = AskJarvis();
+
+    private async Task AskJarvis()
+    {
+        var q = JarvisInput.Text.Trim();
+        if (q.Length == 0 || !JarvisAskButton.IsEnabled) return;
+        JarvisInput.Clear();
+        JarvisInput.IsEnabled = JarvisAskButton.IsEnabled = false;
+        JarvisLog.AppendText($"\n\n[YOU] {q}\n[JARVIS] thinking…");
+        JarvisLog.ScrollToEnd();
+        var (ok, text) = await HudOverlay.AskJarvisAsync(q);
+        JarvisLog.Text = JarvisLog.Text[..JarvisLog.Text.LastIndexOf("[JARVIS] thinking…", StringComparison.Ordinal)]
+                         + (ok ? $"[JARVIS] {text}" : $"[JARVIS couldn't answer] {text}");
+        JarvisLog.ScrollToEnd();
+        JarvisInput.IsEnabled = JarvisAskButton.IsEnabled = true;
+        JarvisInput.Focus();
+    }
 
     /// <summary>The easy buttons: the Tag is the usys verb. Anything it needs is asked for first.</summary>
     private void Easy_Click(object sender, RoutedEventArgs e)
