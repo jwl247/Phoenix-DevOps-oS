@@ -3,6 +3,9 @@
 **Status: PLAN ONLY. Not being built (Jerry 2026-10-07: "make a build plan its not getting built yet,
 prefetch needs worked out").** Prefetch (§6) is the open piece and gates step 3 onward.
 
+**The general idea (J, 10/7): "basically we build Helix into 3 PCs" — not written in stone.** One Helix
+across the three sisters (PBMII, the Compaq, the HP), with everything below as the working draft of how.
+
 Sources: Jerry's ring sketch + talk (`docs/plans/ring-topology-sketch-2026-10-07.md`), his four
 configuration pages (`press-room/1.jpg`-`4.jpg`), the Music ring (a guide only), `sector4/ring/`
 (built + tested 10/7 morning, parked), the kernel's `SharedMemoryBus` (`sector1/helix-lightning/franken5.py`).
