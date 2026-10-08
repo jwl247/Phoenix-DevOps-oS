@@ -61,6 +61,7 @@ Status: ✅ tested working · ❌ tested broken · ⚠ works but wrong/confusing
 | `usys suite-promote <name> [-Desc x]` | Wrap an intaked file as a runnable suite | — |
 | `usys suite-list` / `list-suites` | List runnable suites | — |
 | `usys suite-trust <name>[@ver]` | Trust-stamp a suite on this machine | — |
+| `usys app-intake <folder> [-Name n] [-Entry exe]` | Intake a program or game as a suite (one bundle + a run card); `usys run <name>` then unpacks it from the pool, sets it up and starts it, no installer. GOG recognized; others name the exe with `-Entry` | Verified 10/8 (Cold Waters) |
 | `usys load …` | Load a suite (see `usys help`) | — |
 
 ## Distros (Linux VMs via QEMU — no WSL)
