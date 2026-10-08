@@ -60,6 +60,12 @@ NAMES = {"frank": "Frank's storage system (franken.py)", "nh": "New Horizon", "o
 def peak_memory_mb():
     """Peak resident memory of THIS process, MB (Windows: PeakWorkingSetSize; Linux: VmHWM)."""
     try:
+        import psutil                                   # the ctypes path below read 0.0 on Windows (10/7)
+        mi = psutil.Process().memory_info()
+        return round(getattr(mi, "peak_wset", 0) / 2**20, 1) or round(mi.rss / 2**20, 1)
+    except Exception:
+        pass
+    try:
         if os.name == "nt":
             import ctypes
             from ctypes import wintypes
@@ -228,6 +234,8 @@ def child(a):
                 res = {"contender": a.one, "check": "PASS" if bad == 0 else f"FAIL ({bad}/10 wrong or missing)"}
             else:
                 res = asyncio.run(run_one(a.one, path, a))
+                if a.hold:
+                    time.sleep(a.hold)
     except Exception as e:
         res = {"contender": a.one, "error": f"{type(e).__name__}: {e}"}
     print("RESULT " + json.dumps(res))
@@ -242,6 +250,7 @@ def main():
     p.add_argument("--data", choices=["random", "text"], default="random")
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--check", action="store_true", help="10 items each, PASS/FAIL only")
+    p.add_argument("--hold", type=float, default=0, help="seconds each contender stays alive after its run (to read it in Process Explorer)")
     p.add_argument("--out", default=str(HERE / f"bench_three-{time.strftime('%Y%m%d-%H%M%S')}.json"))
     for k, v in DEFAULTS.items():
         p.add_argument(f"--{k}", default=str(v), help=f"path to {NAMES[k]}")
@@ -256,7 +265,7 @@ def main():
         print(f"\n== {NAMES[name]} ...", flush=True)
         cmd = [sys.executable, str(Path(__file__).resolve()), "--one", name,
                "--items", str(a.items), "--size", str(a.size), "--reads", str(a.reads),
-               "--data", a.data, "--seed", str(a.seed),
+               "--data", a.data, "--seed", str(a.seed), "--hold", str(a.hold),
                "--frank", a.frank, "--nh", a.nh, "--og", a.og] + (["--check"] if a.check else [])
         out = subprocess.run(cmd, capture_output=True, text=True)
         line = next((l for l in out.stdout.splitlines() if l.startswith("RESULT ")), None)
