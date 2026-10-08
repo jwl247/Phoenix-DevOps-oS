@@ -17,8 +17,8 @@ MODEL = "llama3.2:3b"
 IDENTITY = "/opt/openjarvis/jarvis_identity.md"  # sent as the system message on EVERY ask (rail: he can't drift from it)
 MAX_TEXT = 4000
 WARM = sys.argv[1:] == ["--warm"]  # root-only, from openjarvis.service at start; SSH callers can't pass argv to a forced command
-TIMEOUT = 90 if WARM else 22  # warm-up may pay the cold prefix; a caller's ask must end BEFORE the suit gives up (WAIT 25 s): the old 120 s held Jarvis for every caller (S2APPS-F79)
-MAX_TOKENS = 300      # a reply sized to finish inside TIMEOUT on CPU
+TIMEOUT = 90  # reins loosened (Jerry 2026-10-08: "guard rail don't mean chained in the basement"): 22 s cut off real answers on a busy CPU. Still ends BEFORE the suit gives up (WAIT 100 s); one ask per caller box still holds (S2APPS-F79/JARVIS-S11)
+MAX_TOKENS = 1024     # loosened from 300 (Jerry 10/8); sized to finish inside TIMEOUT on CPU
 KEY_FILE = "/etc/openjarvis/gate.key"  # 0640 root:jarvis-call - Jarvis's API refuses calls without it (JARVIS-S03)
 
 

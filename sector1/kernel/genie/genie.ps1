@@ -248,7 +248,7 @@ function Split-GenieJsonStream([string]$buf) {
     return , @($out.ToArray(), $rest)
 }
 
-function Send-GenieStage([string]$Suit, [string]$Json, [int]$Channel = 1, [int]$Wait = 30, [string]$HostName = '127.0.0.1') {
+function Send-GenieStage([string]$Suit, [string]$Json, [int]$Channel = 1, [int]$Wait = 120, [string]$HostName = '127.0.0.1') {
     if (-not $Suit) { throw 'usage: genie send <suit> [''{"key": "value"}''] [-Channel 1-4] [-Wait sec]' }
     $stage = if ($Json) { try { $Json | ConvertFrom-Json -AsHashtable } catch { throw "the stage is not valid JSON: $($_.Exception.Message)" } } else { @{} }
     if ($stage -isnot [hashtable]) { throw 'the stage must be a JSON object: {"key": "value"}' }
@@ -571,7 +571,7 @@ function genie {
         [string]$Name,
         [switch]$Write,
         [ValidateRange(1, 4)][int]$Channel = 1,
-        [ValidateRange(1, 600)][int]$Wait = 30
+        [ValidateRange(1, 600)][int]$Wait = 120
     )
     Set-StrictMode -Version Latest   # this call and the helpers it runs only
     try {

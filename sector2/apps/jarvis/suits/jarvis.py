@@ -16,7 +16,7 @@ import subprocess
 from pathlib import Path
 
 NAME = "jarvis"
-WAIT = 25  # seconds: genie send waits 30
+WAIT = 100  # seconds: the gate gives up at 90; genie send waits 120 (Jerry 10/8: reins loosened)
 
 
 # JARVIS-S10: pbmIII's host key, pinned (was trust-on-first-use, so a first connection could be
