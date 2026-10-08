@@ -30,6 +30,7 @@ Ring/sisters/universe-and-satellites design recorded but the game comes first ·
 
 ## 4. Open
 - **Waiting on Jerry:** sync the 3 stale scripts on pbmIII (recover/harden/shares — changes the box); which `openjarvis.service` is current; 3.9.0 member keys so the Compaq can pull from R2 (mark qcow2 + vault.enc sensitive first); the HP powered on for its heal check; rename `Testing Facilty/juliet.py` -> `dbl_juliet.py` + the real juliet beside it; MSYS2 compiler only if he wants the C helix benched; plus the evening handoff §4 list.
+- **Jerry added at session end:** (1) **a driver updater** — design with Jerry first: which machines, which drivers; never storage drivers or anything that blacklists/sets drives readonly (AI SAFETY rules 2-4), GPU drivers stay off Phoenix OS (rule 6), every driver change = rule 9 (state it, his yes); (2) **aliases** — the zsh-style PS7 aliases still on the backlog (the 10/7 evening set `g pulse pb3 aws1 box snap lastsnap repo .. ... glog gst here pool` already exists in `scripts/phoenix-aliases.ps1`); ask which ones he wants.
 - **Claude can do:** Console list items 2-4; a directory's own version never advances past v1; security A2-N1 (keys on curl argv).
 
 ## 5. Gotchas learned tonight
