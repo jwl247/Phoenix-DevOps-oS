@@ -64,6 +64,16 @@ One system across three bodies: one Conductor, one journal, one namespace (the s
 thing on every sister — builds on the slash-insensitive paths and "drives sequential by label"), joined by
 sockets over the mesh, symlinks where a local path must point at a sister's.
 
+**What Franken really is (worked through with Jerry 10/7, confirmed "correct"):** `Music\franken.py`
+was built by Jerry in Meld from separate parts — the Helix VRAM/cache (from the old
+`helix_complete_package.py`, a zlib-6 stand-in, not her), the translator (apps speak Linux:
+malloc/open/read/write with pointers and fds → Helix's language and back; `heix/kernel/core/helix_translator.py`),
+the AgnosticLayer (its own file, `heix/kernel/core/agnostic_layer.py`), and HelixSync (Syncthing, ported
+from `heix_syncthing_module.js`) — all in `archive/fossil-consolidation-20260819-210541/SECTOR4/heix/`.
+Take those out and what is left is **the assembler**: start the parts, wire them, give apps one door
+(5 calls). That is the Conductor's job. Two false claims in what is left, not to carry forward: it prints
+"Core 3, Real-time priority" but sets neither; it prints "ALL TESTS PASSED" without checking anything.
+
 ## 3. The journal (the motor)
 - One append-only journal, kept by the Conductor.
 - An entry = a job: `{seq, at, who, kind, args, prev_hash}`. Writing it IS the request; the Conductor
