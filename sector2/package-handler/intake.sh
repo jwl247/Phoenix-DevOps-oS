@@ -1347,11 +1347,11 @@ fetch_r2_fallback() {
     fi
   fi
 
-  mv "${tmp}" "${pool_dir}/${remote_version}_${name}"
-  LAST_R2_FETCHED="${pool_dir}/${remote_version}_${name}"
+  mv "${tmp}" "${pool_dir}/${remote_version}_${name##*/}"
+  LAST_R2_FETCHED="${pool_dir}/${remote_version}_${name##*/}"
   log "INFO" "R2 fallback: pulled ${name} ${remote_version} from R2 → ${pool_dir}"
   custody_log_local "${hex}" "${name}" "clone_in_from_r2" "${remote_version}" \
-    "${WORKER_URL}/clonepool/${r2_key}" "${pool_dir}/${remote_version}_${name}" "white" "user"
+    "${WORKER_URL}/clonepool/${r2_key}" "${pool_dir}/${remote_version}_${name##*/}" "white" "user"
   report_custody "${hex}" "${name}" "clone_in_from_r2" "white" "user"
   return 0
 }

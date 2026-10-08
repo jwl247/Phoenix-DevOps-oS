@@ -102,28 +102,38 @@ function Start-GenieKernel {
     $stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
     Add-Content -Path $script:GenieLog -Value "`n===== genie up $stamp  python=$python =====" -Encoding utf8
 
-    $psi = [System.Diagnostics.ProcessStartInfo]::new()
-    $psi.UseShellExecute  = $false
-    $psi.CreateNoWindow   = $true
-    $psi.WorkingDirectory = $script:GenieKernelDir
+    $kernelEnv = [ordered]@{ PYTHONUNBUFFERED = '1'; PYTHONIOENCODING = 'utf-8' }   # guardian log lines carry emoji
+    if (-not $env:PHOENIX_TREE_PORT)  { $kernelEnv['PHOENIX_TREE_PORT']  = '7713' }
+    if (-not $env:PHOENIX_CLONE_PORT) { $kernelEnv['PHOENIX_CLONE_PORT'] = '7714' }
+
     if ($script:GenieIsWindows) {
-        # cmd owns the redirect so the kernel never blocks on a full pipe.
-        $psi.FileName  = Join-Path $env:SystemRoot 'System32\cmd.exe'
-        $psi.Arguments = "/d /s /c `"`"$python`" -u `"$($script:GenieEntry)`" >> `"$($script:GenieLog)`" 2>&1`""
+        # ShellExecute (Start-Process, no redirection), window hidden: the kernel inherits NO handles.
+        # CreateProcess with inheritance handed it every handle its caller held, so anything that read
+        # `usys start` output (a Console button, a script) waited for the kernel to exit (2026-10-08).
+        # cmd owns the >> redirect so the kernel never blocks on a full pipe.
+        $saved = @{}
+        foreach ($k in $kernelEnv.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $kernelEnv[$k]) }
+        try {
+            $proc = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\cmd.exe') -WindowStyle Hidden -PassThru `
+                        -WorkingDirectory $script:GenieKernelDir `
+                        -ArgumentList "/d /s /c `"`"$python`" -u `"$($script:GenieEntry)`" >> `"$($script:GenieLog)`" 2>&1`""
+        } finally {
+            foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) }
+        }
     } else {
+        $psi = [System.Diagnostics.ProcessStartInfo]::new()
+        $psi.UseShellExecute  = $false
+        $psi.CreateNoWindow   = $true
+        $psi.WorkingDirectory = $script:GenieKernelDir
         $psi.FileName = '/bin/sh'
         $psi.ArgumentList.Add('-c')
         $psi.ArgumentList.Add('exec "$0" -u "$1" >> "$2" 2>&1')
         $psi.ArgumentList.Add($python)
         $psi.ArgumentList.Add($script:GenieEntry)
         $psi.ArgumentList.Add($script:GenieLog)
+        foreach ($k in $kernelEnv.Keys) { $psi.Environment[$k] = $kernelEnv[$k] }
+        $proc = [System.Diagnostics.Process]::Start($psi)
     }
-    if (-not $env:PHOENIX_TREE_PORT)  { $psi.Environment['PHOENIX_TREE_PORT']  = '7713' }
-    if (-not $env:PHOENIX_CLONE_PORT) { $psi.Environment['PHOENIX_CLONE_PORT'] = '7714' }
-    $psi.Environment['PYTHONUNBUFFERED'] = '1'
-    $psi.Environment['PYTHONIOENCODING'] = 'utf-8'   # guardian log lines carry emoji
-
-    $proc = [System.Diagnostics.Process]::Start($psi)
     Set-Content -Path $script:GeniePidFile -Value $proc.Id -Encoding ascii
 
     $deadline = (Get-Date).AddSeconds(20)

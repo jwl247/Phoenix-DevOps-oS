@@ -66,7 +66,7 @@ NAME_RE      = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 SHA3_RE      = re.compile(r"^[0-9a-fA-F]{128}$")
 GENIE_TAG    = "genie"
 AUTO_RING_BASE = 100                # imported suits live above the 16 core rings
-HEX_RE       = re.compile(r"^[0-9a-fA-F]{2,128}$")
+HEX_RE       = re.compile(r"^[0-9a-fA-F]{2,1024}$")   # folder/name identities make long hexes (2026-10-08)
 MEM_MODPREFIX = "genie_mem_"        # in-RAM suit modules live in sys.modules under this prefix
 
 
@@ -109,16 +109,40 @@ def _r2_pull(hex_id: str) -> tuple:
         return r.read(), ctype
 
 
+def _worker_json(url: str) -> dict:
+    """GET a worker JSON route and say plainly why it failed (2026-10-08: a 404 or an Access
+    login page used to come back as 'HTTP 500: HTTPError...' or 'Expecting value')."""
+    opener = urllib.request.build_opener(_NoRedirect())
+    try:
+        with opener.open(urllib.request.Request(url, headers=_worker_headers()), timeout=20) as r:
+            body = r.read()
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            raise ValueError("packages-worker said 401: the kernel's PHOENIX_AUTH is stale - restart it (usys stop, usys start)")
+        if e.code in (301, 302, 303, 307, 308, 403):
+            raise ValueError("Cloudflare Access refused the kernel: CF_ACCESS_* missing or stale - restart it (usys stop, usys start)")
+        if e.code == 404:
+            raise ValueError("not in the clonepool")
+        raise ValueError(f"packages-worker answered HTTP {e.code}")
+    try:
+        return json.loads(body)
+    except ValueError:
+        raise ValueError("packages-worker sent something that isn't JSON (a Cloudflare Access page?)")
+
+
 def _r2_meta(ref: str) -> dict:
     """Resolve a name-or-hex to its clonepool row (hex_id + hash_sha3 + name + version). Metadata only."""
-    if HEX_RE.match(ref):
-        url = f"{_worker_base()}/clonepool/{urllib.parse.quote(ref)}?meta=true"
-        with urllib.request.urlopen(urllib.request.Request(url, headers=_worker_headers()), timeout=20) as r:
-            return json.loads(r.read())
-    # a bare name: search, require exactly one hit
-    url = f"{_worker_base()}/search?q={urllib.parse.quote(ref)}"
-    with urllib.request.urlopen(urllib.request.Request(url, headers=_worker_headers()), timeout=20) as r:
-        hits = [x for x in (json.loads(r.read()).get("clonepool") or []) if x.get("name") == ref or x.get("hex_id") == ref]
+    if HEX_RE.match(ref) and len(ref) % 2 == 0:
+        try:
+            return _worker_json(f"{_worker_base()}/clonepool/{urllib.parse.quote(ref)}?meta=true")
+        except ValueError as e:
+            if "not in the clonepool" not in str(e) or len(ref) > 48:   # a short hex-looking NAME falls through to search
+                raise
+    # a bare name: search, require exactly one hit (D1 LIKE refuses patterns over 50 bytes)
+    if len(ref.encode()) > 48:
+        raise ValueError(f"'{ref[:40]}...' is too long to search by name - import it by its pool id (hex)")
+    found = _worker_json(f"{_worker_base()}/search?q={urllib.parse.quote(ref)}")
+    hits = [x for x in (found.get("clonepool") or []) if x.get("name") == ref or x.get("hex_id") == ref]
     if len(hits) != 1:
         raise ValueError(f"'{ref}' matched {len(hits)} clonepool rows — import by hex_id" if hits
                          else f"'{ref}' is not in the clonepool")

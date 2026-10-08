@@ -63,11 +63,18 @@ done
 # "already exists" check below looks at the real file, not name.lol.
 name="${name%.lol}"
 
-# The pool is keyed by name, not path: "./x/intake.sh" means "intake.sh".
+# The pool is keyed by name. A path to a file that is HERE ("./x/intake.sh") means its name
+# ("intake.sh"); anything else is passed as given, because a pool name can be folder/name when
+# two files share a bare name (intake identity, 2026-10-07). It used to strip every folder part,
+# so a folder/name suit could never come out (2026-10-08).
 is_dir=0; [[ "$name" == */ ]] && is_dir=1
-base="${name%/}"; base="${base##*/}"; base="${base##*\\}"
-[[ "$base" != "${name%/}" ]] && echo "[clone] the pool is keyed by name — cloning '$base'"
+base="${name%/}"
+if [[ -e "$base" && "$base" == */* ]]; then
+  base="${base##*/}"; base="${base##*\\}"
+  echo "[clone] the pool is keyed by name — cloning '$base'"
+fi
 name="$base"; [[ $is_dir -eq 1 ]] && name="$base/"
+base="${base##*/}"   # the file name it lands as
 
 # Windows-style folder (C:\x) → bash path when cygpath is around (Git Bash).
 if [[ -n "$folder" ]]; then

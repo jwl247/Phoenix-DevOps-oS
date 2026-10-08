@@ -869,16 +869,15 @@ function Invoke-UsysOpen {
         }
         '.lol' {
             if ($DryRun) {
-                Write-Host '  [DRY RUN] would intake .lol via Sector 4' -ForegroundColor Cyan
+                Write-Host '  [DRY RUN] would intake .lol into the clone pool' -ForegroundColor Cyan
             } else {
-                Invoke-UsysIntake -Path $resolved -Mode 'file'
+                Invoke-UsysIntakePool -Path $resolved
             }
         }
     }
 
     if ($Intake) {
-        Write-UsysInfo 'secondary intake pass requested'
-        Invoke-UsysIntake -Path $resolved -Mode 'file' -DryRun:$DryRun
+        if ($ext -ne '.lol') { Write-UsysInfo 'secondary intake pass requested'; if (-not $DryRun) { Invoke-UsysIntakePool -Path $resolved } }
     }
     Write-Host ''
 }
@@ -1755,7 +1754,9 @@ function Invoke-UsysRun {
         }
         
         Write-Host ''
-        Write-UsysOk "Suite execution complete"
+        if ($LASTEXITCODE -and [string]$manifest.runtime -in 'python', 'node', 'bash', 'powershell', 'binary') {
+            Write-UsysErr "Suite exited with code $LASTEXITCODE"
+        } else { Write-UsysOk "Suite execution complete" }
     } catch {
         Write-Host ''
         Write-UsysErr "Suite execution failed: $_"
@@ -1952,6 +1953,7 @@ function Invoke-UsysAppIntake {
 
     Write-UsysInfo 'intaking the bundle (pool + D1 + R2)…'
     Invoke-UsysClone -Path $tar
+    if ($LASTEXITCODE -ne 0) { Write-UsysErr 'the bundle did not go in - no run card written'; return }
 
     $manifest = [ordered]@{
         name         = $Name
@@ -1985,7 +1987,9 @@ function Invoke-UsysAppIntake {
     $manifest | ConvertTo-Json -Depth 8 | Set-Content $cardFile -Encoding UTF8
     Write-UsysInfo 'intaking the run card…'
     Invoke-UsysClone -Path $cardFile
+    $cardOk = ($LASTEXITCODE -eq 0)
     Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not $cardOk) { Write-UsysErr 'the run card did not go in'; return }
     Write-UsysOk "app ready: usys suite-trust $Name   then   usys run $Name"
 }
 
@@ -2057,6 +2061,61 @@ function Invoke-UsysAppRun {
     Write-UsysInfo "pid $($proc.Id) — runs from $home_ (no installer, nothing in Program Files)"
 }
 
+# =============================================================================
+# THE EASY COMMANDS (Jerry 2026-10-08: "usys is the new common command" — one word,
+# two at most; "it confuses me every time I try and fail to run anything").
+#   intakeS <file>   a suit into Phoenix          intakeC <file|folder|url>  the clone pool
+#   import <suit>    the import method: R2 -> RAM -> run (a local file is intaked first)
+#   get, run, closet, open, jump, status, start, stop, log, help
+# The kernel controller (genie) works underneath; nobody has to type it.
+# =============================================================================
+$script:UsysSuitExt = @('.py', '.sh', '.ps1', '.js', '.mjs')
+
+function Invoke-UsysKernel {
+    param([string[]]$KernelArgs = @())
+    if (-not (Get-Command genie -CommandType Function -ErrorAction SilentlyContinue)) {
+        $g = Join-Path (Get-UsysRepoRoot) 'sector1\kernel\genie\genie.ps1'
+        if (-not (Test-Path $g)) { Write-UsysErr "the kernel controller isn't at $g"; return }
+        . $g
+    }
+    genie @KernelArgs
+}
+
+function Test-UsysSuitFile([string]$Path) {
+    return $script:UsysSuitExt -contains ([System.IO.Path]::GetExtension($Path)).ToLowerInvariant()
+}
+
+function Invoke-UsysIntakeSuit([string]$Path) {
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { Write-UsysErr 'usage: usys intakeS <file>   (a suit: .py .sh .ps1 .js)'; return }
+    if (-not (Test-UsysSuitFile $Path)) {
+        Write-UsysErr "$([System.IO.Path]::GetFileName($Path)) isn't a suit (a suit is code: $($script:UsysSuitExt -join ' '))."
+        Write-UsysInfo "  any other file goes to the clone pool:  usys intakeC $Path"
+        return
+    }
+    # The same door genie import uses: Sector 2 intake, then custody must hold THESE bytes.
+    # Only then does it say "in" (2026-10-08: it used the dead Sector 4 path and said "in" anyway).
+    if (-not (Get-Command Invoke-GenieIntakeLocal -ErrorAction SilentlyContinue)) {
+        . (Join-Path (Get-UsysRepoRoot) 'sector1\kernel\genie\genie.ps1')
+    }
+    try {
+        $hex = Invoke-GenieIntakeLocal $Path
+        Write-UsysOk "suit in Phoenix, custody matches this file. Run it:  usys import $([System.IO.Path]::GetFileName($Path))"
+        Write-UsysInfo "  (pool id $hex)"
+    } catch { Write-UsysErr "not in: $($_.Exception.Message)" }
+}
+
+function Invoke-UsysIntakePool([string]$Path) {
+    if (-not $Path) { Write-UsysErr 'usage: usys intakeC <file | folder | web link>'; return }
+    if ($Path -match '^https?://') { Invoke-UsysDownload -Uri $Path; return }
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        # A program or game folder a recognizer knows becomes a runnable app; any other folder is a snapshot.
+        if (Get-UsysAppRecognizedCard (Resolve-Path -LiteralPath $Path).Path) { Invoke-UsysAppIntake -Path $Path; return }
+    } elseif (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { Write-UsysErr "not found: $Path"; return }
+    # Files and folders: the Sector 2 clone pool pipeline (pool + D1 custody + R2). The Sector 4
+    # vault path needs /mnt/g inside the Debian VM and can't run from Windows (2026-10-08).
+    if (Invoke-UsysIntakeFile -Path $Path) { Write-UsysOk "in the clone pool: $Path   (out again: usys get $([System.IO.Path]::GetFileName($Path.TrimEnd('\','/'))))" }
+}
+
 function Invoke-UsysSuitePromote {
     [CmdletBinding()]
     param(
@@ -2126,9 +2185,11 @@ function Invoke-UsysSuitePromote {
     Write-Host ''
 
     Invoke-UsysClone -Path $tmpFile
+    $promoted = ($LASTEXITCODE -eq 0)
 
     # Clean up temp
     Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not $promoted) { Write-UsysErr "suite-promote: the manifest did not go in - '$Name' is not runnable"; return }
 
     Write-Host ''
     Write-UsysOk "Suite promoted: $Name v$targetVersion — runnable: usys run $Name"
@@ -2405,6 +2466,24 @@ function Show-UsysHelp {
   UnitedSys (usys) v$($script:UsysVersion) — Phoenix DevOps global command layer
   USys — United Systems | jwl247 | GPL-3.0
 
+  THE EASY ONES — one word after usys
+    usys intakeS <file>          Intake a SUIT (code: .py .sh .ps1 .js) into Phoenix
+    usys intakeC <file|folder>   Intake into the CLONE POOL (any file, folder, game, web link)
+    usys import <suit>           The import method: R2 -> memory -> run the suit (never on disk)
+    usys <suit>.py               Same as usys import <suit>.py
+    usys get <name>              A copy out of Phoenix into this folder, hash-checked
+    usys run <name>              Run an app, a game or a VM
+    usys closet                  The suits in the closet
+    usys open <file>             Open a file with its app
+    usys jump                    Go to the path you highlighted (shortcut: g)
+    usys status                  Is Phoenix healthy (kernel included)
+    usys start / usys stop       The kernel on / off
+    usys log                     The kernel's log
+    usys help                    This sheet (the Console's COMMANDS button shows it too)
+    Searching: the Glossary (Console GLOSSARY button) finds anything and shows its code.
+
+  ── everything below still works; the easy ones above cover it ──
+
   Usage:
     usys <command> [args...]
 
@@ -2525,7 +2604,7 @@ function Invoke-UsysMain {
 
     switch ($Command.ToLowerInvariant()) {
         'init'          { Invoke-UsysInit }
-        'status'        { Invoke-UsysStatus }
+        'status'        { Invoke-UsysStatus; Invoke-UsysKernel @('status') }
         'doctor'        { Invoke-UsysDoctor }
         'help'          { Show-UsysHelp }
         '--help'        { Show-UsysHelp }
@@ -2533,15 +2612,36 @@ function Invoke-UsysMain {
         'version'       { Write-Output $script:UsysVersion }
         'path-register' { Register-UsysPath | Out-Null; Write-UsysOk 'PATH registration complete' }
 
+        # ── the easy commands (one word) ──────────────────────────────────────
+        'intakes' { Invoke-UsysIntakeSuit -Path ($Rest | Select-Object -First 1) }
+        'intakec' { Invoke-UsysIntakePool -Path ($Rest | Select-Object -First 1) }
+        'import'  {
+            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys import <suit name | file>   (R2 -> memory -> run, never on disk)'; return }
+            Invoke-UsysKernel (@('import') + $Rest)
+        }
+        'get'     {
+            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys get <name>   (a hash-checked copy into this folder)'; return }
+            Invoke-UsysCloneOut -CloneArgs $Rest
+        }
+        'closet'  { Invoke-UsysKernel @('closet') }
+        'start'   { Invoke-UsysKernel @('up') }
+        'stop'    { Invoke-UsysKernel @('down') }
+        'log'     { Invoke-UsysKernel (@('log') + $Rest) }
+        'jump'    {
+            if (Get-Command Invoke-PhoenixGoto -ErrorAction SilentlyContinue) { Invoke-PhoenixGoto @Rest }
+            else { Write-UsysErr 'usys jump moves your PS7 window, so run it in PS7: highlight a path, then type  usys jump  (or g)' }
+        }
+
         'intake' {
+            # Same door as intakeC: the Sector 2 clone pool (2026-10-08). The Sector 4 vault
+            # path (Invoke-UsysIntake) needs /mnt/g inside the Debian VM; it never ran from Windows.
             if ($Rest.Count -ge 2 -and $Rest[0] -eq 'dir') {
-                Invoke-UsysIntake -Path $Rest[1] -Mode 'dir'
+                Invoke-UsysIntakePool -Path $Rest[1]
             } elseif ($Rest.Count -ge 1 -and $Rest[0] -eq 'status') {
-                Invoke-UsysIntake -Path '' -Mode 'status'
+                $bash = Get-UsysGitBash; $sh = Get-UsysCloneIntakeSh
+                if ($bash -and $sh) { & $bash (ConvertTo-GitBashPath $sh) status }
             } elseif ($Rest.Count -ge 1) {
-                $dry = $Rest -contains '-DryRun' -or $Rest -contains '--dry-run'
-                $path = $Rest | Where-Object { $_ -notin '-DryRun', '--dry-run' } | Select-Object -First 1
-                Invoke-UsysIntake -Path $path -Mode 'file' -DryRun:$dry
+                Invoke-UsysIntakePool -Path ($Rest | Where-Object { $_ -notin '-DryRun', '--dry-run' } | Select-Object -First 1)
             } else {
                 Write-UsysErr 'usage: usys intake <file> | usys intake dir <path> | usys intake status'
             }
@@ -2842,6 +2942,12 @@ function Invoke-UsysMain {
         }
 
         default {
+            # `usys example.py` = `usys import example.py` (Jerry 10/8)
+            if (Test-UsysSuitFile $Command) {
+                $p = if (Get-Command ConvertTo-PhoenixPath -ErrorAction SilentlyContinue) { ConvertTo-PhoenixPath $Command } else { $Command }
+                Invoke-UsysKernel (@('import', $p) + $Rest)
+                return
+            }
             Write-UsysErr "unknown command: $Command"
             Show-UsysHelp
         }
