@@ -47,6 +47,9 @@ TESTING = HERE.parents[1] / "Testing Facilty"
 ROUTERS = {
     "capulet": {"label": "Capulet (Frank + Helix)", "file": "capulet.py",    "inp": 5555, "out": 5556},
     "slim":    {"label": "Helix Slim",              "file": "helix_slim.py", "inp": 5560, "out": 5559},
+    # the old timer Slim was modeled on (same ports); lives in the repo, not Testing Facilty
+    "frankenhelix": {"label": "FrankenHelix (ring0)", "path": HERE.parents[1] / "sector2" / "ring0" / "frankenhelix.py",
+                     "inp": 5560, "out": 5559},
 }
 
 
@@ -71,7 +74,7 @@ def pct(sorted_ms, q):
 
 def run_router(name, a, n):
     r = ROUTERS[name]
-    path = Path(a.testing) / r["file"]
+    path = Path(r["path"]) if "path" in r else Path(a.testing) / r["file"]
     if not path.is_file():
         return {"router": name, "error": f"{path} not found"}
     for p in (r["inp"], r["out"]):
@@ -161,7 +164,7 @@ def main():
     p.add_argument("--out", default=str(HERE / f"bench_routers-{time.strftime('%Y%m%d-%H%M%S')}.json"))
     a = p.parse_args()
 
-    order = [a.only] if a.only else ["capulet", "slim"]
+    order = [a.only] if a.only else ["capulet", "slim", "frankenhelix"]
     results = []
     for name in order:
         print(f"\n== {ROUTERS[name]['label']} ...", flush=True)

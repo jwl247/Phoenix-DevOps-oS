@@ -1,0 +1,22 @@
+[
+ {
+  "router": "frankenhelix",
+  "label": "FrankenHelix (ring0)",
+  "messages": 20000,
+  "size": 256,
+  "sent": 2500,
+  "received": 1731,
+  "lost": 769,
+  "garbled_or_duplicate": 0,
+  "stalled_at_message": 2500,
+  "send_seconds": 2.028,
+  "throughput_msgs_per_s": 27.9,
+  "delay_ms": {
+   "p50": 30682.979,
+   "p90": 59162.4,
+   "p99": 66234.597,
+   "max": 67008.82
+  },
+  "router_log": "C:\\Users\\jwlef\\AppData\\Local\\Temp\\bench_routers_frankenhelix.log"
+ }
+]

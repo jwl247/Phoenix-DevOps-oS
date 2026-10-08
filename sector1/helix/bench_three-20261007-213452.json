@@ -1,0 +1,33 @@
+[
+ {
+  "contender": "free",
+  "label": "Freewheeling (HelixDB)",
+  "python": "3.12.10",
+  "platform": "win32",
+  "items": 20000,
+  "size": 4096,
+  "data": "random",
+  "reads": 100000,
+  "seed": 7,
+  "write": {
+   "ops": 20000,
+   "ops_per_s": 7531.5,
+   "p50_us": 126.8,
+   "p90_us": 148.4,
+   "p99_us": 198.9,
+   "max_us": 8128.5
+  },
+  "read": {
+   "ops": 100000,
+   "ops_per_s": 103343.2,
+   "p50_us": 0.5,
+   "p90_us": 0.5,
+   "p99_us": 1.1,
+   "max_us": 76.6
+  },
+  "wrong_answers": 0,
+  "missing_answers": 0,
+  "peak_mem_mb": 617.4,
+  "registry_items": null
+ }
+]
