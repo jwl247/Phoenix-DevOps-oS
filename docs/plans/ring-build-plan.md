@@ -119,7 +119,13 @@ the mem group, we should use it as ring SMB."** It already has what a bus needs:
 64 lanes and per-lane locks, store / retrieve / query_language, compress / expand under load. It is plain
 in-process memory, which fits §4 (members side-loaded in ONE process): members share it directly, no
 copies, no files. Flow: members -> propcoms only; propcoms puts the ball on Freewheeling; the next member
-is woken and takes it from Freewheeling. Kills the step-0 polling (511 ms/ball). If members ever had to be
+is woken and takes it from Freewheeling. Kills the step-0 polling (511 ms/ball). **The ring's data handlers (J, 10/7): "always Frank sorting to Freewheeling and Helix pushing or pulling."**
+Frank (franken) SORTS — decides where each ball goes and puts it into Freewheeling; Freewheeling HOLDS (the
+bank = the bus); Helix (New Horizon) MOVES — pushes out of Freewheeling (eviction down the tiers) and pulls in
+ahead of need (prefetch up the tiers), i.e. the paging manager's "clears and feeds her". Today's
+`member.py` gets this wrong: franken hands to freewheeling through a folder, and new_horizon only archives
+balls already done (never pushes/pulls).
+If members ever had to be
 separate processes, Freewheeling would move onto a memory-mapped region (not needed in this design).
 
 - Owned by the Conductor (not the kernel's `frank5.shm`; that one is the kernel's, reached over the
