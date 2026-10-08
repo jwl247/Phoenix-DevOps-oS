@@ -53,6 +53,10 @@ changes CLAUDE.md "R2 primary — source of truth"): the HP holds final bytes + 
 R2/D1 mirrored in the background; if the cloud vanished, home keeps running.
 **Roles (J, 10/7): the Compaq (pbmIII) is the ROUTER — to be built. Final storage = the other HP.**
 CLAUDE.md "R2 primary" stays until this is built ("not yet, we haven't built any of this").
+**End game (J, 10/7, referencing the ring sketch):** the Compaq RECEIVES everything, sorts, organizes,
+prioritizes, and sends it on to "dad" (ask: PBMII?) or the HP. Same for egress. **Prefetch calls and all
+of that come from PBMII.** **Everything in this system clones to destination** (the clone pool is the
+installer; see the sector-kernels / clone-to-destination note).
 
 ## 3. The journal (the motor)
 - One append-only journal, kept by the Conductor.
