@@ -41,6 +41,11 @@ machine or spread across machines (then a propcoms reaches the Conductor over th
 runs when the Conductor's machine is off (Jerry travels — a standby Conductor that takes over, or the
 rings hold until he is back).
 
+**Placement (J, 10/7): each machine has its corresponding ring, with its own ingress and egress;
+all roads lead to the HP for final storage.** Open, the big one (J): **how deep the Phoenix universe
+delves into R2 and D1** — today CLAUDE.md says R2 is the source of truth for content and D1 the custody
+ledger; "final storage on the HP" moves the truth home. Decide before step 5.
+
 ## 3. The journal (the motor)
 - One append-only journal, kept by the Conductor.
 - An entry = a job: `{seq, at, who, kind, args, prev_hash}`. Writing it IS the request; the Conductor
