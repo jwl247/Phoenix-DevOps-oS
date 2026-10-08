@@ -130,6 +130,11 @@ Measured 10/7: PBMII → Compaq over the mesh 1.3 ms avg (max 2 ms, 10/10); the 
 ms-s, from what is being touched now), warm (local SSD/NVMe, s-min, from the journal: a written job's
 inputs fetched before it runs), cold (4 TB / 20 TB drive from the pool and other machines, min-h, from
 patterns). Each hands up to the tier above, so nothing is fetched twice.
+**Why the tiers match (J, 10/7): "her eviction is tiered."** Helix HOLDS data on two strands side by side
+(the wider hallway, deterministic placement); her EVICTION steps down tiers (hot → warm → cold → out).
+Prefetch is the same ladder in reverse (cold → warm → hot, ahead of demand). Compared 10/7: Franken2's
+HelixCache (Music/franken.py) is a plain 3-tier LRU with no Dandelion and one lock — not Helix;
+dm-helix is closest in body; New Horizon is the newest and the only one with quad.
 **All of it is color coded (J): the color FAMILY is the tier** — "primary colors tier1, secondary colors
 tier2, tertiary colors tier3":
 | Tier | Family | Colors |
