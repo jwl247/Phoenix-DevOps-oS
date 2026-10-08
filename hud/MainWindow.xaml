@@ -63,6 +63,8 @@
                     <Button Content="EXPLORER" Click="Files_Click" ToolTip="File Explorer in F:\Phoenix"/>
                     <Button Content="TERMINAL" Click="Terminal_Click" ToolTip="A PS7 terminal in the Phoenix repo"/>
                     <Button Content="HELP" Tag="help" Click="Easy_Click" ToolTip="usys help: the commands cheat sheet"/>
+                    <Button Content="ROTATE" Tag="rotate" Click="Easy_Click" Foreground="#FF6B6B"
+                            ToolTip="rotate-key: new PHOENIX_AUTH + Cloudflare Access secret on every worker, this PC and the vault. Opens a PS7 window; you type ROTATE there. Jerry's account only."/>
                 </WrapPanel>
                 <TextBlock x:Name="EasyStatus" Foreground="{StaticResource TextDim}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
                            Text="Each button opens a PS7 window with the answer. The word on the button is what you'd type after usys."/>

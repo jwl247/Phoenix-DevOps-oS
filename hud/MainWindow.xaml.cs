@@ -177,6 +177,10 @@ public partial class MainWindow : Window
         switch (verb)
         {
             case "help": CheatSheet.Open(); EasyStatus.Text = "usys help - the cheat sheet."; return;
+            case "rotate":
+                r = UsysButtons.RunRotate();
+                EasyStatus.Text = r.ok ? "rotate-key opened in its own PS7 window - type ROTATE there to go (nothing changes until you do)." : r.why;
+                return;
             case "docks":
                 if (App.Overlay is { } o) { o.ToggleDocks(); EasyStatus.Text = o.DocksOpen ? "Docks open." : "Docks closed."; }
                 else EasyStatus.Text = "The HUD (the eye) isn't running, so there are no docks to open.";

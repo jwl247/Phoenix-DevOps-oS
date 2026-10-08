@@ -30,6 +30,18 @@ public static class UsysButtons
         catch (Exception e) { return (false, $"couldn't start PS7: {e.Message}"); }
     }
 
+    /// <summary>ROTATE (Jerry 10/8: "yes rotate button"): opens a normal PS7 window (profile loaded) running
+    /// `rotate-key`. Its own guard still decides: Jerry's account, a real console, and he types ROTATE.
+    /// The command line is a fixed literal; nothing from the Console reaches it.</summary>
+    public static (bool ok, string why) RunRotate()
+    {
+        var psi = new ProcessStartInfo("pwsh") { UseShellExecute = false, CreateNoWindow = false, WorkingDirectory = FileActions.RepoRoot };
+        foreach (var a in new[] { "-NoExit", "-NoLogo", "-Command", "rotate-key" }) psi.ArgumentList.Add(a);
+        foreach (var k in new[] { "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT" }) psi.Environment.Remove(k);
+        try { Process.Start(psi); return (true, ""); }
+        catch (Exception e) { return (false, $"couldn't start PS7: {e.Message}"); }
+    }
+
     public static string? PickFile(string title)
     {
         var d = new Microsoft.Win32.OpenFileDialog { Title = title, CheckFileExists = true };
