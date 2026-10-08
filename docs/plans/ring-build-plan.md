@@ -66,6 +66,10 @@ prefetch calls), the Compaq (the router: receives, sorts, prioritizes, in and ou
 One system across three bodies: one Conductor, one journal, one namespace (the same path means the same
 thing on every sister — builds on the slash-insensitive paths and "drives sequential by label"), joined by
 sockets over the mesh, symlinks where a local path must point at a sister's.
+**Desktops (J, 10/7): the Compaq and the HP lose their desktops at some point** — they end up headless
+(router, storage). Creative apps live on PBMII only, where Jerry sits; their HEAVY work (renders, encodes,
+transcription) is movable work the load balancer may send to a free sister. The Compaq's LightDM /
+Chrome / TV-sound setup (10/7) is temporary, for while it is still used as a desktop.
 
 **What Franken really is (worked through with Jerry 10/7, confirmed "correct"):** `Music\franken.py`
 was built by Jerry in Meld from separate parts — the Helix VRAM/cache (from the old
