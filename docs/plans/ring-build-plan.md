@@ -85,6 +85,9 @@ Take those out and what is left is **the assembler**: start the parts, wire them
 (5 calls). That is the Conductor's job. Two false claims in what is left, not to carry forward: it prints
 "Core 3, Real-time priority" but sets neither; it prints "ALL TESTS PASSED" without checking anything.
 
+**Captured, not designed (J, 10/7): "we can make the helix kernel pure C, a namespace kernel, and go with
+it — I'm not being sarcastic."** Talk it through with Jerry before anything is built.
+
 ## 3. The journal (the motor)
 - One append-only journal, kept by the Conductor.
 - An entry = a job: `{seq, at, who, kind, args, prev_hash}`. Writing it IS the request; the Conductor
