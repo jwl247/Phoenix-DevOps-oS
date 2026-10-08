@@ -1193,7 +1193,7 @@ function Find-UsysSuites {
 # wire). Global escape hatch: PHOENIX_SUITE_NO_GATE=1.
 # =============================================================================
 
-$script:UsysHostRuntimes = @('python', 'node', 'bash', 'powershell', 'binary')
+$script:UsysHostRuntimes = @('python', 'node', 'bash', 'powershell', 'binary', 'app')
 
 function Get-UsysSuiteTrustKey {
     $k = $env:PHOENIX_AUTH
@@ -1556,6 +1556,9 @@ function Invoke-UsysRun {
             'powershell' {
                 & pwsh -File $entryPath @Arguments
             }
+            'app' {
+                Invoke-UsysAppRun -Manifest $manifest -Arguments $Arguments
+            }
             'binary' {
                 & $entryPath @Arguments
             }
@@ -1818,6 +1821,240 @@ function Get-UsysRuntimeForExt {
         'img'   { return 'qemu' }
         default { return 'binary' }
     }
+}
+
+# =============================================================================
+# APPS — intake a program, run it without its installer (Jerry 2026-10-08:
+# "a game can be intaked without installing, you can play it because the system
+# configured it for you" — not limited to games).
+#
+#   usys app-intake <folder> [-Name n] [-Entry exe] [-Version v]
+#       folder -> deterministic tar (one pool row, R2) + <name>.suite.json with
+#       runtime "app" and a run card (exe, args, workdir, registry, folders,
+#       bundle sha3). A recognizer fills the card in; GOG today.
+#   usys run <name>
+#       bundle from the local pool or R2, SHA3-checked against the card, unpacked
+#       once under PHOENIX_APPS_DIR (default F:\Phoenix\apps), the card's config
+#       applied (HKCU keys, folders), the exe started. The installer never runs.
+#
+# The suite's entry is its own .suite.json, so `usys suite-trust` stamps the card,
+# and the card pins the bundle's sha3: the stamp covers the bytes that run.
+# =============================================================================
+
+# Installer-only files that mean nothing once Phoenix is the installer.
+$script:UsysAppSkip = @('unins*.exe', 'unins*.dat', 'unins*.msg', 'unins*.ini', 'goglog.ini')
+
+function Resolve-UsysAppToken([string]$Text, [string]$AppDir) {
+    if (-not $Text) { return $Text }
+    $map = @{
+        '{app}'          = $AppDir
+        '{localappdata}' = $env:LOCALAPPDATA
+        '{appdata}'      = $env:APPDATA
+        '{userappdata}'  = $env:APPDATA
+        '{userdocs}'     = [Environment]::GetFolderPath('MyDocuments')
+        '{documents}'    = [Environment]::GetFolderPath('MyDocuments')
+        '{userprofile}'  = $env:USERPROFILE
+        '{savedgames}'   = (Join-Path $env:USERPROFILE 'Saved Games')
+    }
+    foreach ($k in $map.Keys) { $Text = $Text.Replace($k, [string]$map[$k]) }
+    return [System.IO.Path]::GetFullPath(($Text -replace '/', '\'))
+}
+
+# Recognizers: read what the installer would have done from the files it left.
+function Get-UsysAppRecognizedCard([string]$Dir) {
+    $info = Get-ChildItem -LiteralPath $Dir -Filter 'goggame-*.info' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($info) {
+        $i = Get-Content -LiteralPath $info.FullName -Raw | ConvertFrom-Json
+        $task = @($i.playTasks | Where-Object { $_.isPrimary }) + @($i.playTasks | Where-Object { $_.category -eq 'game' -and $_.path }) |
+                Select-Object -First 1
+        $card = [ordered]@{
+            source   = "gog:$($i.gameId)"
+            title    = [string]$i.name
+            exe      = [string]$task.path
+            args     = @(if ($task.arguments) { [string]$task.arguments })
+            workdir  = if ($task.workingDir) { [string]$task.workingDir } else { '' }
+            registry = @()
+            folders  = @()
+        }
+        $script = Join-Path $Dir ($info.BaseName + '.script')
+        if (Test-Path -LiteralPath $script) {
+            foreach ($a in @((Get-Content -LiteralPath $script -Raw | ConvertFrom-Json).actions)) {
+                $x = $a.install
+                switch ([string]$x.action) {
+                    'savePath'    { $card.folders  += [string]$x.arguments.savePath }
+                    'setRegistry' {
+                        $card.registry += [ordered]@{
+                            root  = [string]$x.arguments.root
+                            key   = [string]$x.arguments.subkey
+                            name  = [string]$x.arguments.valueName
+                            data  = [string]$x.arguments.valueData
+                            type  = [string]$x.arguments.valueType
+                        }
+                    }
+                    default { Write-UsysWarn "GOG action '$($x.action)' not handled yet — check the run card by hand" }
+                }
+            }
+        }
+        return $card
+    }
+    return $null
+}
+
+function Get-UsysSha3File([string]$Path) {
+    $bash = Get-UsysGitBash
+    $out = & $bash -c "openssl dgst -sha3-512 -r '$(ConvertTo-GitBashPath $Path)'" 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $out) { throw "sha3 failed for $Path" }
+    return (($out | Select-Object -First 1) -split '\s+')[0].ToLowerInvariant()
+}
+
+function Invoke-UsysAppIntake {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [string]$Name = '',
+        [string]$Entry = '',
+        [string]$Version = '',
+        [switch]$DryRun
+    )
+    $dir = (Resolve-Path -LiteralPath $Path -ErrorAction SilentlyContinue).Path
+    if (-not $dir -or -not (Test-Path -LiteralPath $dir -PathType Container)) { Write-UsysErr "not a folder: $Path"; return }
+    $card = Get-UsysAppRecognizedCard $dir
+    if (-not $card) {
+        if (-not $Entry) { Write-UsysErr 'no recognizer knows this folder — name the program: -Entry <file.exe>'; return }
+        $card = [ordered]@{ source = 'folder'; title = (Split-Path $dir -Leaf); exe = ''; args = @(); workdir = ''; registry = @(); folders = @() }
+    }
+    if ($Entry) { $card.exe = $Entry }
+    if (-not (Test-Path -LiteralPath (Join-Path $dir $card.exe) -PathType Leaf)) { Write-UsysErr "program not found in the folder: $($card.exe)"; return }
+    if (-not $Name) { $Name = (($card.title -replace '[^A-Za-z0-9]+', '').ToLowerInvariant()) }
+    if ($Name -notmatch '^[a-z0-9][a-z0-9._-]*$') { Write-UsysErr "bad suite name '$Name' (a-z 0-9 . _ -)"; return }
+
+    Write-UsysInfo "app: $($card.title)  ($($card.source))  -> suite '$Name'"
+    Write-UsysInfo "  program : $($card.exe) $($card.args -join ' ')"
+    foreach ($r in $card.registry) { Write-UsysInfo "  registry: $($r.root)\$($r.key)$(if ($r.name) { " [$($r.name)=$($r.data)]" })" }
+    foreach ($f in $card.folders)  { Write-UsysInfo "  folder  : $f" }
+    if ($DryRun) { Write-UsysInfo '[DRY RUN] nothing bundled or intaked'; return }
+
+    # One deterministic tar: sorted, fixed owner — the same files make the same bytes,
+    # so a re-intake of an unchanged program keeps the version already in the pool.
+    $bash = Get-UsysGitBash
+    if (-not $bash) { Write-UsysErr 'Git Bash not found'; return }
+    $outDir = if ($env:PHOENIX_BUNDLES) { $env:PHOENIX_BUNDLES } else { 'F:\Phoenix\bundles' }
+    $outDir = Join-Path $outDir 'apps'
+    New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+    $tar = Join-Path $outDir "$Name.tar"
+    $excl = ($script:UsysAppSkip | ForEach-Object { "--exclude='./$_'" }) -join ' '
+    Write-UsysInfo "bundling -> $tar"
+    & $bash -c "tar --sort=name --owner=0 --group=0 --numeric-owner $excl -cf '$(ConvertTo-GitBashPath "$tar.tmp")' -C '$(ConvertTo-GitBashPath $dir)' ."
+    if ($LASTEXITCODE -ne 0) { Write-UsysErr 'tar failed'; Remove-Item "$tar.tmp" -ErrorAction SilentlyContinue; return }
+    Move-Item -Force "$tar.tmp" $tar
+    $sha3 = Get-UsysSha3File $tar
+    $bytes = (Get-Item -LiteralPath $tar).Length
+    Write-UsysOk ("bundle: {0:N2} GB  sha3 {1}…" -f ($bytes / 1GB), $sha3.Substring(0, 16))
+
+    Write-UsysInfo 'intaking the bundle (pool + D1 + R2)…'
+    Invoke-UsysClone -Path $tar
+
+    $manifest = [ordered]@{
+        name         = $Name
+        version      = $(if ($Version) { $Version } else { (Get-Date).ToString('yyyyMMdd') })
+        description  = "$($card.title) — intaked, runs from the pool; Phoenix sets it up, the installer never runs."
+        author       = "Phoenix app-intake by $env:USERNAME"
+        type         = 'app'
+        entry        = '.suite.json'
+        runtime      = 'app'
+        dependencies = @()
+        environment  = @{}
+        permissions  = @('filesystem:write', 'process:spawn')
+        app          = [ordered]@{
+            source       = $card.source
+            title        = $card.title
+            bundle       = "$Name.tar"
+            bundle_hex   = (-join ([Text.Encoding]::UTF8.GetBytes("$Name.tar") | ForEach-Object { $_.ToString('x2') }))
+            bundle_sha3  = $sha3
+            bundle_bytes = $bytes
+            exe          = $card.exe
+            args         = @($card.args)
+            workdir      = $card.workdir
+            registry     = @($card.registry)
+            folders      = @($card.folders)
+        }
+        metadata     = [ordered]@{ category = 'app'; tags = @('app', 'no-install', 'phoenix') }
+    }
+    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "phoenix-app-$Name"
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $cardFile = Join-Path $tmpDir "$Name.suite.json"
+    $manifest | ConvertTo-Json -Depth 8 | Set-Content $cardFile -Encoding UTF8
+    Write-UsysInfo 'intaking the run card…'
+    Invoke-UsysClone -Path $cardFile
+    Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    Write-UsysOk "app ready: usys suite-trust $Name   then   usys run $Name"
+}
+
+function Invoke-UsysAppRun {
+    param([Parameter(Mandatory)][object]$Manifest, [string[]]$Arguments)
+    $a = $Manifest.app
+    if (-not $a -or -not $a.bundle_sha3 -or -not $a.exe) { Write-UsysErr 'run card incomplete (app.bundle_sha3 / app.exe)'; return }
+    $root = if ($env:PHOENIX_APPS_DIR) { $env:PHOENIX_APPS_DIR } else { 'F:\Phoenix\apps' }
+    $home_ = Join-Path (Join-Path $root $Manifest.name) $a.bundle_sha3.Substring(0, 16)
+    $mark = Join-Path $home_ '.phoenix-app'
+
+    if (-not ((Test-Path -LiteralPath $mark) -and ((Get-Content -LiteralPath $mark -Raw).Trim() -eq $a.bundle_sha3))) {
+        $bash = Get-UsysGitBash
+        # The bundle: this machine's pool first, else R2 (intake clone, D1-checked).
+        $pool = Join-Path (Join-Path (Get-UsysClonepoolDir) 'T1') $a.bundle_hex
+        $tar = Get-ChildItem -LiteralPath $pool -Filter "v*_$($a.bundle)" -File -ErrorAction SilentlyContinue |
+               Sort-Object { [int]($_.Name -replace '^v(\d+)_.*', '$1') } -Descending |
+               Where-Object { (Get-UsysSha3File $_.FullName) -eq $a.bundle_sha3 } | Select-Object -First 1
+        $stage = Join-Path $root ".stage-$($Manifest.name)"
+        New-Item -ItemType Directory -Force -Path $stage | Out-Null
+        try {
+            if ($tar) { $tarPath = $tar.FullName; Write-UsysInfo "bundle from the pool: $tarPath" }
+            else {
+                Write-UsysInfo "bundle not in this pool — pulling $($a.bundle) from Phoenix (R2)…"
+                & $bash -c "cd '$(ConvertTo-GitBashPath $stage)' && bash '$(ConvertTo-GitBashPath (Get-UsysCloneIntakeSh))' clone '$($a.bundle)'" | ForEach-Object { Write-Host "  $_" }
+                $tarPath = Join-Path $stage $a.bundle
+                if (-not (Test-Path -LiteralPath $tarPath)) { Write-UsysErr 'pull failed — bundle not delivered'; return }
+            }
+            Write-UsysInfo 'checking the bundle against the run card (sha3)…'
+            if ((Get-UsysSha3File $tarPath) -ne $a.bundle_sha3) { Write-UsysErr 'SHA3 MISMATCH — bundle is not the one this card names. Not unpacked.'; return }
+            $tmpHome = "$home_.tmp"
+            Remove-Item -LiteralPath $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Force -Path $tmpHome | Out-Null
+            Write-UsysInfo "unpacking -> $home_"
+            & $bash -c "tar -xf '$(ConvertTo-GitBashPath $tarPath)' -C '$(ConvertTo-GitBashPath $tmpHome)'"
+            if ($LASTEXITCODE -ne 0) { Write-UsysErr 'unpack failed'; return }
+            Remove-Item -LiteralPath $home_ -Recurse -Force -ErrorAction SilentlyContinue
+            Move-Item -LiteralPath $tmpHome -Destination $home_
+            Set-Content -LiteralPath $mark -Value $a.bundle_sha3 -NoNewline
+        } finally {
+            Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    # What the installer would have set up. HKCU only: a machine-wide key needs
+    # admin and is shown, never written behind Jerry's back (safety rule 9).
+    foreach ($r in @($a.registry)) {
+        $hive = switch -Regex ([string]$r.root) { '^(HKEY_CURRENT_USER|HKCU)$' { 'HKCU:' } default { '' } }
+        if (-not $hive) { Write-UsysWarn "registry $($r.root)\$($r.key) needs admin — not written; set it once by hand if the program asks"; continue }
+        $p = Join-Path $hive $r.key
+        if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null; Write-UsysInfo "registry: created $($r.root)\$($r.key)" }
+        if ($r.name) {
+            $t = switch ([string]$r.type) { 'dword' { 'DWord' } 'qword' { 'QWord' } default { 'String' } }
+            New-ItemProperty -Path $p -Name $r.name -Value (Resolve-UsysAppToken ([string]$r.data) $home_) -PropertyType $t -Force | Out-Null
+        }
+    }
+    foreach ($f in @($a.folders)) {
+        $fp = Resolve-UsysAppToken ([string]$f) $home_
+        if (-not (Test-Path -LiteralPath $fp)) { New-Item -ItemType Directory -Force -Path $fp | Out-Null; Write-UsysInfo "folder: created $fp" }
+    }
+
+    $exe = Join-Path $home_ $a.exe
+    $wd = if ($a.workdir) { Resolve-UsysAppToken ([string]$a.workdir) $home_ } else { Split-Path $exe -Parent }
+    $argv = @(@($a.args) + @($Arguments) | Where-Object { $_ })
+    Write-UsysOk "starting $($a.title): $exe"
+    $sp = @{ FilePath = $exe; WorkingDirectory = $wd; PassThru = $true }
+    if ($argv.Count) { $sp.ArgumentList = $argv }
+    $proc = Start-Process @sp
+    Write-UsysInfo "pid $($proc.Id) — runs from $home_ (no installer, nothing in Program Files)"
 }
 
 function Invoke-UsysSuitePromote {
@@ -2235,6 +2472,10 @@ function Show-UsysHelp {
     list-suites                      Alias for suite-list
     suite-trust <name>[@ver]         Trust-stamp a suite for execution on THIS machine
     run <name> --unverified          Run an unstamped elevated-ask suite anyway
+    app-intake <folder> [-Name n] [-Entry exe]
+                                     Intake a program (game or app) as a suite: one bundle +
+                                     a run card. 'usys run <name>' unpacks it from the pool,
+                                     sets it up (HKCU keys, folders) and starts it. No installer.
 
   Suite execution gate (audit T1 #1+#3): a host-runtime suite (python/node/
     bash/powershell/binary) that is not trust-stamped and declares network /
@@ -2453,6 +2694,20 @@ function Invoke-UsysMain {
 
         'suite-list' {
             Invoke-UsysListSuites
+        }
+
+        'app-intake' {
+            if ($Rest.Count -lt 1) { Write-UsysErr 'usage: usys app-intake <folder> [-Name n] [-Entry exe] [-Version v] [-DryRun]'; return }
+            $p = @{ Path = $Rest[0] }
+            for ($i = 1; $i -lt $Rest.Count; $i++) {
+                switch ($Rest[$i]) {
+                    { $_ -in '-Name', '--name' }       { $p.Name = $Rest[++$i] }
+                    { $_ -in '-Entry', '--entry' }     { $p.Entry = $Rest[++$i] }
+                    { $_ -in '-Version', '--version' } { $p.Version = $Rest[++$i] }
+                    { $_ -in '-DryRun', '--dry-run' }  { $p.DryRun = $true }
+                }
+            }
+            Invoke-UsysAppIntake @p
         }
 
         'suite-promote' {
