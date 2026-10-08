@@ -57,6 +57,12 @@ CLAUDE.md "R2 primary" stays until this is built ("not yet, we haven't built any
 prioritizes, and sends it on to "dad" (ask: PBMII?) or the HP. Same for egress. **Prefetch calls and all
 of that come from PBMII.** **Everything in this system clones to destination** (the clone pool is the
 installer; see the sector-kernels / clone-to-destination note).
+**The three sisters (J, 10/7): "we are going to make all three pcs sisters — think as 1, act as 1;
+everything else is 1 — socket together, symlink, whatever is called for."** PBMII (the brain: decisions,
+prefetch calls), the Compaq (the router: receives, sorts, prioritizes, in and out), the HP (final storage).
+One system across three bodies: one Conductor, one journal, one namespace (the same path means the same
+thing on every sister — builds on the slash-insensitive paths and "drives sequential by label"), joined by
+sockets over the mesh, symlinks where a local path must point at a sister's.
 
 ## 3. The journal (the motor)
 - One append-only journal, kept by the Conductor.
