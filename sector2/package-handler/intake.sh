@@ -1148,6 +1148,8 @@ intake_file() {
   # ── Identity: the bare name, or a longer one if another file holds it ──
   name=$(resolve_identity "${filepath}") || return 1
   hex=$(to_hex "${name}")
+  # Machine-readable: callers (genie import) find the row by this hex, not the bare name.
+  echo "[intake:ID] ${name} hex ${hex}"
   pool_dir="${CLONEPOOL_DIR}/T1/${hex}"
   sidecar="${pool_dir}/${hex}.sidecar.json"
   mkdir -p "${pool_dir}"

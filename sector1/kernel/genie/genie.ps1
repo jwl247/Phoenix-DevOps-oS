@@ -358,7 +358,11 @@ function Invoke-GenieIntakeLocal([string]$Path) {
     } finally { $env:CLONEPOOL_DIR = $prevPool }
     $out | Where-Object { $_ -match '\[intake:' } | ForEach-Object { G-Info $_.Trim() }
     $name = [System.IO.Path]::GetFileName($full)
-    $row = Resolve-GenieRow $name
+    # Intake may give the file a longer identity (folder/name) when another file holds
+    # the bare name; it prints the hex it chose. Look the row up by that, never by name.
+    $idLine = $out | Where-Object { $_ -match '\[intake:ID\] (.+) hex ([0-9a-f]+)\s*$' } | Select-Object -First 1
+    $key = if ($idLine -and $idLine -match '\[intake:ID\] (.+) hex ([0-9a-f]+)\s*$') { $Matches[2] } else { $name }
+    $row = Resolve-GenieRow $key
     $mine = Get-GenieSha3 ([System.IO.File]::ReadAllBytes($full))
     $theirs = if ($row.PSObject.Properties['hash_sha3']) { ([string]$row.hash_sha3).ToLowerInvariant() } else { '' }
     if ($mine -ne $theirs) {
@@ -366,11 +370,20 @@ function Invoke-GenieIntakeLocal([string]$Path) {
         throw ("the pool's $name is not this file, so nothing was loaded." +
                $(if ($why) { " intake said: $($why.Trim())" } else { " Run: intake $Path   to see why." }))
     }
-    return $name
+    return $row.hex_id
 }
 
 function Resolve-GenieRow([string]$Id) {
     # Exact hex_id wins; a bare name must match exactly one row (no silent guessing).
+    # A hex goes straight to its row: /search is a D1 LIKE, and D1 refuses patterns over
+    # 50 bytes ("LIKE or GLOB pattern too complex"), so every folder/name hex 500s there.
+    if ($Id -match '^[0-9a-f]{8,}$' -and $Id.Length % 2 -eq 0) {
+        $r = Invoke-GenieWorker "/clonepool/$([uri]::EscapeDataString($Id))?meta=true"
+        if ($r.StatusCode -eq 200) {
+            $m = $r.Content | ConvertFrom-Json
+            if ($m.PSObject.Properties['hex_id'] -and $m.hex_id -eq $Id) { return $m }
+        }
+    }
     $q = [uri]::EscapeDataString($Id)
     $s = (Invoke-GenieWorker "/search?q=$q").Content | ConvertFrom-Json
     $hits = @($s.clonepool | Where-Object { $_.hex_id -eq $Id -or $_.name -eq $Id })
