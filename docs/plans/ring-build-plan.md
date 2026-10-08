@@ -97,6 +97,27 @@ sockets over the mesh, symlinks where a local path must point at a sister's.
 - A ring on another machine never shares memory across the wire: its propcoms ↔ the Conductor go over
   the mesh, signed.
 
+## 5b. Sockets between the sisters (talked 10/7)
+Measured 10/7: PBMII → Compaq over the mesh 1.3 ms avg (max 2 ms, 10/10); the Compaq's eno1 links at
+**1000 Mb/s** (older notes said 100), 4 cores, 16 GB RAM.
+- **Everything on the wire is QUADRALINGUAL (J: "everything turns quadralingual").** No translation
+  sister-to-sister; translator.sh only at the sector3 exit (CLAUDE.md rules 1-3). A message whose four
+  strands disagree is refused at the door: validation is a property of the data, not a step.
+  Measure the size/CPU cost of four strands on the real link (quadpack note: MEASURE it).
+- **One persistent connection per sister pair**, reused (the ~7 s/file intake was mostly fresh HTTPS
+  calls to Cloudflare; an open mesh socket is ~1-2 ms). **Priority lanes:** rings 1-3, ring 4 (system),
+  bulk files — a big copy never blocks a small message.
+- Files stream at wire speed (gigabit ≈ 110 MB/s; zero-copy send on Linux, HP → Compaq → PBMII).
+- Inside one sister: the shared memory bus + local sockets/named pipes. Never shared memory across the wire.
+- Nebula proves the MACHINE, not the program: every socket keeps its own key (the Helix `HXT` token
+  handshake) + signed requests (what one sister may ask another).
+- A sister that is off: messages wait in the journal and go when she is back; nothing lost.
+- Bind exclusively, mesh address + loopback only, refuse loudly when a port is taken (10/7: a stray PoC
+  held 7701-7704 and stages went to it silently).
+- Symlinks to a sister's folder need a mounted share (SMB/NFS); Windows symlinks need Developer Mode/admin.
+  Shares only where a program needs a path; the main road is sockets.
+- Off-mesh (Jerry's phone away from home): 30-80 ms through the lighthouse; control yes, bulk stays home.
+
 ## 6. PREFETCH — OPEN, must be worked out before step 3 (Jerry)
 
 **Decided (J, 10/7):** not one monolith prefetch — **three**, with **the same tiered system as Helix**
