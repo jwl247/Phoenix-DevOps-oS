@@ -146,7 +146,7 @@ if [[ -d "${VAULT_DIR}" ]]; then
   while IFS= read -r vf; do
     ( umask 077; NT="${NEW_TOKEN}" awk '/^PHOENIX_AUTH=/{print "PHOENIX_AUTH=" ENVIRON["NT"]; next} {print}' "${vf}" > "${vf}.rot.$$" ) \
       && mv "${vf}.rot.$$" "${vf}" && vault_hits=$((vault_hits + 1)) && echo "  vault: updated $(basename "${vf}")"
-  done < <(grep -l '^PHOENIX_AUTH=' "${VAULT_DIR}"/* 2>/dev/null | grep -v '\.template$' || true)   # never a real key into a template
+  done < <(grep -l '^PHOENIX_AUTH=' "${VAULT_DIR}"/* 2>/dev/null | grep -vE '\.template$|\.bak' || true)   # never a real key into a template or a backup copy
 fi
 [[ "${vault_hits}" == "0" ]] && echo "  vault: no PHOENIX_AUTH= line found in ${VAULT_DIR} - update it by hand"
 echo "  Registry (HKCU\\Environment) updated for this Windows user."

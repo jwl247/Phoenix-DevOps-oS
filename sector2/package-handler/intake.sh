@@ -617,6 +617,20 @@ preflight_auth() {
     echo ""
     exit 1
   fi
+  # Cloudflare Access answers BEFORE the worker: a redirect/403 means the CF_ACCESS_*
+  # pair is missing or wrong, and every D1/R2 call after it would fail as a quiet WARN.
+  # Stop here instead (2026-10-08; genie.ps1 already says this plainly).
+  if [[ "${d1_code}" =~ ^(301|302|303|307|308|403)$ ]]; then
+    echo ""
+    echo " ╔══════════════════════════════════════════════════════════════╗"
+    echo " ║  CLOUDFLARE ACCESS REFUSED — stopping before touching files   ║"
+    echo " ╚══════════════════════════════════════════════════════════════╝"
+    echo "  packages-worker answered HTTP ${d1_code} from Cloudflare Access (${WORKER_URL}/whoami)."
+    echo "  CF_ACCESS_CLIENT_ID / CF_ACCESS_CLIENT_SECRET are missing or stale in this shell."
+    echo "  They live in the vault + Windows user settings (rotate-key keeps them); open a new window."
+    echo ""
+    exit 1
+  fi
   # Non-401 failures (network down, DNS, timeout) are not fatal: intake keeps
   # working local-only, and says so once instead of dying silently (S2CORE-F42).
   if [[ -z "${d1_code}" || "${d1_code}" == "000" ]]; then

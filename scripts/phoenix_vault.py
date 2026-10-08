@@ -105,7 +105,8 @@ def unseal(blob: bytes, passphrase: str) -> dict:
 def read_vault(vault: Path) -> dict[str, bytes]:
     files = {}
     for p in sorted(vault.iterdir()):
-        if p.is_file() and p.suffix.lower() not in SKIP:
+        # backups (*.bak*) stay home too: a rotation once wrote the live key into one (2026-10-08)
+        if p.is_file() and p.suffix.lower() not in SKIP and ".bak" not in p.name.lower():
             data = p.read_bytes()
             data.decode("utf-8")                       # secrets are text; refuse anything else
             files[p.name] = data

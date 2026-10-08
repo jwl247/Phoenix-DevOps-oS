@@ -93,6 +93,6 @@ hits=0
 while IFS= read -r vf; do
   ( umask 077; NT="$NEW" awk '/^CF_ACCESS_CLIENT_SECRET=/{print "CF_ACCESS_CLIENT_SECRET=" ENVIRON["NT"]; next} {print}' "$vf" > "$vf.rot.$$" ) \
     && mv "$vf.rot.$$" "$vf" && hits=$((hits + 1)) && echo "  vault: updated $(basename "$vf")"
-done < <(grep -l '^CF_ACCESS_CLIENT_SECRET=' "${VAULT_DIR}"/* 2>/dev/null | grep -v '\.template$' || true)
+done < <(grep -l '^CF_ACCESS_CLIENT_SECRET=' "${VAULT_DIR}"/* 2>/dev/null | grep -vE '\.template$|\.bak' || true)   # never into a template or a backup copy
 [[ "$hits" -gt 0 ]] || echo "  vault: no CF_ACCESS_CLIENT_SECRET= line found in ${VAULT_DIR} - add it by hand"
 echo "  Access token rotated. Boxes pick it up from the vault within the hour (old secret ends $EXP)."

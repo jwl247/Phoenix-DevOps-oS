@@ -10,6 +10,9 @@ The master PowerShell 7 CLI for the whole project plus the scripts that feed the
 - `usys-suite-gate.Tests.ps1` — standalone (no Pester) execution-gate tests, 18/18 passing.
 - `hsf-intake.sh` — non-interactive intake of files/folders straight into `sector2/package-handler/intake.sh`; resolves PHOENIX_AUTH / PHOENIX_WORKER_URL / CLONEPOOL_DIR / CF-Access from the Windows User environment. CLAUDE.md's named intake path.
 - `intake.ps1` — Windows intake wrapper (PowerShell 7 only).
+- `phoenix-rotate.ps1` — `rotate-key`: auth rotation, the whole chain in one command (Jerry's SID + typed ROTATE, never an agent). Step 1 `sector2/package-handler/rotate-phoenix-auth.sh` (new PHOENIX_AUTH → packages-worker, office-notify-worker, pbm-radar-worker, each proven on /whoami → Windows user env via setx → every vault file with a `PHOENIX_AUTH=` line except templates/backups). Step 1b `rotate-access-token.sh` (Cloudflare Access secret, 1 h overlap). Step 2 `phoenix_vault.py push` (cloud vault). Step 3 refreshes this window only.
+- **Where the keys live (single source of truth, 2026-10-08):** the vault `F:\Phoenix\Vault\secrets\phoenix-secrets.env` + Windows user env (HKCU). Every program inherits HKCU. `~/.phoenix_env.sh` / `.ps1` hold NO keys anymore (they had a stale Sep-24 key that overrode the live one in bin/clone, bin/intake, intake.ps1 → "PHOENIX_AUTH REJECTED"). `install.ps1` takes keys from the vault (vault wins), never writes them into those files.
+- **Who gets a rotated key:** automatic — new PS7 windows (profile), usys, genie, hsf-intake, every bin/ command, HUD (`AtlasClient` reads HKCU per call), portal (re-reads the vault per call). Needs a restart — dashboard, the running kernel (genie_control), PhoenixPortal/Hands tasks, open shells. By hand — pbmIII and awslh (`phoenix_vault.py pull --keys PHOENIX_AUTH,…` into `/etc/phoenix/secrets`); Linux `install.sh` still writes the key into `~/.phoenix_env.sh` there. Separate keys, not rotated by rotate-key — worker-up data planes (`~/.phoenix/worker-up/<name>/auth`), the mesh (`MESH_ADMIN`).
 - `compliance-local-check.ps1` — local half of the monthly compliance routine (Defender status etc., FAR 52.204-21 controls 13-15).
 - `install-compliance-check-autostart.ps1` — registers the weekly `Phoenix-ComplianceCheck` task.
 
@@ -35,7 +38,9 @@ Bash side: `bash scripts/hsf-intake.sh <path> [<path> ...]`.
 ## Connects to / connected from
 - `scripts/usys.ps1` → `sector2/package-handler/intake.sh` — IN: `usys download`, `usys watch`, `usys distro intake-qemu` (all via `Invoke-UsysIntakeFile`; no call site uses `phoenix-core/tools/intake.py` any more).
 - `scripts/usys.ps1` → `bin/clone` → `intake.sh clone` — OUT: `usys clone` (`Invoke-UsysCloneOut`).
-- `scripts/usys.ps1` → `sector4/intake/intake.sh` — `usys intake` / `.lol` magic extension (the Sector 4 vault pipeline; routed there on purpose).
+- `scripts/usys.ps1` → `sector4/intake/intake.sh` — `usys intake` / `.lol` magic extension (the Sector 4 vault pipeline). It needs `/mnt/g` (breach_coms4 inside the Debian VM) and runs the deprecated `phoenix-core/tools/intake.py`, so it can NOT work from Windows/Git Bash (verified 2026-10-08).
+- `scripts/phoenix-rotate.ps1` → `sector2/package-handler/rotate-phoenix-auth.sh` + `rotate-access-token.sh` → workers (`wrangler secret`), HKCU, vault files; → `scripts/phoenix_vault.py push` → `phoenix-vault-worker` (cloud vault, backups never pushed).
+- `sector2/package-handler/intake.sh` preflight → `/whoami`: 401 = PHOENIX_AUTH wrong (REJECTED); 3xx/403 = Cloudflare Access keys wrong (ACCESS REFUSED); both stop before touching files.
 - `scripts/hsf-intake.sh` → `sector2/package-handler/intake.sh` (piped, non-interactive).
 - `tools/phoenix-tray.py` → `scripts/hsf-intake.sh` (tray intake, since 2026-09-29).
 - `scripts/usys.ps1` → `sector2/package-handler/worker/index.js` (`/clonepool` GETs for search/pull, `?meta=true` for the custody hash).

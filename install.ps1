@@ -254,7 +254,9 @@ else { PHX-Warn "Vault not found at $SecretsFile -- will prompt / use existing e
 
 if (Test-Path $ENV_PS1) { . $ENV_PS1; PHX-Info "Loaded $ENV_PS1" }
 
-if (-not $env:PHOENIX_AUTH -and $vault['PHOENIX_AUTH']) {
+# The vault WINS for keys: rotate-key rewrites it, so an older value in the env must
+# never be written back over a rotation (2026-10-08: a re-run used to roll it back).
+if ($vault['PHOENIX_AUTH']) {
     $env:PHOENIX_AUTH = $vault['PHOENIX_AUTH']
     PHX-OK 'PHOENIX_AUTH from vault.'
 }
@@ -270,7 +272,7 @@ if (-not $env:PHOENIX_AUTH) { PHX-Warn 'PHOENIX_AUTH unset -- D1/R2 sync disable
 # since 2026-09-21 -- without these every worker call lands on the Access login
 # page instead of JSON. Vault only; never prompted (Laurie's box won't have them).
 foreach ($k in 'CF_ACCESS_CLIENT_ID', 'CF_ACCESS_CLIENT_SECRET') {
-    if (-not [Environment]::GetEnvironmentVariable($k) -and $vault[$k]) {
+    if ($vault[$k]) {
         [Environment]::SetEnvironmentVariable($k, $vault[$k])
     }
 }
@@ -320,8 +322,8 @@ $bashPkg   = ConvertTo-GitBashPath $INTAKE_SH
 
 @"
 # Phoenix DevOps OS environment -- generated $timestamp
+# NO KEYS here: rotate-key keeps them in the vault + Windows user settings, which every program inherits.
 `$env:PHOENIX_ROOT       = "$OS_DIR"
-`$env:PHOENIX_AUTH       = "$($env:PHOENIX_AUTH)"
 `$env:PHOENIX_WORKER_URL = "$WORKER_URL"
 `$env:CLONEPOOL_DIR      = "$ClonepoolDir"
 `$env:OLLAMA_MODELS      = "$OllamaModels"
@@ -330,7 +332,6 @@ $bashPkg   = ConvertTo-GitBashPath $INTAKE_SH
 try { icacls $ENV_PS1 /inheritance:r /grant:r "$($env:USERNAME):(R,W)" | Out-Null } catch {}
 
 @"
-export PHOENIX_AUTH="$($env:PHOENIX_AUTH)"
 export PHOENIX_WORKER_URL="$WORKER_URL"
 export CLONEPOOL_DIR="$bashPool"
 export PHOENIX_INTAKE="$bashPkg"
