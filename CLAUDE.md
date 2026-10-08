@@ -376,12 +376,12 @@ Push.
 | Secrets map (no values) | `docs/SECRETS.md` → vault `F:\Phoenix\Vault\secrets\` |
 | Pre-slim CLAUDE.md snapshot | `D:\Phoenix\claude-archive\` (also git history) |
 
-## LAST SESSION (2026-10-07 night — kernel ports, pool identity, the ring talked out + benched, heal step 1)
-Detail: `docs/history/SESSION-LOG.md` + `docs/history/HANDOFF-2026-10-07-night.md`. Suit look-up + eye step-aside (verified live); Helix-I no longer lies "OPERATIONAL" when a stray process holds 7701-7704; intake: path-aware identity (folder/name) + companion fix; whole repo + sector bundles in the pool; the ring design recorded in `docs/plans/ring-build-plan.md` (not committed to build — Jerry: the game first); storage/router/ring benches with raw results committed; heal step 1 on pbmIII (units + helix.ko now in the pool). Compaq: TV display/LightDM/Chrome/audio, ssh fixed.
+## LAST SESSION (2026-10-08 — auth root cause, usys one-word commands, slim Console, a better Jarvis)
+Detail: `docs/history/HANDOFF-2026-10-08.md`. Stale `~/.phoenix_env.*` key was the REJECTED cause (fixed); usys easy commands (17 tests); window flashing fixed; Console = buttons + Jarvis; Jarvis 8B on PBMII's cores in a Job Object (30% cap) + tools + lessons; pbmIII desktop disabled (broke barrier — fix first next session).
 
 ## NEXT SESSION (top items — full list in docs/history/NEXT-SESSION-BACKLOG.md)
-- **READ FIRST: `docs/history/HANDOFF-2026-10-07-night.md`** (then the evening one). NEXT = the rest of the Console list (evening handoff §3; item 1 Suit look-up DONE 10/7).
-- **HUD BUILT 10/7 (fbdc0f8): the eye + docks** (`docs/plans/hud-eye-and-docks.md`, Jerry framed it). Starts at logon (`Hud.exe --eye`). Jerry confirmed voice + "open the dock" work (10/7). NEXT: **talk out the Console's easy buttons** with him, then build them.
+- **READ FIRST: `docs/history/HANDOFF-2026-10-08.md`** §3. FIRST: keyboard + mouse on pbmIII (barrier died with the desktop I disabled 10/8) — LightDM + a minimal session, measure CPU, prove the mouse crosses. Then: rebuild HUD (uncommitted UTF-8/300 s Jarvis change), prove engine-down fallback + cold start, Jennifer rename (scope), old-HUD move (needs yes).
+- **RULES (Jerry 10/8):** no commit / no "done" unless it works end to end · usys one-word commands only · Atlas gap = stop and add it.
 - **FIX WAVES (10/7): everything Claude can do is done** (addendum-4). What is left needs Jerry (list below + addendum-4 "Still open"). Then the **next phase = build**, mapped in the workflow graph (ask for the link).
 - **Jerry only:** Windows local engine for PBMII (cross-compile on pbmIII, or use pbmIII's over the mesh) · pbmIII box fixes (harden/shares/recover, apache purge) · DASH-F24 · Radar cancel path · qcow2 + vault.enc sensitive · delete `C:\Program Files\Git\opt\` · Android or iPhone (phone node)
 - **TRUST RULE (Jerry, 2026-10-05): no documentation from ~09-21 → 10-05 can be trusted** (CONNECTIONS, session log, handoffs, COMMANDS, BUILD STATUS, "proven/live/DONE" claims). Verify by running it as a user would before building on it or reporting it works; correct wrong docs in place.
