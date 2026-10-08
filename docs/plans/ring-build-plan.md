@@ -174,6 +174,22 @@ yellow (J). **Ring 4 is SYSTEM USE (J): kept for the system's own work so nothin
 system jobs never queue behind user work.** (Its color: not given yet.) Nothing in the repo records this color code yet — it gets written here first, then into
 the ring/tier code and the QR footer tier colors (CLAUDE.md TAV: footer QR = tier color T1-T4).
 
+**The tiers live on the three sisters (J, 10/7, confirmed):**
+| Tier | Sister | Prefetch role |
+|---|---|---|
+| T1 hot (primary colors) | PBMII | what is in use now, RAM; PBMII makes the prefetch calls |
+| T2 warm (secondary colors) | the Compaq | **the holding area**: staged ahead of PBMII asking; the router decides what waits there and how long |
+| T3 cold (tertiary colors) | the HP | final storage, everything |
+Compaq <-> HP talk prefetch (the HP pushes what is likely needed into the Compaq's warm holding area);
+the Compaq hands from the holding area into PBMII's hot tier (1.3 ms link). Eviction is the same ladder in
+reverse (PBMII -> Compaq warm -> HP). The "bus between each machine and the other" is figurative: one
+conversation per pair, each with its own job; under it, a mirrored bus (each side writes its own copy at
+memory speed, the socket keeps the copies in step, the reader wakes on arrival).
+**A QuadEngine in the shared memory (J): "to help it along."** Data stays quad on every bus and in the
+holding area; the QuadEngine on each bus keeps it quad (encode on the way in, strands checked as they land,
+so a bad message never reaches a ring) — and, per Jerry's hypothesis, quad may be what Helix runs fastest
+on (measure it: the New Horizon A/B).
+
 Still open:
 What exists: New Horizon's "prefetch horizon σ" (predicted next access from mean ± stddev of past
 intervals; `PrefetchCompressor` adaptive poll 50 ms / 200 ms / 500 ms / 2 s; `hint_prefetch` into T3),
