@@ -51,6 +51,8 @@ truth; the cloud (R2, D1, workers) is the satellites: offsite copy, game edge, R
 Remote access goes phone → mesh → HP, not through the cloud. Proposed (Claude, awaiting Jerry's yes,
 changes CLAUDE.md "R2 primary — source of truth"): the HP holds final bytes + its own custody ledger;
 R2/D1 mirrored in the background; if the cloud vanished, home keeps running.
+**Roles (J, 10/7): the Compaq (pbmIII) is the ROUTER — to be built. Final storage = the other HP.**
+CLAUDE.md "R2 primary" stays until this is built ("not yet, we haven't built any of this").
 
 ## 3. The journal (the motor)
 - One append-only journal, kept by the Conductor.
