@@ -23,7 +23,20 @@
                            FontSize="16" VerticalAlignment="Center" HorizontalAlignment="Left"/>
                 <controls:KnightRiderBar x:Name="VoiceIndicator" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 <TextBlock x:Name="ProviderLabel" Text="provider: —" Foreground="{StaticResource TextDim}"
-                           FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,190,0"/>
+                           FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,524,0"/>
+                <!-- Transplanted from the dashboard (Jerry 10/8): files, terminal, glossary that shows code, commands -->
+                <Button Content="COMMANDS" Width="84" Height="28" HorizontalAlignment="Right"
+                        Margin="0,0,432,0" Style="{StaticResource HudButton}" Click="Commands_Click"
+                        ToolTip="The commands cheat sheet: every alias and command, rebuilt from the repo"/>
+                <Button Content="EXPLORER" Width="74" Height="28" HorizontalAlignment="Right"
+                        Margin="0,0,352,0" Style="{StaticResource HudButton}" Click="Files_Click"
+                        ToolTip="Open File Explorer in F:\Phoenix"/>
+                <Button Content="TERMINAL" Width="74" Height="28" HorizontalAlignment="Right"
+                        Margin="0,0,272,0" Style="{StaticResource HudButton}" Click="Terminal_Click"
+                        ToolTip="Open a PS7 terminal in the Phoenix repo"/>
+                <Button Content="GLOSSARY" Width="74" Height="28" HorizontalAlignment="Right"
+                        Margin="0,0,192,0" Style="{StaticResource HudButton}" Click="Glossary_Click"
+                        ToolTip="Glossary: find any file in Phoenix by name or what it does and read its code (custody-checked)"/>
                 <Button x:Name="CliToggleButton" Content="CLI" Width="40" Height="28" HorizontalAlignment="Right"
                         Margin="0,0,36,0" Style="{StaticResource HudButton}" Click="ToggleCli_Click"
                         ToolTip="Show/hide the CLAUDE CODE pane"/>
@@ -31,11 +44,46 @@
                         Margin="0,0,82,0" Style="{StaticResource HudButton}" Click="ToggleHud_Click"
                         ToolTip="Launch / hide the HUD: see-through, chat with Claude, drop files on the left edge (Ctrl+Alt+Space)"/>
                 <Button x:Name="SuitsButton" Content="SUITS" Width="54" Height="28" HorizontalAlignment="Right"
-                        Margin="0,0,130,0" Style="{StaticResource HudButton}" Click="Suits_Click"
+                        Margin="0,0,132,0" Style="{StaticResource HudButton}" Click="Suits_Click"
                         ToolTip="Suit look-up: find a suit in the pool by name or what it does, read it, import (run) it"/>
                 <Button Content="✕" Width="28" Height="28" HorizontalAlignment="Right"
                         Style="{StaticResource HudButton}" Click="Close_Click"/>
             </Grid>
+        </Border>
+
+        <!-- EASY BUTTONS (Jerry 10/8): one per usys command; each runs in its own PS7 window
+             that stays open. The words on the buttons are the words you'd type after usys. -->
+        <Border Style="{StaticResource HudPanel}" HorizontalAlignment="Left" VerticalAlignment="Top"
+                Margin="0,64,0,0" Width="560">
+            <StackPanel Margin="12">
+                <TextBlock Text="USYS — ONE WORD" Foreground="{StaticResource HoloCyan}" FontSize="13" FontWeight="Bold" Margin="0,0,0,8"/>
+                <WrapPanel x:Name="EasyButtons">
+                    <WrapPanel.Resources>
+                        <Style TargetType="Button" BasedOn="{StaticResource HudButton}">
+                            <Setter Property="Width" Value="126"/>
+                            <Setter Property="Height" Value="40"/>
+                            <Setter Property="Margin" Value="0,0,8,8"/>
+                            <Setter Property="FontSize" Value="13"/>
+                        </Style>
+                    </WrapPanel.Resources>
+                    <Button Content="IMPORT" Tag="import" Click="Easy_Click" ToolTip="usys import: the import method - pick a suit file or type a suit name; R2 -> memory -> run, never on disk"/>
+                    <Button Content="INTAKE S" Tag="intakes" Click="Easy_Click" ToolTip="usys intakeS: put a SUIT (.py .sh .ps1 .js) into Phoenix"/>
+                    <Button Content="INTAKE C" Tag="intakec" Click="Easy_Click" ToolTip="usys intakeC: put any FILE into the clone pool"/>
+                    <Button Content="INTAKE C ▸ FOLDER" Tag="intakec-folder" Click="Easy_Click" FontSize="11" ToolTip="usys intakeC: put a FOLDER (or a game/program folder) into the clone pool"/>
+                    <Button Content="GET" Tag="get" Click="Easy_Click" ToolTip="usys get: a copy OUT of Phoenix into a folder you pick, hash-checked"/>
+                    <Button Content="RUN" Tag="run" Click="Easy_Click" ToolTip="usys run: run an app, a game or a VM (e.g. coldwaters, debian)"/>
+                    <Button Content="OPEN" Tag="open" Click="Easy_Click" ToolTip="usys open: open a file with its app"/>
+                    <Button Content="CLOSET" Tag="closet" Click="Easy_Click" ToolTip="usys closet: the suits in the closet"/>
+                    <Button Content="STATUS" Tag="status" Click="Easy_Click" ToolTip="usys status: is Phoenix healthy (kernel included)"/>
+                    <Button Content="START" Tag="start" Click="Easy_Click" ToolTip="usys start: the kernel on"/>
+                    <Button Content="STOP" Tag="stop" Click="Easy_Click" ToolTip="usys stop: the kernel off"/>
+                    <Button Content="LOG" Tag="log" Click="Easy_Click" ToolTip="usys log: the kernel's log"/>
+                    <Button Content="DOCKS" Tag="docks" Click="Easy_Click" ToolTip="Open / close the HUD's docks by hand"/>
+                    <Button Content="HELP" Tag="help" Click="Easy_Click" ToolTip="usys help: the cheat sheet (same as COMMANDS)"/>
+                </WrapPanel>
+                <TextBlock x:Name="EasyStatus" Foreground="{StaticResource TextDim}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
+                           Text="Each button opens a PS7 window with the answer. The word on the button is what you'd type after usys."/>
+            </StackPanel>
         </Border>
 
         <!-- CLAUDE CODE — full Claude Code (every tool, in the repo), built the

@@ -100,6 +100,7 @@ public partial class HudOverlay : Window
                                   Foreground = (Brush)FindResource("Amber"), FontFamily = new FontFamily("Consolas") };
         void item(string header, Action act) { var i = new MenuItem { Header = header }; i.Click += (_, _) => act(); m.Items.Add(i); }
         item(ChatPanel.IsVisible ? "Fold the chat away" : "Open the chat", ToggleChat);
+        item(DocksOpen ? "Close the docks" : "Open the docks", ToggleDocks);
         if (_profile.Jarvis) item("Ask Jarvis…", StartJarvisAsk);
         if (_profile.Console) item("Open the Console", App.OpenConsole);
         m.Items.Add(new Separator());
@@ -313,6 +314,18 @@ public partial class HudOverlay : Window
     {
         dock.Visibility = Visibility.Collapsed;
         BodyOf(dock).Visibility = Visibility.Collapsed;
+    }
+
+    public bool DocksOpen => Shelf.Visibility == Visibility.Visible || ShelfRight.Visibility == Visibility.Visible;
+
+    /// <summary>The docks by hand (Jerry 10/8: "a button that manually controls the docks"): open both, or
+    /// put both away. Same doors as the voice command, so the security lock still holds.</summary>
+    public void ToggleDocks()
+    {
+        if (DocksOpen) { CloseDock(Shelf); CloseDock(ShelfRight); Add("[SYS] Docks closed."); return; }
+        if (DocksLocked) { Add("[SECURITY] The docks are locked by security. Unlock them from a terminal: security unlock-hud"); return; }
+        OpenDock(Shelf); OpenDock(ShelfRight);
+        Add("[SYS] Docks open.");
     }
 
     private void CloseDock_Click(object sender, RoutedEventArgs e)

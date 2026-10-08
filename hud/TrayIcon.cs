@@ -33,7 +33,12 @@ public sealed class TrayIcon : IDisposable
         if (p.Console) item("Open the Console", App.OpenConsole);
         item("Run…", RunBox.Open);
         if (p.Intake) item("Suit look-up…", () => SuitLookup.Open());
+        if (p.Intake) item("Glossary (read the code)…", () => SuitLookup.OpenGlossary());
+        if (p.Console) item("Open File Explorer", () => ConsoleActions.OpenExplorer());
+        if (p.Console) item("Open Terminal", () => ConsoleActions.OpenTerminal());
+        item("Commands cheat sheet", CheatSheet.Open);
         item("Chat (drop it down from the eye)", App.ToggleHud);
+        item("Docks (open / close)", () => App.Overlay?.ToggleDocks());
         if (p.Jarvis) item("Ask Jarvis…", () => App.Overlay?.StartJarvisAsk());
         item("Screenshot for Claude", SnapForClaude);
         // Out of the way on demand (Jerry 10/7: "your always on top im trying to use the compaq").

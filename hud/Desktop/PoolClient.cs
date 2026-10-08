@@ -32,6 +32,7 @@ public static class PoolClient
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
     private static readonly string[] Boilerplate = { "Auto-generated from TAV intake", "Intaked via " };   // intake placeholders, not descriptions
     private const int MaxViewBytes = 512 * 1024;
+    private const long MaxFetchBytes = 8L * 1024 * 1024;   // past this the Glossary describes, it doesn't download (a game bundle is GBs)
 
     public static bool IsSuitName(string n) => SuitExt.Any(e => n.EndsWith(e, StringComparison.OrdinalIgnoreCase));
     public static bool IsHex(string h) => HexRe.IsMatch(h);
@@ -67,8 +68,9 @@ public static class PoolClient
                         Str(r, "state"), what, repoPath);
     }
 
-    /// <summary>Pool by name + Atlas by description, merged. Never throws: the error comes back as text.</summary>
-    public static async Task<(IReadOnlyList<Suit> suits, string? error)> SearchAsync(string word)
+    /// <summary>Pool by name + Atlas by description, merged. Never throws: the error comes back as text.
+    /// suitsOnly=false is the Glossary: every file in the pool, not just code a suit can be made of.</summary>
+    public static async Task<(IReadOnlyList<Suit> suits, string? error)> SearchAsync(string word, bool suitsOnly = true)
     {
         try
         {
@@ -89,7 +91,7 @@ public static class PoolClient
                 {
                     var path = Str(c, "path");
                     var file = Path.GetFileName(path);
-                    if (IsSuitName(file)) what.TryAdd(path, (Str(c, "description"), path));
+                    if (!suitsOnly || IsSuitName(file)) what.TryAdd(path, (Str(c, "description"), path));
                 }
             // The glossary's own description, unless it is the intake placeholder.
             var gloss = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -105,7 +107,7 @@ public static class PoolClient
             void Add(JsonElement r)
             {
                 var name = Str(r, "name");
-                if (!IsSuitName(name) || !seen.Add(Str(r, "hex_id"))) return;
+                if ((suitsOnly && !IsSuitName(name)) || !seen.Add(Str(r, "hex_id"))) return;
                 var hit = what.Values.FirstOrDefault(w => Covers(name, w.path));
                 var (desc, path) = hit.path is not null ? hit : (gloss.GetValueOrDefault(name, ""), "");
                 found.Add(Row(r, desc, path));
@@ -147,6 +149,11 @@ public static class PoolClient
         try
         {
             var meta = await GetJson($"/clonepool/{s.Hex}?meta=true");
+            // Sensitive files (keys, .env, vault) are never shown (safety rule 10), and big files aren't pulled.
+            if (meta.TryGetProperty("sensitive", out var sens) && (sens.ValueKind == JsonValueKind.True || sens.ToString() is "1" or "true"))
+                return (null, $"{s.Name} is marked SENSITIVE - not shown here.");
+            if (long.TryParse(Str(meta, "size"), out var size) && size > MaxFetchBytes)
+                return (null, $"{s.Name}: {size / (1024.0 * 1024):N1} MB - too big to show here (clone it to read it).");
             var want = Str(meta, "hash_sha3").ToLowerInvariant();
             using var resp = await Get($"/clonepool/{s.Hex}");
             var ctype = resp.Content.Headers.ContentType?.MediaType ?? "";
@@ -162,6 +169,8 @@ public static class PoolClient
                 if (got != want) return (null, $"{s.Name}: SHA3-512 MISMATCH - R2 bytes don't match custody. Not shown.");
                 note = $"verified: SHA3-512 matches custody ({want[..12]}…)";
             }
+            if (Array.IndexOf(bytes, (byte)0, 0, Math.Min(bytes.Length, 8192)) >= 0)
+                return (null, $"{note} - binary file ({bytes.Length / 1024} KB), no text to show");
             if (bytes.Length > MaxViewBytes) note += $" - showing the first {MaxViewBytes / 1024} KB of {bytes.Length / 1024} KB";
             return (Encoding.UTF8.GetString(bytes, 0, Math.Min(bytes.Length, MaxViewBytes)), note);
         }

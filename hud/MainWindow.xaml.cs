@@ -142,6 +142,51 @@ public partial class MainWindow : Window
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
     private void Suits_Click(object sender, RoutedEventArgs e) => SuitLookup.Open();
+    private void Glossary_Click(object sender, RoutedEventArgs e) => SuitLookup.OpenGlossary();
+    private void Files_Click(object sender, RoutedEventArgs e) => ConsoleActions.OpenExplorer();
+    private void Terminal_Click(object sender, RoutedEventArgs e) => ConsoleActions.OpenTerminal();
+    private void Commands_Click(object sender, RoutedEventArgs e) => CheatSheet.Open();
+
+    /// <summary>The easy buttons: the Tag is the usys verb. Anything it needs is asked for first.</summary>
+    private void Easy_Click(object sender, RoutedEventArgs e)
+    {
+        var verb = (sender as FrameworkElement)?.Tag as string ?? "";
+        (bool ok, string why) r = (true, "");
+        switch (verb)
+        {
+            case "help": CheatSheet.Open(); EasyStatus.Text = "usys help - the cheat sheet."; return;
+            case "docks":
+                if (App.Overlay is { } o) { o.ToggleDocks(); EasyStatus.Text = o.DocksOpen ? "Docks open." : "Docks closed."; }
+                else EasyStatus.Text = "The HUD (the eye) isn't running, so there are no docks to open.";
+                return;
+            case "import":
+                if (UsysButtons.Ask("usys import", "The suit to run: type its name (e.g. stage_check.py), or Browse… for a suit file.", true) is not { } suit) return;
+                r = UsysButtons.Run("import", null, suit); break;
+            case "intakes":
+                if (UsysButtons.PickFile("usys intakeS - pick a suit (.py .sh .ps1 .js)") is not { } s) return;
+                r = UsysButtons.Run("intakeS", null, s); break;
+            case "intakec":
+                if (UsysButtons.PickFile("usys intakeC - pick a file for the clone pool") is not { } f) return;
+                r = UsysButtons.Run("intakeC", null, f); break;
+            case "intakec-folder":
+                if (UsysButtons.PickFolder("usys intakeC - pick a folder (or a game/program folder)") is not { } d) return;
+                r = UsysButtons.Run("intakeC", null, d); break;
+            case "get":
+                if (UsysButtons.Ask("usys get", "What to get out of Phoenix (its name, e.g. stage_check.py or helix-lightning/main_kernel.py):", false) is not { } name) return;
+                if (UsysButtons.PickFolder($"usys get {name} - where should it go?") is not { } to) return;
+                r = UsysButtons.Run("get", to, name); break;
+            case "run":
+                if (UsysButtons.Ask("usys run", "What to run (an app, game or VM, e.g. coldwaters or debian):", false) is not { } app) return;
+                r = UsysButtons.Run("run", null, app); break;
+            case "open":
+                if (UsysButtons.PickFile("usys open - pick a file") is not { } of) return;
+                r = UsysButtons.Run("open", null, of); break;
+            case "closet": case "status": case "start": case "stop": case "log":
+                r = UsysButtons.Run(verb); break;
+            default: return;
+        }
+        EasyStatus.Text = r.ok ? $"usys {verb} - running in its own PS7 window." : r.why;
+    }
 
     private void ToggleCli_Click(object sender, RoutedEventArgs e) =>
         ClaudeCodePane.Visibility = ClaudeCodePane.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
