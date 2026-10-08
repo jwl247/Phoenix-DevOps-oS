@@ -1,0 +1,811 @@
+{
+ "box": "pbmiii",
+ "taken": "20261007-223128",
+ "pool_rows": 872,
+ "note": "reference v1 = what was deployed at this moment; check only, nothing changed",
+ "summary": {
+  "repo:DIFFERENT | pool:matches": 1,
+  "repo:same | pool:NOT IN POOL": 17,
+  "repo:same | pool:DIFFERENT from pool's current version": 6,
+  "repo:DIFFERENT | pool:DIFFERENT from pool's current version": 1,
+  "repo:DIFFERENT | pool:NOT IN POOL": 1,
+  "repo:not in repo | pool:NOT IN POOL": 43,
+  "repo:same | pool:pool row has no SHA3": 2,
+  "repo:- | pool:NOT IN POOL": 16,
+  "repo:- | pool:DIFFERENT from pool's current version": 1
+ },
+ "files": [
+  {
+   "path": "/opt/phoenix/sector3/mesh/pbmiii-recover.sh",
+   "rel": "sector3/mesh/pbmiii-recover.sh",
+   "size": 7228,
+   "sha3": "9460c386d391be2199794f2c6132e410fa95f2855099f2eaf534e3d4d805bca2bfdf9e390d746ee617b054cfab19e9283535dcf180720e850c269bca8d3efc21",
+   "pool_name": "pbmiii-recover.sh",
+   "pool": "matches",
+   "repo": "DIFFERENT"
+  },
+  {
+   "path": "/opt/phoenix/sector3/services/helix.service",
+   "rel": "sector3/services/helix.service",
+   "size": 675,
+   "sha3": "425a34b369c303a378f2d5afa7cb0ac27ca2b74bf2811cf852a4bba00acddca68fba672159487b6435d1e01eda9d6b94adcdeb379b7125b722acf37ead243418",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector3/services/phoenix-paging.service",
+   "rel": "sector3/services/phoenix-paging.service",
+   "size": 1253,
+   "sha3": "666e671b79e0dd7dafcb3110a2da1df4e26b5245d570e8d278b166654f711830871a96cf88b77a5f0a2a700145127388749526b859138aad52c533f574ce09e0",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector4/paging.py",
+   "rel": "sector4/paging.py",
+   "size": 60808,
+   "sha3": "d06f4473b1adcfbd259f0edc938c887ba00b0f465b6ce2cf2c5f8a53ef7625e9451a6ab2ecca109c02f78be0f11ac8a8baf97005f4defe20238de5415eadd36b",
+   "pool_name": "paging.py",
+   "pool": "DIFFERENT from pool's current version",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/scripts/phoenix-box-setup.sh",
+   "rel": "scripts/phoenix-box-setup.sh",
+   "size": 3522,
+   "sha3": "0507ef131f1773326007c136ae7d05412de6c75d5c072baa94ef7596d224ef62ba3fb0c594b6e06075404df23bc46f2c15b3e99d444ff75123d50283bd88a5c8",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/scripts/hardening/COMPLIANCE.md",
+   "rel": "scripts/hardening/COMPLIANCE.md",
+   "size": 3947,
+   "sha3": "e562a8975621104b159060927a3a38f1665108464fdad8e0307e112a1d418eeed17b435f07992b7c30ab80ff823954ec3916fb59aac69cb6b06324afdcba6307",
+   "pool_name": "COMPLIANCE.md",
+   "pool": "DIFFERENT from pool's current version",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/scripts/hardening/phoenix-harden.sh",
+   "rel": "scripts/hardening/phoenix-harden.sh",
+   "size": 9996,
+   "sha3": "cf268ca1903e6718aaa0b52e1307f4f2342a00192987382a1f7e81cf0c7b4cdfc43de1aeb517b7bfa00ab3de582aa2b44a3b59c0f0835264974b9857ad0921bd",
+   "pool_name": "phoenix-harden.sh",
+   "pool": "DIFFERENT from pool's current version",
+   "repo": "DIFFERENT"
+  },
+  {
+   "path": "/opt/phoenix/scripts/shares/phoenix-shares.sh",
+   "rel": "scripts/shares/phoenix-shares.sh",
+   "size": 5247,
+   "sha3": "269d33409b14ab9ae9619e552794371a944492757cbb0c016b12fceb54fbabd33fbac21f31388b98cc8085ff84faa677a854579adc50fa7ed6259a6b59cf4e44",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "DIFFERENT"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/frank3_slot_a.mod.o",
+   "rel": "sector1/kernels/frank3_slot_a.mod.o",
+   "size": 94808,
+   "sha3": "8583ebd35c27cb54fe490fbaa93d08e332d634a6d1d5e1940c9f85f52c89147d28596f60492ad7a0320385cb56230b818c32cb37dbcde87dc4c9250465e9e29f",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/local-mix-0-verify.state",
+   "rel": "sector1/kernels/local-mix-0-verify.state",
+   "size": 192,
+   "sha3": "54f70983943e6dc465938c12ddbf577f4d802ceb0d4b78b47128f7d15dded6a55e8feb72be37daa18b338df26d90272d25ae8bacd88a6233df39c6075470c472",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.frank3_slot_a.mod.o.cmd",
+   "rel": "sector1/kernels/.frank3_slot_a.mod.o.cmd",
+   "size": 54662,
+   "sha3": "9e1d81aef53c5e50c2d9eae44dba3f1b7d58f7aad8eedaf025e0f1f8c4ec7071b35c27b3e62910877f6ddd078c8e5e83274d4ab2c8e383479db65175b042fd95",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix.o",
+   "rel": "sector1/kernels/helix.o",
+   "size": 911304,
+   "sha3": "61aa24b245afa494e8e757b3a8137120c3c35aa0062e91322f058488faecfd16b74cc35e851a39401d3b46b8886c2abfb93f925bce6f9f1655232b7f9b8ba7d4",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/local-wv-0-verify.state",
+   "rel": "sector1/kernels/local-wv-0-verify.state",
+   "size": 192,
+   "sha3": "c7054e16df54797972f0861f946e13ef7b141922bb4cc9b825e237dbf5048228ddf89ea16fa02cc858163495a6452815d5f27df759a2851738da6bd917d384db",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix.mod.o",
+   "rel": "sector1/kernels/helix.mod.o",
+   "size": 101552,
+   "sha3": "80473eccaf31995430890537c4129801b9e38deba6d847cf93f4da71f6310e123befa2239ea1f8a08e5fa85b6f1df06d845944b81267a3e06c93827dc6ab22c0",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix_bigset.sh",
+   "rel": "sector1/kernels/helix_bigset.sh",
+   "size": 3526,
+   "sha3": "eaf76e142e0d40c10d087fe1f6aec0fec5b53de1e04b2f83642beecbe0b2f0909e80f40941054c12ec690c2aa992557b8d4595dab6ce97fb4bd2bd4a4b0ec7e5",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/modules.order",
+   "rel": "sector1/kernels/modules.order",
+   "size": 130,
+   "sha3": "eb5cb55a8afaf734d63d5eafeff98f2f380303153334e62e57739666d3dc441c51d9a30abe77fd40d6a52c83e234b9056d5ed370fd69b72ba77e6e6d2e1805c7",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/Makefile",
+   "rel": "sector1/kernels/Makefile",
+   "size": 1439,
+   "sha3": "9b4155f89fa4d22927ba3d73a19c40f3f8261373c3e457aec8bf308db526819ae84eb6a3f7847f8b022bd8920ad2d9b030df408605ea0f189fdc417f7d0cf0e0",
+   "pool_name": "Makefile",
+   "pool": "pool row has no SHA3",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.helix_kmod.o.cmd",
+   "rel": "sector1/kernels/.helix_kmod.o.cmd",
+   "size": 67473,
+   "sha3": "21ec3b78ba38c5def64341571e16d5cea3f20d8924d5494f05e732327221fcfb85c70c520375320b8720922b3067dd07a6b2a94c4fb7d0e0069935dbf3e53367",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/frank3_slot_b.o",
+   "rel": "sector1/kernels/frank3_slot_b.o",
+   "size": 24176,
+   "sha3": "690261f3cdeb333d5bf8754ff1a2f200455ef0a3801c829eea87c4408e3999e4d18f3c4ceb127b6f52c7759acbdd7fd3e35cb70c7e1a414a5699fbff344d1a17",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.frank3_slot_b.mod.cmd",
+   "rel": "sector1/kernels/.frank3_slot_b.mod.cmd",
+   "size": 199,
+   "sha3": "bf2ec94a52572a46c39d98bb4941fcb061a4bedd3c6a2baf923ae343e65bafb3af12fdadabc62bcc90a663d1a1ce23477b4fe25a53079b2618af38db7d925b8d",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/dm_helix_test.sh",
+   "rel": "sector1/kernels/dm_helix_test.sh",
+   "size": 8135,
+   "sha3": "5879c8141c2245441bfe9754b76cc47cf22bf5745858585630a68ad762d4503411c2a9ad2fe66543ca92f88293b109c0d363bfdde72f7f09f94979580b869f08",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix.ko",
+   "rel": "sector1/kernels/helix.ko",
+   "size": 1010112,
+   "sha3": "75c447fc60b8d991605f162bbb3780163af66d90c05df1716da4f7f06feab283b98657f7f38745c45d5f1e9571a5defc90340e953f5519222de230688322dd93",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.frank3_slot_a.mod.cmd",
+   "rel": "sector1/kernels/.frank3_slot_a.mod.cmd",
+   "size": 199,
+   "sha3": "bfb7e8b9e5713843f7b4148cf4d69cdd8fa61b8d6ea92a638bed25648df7896d5ad3a7a1a9b0b06c20838b4b3b4ebb6d3c6d720594cf0b358a74ae53df441646",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.helix.o.cmd",
+   "rel": "sector1/kernels/.helix.o.cmd",
+   "size": 185,
+   "sha3": "350e47b40eb3cf664208e2776531fadd358146641466c3b514559423ec9d95dfe63845ec5648da45f49e75582c1eea5859bf5b170f7a241c8e0524cce047a2c0",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/Module.symvers",
+   "rel": "sector1/kernels/Module.symvers",
+   "size": 255,
+   "sha3": "9e6a143af1083f3b1fc913d9f55e2ff531f77973aa55c3fb5a7555718901512c54aa3822149c175c75604000da7f35e0551e5cf9add620f9f4d13482b1a6bb63",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/frank3_slot_b.mod.c",
+   "rel": "sector1/kernels/frank3_slot_b.mod.c",
+   "size": 1045,
+   "sha3": "a2fd582791f34a39f85285a7af765b9b37fdbf8c302c8481aed3f9d2fc874fde763e7f4b94baf0ffd0e551708ad418d455b5dca6208a3d0511aab415e787d950",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/local-mix-2-verify.state",
+   "rel": "sector1/kernels/local-mix-2-verify.state",
+   "size": 192,
+   "sha3": "196030f195148cc7168921b2630aade44132926d26f580ca51b65bddfdd3abf7b1d2c926e05b1b84d7e9b200222435a1ca8916deb6b3e08f206b014d44e5f762",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/local-mix-1-verify.state",
+   "rel": "sector1/kernels/local-mix-1-verify.state",
+   "size": 192,
+   "sha3": "2b95ceabd1feba7c9ab0a7e75919af7ebc68ed5b0175f32796dd17b4b5f9c36834d8894d06aa9232592e00c90b4078b18bd7251a5d77f31909f768077a5d3b48",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/frank3_slot_b.ko",
+   "rel": "sector1/kernels/frank3_slot_b.ko",
+   "size": 117512,
+   "sha3": "6aabedd7c5969d3235bce47ddee3786b9ce684621c5984bff247477fe1517648d16250ff039f222dab48e36ced23ef2509cbc8a7c2f25e19a866fd8d1f0a958a",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/install_helix_boot.sh",
+   "rel": "sector1/kernels/install_helix_boot.sh",
+   "size": 1848,
+   "sha3": "893e8d606248544fca706851f253cebfc360267ab90d3f5ee85d500c64b5cb3a80686dada3e1d61192555602628e1c632be8b2842f09c5609e4d3fab5daa2263",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.frank3_slot_a.ko.cmd",
+   "rel": "sector1/kernels/.frank3_slot_a.ko.cmd",
+   "size": 301,
+   "sha3": "102addf5e99d4acfe08d980b08af41d107be4cdba4ae207d166a676bb9f3ff1103f8a46950842da4a23d295314e43190659d512c37873910ddf5daf37556509b",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/local-mix-3-verify.state",
+   "rel": "sector1/kernels/local-mix-3-verify.state",
+   "size": 192,
+   "sha3": "f81d8af94ce4bf0aeb8d7af38fbcbb5b92213bd0deb61598cb76856a7fda0ba20014359611d5bfd3c8f03c6e007fc366f54e5ee77d42dc2436a86f2b1e097a02",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.helix.mod.o.cmd",
+   "rel": "sector1/kernels/.helix.mod.o.cmd",
+   "size": 54558,
+   "sha3": "d4ee962692304a24ffd147127fea0db27759e7bcbed23effea39a8e8574fbe453619a1e3b107345aad49821fb39cf5c5441370c4b73ba7be30fdb4c93177de60",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix_phoronix.sh",
+   "rel": "sector1/kernels/helix_phoronix.sh",
+   "size": 3774,
+   "sha3": "7c8dd3dc6a5e13b0484952110e980652b1c831b15cbc3bfc22cc2c8a58b292d22d1ff7dab391b2f8bcb8539460f5adece4a56caa823b496b125d4d941bf1e4ff",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/dm_helix.o",
+   "rel": "sector1/kernels/dm_helix.o",
+   "size": 651632,
+   "sha3": "d99e521b3d05c8998f9e16932f7e6c59729ec17fb4c92043368d1ac9194cfa2d3e866e0814802c5487b896222a92671d42ddead7787a7015b74877dc8a529ade",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/frank3_slot_b.c",
+   "rel": "sector1/kernels/frank3_slot_b.c",
+   "size": 1776,
+   "sha3": "ca5cd6239baf39160a1fd210420aa7c864eda437cc01f6a6da9b0a09c1d27504bb05c7483696bc0083506d6bc886791c4f4a683e629099f40958abefe1e4e903",
+   "pool_name": "frank3_slot_b.c",
+   "pool": "DIFFERENT from pool's current version",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/frank3_slot_a.o",
+   "rel": "sector1/kernels/frank3_slot_a.o",
+   "size": 24176,
+   "sha3": "f870c269313671371a2e6bd897f22c9bacb6afcf42ccda8038d3206317699befb846e8f388a564dca884c7fb882511e1b9c4d85f3fec9882e363a2a0453d7d2a",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix_verdict_lean.sh",
+   "rel": "sector1/kernels/helix_verdict_lean.sh",
+   "size": 2605,
+   "sha3": "4cb54caae4c83f31c1dccd1c9bbb293d560eeb56998434d9d10f4c59057ddeea1c3e5b2fdcfd53180c067be173eba79be6d7950ca2baad28ebd5d251513e662b",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix_boot.sh",
+   "rel": "sector1/kernels/helix_boot.sh",
+   "size": 5012,
+   "sha3": "e309d7eecefe508fd2c41f20f1f52dc8b408531dae5b6a2ce992dc6d22767d3d1cc4a6a7e860124823a8747a9c9f1623e6e3d60a97f3a1aa72fd735371f2a578",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.helix_kmod.o.d",
+   "rel": "sector1/kernels/.helix_kmod.o.d",
+   "size": 36893,
+   "sha3": "40ec2fddd696332a8692f4e507861a7a98ee5017a6b9bcde4aad299318b0642b38b8188504019f931a0bcfa6448b0f0658961c8c6011f08a01a5648307742b62",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.frank3_slot_b.mod.o.cmd",
+   "rel": "sector1/kernels/.frank3_slot_b.mod.o.cmd",
+   "size": 54662,
+   "sha3": "1ee18c7eaf1776d06444999a52b730c074d8db4ee7b5af1913a3fcb22e01d838d0a455c952342a82204d5f6633bd4930f6761b35dbe834ddf00704c9e4640e36",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.helix.mod.cmd",
+   "rel": "sector1/kernels/.helix.mod.cmd",
+   "size": 191,
+   "sha3": "190bb2dffc130eb55a7c5497d2430913bfe4dd76bf5e28eb8b468520aba0dfa04e32f58346986546df0cec3d0cc322342bbb161b30bb6ffb57a9689461186aa1",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix_pair_test.sh",
+   "rel": "sector1/kernels/helix_pair_test.sh",
+   "size": 3756,
+   "sha3": "074f981156124fe7cc9f16bd9b2958a3f42f26201e900b007590868ab48a93bde5b73784a297532b5db001cf1625341efeb1fb2d20d1453d7e891a2519acf973",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.modules.order.cmd",
+   "rel": "sector1/kernels/.modules.order.cmd",
+   "size": 256,
+   "sha3": "756c49558d684796989eebb68ec1a9bcb2864590da8a818cef64d0aef0ee162328955b00cbc402f3275354643deef5e1ded7e4f1d4c335666966a6bc84bba8c1",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix_kmod.c",
+   "rel": "sector1/kernels/helix_kmod.c",
+   "size": 13689,
+   "sha3": "9ec2692b2b9126b247900d3506f59eea038a8615bca999c8018244cfa070a00497a490801de8a91648670e88601617781fa8a0f6a5d828d63ff76b979eab6b8d",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix_llm_bench.sh",
+   "rel": "sector1/kernels/helix_llm_bench.sh",
+   "size": 3618,
+   "sha3": "1d7c85d237298f71f9429e1d96e098acfd21b18950a2305bb121445fdb92ac1279db0eea92148dc718bbbc31e8ef1aa5b97f8b703b6d5ba5f30c0655c1b7d127",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix_test",
+   "rel": "sector1/kernels/helix_test",
+   "size": 16392,
+   "sha3": "94d186390da862b1bb8a2d9e46548bb5b41d658465bfee67fd40ec5330f231d9c02d44bc842b2b10da49954de0a45d6d66eeb97ec048706eaac50a5308667e36",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/dm_helix.c",
+   "rel": "sector1/kernels/dm_helix.c",
+   "size": 56514,
+   "sha3": "11172ec28220f427b398e2e2283ad592b8d294b6179712f2444c54ae4445a51b6d93f56ce5d8579f0169fa286d1752805ae7e22aed791e3bfcf8bf5e8ed30410",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix_kmod.o",
+   "rel": "sector1/kernels/helix_kmod.o",
+   "size": 264728,
+   "sha3": "7c9c7f3ba0d4bee9805627685d5025b3544f1df0fc898e79fd8927313b6c1b42612afa71188769b1f2e3d00292f3f95dc1bb728df6953bc12b00ad8d2f8d26d1",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.helix.ko.cmd",
+   "rel": "sector1/kernels/.helix.ko.cmd",
+   "size": 269,
+   "sha3": "4f23f692f7fff750c8abc6220567f11a9995375ea7bd819246c44dd0f8595ced859e185d8aae4d641247ff4e215b3f74c570a73ae3fe71129577fd82d446d187",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/README.md",
+   "rel": "sector1/kernels/README.md",
+   "size": 5871,
+   "sha3": "caf4f30e2e73f365c99f1584a28366740e9143110055b6e5a88a9a903d577ff3efa4fbff84acce1eff01433f7a2be17a7074b965214f7282b1a036635a789b34",
+   "pool_name": "README.md",
+   "pool": "DIFFERENT from pool's current version",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.frank3_slot_b.o.cmd",
+   "rel": "sector1/kernels/.frank3_slot_b.o.cmd",
+   "size": 53348,
+   "sha3": "238c7f8e3d3ab9a1e34bd81353659effadcefd36cfb9fe686087b26f4de8ac5e3da5be49f8793175f9894a0eab4877563982f676a91051906c5a9b7dad2675b5",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/frank3_slot_a.mod",
+   "rel": "sector1/kernels/frank3_slot_a.mod",
+   "size": 45,
+   "sha3": "e7769e963f21a4537b50b24395b671a9f632c92c685a27addb7a2c295cbf37e3e1894dc97677dfdc16fe79f73c67a3dd3eff645cb8bc24ed343643abde2f4e78",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.dm_helix.o.cmd",
+   "rel": "sector1/kernels/.dm_helix.o.cmd",
+   "size": 70104,
+   "sha3": "9b88d2c402c0922aa614e95cbfd6f3ea40b07f6d468c8360f2ad3faa4af28bd12ca9c4ca9cd474fc0da5aa11dcc29fa65bd52cd8c338433d2bd89f8b6df99691",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix_tune.sh",
+   "rel": "sector1/kernels/helix_tune.sh",
+   "size": 3370,
+   "sha3": "d6a3fda1573be8750b9cf74aa92d879106e828d6f910a87e45827df84427ae087cc51d316be444165c3b1957fd2b2d2efc6a4de5f0a62c84b355f23174c87719",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.frank3_slot_a.o.cmd",
+   "rel": "sector1/kernels/.frank3_slot_a.o.cmd",
+   "size": 53348,
+   "sha3": "2b80230008364405ed009d87519d8e22e86f26bd5ebcd7dadc00095badc4c0e2214245780dc7faf1361178f766ab43cbdb20db7e29ec67479c470574f00f6a43",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/frank3_slot_b.mod",
+   "rel": "sector1/kernels/frank3_slot_b.mod",
+   "size": 45,
+   "sha3": "d566796997cde3ec24b3f6ce9da2364e474446b403bc6eb3d00ef0f6391a5afbe2b7a27b0db2f631446741c6bc51cdac7f01382d1236558a76c78d3b7e0bf561",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix_test.c",
+   "rel": "sector1/kernels/helix_test.c",
+   "size": 3586,
+   "sha3": "5efac82e3f4d6500342cd210277d7cd90f7cb09e2d60d4f26fb090e56a6545792384cabece8ccf66dd672afbdd84361848c2403a12f20e18b4c154a986ebd9fb",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.Module.symvers.cmd",
+   "rel": "sector1/kernels/.Module.symvers.cmd",
+   "size": 216,
+   "sha3": "91312096f22c8fab14921c50a54988b3eb9646ce75809fdda0751fe59103894acf4ac1a71d10e6fe1fe03c1cb942ac808375bb1209d4afc8e4658cdf6bbfab33",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix_freedrive.sh",
+   "rel": "sector1/kernels/helix_freedrive.sh",
+   "size": 4074,
+   "sha3": "5e32d46c414d6386342a30442795de0e91dd77b6477bd86257c4fe9c2d35765e9c68321326036e4124c4b9ddbe320afefe086f85503d80235ca5b9e1d80d8ff6",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix.mod",
+   "rel": "sector1/kernels/helix.mod",
+   "size": 82,
+   "sha3": "29396c14804b262fa9c1d52d442213a41d1752c1bd8a8f4464272cf96c263338b617bf018e9d9211b5e634dc7729ab76566a8bc543e6401a0b319cad421e8581",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix.h",
+   "rel": "sector1/kernels/helix.h",
+   "size": 3855,
+   "sha3": "71c1b923b692d794391111fde491e69ad509220ea9eeb53660ae2f2363e373c0d62b9eee435429ce7628fef507db8d5163e2edf672f0cd9dba8f1ff8f95d45b4",
+   "pool_name": "helix.h",
+   "pool": "DIFFERENT from pool's current version",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/frank3_slot_b.mod.o",
+   "rel": "sector1/kernels/frank3_slot_b.mod.o",
+   "size": 94808,
+   "sha3": "8046f305181a036b2b6ea4d02f82b205951a48f7f5cb2f78e1ff0f669c3ff71ae99449deb5b71bd13ced7b215e8d598cb83a4b4b687100404a33e17bd7f5e251",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/frank3_slot_a.mod.c",
+   "rel": "sector1/kernels/frank3_slot_a.mod.c",
+   "size": 1045,
+   "sha3": "8a40c1f28429350d9e68cfa172f0d313991206c3d502fd9ef81e23331d7c9444604985a6528b68d10f36fbdbc040431737fe526fbfe1182fbf573a093379b73e",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/.frank3_slot_b.ko.cmd",
+   "rel": "sector1/kernels/.frank3_slot_b.ko.cmd",
+   "size": 301,
+   "sha3": "b35aeb303585fd76409c7d8d252893aab268830d66c119ca40b22fe73c8c4b74e54e4135ed51a09654c0b4f00d8fbc1b173fd6a5d75fd40131591f58d7d34be5",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/frank3_slot_a.ko",
+   "rel": "sector1/kernels/frank3_slot_a.ko",
+   "size": 117512,
+   "sha3": "1867642e77d55def56054195229e0d7b02d52c5c58ee6392a5976a25ca5d91f2f173b17181607fa2b2b9af95aea0ee6bbe2b5297070de0ab7615a574aa3ada30",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/frank3_slot_a.c",
+   "rel": "sector1/kernels/frank3_slot_a.c",
+   "size": 1776,
+   "sha3": "17be4d92fbb35caad1d99d97157e8f4d228492a5fee893a83e12377b7a3fbbb35d9c6f49136018dd8caba4168a52e404224d91568f8cbf2a18675f8add36a406",
+   "pool_name": "frank3_slot_a.c",
+   "pool": "DIFFERENT from pool's current version",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/helix.mod.c",
+   "rel": "sector1/kernels/helix.mod.c",
+   "size": 4676,
+   "sha3": "a14566dbd54cbcb2b40b2672141df520e2629ef937827403a8cb8126a3e6c74b4056b04e6a75f67a84ce67f5464886003904d8fb335ceea18573e53f5341d8ee",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/libhelix/libhelix.so",
+   "rel": "sector1/kernels/libhelix/libhelix.so",
+   "size": 16432,
+   "sha3": "5c3c319abb558417056cec7399d5bc4916edd5a5e22f37cb97b840e7a7831160989b86b8ad8b9c67c6466fb109a810ab846b2d403f8f0b9a42fd9fedd2f0107e",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "not in repo"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/libhelix/helix.py",
+   "rel": "sector1/kernels/libhelix/helix.py",
+   "size": 9489,
+   "sha3": "d0e5fcb29725dafa9336c21657c1e9d195c675a78f0e42459610db7b44cd5a58b6d590453e8535b15714a67f1661144517eb7c003cff196ca7302934322ff3b9",
+   "pool_name": "helix.py",
+   "pool": "pool row has no SHA3",
+   "repo": "same"
+  },
+  {
+   "path": "/opt/phoenix/sector1/kernels/libhelix/libhelix.c",
+   "rel": "sector1/kernels/libhelix/libhelix.c",
+   "size": 5581,
+   "sha3": "6e3ab8b4b54b166a50f7eb6223ca874aa58e37cc25d2ebfcc1cd757c102c8877fcd39a0be0253f8984148fd246c3acd483352fac9bb54eea25196862438743a7",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "same"
+  },
+  {
+   "path": "/etc/systemd/system/helix.service",
+   "rel": "units/helix.service",
+   "size": 675,
+   "sha3": "425a34b369c303a378f2d5afa7cb0ac27ca2b74bf2811cf852a4bba00acddca68fba672159487b6435d1e01eda9d6b94adcdeb379b7125b722acf37ead243418",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/jarvis-purge.service",
+   "rel": "units/jarvis-purge.service",
+   "size": 512,
+   "sha3": "fb7c2db09b734fe05b993a51ef6c58eeb416c8c83c51b4261fed791f074818a684b8823c0564c210ceac803f9b44ab7fd790538e80584ef40e246892e0787e0e",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/jarvis-purge.timer",
+   "rel": "units/jarvis-purge.timer",
+   "size": 155,
+   "sha3": "f96424b7bef2e0f94bbdf87ac8b4e677924331b6d09c67e7ecb16d35ca74210fabc91402452a9664fc3256b8a36e16e9af8573fa881916730f590039302ec905",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/nebula.service",
+   "rel": "units/nebula.service",
+   "size": 344,
+   "sha3": "5feb106f5c99de81dd5c187e55fcefac4c838526d8955d1a9939167f99c4201a1e436cfb190c05e8766badee89c4fafcdafc0114ec6959c22e5dd81639d012d6",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/openjarvis.service",
+   "rel": "units/openjarvis.service",
+   "size": 1807,
+   "sha3": "628a7b563ed9e22a7dcf1768dda3a72a034f088dafe8608b729035de55d0a7b2968eaa4adeffed909112ddc881e810ed551e63d306452a2ca948f219f45b87ab",
+   "pool_name": "openjarvis.service",
+   "pool": "DIFFERENT from pool's current version",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/phoenix-buddy.service",
+   "rel": "units/phoenix-buddy.service",
+   "size": 244,
+   "sha3": "0249bb404799f2bf960e0fe8993a6c1668bea1a16c459864e310e57aeac67123b214dc417169f8a356601e19e5cc5827cc73dd767668ef2d62ba677e67ce9e5c",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/phoenix-buddy.timer",
+   "rel": "units/phoenix-buddy.timer",
+   "size": 143,
+   "sha3": "3d2be7b2e1763ca0c3ccaef8e8f1fa9723fdce001d4b3414af3c9f4008b97533f253f9ac3f0aab0d65d73cec56632342a032cffc7f5e9d34b149d7a873dbbc41",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/phoenix-harden-heal.service",
+   "rel": "units/phoenix-harden-heal.service",
+   "size": 116,
+   "sha3": "b1f14dbb37ffb7d631d7b4ccbaa7c47ec10f0006a57d991897f3a9590c606b05a86d7a0a55254d1c4565aa9b631c2871f850ea04b928321b7ac072f88cbbd338",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/phoenix-harden-heal.timer",
+   "rel": "units/phoenix-harden-heal.timer",
+   "size": 155,
+   "sha3": "505860220dd8fb67fd972166badf424c0a6988a88d86e6ab2e3a4f5a5c974958f97cc276c6f63b37ad60787a55a70d24627b1b1f1cbe4463b71e1bace1bba394",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/phoenix-llm.service",
+   "rel": "units/phoenix-llm.service",
+   "size": 1572,
+   "sha3": "e55a4c4568167bba0cf8762b95679ce858afa6993993932bbe101386d6ea192f0de35d0499d02b76e2a8e75d9e5598f734d9f88c5e3f8c9b837627899f16f46b",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/phoenix-mesh-heal.service",
+   "rel": "units/phoenix-mesh-heal.service",
+   "size": 116,
+   "sha3": "5abac11aa45a34d4dc87756a3a49020c029a0b0eaff9155472892ce66a71dfe4c23607fe5f67d8154ae19a56a5e827bc5f9a65fc7e6586f7f2c70787eafc145d",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/phoenix-mesh-heal.timer",
+   "rel": "units/phoenix-mesh-heal.timer",
+   "size": 148,
+   "sha3": "28f2972fc6da604c1679c13790b23271ebab01b08c3d4f992347d70a69cc75b126592ec9db0363d1c8e11a286d612ae897dfb5813f6a6103fcf0fc629bd0fd73",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/phoenix-paging.service",
+   "rel": "units/phoenix-paging.service",
+   "size": 1253,
+   "sha3": "666e671b79e0dd7dafcb3110a2da1df4e26b5245d570e8d278b166654f711830871a96cf88b77a5f0a2a700145127388749526b859138aad52c533f574ce09e0",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/phoenix-security.service",
+   "rel": "units/phoenix-security.service",
+   "size": 279,
+   "sha3": "20497ec40dc4ece0296b3a96434e408414b4b08ca5049c5a9e2985d95b14b60636ab00448350a5fcf337ce48a77e9e1277b0eae8febcea351aae9fdbee12f393",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/phoenix-security.timer",
+   "rel": "units/phoenix-security.timer",
+   "size": 151,
+   "sha3": "148da44dbb92fc0de27ec63cbccf7f19a4830750549db5af1d66ecb1fb5df121a7f0b2f3404265c8ff5af3b35135a796926b4efb5b695756a47ec71d862c2b86",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/phoenix-shares-heal.service",
+   "rel": "units/phoenix-shares-heal.service",
+   "size": 113,
+   "sha3": "4169cae1d25743859b97968c0d19668a7a92cacae2433eee8abeeb6441ea66d940ed419410e7a429ee65810260e653ae7f142f661caa58c6c1df7c715e080742",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  },
+  {
+   "path": "/etc/systemd/system/phoenix-shares-heal.timer",
+   "rel": "units/phoenix-shares-heal.timer",
+   "size": 151,
+   "sha3": "061dc78d2d9e1d26cbb39eb07217ad578c14b55eb7afdb7a9d37d72e0b8dfb7cfc5ce61425d4a410d88eba39a0f7dacddf088086f9271849b49c63ca78f50e41",
+   "pool_name": null,
+   "pool": "NOT IN POOL",
+   "repo": "-"
+  }
+ ]
+}
