@@ -39,6 +39,17 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+if os.name == "nt":
+    # Runs on Jerry's desktop with pythonw: a console child (sc, netsh, powershell, shutdown...)
+    # started without CREATE_NO_WINDOW pops a Windows Terminal window and steals focus - portal's
+    # `sc query` did, on every status check (2026-10-08). Same fix as phoenix_buddy.py (a54431a):
+    # every subprocess gets CREATE_NO_WINDOW unless it asks otherwise.
+    class _QuietPopen(subprocess.Popen):
+        def __init__(self, *a, **k):
+            k.setdefault("creationflags", subprocess.CREATE_NO_WINDOW)
+            super().__init__(*a, **k)
+    subprocess.Popen = _QuietPopen
 from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
