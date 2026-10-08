@@ -1,0 +1,126 @@
+[
+ {
+  "contender": "frank",
+  "label": "Frank's storage system (franken.py)",
+  "python": "3.12.10",
+  "platform": "win32",
+  "items": 20000,
+  "size": 4096,
+  "data": "random",
+  "reads": 100000,
+  "seed": 7,
+  "write": {
+   "ops": 20000,
+   "ops_per_s": 1058.6,
+   "p50_us": 906.7,
+   "p90_us": 1748.6,
+   "p99_us": 2841.1,
+   "max_us": 14977.0
+  },
+  "read": {
+   "ops": 100000,
+   "ops_per_s": 97363.5,
+   "p50_us": 1.0,
+   "p90_us": 1.1,
+   "p99_us": 1.6,
+   "max_us": 35.7
+  },
+  "wrong_answers": 0,
+  "missing_answers": 0,
+  "peak_mem_mb": 131.2,
+  "registry_items": null
+ },
+ {
+  "contender": "nh",
+  "label": "New Horizon",
+  "python": "3.12.10",
+  "platform": "win32",
+  "items": 20000,
+  "size": 4096,
+  "data": "random",
+  "reads": 100000,
+  "seed": 7,
+  "write": {
+   "ops": 20000,
+   "ops_per_s": 3045.3,
+   "p50_us": 318.0,
+   "p90_us": 351.2,
+   "p99_us": 433.7,
+   "max_us": 19347.0
+  },
+  "read": {
+   "ops": 100000,
+   "ops_per_s": 21530.7,
+   "p50_us": 33.0,
+   "p90_us": 34.5,
+   "p99_us": 64.9,
+   "max_us": 194.4
+  },
+  "wrong_answers": 0,
+  "missing_answers": 0,
+  "peak_mem_mb": 658.3,
+  "registry_items": 20000
+ },
+ {
+  "contender": "og",
+  "label": "OG Double Helix",
+  "python": "3.12.10",
+  "platform": "win32",
+  "items": 20000,
+  "size": 4096,
+  "data": "random",
+  "reads": 100000,
+  "seed": 7,
+  "write": {
+   "ops": 20000,
+   "ops_per_s": 10160.4,
+   "p50_us": 93.7,
+   "p90_us": 102.5,
+   "p99_us": 147.9,
+   "max_us": 15165.7
+  },
+  "read": {
+   "ops": 100000,
+   "ops_per_s": 82913.5,
+   "p50_us": 2.6,
+   "p90_us": 2.7,
+   "p99_us": 4.6,
+   "max_us": 70.3
+  },
+  "wrong_answers": 0,
+  "missing_answers": 0,
+  "peak_mem_mb": 405.1,
+  "registry_items": 20000
+ },
+ {
+  "contender": "free",
+  "label": "Freewheeling (HelixDB)",
+  "python": "3.12.10",
+  "platform": "win32",
+  "items": 20000,
+  "size": 4096,
+  "data": "random",
+  "reads": 100000,
+  "seed": 7,
+  "write": {
+   "ops": 20000,
+   "ops_per_s": 7603.9,
+   "p50_us": 126.4,
+   "p90_us": 147.2,
+   "p99_us": 188.1,
+   "max_us": 7523.9
+  },
+  "read": {
+   "ops": 100000,
+   "ops_per_s": 104180.3,
+   "p50_us": 0.5,
+   "p90_us": 0.5,
+   "p99_us": 1.0,
+   "max_us": 25.4
+  },
+  "wrong_answers": 0,
+  "missing_answers": 0,
+  "peak_mem_mb": 617.5,
+  "registry_items": null
+ }
+]
