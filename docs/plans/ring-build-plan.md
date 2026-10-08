@@ -125,8 +125,9 @@ bank = the bus); Helix (New Horizon) MOVES — pushes out of Freewheeling (evict
 ahead of need (prefetch up the tiers), i.e. the paging manager's "clears and feeds her". Today's
 `member.py` gets this wrong: franken hands to freewheeling through a folder, and new_horizon only archives
 balls already done (never pushes/pulls).
-**Why (J, 10/7): "free was in charge of the stage read API."** That is Jerry's DESIGN; the file itself never
-says "stage" — `helix_api.py`'s Freewheeling is ROLE "memory_bank" with `store_warm`/`load_warm` (warm memory)
+**Why (J, 10/7): "free was in charge of the stage read API."** The file never uses the word "stage", but her
+warm store IS staged data in memory and `load_warm` is how it is read — so reading her API as the stage read
+API is fair (J: "open to interpretation"). `helix_api.py`'s Freewheeling is ROLE "memory_bank" with `store_warm`/`load_warm` (warm memory)
 and `store_cold`/`load_cold` (cold store), a per-system load count, threshold 5, and an empty
 "# --- existing logic ---" end (more was meant to go there). The rebuild makes her the stage read API for real.
 **Her `ident.card` / `responsibility.json` don't exist — by design history (J): the ident was first the
