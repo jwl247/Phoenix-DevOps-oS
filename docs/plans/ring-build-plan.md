@@ -45,6 +45,12 @@ rings hold until he is back).
 all roads lead to the HP for final storage.** Open, the big one (J): **how deep the Phoenix universe
 delves into R2 and D1** — today CLAUDE.md says R2 is the source of truth for content and D1 the custody
 ledger; "final storage on the HP" moves the truth home. Decide before step 5.
+**The principle (J, 10/7): "we are the universe but the cloud will be our satellites that the rest of
+the world marvels at."** Home (the HP, the machines, the mesh, Jerry's phone as a mesh node) holds the
+truth; the cloud (R2, D1, workers) is the satellites: offsite copy, game edge, Radar, the public face.
+Remote access goes phone → mesh → HP, not through the cloud. Proposed (Claude, awaiting Jerry's yes,
+changes CLAUDE.md "R2 primary — source of truth"): the HP holds final bytes + its own custody ledger;
+R2/D1 mirrored in the background; if the cloud vanished, home keeps running.
 
 ## 3. The journal (the motor)
 - One append-only journal, kept by the Conductor.
