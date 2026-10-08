@@ -88,6 +88,10 @@ rm -f /mnt/helix-egress/benchorigin.img ~/helixbench/strandB.img   # keeps the r
 ```
 
 ## Not covered here (separate tests)
-- **Quad vs plain:** dm-helix works on plain disk blocks and has no quad in it (checked 10/7). The quad
-  speed Jerry saw was the userspace Helix (`sector1/helix/`). That A/B needs its own script.
+- **Quad vs plain:** dm-helix works on plain disk blocks and has no quad in it (checked 10/7).
+  **New Horizon is the newest reproduction of Helix (J, 10/7)** and is where quad lives
+  (`helix_new_horizon.py`: `QuadralingualPacket`, quadralingual octahedron blocks, rungs). The quad A/B
+  runs against New Horizon: the same data stored and fetched as plain vs as QuadralingualPackets.
+  Blocker: the Compaq has no numpy (Python 3.11.2, checked 10/7) — import it from the pool or install
+  on Jerry's yes. Script not written yet.
 - Linux + SSD cache (lvmcache/bcache) as the fair standard for run C.
