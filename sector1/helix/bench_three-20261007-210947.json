@@ -1,0 +1,95 @@
+[
+ {
+  "contender": "frank",
+  "label": "Frank's storage system (franken.py)",
+  "python": "3.12.10",
+  "platform": "win32",
+  "items": 20000,
+  "size": 4096,
+  "data": "random",
+  "reads": 100000,
+  "seed": 7,
+  "write": {
+   "ops": 20000,
+   "ops_per_s": 1098.5,
+   "p50_us": 929.4,
+   "p90_us": 1677.2,
+   "p99_us": 1907.8,
+   "max_us": 4577.7
+  },
+  "read": {
+   "ops": 100000,
+   "ops_per_s": 97838.9,
+   "p50_us": 1.0,
+   "p90_us": 1.0,
+   "p99_us": 1.6,
+   "max_us": 31.6
+  },
+  "wrong_answers": 0,
+  "missing_answers": 0,
+  "peak_mem_mb": 0.0,
+  "registry_items": null
+ },
+ {
+  "contender": "nh",
+  "label": "New Horizon",
+  "python": "3.12.10",
+  "platform": "win32",
+  "items": 20000,
+  "size": 4096,
+  "data": "random",
+  "reads": 100000,
+  "seed": 7,
+  "write": {
+   "ops": 20000,
+   "ops_per_s": 3064.1,
+   "p50_us": 316.5,
+   "p90_us": 347.7,
+   "p99_us": 423.5,
+   "max_us": 20041.8
+  },
+  "read": {
+   "ops": 100000,
+   "ops_per_s": 23769.2,
+   "p50_us": 30.4,
+   "p90_us": 31.4,
+   "p99_us": 49.3,
+   "max_us": 183.8
+  },
+  "wrong_answers": 0,
+  "missing_answers": 0,
+  "peak_mem_mb": 0.0,
+  "registry_items": 20000
+ },
+ {
+  "contender": "og",
+  "label": "OG Double Helix",
+  "python": "3.12.10",
+  "platform": "win32",
+  "items": 20000,
+  "size": 4096,
+  "data": "random",
+  "reads": 100000,
+  "seed": 7,
+  "write": {
+   "ops": 20000,
+   "ops_per_s": 10177.4,
+   "p50_us": 93.4,
+   "p90_us": 101.4,
+   "p99_us": 156.7,
+   "max_us": 14983.7
+  },
+  "read": {
+   "ops": 100000,
+   "ops_per_s": 82538.9,
+   "p50_us": 2.6,
+   "p90_us": 2.7,
+   "p99_us": 4.4,
+   "max_us": 46.9
+  },
+  "wrong_answers": 0,
+  "missing_answers": 0,
+  "peak_mem_mb": 0.0,
+  "registry_items": 20000
+ }
+]

@@ -1,0 +1,42 @@
+[
+ {
+  "router": "capulet",
+  "label": "Capulet (Frank + Helix)",
+  "messages": 20000,
+  "size": 256,
+  "sent": 2500,
+  "received": 2500,
+  "lost": 0,
+  "garbled_or_duplicate": 0,
+  "stalled_at_message": 2500,
+  "send_seconds": 2.031,
+  "throughput_msgs_per_s": 200.4,
+  "delay_ms": {
+   "p50": 6176.868,
+   "p90": 11145.965,
+   "p99": 12249.972,
+   "max": 12364.685
+  },
+  "router_log": "C:\\Users\\jwlef\\AppData\\Local\\Temp\\bench_routers_capulet.log"
+ },
+ {
+  "router": "slim",
+  "label": "Helix Slim",
+  "messages": 20000,
+  "size": 256,
+  "sent": 5000,
+  "received": 2000,
+  "lost": 3000,
+  "garbled_or_duplicate": 0,
+  "stalled_at_message": 5000,
+  "send_seconds": 2.204,
+  "throughput_msgs_per_s": 7202.5,
+  "delay_ms": {
+   "p50": 97.827,
+   "p90": 165.036,
+   "p99": 175.689,
+   "max": 176.728
+  },
+  "router_log": "C:\\Users\\jwlef\\AppData\\Local\\Temp\\bench_routers_slim.log"
+ }
+]

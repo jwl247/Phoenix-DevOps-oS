@@ -1,0 +1,43 @@
+{
+ "ring": "coms4",
+ "platform": "win32",
+ "python": "3.12.10",
+ "scratch": "C:\\Users\\jwlef\\AppData\\Local\\Temp\\ring_bench_f6smo521",
+ "startup_s": 2.5,
+ "members": {
+  "franken": "working",
+  "freewheeling": "working",
+  "propcoms": "working",
+  "quadengine": "working",
+  "integrated_guardian": "working",
+  "conductor_sync": "idle",
+  "new_horizon": "working",
+  "syncthing": "idle"
+ },
+ "idle": {
+  "processes": 17,
+  "cpu_percent": 2.6,
+  "file_writes_per_s": 18.2,
+  "seconds": 15
+ },
+ "single": {
+  "balls": 20,
+  "outcome": {
+   "done": 20
+  },
+  "in_to_done_ms": {
+   "p50": 511.2,
+   "p90": 515.4,
+   "max": 632.8
+  }
+ },
+ "burst": {
+  "balls": 500,
+  "outcome": {
+   "done": 40,
+   "escalated": 460
+  },
+  "seconds_to_account_for_all": 6.32,
+  "balls_per_s": 79.1
+ }
+}

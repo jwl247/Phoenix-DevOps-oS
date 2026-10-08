@@ -213,6 +213,15 @@ and the sketch calls Prefetch "typical" on every ring. Questions to settle with 
 7. **How we measure it:** hit rate, bytes wasted (fetched, never used), latency saved — and the
    Helix-vs-standard caching test (road-test plan §6) with a working set larger than RAM.
 
+## Step 0 RESULT — baseline of today's ring (run 2026-10-07 21:15 on PBMII, `sector4/ring/bench_ring.py`, scratch home)
+- Start: all 8 members up in 2.5 s (conductor_sync + syncthing idle by design). **17 processes.**
+- **Idle: CPU 2.6% of one core, 18.2 file writes/s with no work at all.**
+- **One ball at a time: in -> done p50 511 ms, max 633 ms** (20/20 done) — ~0.5 s per ball is almost all
+  polling waits (3 hops x 0.25 s sleeps), not work.
+- **Burst of 500: 40 done, 460 escalated to coms3** (freewheeling escalates past 60 balls/min on one system);
+  all 500 accounted for in 6.32 s = 79 balls/s. Nothing missing, nothing in breach.
+- Raw: `sector4/ring/bench_ring-20261007-211510.json`. This is the "before" every later step is measured against.
+
 ## 7. Build order (when Jerry says build), each step measured
 | Step | What | Done when | Touches |
 |---|---|---|---|
