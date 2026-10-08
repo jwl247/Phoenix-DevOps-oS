@@ -130,6 +130,15 @@ warm store IS staged data in memory and `load_warm` is how it is read — so rea
 API is fair (J: "open to interpretation"). `helix_api.py`'s Freewheeling is ROLE "memory_bank" with `store_warm`/`load_warm` (warm memory)
 and `store_cold`/`load_cold` (cold store), a per-system load count, threshold 5, and an empty
 "# --- existing logic ---" end (more was meant to go there). The rebuild makes her the stage read API for real.
+**Settled by Jerry's `freewheeling_stage.py` (pasted 10/7; only copy in
+`archive/fossil-consolidation-20260819-210541/SECTOR4/`; its engine `sector4/pcs.py` is live):
+"Storage IS the stage."** Pipeline: DATA IN -> PCS born (`prefetch_interrupt`) -> FreewheelStage call1 WARM
+(slot created, family zone: "birds of a feather flock together") -> call2 HOT (hash absorbs data,
+probability climbs) -> call3 DEFINITIVE -> `snap_clone` into the clone pool + signal
+`phoenix-cpt@{hash}.service` (the Cpt Conductor) | RESIDUE -> evicted. Prefetch births the data,
+Freewheeling is the stage, the pool is where it lands, the Conductor is told after commit. Speed fixes for
+the rebuild: chunks are files under /tmp/phoenix_snap/<hash>/ (-> bus slots), a `systemctl` process per
+commit to reach the Conductor (-> a bus message), rmtree per slot.
 **Her `ident.card` / `responsibility.json` don't exist — by design history (J): the ident was first the
 HEADER and FOOTER of the member's own file, then moved to the clone pool** (each pool row's hex_id,
 header_qr, footer_qr). A member's identity = its pool row; the rebuild reads it from the pool, not a card. In Jerry's original (Music) that API could not run: `load_warm(self, ket)`
