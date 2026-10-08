@@ -113,6 +113,15 @@ it — I'm not being sarcastic."** Talk it through with Jerry before anything is
   idle (never fakes work).
 
 ## 5. The bus
+**Decided (J, 10/7): FREEWHEELING IS THE RING'S SHARED MEMORY BUS — "freewheeling is supposed to be the core of
+the mem group, we should use it as ring SMB."** It already has what a bus needs: QuadralingualPackets
+(every ball held in all 4 languages — quad-native, the "QuadEngine in the shared memory"), a Dandelion with
+64 lanes and per-lane locks, store / retrieve / query_language, compress / expand under load. It is plain
+in-process memory, which fits §4 (members side-loaded in ONE process): members share it directly, no
+copies, no files. Flow: members -> propcoms only; propcoms puts the ball on Freewheeling; the next member
+is woken and takes it from Freewheeling. Kills the step-0 polling (511 ms/ball). If members ever had to be
+separate processes, Freewheeling would move onto a memory-mapped region (not needed in this design).
+
 - Owned by the Conductor (not the kernel's `frank5.shm`; that one is the kernel's, reached over the
   bee line).
 - Only the door writes into it from outside; the bus file is locked to Phoenix's own user.
