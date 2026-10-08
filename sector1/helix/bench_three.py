@@ -48,9 +48,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+TESTING = REPO / "Testing Facilty"          # Jerry's nominations (10/7)
 DEFAULTS = {
-    "frank": Path(r"C:\Users\jwlef\Music\franken.py") if os.name == "nt" else Path.home() / "Music/franken.py",
-    "nh":    REPO / "sector4" / "ring" / "helix_new_horizon.py",
+    "frank": TESTING / "franken.py",
+    "nh":    TESTING / "helix_new_horizon.py",    # Jerry's original, not the sector4/ring copy
     "og":    Path(r"C:\Users\jwlef\helix_recovery\og_double_helix.py") if os.name == "nt" else Path.home() / "helix_recovery/og_double_helix.py",
 }
 NAMES = {"frank": "Frank's storage system (franken.py)", "nh": "New Horizon", "og": "OG Double Helix"}
