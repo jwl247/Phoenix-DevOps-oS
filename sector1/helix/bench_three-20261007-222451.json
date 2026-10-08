@@ -1,0 +1,33 @@
+[
+ {
+  "contender": "orig",
+  "label": "OG Double Helix ORIGINAL",
+  "python": "3.12.10",
+  "platform": "win32",
+  "items": 20000,
+  "size": 4096,
+  "data": "random",
+  "reads": 100000,
+  "seed": 7,
+  "write": {
+   "ops": 20000,
+   "ops_per_s": 3742.4,
+   "p50_us": 258.3,
+   "p90_us": 287.0,
+   "p99_us": 363.5,
+   "max_us": 16905.4
+  },
+  "read": {
+   "ops": 100000,
+   "ops_per_s": 103839.6,
+   "p50_us": 0.5,
+   "p90_us": 0.6,
+   "p99_us": 1.0,
+   "max_us": 29.4
+  },
+  "wrong_answers": 0,
+  "missing_answers": 0,
+  "peak_mem_mb": 642.6,
+  "registry_items": 20000
+ }
+]

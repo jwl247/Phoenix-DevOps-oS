@@ -52,11 +52,12 @@ TESTING = REPO / "Testing Facilty"          # Jerry's nominations (10/7)
 DEFAULTS = {
     "frank": TESTING / "franken.py",
     "nh":    TESTING / "helix_new_horizon.py",    # Jerry's original, not the sector4/ring copy
-    "free":  REPO / "sector4" / "ring" / "freewheeling.py",   # the old timer: standalone Helix, HelixDB
+    "free":  REPO / "sector4" / "ring" / "freewheeling.py",
+    "orig":  Path("F:/Phoenix/Vault/OG_double_helix_complete.py"),   # the ORIGINAL OG, before the 9/30 fixes   # the old timer: standalone Helix, HelixDB
     "og":    Path(r"C:\Users\jwlef\helix_recovery\og_double_helix.py") if os.name == "nt" else Path.home() / "helix_recovery/og_double_helix.py",
 }
 NAMES = {"frank": "Frank's storage system (franken.py)", "nh": "New Horizon", "og": "OG Double Helix",
-         "free": "Freewheeling (HelixDB)"}
+         "free": "Freewheeling (HelixDB)", "orig": "OG Double Helix ORIGINAL"}
 
 
 def peak_memory_mb():
@@ -158,7 +159,8 @@ class Free:
 
 ADAPTERS = {"frank": Frank, "free": Free,
             "nh": lambda p, t3: _DoubleHelix("nh", p, t3),
-            "og": lambda p, t3: _DoubleHelix("og", p, t3)}
+            "og": lambda p, t3: _DoubleHelix("og", p, t3),
+            "orig": lambda p, t3: _DoubleHelix("orig", p, t3)}
 
 
 def make_values(n, size, kind, seed):
@@ -262,7 +264,7 @@ def child(a):
 
 def main():
     p = argparse.ArgumentParser(description="Frank vs New Horizon vs OG Double Helix — same test, Jerry runs it")
-    p.add_argument("--only", choices=["frank", "nh", "og", "free"], help="run just one contender")
+    p.add_argument("--only", choices=["frank", "nh", "og", "free", "orig"], help="run just one contender")
     p.add_argument("--items", type=int, default=20000)
     p.add_argument("--size", type=int, default=4096, help="bytes per value")
     p.add_argument("--reads", type=int, default=100000)
@@ -278,14 +280,14 @@ def main():
     if a.one:
         return child(a)
 
-    order = [a.only] if a.only else ["frank", "nh", "og", "free"]
+    order = [a.only] if a.only else ["frank", "nh", "og", "free", "orig"]
     results = []
     for name in order:
         print(f"\n== {NAMES[name]} ...", flush=True)
         cmd = [sys.executable, str(Path(__file__).resolve()), "--one", name,
                "--items", str(a.items), "--size", str(a.size), "--reads", str(a.reads),
                "--data", a.data, "--seed", str(a.seed), "--hold", str(a.hold),
-               "--frank", a.frank, "--nh", a.nh, "--og", a.og, "--free", a.free] + (["--check"] if a.check else [])
+               "--frank", a.frank, "--nh", a.nh, "--og", a.og, "--free", a.free, "--orig", a.orig] + (["--check"] if a.check else [])
         out = subprocess.run(cmd, capture_output=True, text=True)
         line = next((l for l in out.stdout.splitlines() if l.startswith("RESULT ")), None)
         res = json.loads(line[7:]) if line else {"contender": name, "error": (out.stderr or out.stdout)[-800:]}
