@@ -19,6 +19,8 @@
 
 $script:EngineExe   = 'E:\Phoenix\llm-engine\llama-b11149\llama-server.exe'
 $script:EngineModel = 'E:\models\llama3.2-3b\llama3.2-3b-q4km.gguf'
+# Brains it can load (engine start -Brain 8b): both sha256-pinned on E:\models
+$script:EngineBrains = @{ '3b' = 'E:\models\llama3.2-3b\llama3.2-3b-q4km.gguf'; '8b' = 'E:\models\llama3.1-8b\Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf' }
 $script:EngineKey   = Join-Path $HOME '.phoenix\llm\engine.key'
 $script:EngineHome  = Join-Path $HOME '.phoenix\llm'
 $script:EnginePid   = Join-Path $script:EngineHome 'engine.pid'
@@ -37,16 +39,27 @@ Add-Type -Namespace Phx -Name JobBox -MemberDefinition @'
 }
 
 function Get-PhoenixEngineProcess {
-    if (-not (Test-Path $script:EnginePid)) { return $null }
-    $id = [int](Get-Content $script:EnginePid -Raw)
-    $p = Get-Process -Id $id -ErrorAction SilentlyContinue
-    if ($p -and $p.Path -eq $script:EngineExe) { return $p }
+    # Whoever owns 127.0.0.1:8080 IS the engine. (2026-10-08: a non-elevated logon task couldn't read
+    # the Path of an engine started elevated, decided none was running and started a duplicate.)
+    $owner = Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($owner) {
+        $p = Get-Process -Id $owner.OwningProcess -ErrorAction SilentlyContinue
+        if ($p -and $p.ProcessName -eq 'llama-server') { return $p }
+    }
+    if (Test-Path $script:EnginePid) {
+        $p = Get-Process -Id ([int](Get-Content $script:EnginePid -Raw)) -ErrorAction SilentlyContinue
+        if ($p -and $p.ProcessName -eq 'llama-server') { return $p }
+    }
     return $null
 }
 
 function Start-PhoenixEngine {
-    param([int]$CpuPercent = 30, [long]$Cores = 0xF00, [int]$MemGB = 4)
-    if (Get-PhoenixEngineProcess) { Write-Host '  engine: already running (engine status)'; return }
+    param([int]$CpuPercent = 30, [long]$Cores = 0xF00, [int]$MemGB = 4, [ValidateSet('3b', '8b')][string]$Brain = '3b')
+    $script:EngineModel = $script:EngineBrains[$Brain]
+    if ($running = Get-PhoenixEngineProcess) { Write-Host "  engine: already running (pid $($running.Id)) - nothing started"; return }
+    if (Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue) {
+        Write-Host '  engine: port 8080 is taken by something else - not starting' -ForegroundColor Red; return
+    }
     foreach ($f in $script:EngineExe, $script:EngineModel, $script:EngineKey) {
         if (-not (Test-Path $f)) { Write-Host "  engine: missing $f" -ForegroundColor Red; return }
     }
@@ -56,7 +69,8 @@ function Start-PhoenixEngine {
         try { New-NetFirewallRule -DisplayName 'Phoenix LLM engine - block ALL outbound' -Direction Outbound -Program $script:EngineExe -Action Block -Profile Any | Out-Null }
         catch { Write-Host "  engine: could not add the outbound block rule ($($_.Exception.Message)) - not starting" -ForegroundColor Red; return }
     }
-    $args = @('--model', $script:EngineModel, '--alias', 'llama3.2:3b', '--host', '127.0.0.1', '--port', '8080',
+    $alias = if ($Brain -eq '8b') { 'llama3.1:8b' } else { 'llama3.2:3b' }
+    $args = @('--model', $script:EngineModel, '--alias', $alias, '--host', '127.0.0.1', '--port', '8080',
               '--api-key-file', $script:EngineKey, '--ctx-size', '8192', '--threads', '4', '--no-webui', '--no-ui-mcp-proxy')
     $p = Start-Process $script:EngineExe -ArgumentList $args -WindowStyle Hidden -PassThru `
             -RedirectStandardError (Join-Path $script:EngineHome 'engine.log') -RedirectStandardOutput (Join-Path $script:EngineHome 'engine.out')
@@ -89,10 +103,17 @@ function Start-PhoenixEngine {
         return
     }
     Set-Content $script:EnginePid $p.Id
+    # "up" only when THIS engine owns the port and answers - not some other process's health.
     $up = $false
-    foreach ($i in 1..60) { try { if ((Invoke-RestMethod http://127.0.0.1:8080/health -TimeoutSec 2).status -eq 'ok') { $up = $true; break } } catch {}; Start-Sleep 1 }
-    if ($up) { Write-Host ("  engine: up - pid {0}, in its virtual processor: hard cap {1}% CPU, cores 0x{2:X}, {3} GB, below-normal" -f $p.Id, $CpuPercent, $Cores, $MemGB) -ForegroundColor Green }
-    else { Write-Host "  engine: started (pid $($p.Id)) but never answered /health - see $($script:EngineHome)\engine.log" -ForegroundColor Red }
+    foreach ($i in 1..90) {
+        if ($p.HasExited) { break }
+        $own = (Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess
+        if ($own -eq $p.Id) { try { if ((Invoke-RestMethod http://127.0.0.1:8080/health -TimeoutSec 2).status -eq 'ok') { $up = $true; break } } catch {} }
+        Start-Sleep 1
+    }
+    if (-not $up -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+    if ($up) { Write-Host ("  engine: up ($Brain brain) - pid {0}, in its virtual processor: hard cap {1}% CPU, cores 0x{2:X}, {3} GB, below-normal" -f $p.Id, $CpuPercent, $Cores, $MemGB) -ForegroundColor Green }
+    else { Remove-Item $script:EnginePid -ErrorAction SilentlyContinue; Write-Host "  engine: FAILED - it never came up on 8080 (stopped it; see $($script:EngineHome)\engine.log)" -ForegroundColor Red }
 }
 
 function Stop-PhoenixEngine {
@@ -113,9 +134,9 @@ function Get-PhoenixEngineStatus {
 
 function Invoke-PhoenixEngine {
     param([Parameter(Position = 0)][ValidateSet('start', 'stop', 'status')][string]$Verb = 'status',
-          [int]$CpuPercent = 30, [long]$Cores = 0xF00, [int]$MemGB = 4)
+          [int]$CpuPercent = 30, [long]$Cores = 0xF00, [int]$MemGB = 4, [ValidateSet('3b', '8b')][string]$Brain = '3b')
     switch ($Verb) {
-        'start'  { Start-PhoenixEngine -CpuPercent $CpuPercent -Cores $Cores -MemGB $MemGB }
+        'start'  { Start-PhoenixEngine -CpuPercent $CpuPercent -Cores $Cores -MemGB $MemGB -Brain $Brain }
         'stop'   { Stop-PhoenixEngine }
         'status' { Get-PhoenixEngineStatus }
     }

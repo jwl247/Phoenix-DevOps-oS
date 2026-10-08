@@ -5,6 +5,8 @@ Phoenix DevOps OS | jwl247 | GPL v3
   jarvis what is on Laurie's list today
   echo "long question" | jarvis
   jarvis --json "question"          raw JSON answer
+  jarvis --no-tools "question"      ask without his hands (tools)
+  jarvis --pbmiii "question"        ask the 3B on pbmIII even when PBMII's engine box is up
   jarvis ui                         open his web screen (SSH tunnel to pbmIII, nothing exposed)
 
 Path: SSH over the Phoenix Mesh as jarvis-call (forced command, no shell) -> jarvis-gate -> Jarvis
@@ -61,16 +63,8 @@ def ui() -> int:
     return 0
 
 
-def main() -> int:
-    args = sys.argv[1:]
-    if args == ["ui"]:
-        return ui()
-    raw = "--json" in args
-    args = [a for a in args if a != "--json"]
-    if args in ([], ["-h"], ["--help"]) and sys.stdin.isatty():
-        print(__doc__.split("\n\n")[1])
-        return 0 if args else 2
-    text = " ".join(args) if args else sys.stdin.read()
+def ask_gate(text: str) -> dict:
+    """One ask through the gate. Returns the gate's JSON ({ok, answer|error, ms})."""
     stage = json.dumps({"text": text})
     if os.path.exists(GATE) and os.access(GATE, os.X_OK):
         cmd = [GATE]                                   # on pbmIII: no SSH hop
@@ -81,17 +75,149 @@ def main() -> int:
                os.environ.get("JARVIS_HOST", "jarvis-call@10.42.0.10"), "ask"]
     try:
         p = subprocess.run(cmd, input=stage, capture_output=True, text=True, encoding="utf-8", timeout=150)
-        out = json.loads(p.stdout.strip().splitlines()[-1])
+        return json.loads(p.stdout.strip().splitlines()[-1])
     except subprocess.TimeoutExpired:
-        print("jarvis: no answer in 150 s", file=sys.stderr); return 1
+        return {"ok": False, "error": "no answer in 150 s"}
     except (OSError, ValueError, IndexError):
         err = (p.stderr.strip().splitlines() or ["no output"])[-1] if "p" in locals() else "ssh not found"
-        print(f"jarvis: can't reach him ({err}). Mesh up? Key at JARVIS_KEY?", file=sys.stderr); return 1
+        return {"ok": False, "error": f"can't reach him ({err}). Mesh up? Key at JARVIS_KEY?"}
+
+
+# The better brain (Jerry 10/8): the 8B model in PBMII's engine box (scripts/phoenix-engine.ps1:
+# 30% CPU cap, cores 8-11, local only, engine key) answers first; the 3B on pbmIII through his gate
+# is the fallback. The identity is the same file the gate sends, so he's the same Jarvis either way.
+ENGINE = os.environ.get("JARVIS_ENGINE", "http://127.0.0.1:8080").rstrip("/")
+ENGINE_KEY = Path.home() / ".phoenix" / "llm" / "engine.key"
+IDENTITY = Path(__file__).resolve().parent.parent / "sector2" / "apps" / "jarvis" / "jarvis_identity.md"
+ASK_LOG = Path.home() / ".phoenix" / "jarvis" / "asks.log"
+
+
+def local_brain() -> str:
+    """The model name if PBMII's engine box answers, else ''."""
+    import urllib.request
+    try:
+        if not ENGINE_KEY.exists() or not IDENTITY.exists():
+            return ""
+        with urllib.request.urlopen(ENGINE + "/health", timeout=2) as r:
+            if json.loads(r.read()).get("status") != "ok":
+                return ""
+        req = urllib.request.Request(ENGINE + "/v1/models", headers={"Authorization": f"Bearer {ENGINE_KEY.read_text().strip()}"})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            data = json.loads(r.read()).get("data") or [{}]
+        return data[0].get("id", "") or "local"
+    except Exception:
+        return ""
+
+
+def ask_local(text: str) -> dict:
+    """One ask to PBMII's engine box, identity as the system message (like jarvis-gate)."""
+    import time, urllib.request
+    body = json.dumps({"model": "jarvis", "stream": False, "max_tokens": 600,   # short answers: a capped 8B writes ~7 tokens/s
+                       "messages": [{"role": "system", "content": IDENTITY.read_text(encoding="utf-8")},
+                                    {"role": "user", "content": text}]}).encode()
+    req = urllib.request.Request(ENGINE + "/v1/chat/completions", data=body,
+                                 headers={"Content-Type": "application/json",
+                                          "Authorization": f"Bearer {ENGINE_KEY.read_text().strip()}"})
+    t0 = time.time()
+    try:
+        with urllib.request.urlopen(req, timeout=150) as r:
+            out = json.loads(r.read())
+        return {"ok": True, "answer": out["choices"][0]["message"]["content"], "ms": int((time.time() - t0) * 1000)}
+    except Exception as e:
+        return {"ok": False, "error": f"engine box: {e}"}
+
+
+def log_ask(brain: str, text: str, out: dict, used: list, secs: float):
+    """Every ask is journaled (what he was asked, which brain, which tools) - never the answer text."""
+    try:
+        ASK_LOG.parent.mkdir(parents=True, exist_ok=True)
+        import datetime as _dt
+        with ASK_LOG.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"at": _dt.datetime.now().isoformat(timespec="seconds"), "brain": brain,
+                                "chars": len(text), "ok": bool(out.get("ok")), "tools": used, "secs": round(secs, 1)}) + "\n")
+    except OSError:
+        pass
+
+
+def load_tools():
+    """Jarvis's hands (sector2/apps/jarvis/jarvis_tools.py). They run HERE, never on pbmIII."""
+    here = Path(__file__).resolve().parent.parent / "sector2" / "apps" / "jarvis"
+    if not (here / "jarvis_tools.py").exists():
+        return None
+    sys.path.insert(0, str(here))
+    try:
+        import jarvis_tools
+        return jarvis_tools
+    except Exception:
+        return None
+
+
+def main() -> int:
+    # His answers can carry characters Windows' default console encoding can't print ("12 × 12", arrows):
+    # write UTF-8, never crash on a character (the HUD reads UTF-8).
+    for _s in (sys.stdout, sys.stderr):
+        try:
+            _s.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+    args = sys.argv[1:]
+    if args == ["ui"]:
+        return ui()
+    raw = "--json" in args
+    use_tools = "--no-tools" not in args
+    force_pbmiii = "--pbmiii" in args
+    args = [a for a in args if a not in ("--json", "--no-tools", "--pbmiii")]
+    if args in ([], ["-h"], ["--help"]) and sys.stdin.isatty():
+        print(__doc__.split("\n\n")[1])
+        return 0 if args else 2
+    text = " ".join(args) if args else sys.stdin.read()
+    tools = load_tools() if use_tools else None
+    import time as _time
+    t_start = _time.time()
+    model = "" if force_pbmiii else local_brain()
+    brain = f"{model} on PBMII" if model else "llama3.2:3b on pbmIII"
+    ask = ask_local if model else ask_gate
+
+    # Jarvis's hands (Jerry 10/8): he may ask for a tool with ONE line `TOOL: name {json}`; it runs on
+    # this machine (base tier read-only; anything that changes the world only goes to Claude's request
+    # queue), and the result goes back to him. At most 3 tools per question. The answer says which
+    # tools were used, so "what did you just do" always has a real answer.
+    used = []
+    if tools:
+        prompt = f"{tools.catalog()}\n\nYOUR BRAIN RIGHT NOW: {brain}.\n\nQUESTION: {text}"
+        # When the question is clearly about one of his lessons, hand him that lesson up front: even the
+        # 8B skipped looking things up ("bounding overwatch", 2026-10-08). Same lesson text, no guessing.
+        hint = tools.lesson_hint(text) if hasattr(tools, "lesson_hint") else ""
+        if hint:
+            prompt += f"\n\nLESSON NOTES (from your own lessons - already looked up for you; answer from these, briefly, with no tool):\n{hint}"
+        out = ask(prompt)
+        for _ in range(3):
+            call = tools.find_call(out.get("answer", "")) if out.get("ok") else None
+            if not call:
+                break
+            name, targs = call
+            result = tools.run(name, targs, question=text)
+            used.append(name)
+            prompt += (f"\n\nYou asked for TOOL {name}. Its result:\n{result}\n\n"
+                       "Now answer the QUESTION for Jerry in plain words using that result. "
+                       "Call another tool only if you really need one.")
+            out = ask(prompt[-3900:])
+        if out.get("ok") and tools.find_call(out.get("answer", "")):
+            out["answer"] = tools.strip_calls(out["answer"]) or "(he kept asking for tools and never answered)"
+    else:
+        out = ask(text)
+    if not out.get("ok") and model:
+        # the box failed mid-question: the 3B on pbmIII answers instead (degraded, alive)
+        brain, out = "llama3.2:3b on pbmIII (fallback)", ask_gate(text)
+    log_ask(brain, text, out, used, _time.time() - t_start)
+    out["brain"] = brain
+    if used:
+        out["tools"] = used
     if raw:
         print(json.dumps(out)); return 0 if out.get("ok") else 1
     if not out.get("ok"):
         print(f"jarvis: {out.get('error')}", file=sys.stderr); return 1
-    print(out["answer"])
+    print(out["answer"] + f"\n[{brain}" + (f" | tools: {', '.join(used)}" if used else "") + "]")
     return 0
 
 
