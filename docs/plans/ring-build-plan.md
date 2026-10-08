@@ -125,6 +125,12 @@ bank = the bus); Helix (New Horizon) MOVES — pushes out of Freewheeling (evict
 ahead of need (prefetch up the tiers), i.e. the paging manager's "clears and feeds her". Today's
 `member.py` gets this wrong: franken hands to freewheeling through a folder, and new_horizon only archives
 balls already done (never pushes/pulls).
+**Why (J, 10/7): "free was in charge of the stage read API."** Freewheeling owns the stage API in
+`helix_api.py` — `store_warm`/`load_warm` (staged in memory), `store_cold`/`load_cold` (cold store); every
+member reads a stage THROUGH Freewheeling. In Jerry's original (Music) that API could not run: `load_warm(self, ket)`
+reads `key` (NameError) and `self.cold_storage` is never created — the likely reason the 10/7 morning build
+went around her with folders. Fixed in `sector4/ring/helix_api.py` (typo + a real `_ColdStore`), so the
+rebuild routes stage reads through Freewheeling as designed.
 If members ever had to be
 separate processes, Freewheeling would move onto a memory-mapped region (not needed in this design).
 
