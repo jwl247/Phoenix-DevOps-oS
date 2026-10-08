@@ -104,6 +104,11 @@ Measured 10/7: PBMII → Compaq over the mesh 1.3 ms avg (max 2 ms, 10/10); the 
   sister-to-sister; translator.sh only at the sector3 exit (CLAUDE.md rules 1-3). A message whose four
   strands disagree is refused at the door: validation is a property of the data, not a step.
   Measure the size/CPU cost of four strands on the real link (quadpack note: MEASURE it).
+- **Jerry's hypothesis (10/7): Helix has a connection with the quad — she translates quad into her own
+  language, and "the results were different when it was quad, so we'll see."** Test it as an A/B on the
+  same data and the same box: plain vs quad into Helix — store/fetch time, compression, hit rate,
+  prefetch accuracy, CPU. Keep whichever wins by the numbers (BENCHMARKS precision rule). Fits the
+  original intent: quadralingual = room for her to interpret the data, not a fixed 4-format scheme.
 - **One persistent connection per sister pair**, reused (the ~7 s/file intake was mostly fresh HTTPS
   calls to Cloudflare; an open mesh socket is ~1-2 ms). **Priority lanes:** rings 1-3, ring 4 (system),
   bulk files — a big copy never blocks a small message.
