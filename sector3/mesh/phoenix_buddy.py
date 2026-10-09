@@ -205,9 +205,97 @@ def one_peer(peer_name, cfg, me_name, act=True):
     return a, st, problems
 
 
+# ---------------------------------------------------------------- the kernel on THIS box (2026-10-09)
+# The buddy runs as the person (not SYSTEM), so it is the one that may start their kernel: started as
+# SYSTEM the kernel would get SYSTEM's home and lose its closet. 2026-10-08 the kernel ran DEGRADED a
+# whole day (another program held Helix-I 7701-7704) and nothing healed or said it.
+KERNEL_STATUS_PORT = 8765
+HELIX_PORTS = (7701, 7702, 7703, 7704, 7805, 7806, 7807, 7808)
+REPO = HERE.parents[1]
+GENIE_HOME = Path(os.environ.get("PHOENIX_GENIE_HOME", Path.home() / ".phoenix" / "genie"))
+
+
+def _listeners() -> dict:
+    """port -> pid of whoever LISTENs on 127.0.0.1/0.0.0.0 (netstat: loopback-safe, no admin)."""
+    out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True).stdout
+    owners = {}
+    for line in out.splitlines():
+        f = line.split()
+        if len(f) >= 5 and f[3].upper() == "LISTENING" and ":" in f[1]:
+            try:
+                owners.setdefault(int(f[1].rsplit(":", 1)[1]), int(f[4]))
+            except ValueError:
+                pass
+    return owners
+
+
+def _proc_name(pid: int) -> str:
+    out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"], capture_output=True, text=True).stdout
+    return out.split('","')[0].strip('"') if out.strip().startswith('"') else "?"
+
+
+def kernel_look() -> list:
+    """Problems with this box's kernel; [] = healthy."""
+    own = _listeners()
+    kpid = own.get(KERNEL_STATUS_PORT)
+    if not kpid:
+        return ["kernel:down"]
+    bad = []
+    for port in HELIX_PORTS:
+        holder = own.get(port)
+        if holder != kpid:
+            bad.append(f"{port}:{'free' if not holder else f'{_proc_name(holder)}#{holder}'}")
+    return [f"kernel:degraded:{','.join(bad)}"] if bad else []
+
+
+def _genie(verb: str) -> str:
+    g = REPO / "sector1" / "kernel" / "genie" / "genie.ps1"
+    env = dict(os.environ, PHOENIX_GENIE_AUTOUP="0")
+    r = subprocess.run(["pwsh", "-NoProfile", "-NonInteractive", "-Command", f". '{g}'; genie {verb}"],
+                       capture_output=True, text=True, env=env, timeout=180)
+    return " ".join((r.stdout + r.stderr).split())[-200:]
+
+
+def kernel_heal(act=True) -> list:
+    sf = state_file("kernel-self")
+    sf.parent.mkdir(parents=True, exist_ok=True)
+    prev = json.loads(sf.read_text()) if sf.exists() else {}
+    if (GENIE_HOME / "stopped-on-purpose").exists():   # a person said `lol stop`: down is the right state
+        if act and prev.get("problems") != ["stopped-on-purpose"]:
+            log("kernel (this box): stopped on purpose (lol stop) - left down until `lol start`")
+            sf.write_text(json.dumps({"problems": ["stopped-on-purpose"], "acted": prev.get("acted", 0), "seen": int(time.time())}))
+        return []
+    problems = kernel_look()
+    if act and problems:
+        sig = sorted(problems)
+        if not (sig == prev.get("problems") and time.time() - prev.get("acted", 0) < RETRY_SECS):
+            p = problems[0]
+            held = p.startswith("kernel:degraded:") and any(not x.endswith(":free") for x in p.split(":", 2)[2].split(","))
+            if held:
+                # another program holds Helix ports: never kill someone else's process; say who
+                log(f"kernel (this box): {p} -> NOT healed: another program holds Helix ports; stop it, then the next pass restarts the kernel")
+            else:
+                said = _genie("restart" if p.startswith("kernel:degraded") else "up")
+                left = kernel_look()
+                log(f"kernel (this box): {p} -> {'restarted' if p.startswith('kernel:degraded') else 'started'} by the buddy; "
+                    + ("now healthy" if not left else "still: " + ", ".join(left)) + f" [{said}]")
+                problems = left
+            prev["acted"] = time.time()
+    new = {"problems": sorted(problems), "acted": prev.get("acted", 0), "seen": int(time.time())}
+    if act:
+        if new["problems"] != prev.get("problems") and not problems:
+            log("kernel (this box): healthy")
+        sf.write_text(json.dumps(new))
+    return problems
+
+
 def cmd_run(args, act=True):
     cfg = hosts(args.hosts)
     me = cfg["hosts"].get(args.me) or sys.exit(f"{args.me} not in hosts.json")
+    if IS_WIN and (REPO / "sector1" / "kernel" / "genie" / "genie.ps1").exists():
+        problems = kernel_heal(act=act)
+        if not act:
+            print(f"{'kernel':8} {'(this box)':17} " + ("healthy" if not problems else ", ".join(problems)))
     for p in me.get("buddies", []):
         a, st, problems = one_peer(p, cfg, args.me, act=act)
         if not act:

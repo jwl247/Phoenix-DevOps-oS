@@ -40,6 +40,11 @@ class WingetBackend(BackendBase):
     def info(self, package):
         code, out, err = self._run(['winget', 'show', package])
         info = {'name': package, 'raw': out}
+        if code != 0:
+            # e.g. "Multiple packages found" + the Id table: hand it back so the user sees the choices
+            # (drop winget's progress-spinner and table-rule lines, keep the words and the Id table)
+            info['error'] = '\n'.join(l for l in (out + err).splitlines() if l.strip() and set(l.strip()) - set('-\\|/'))
+            return info
         for line in out.splitlines():
             if line.strip().startswith('Version:'):
                 info['version'] = line.split(':', 1)[1].strip()

@@ -50,7 +50,8 @@ AUDIT_PATH      = Path(os.environ.get("PHOENIX_AUDIT", os.path.join(_TMP, "phoen
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [FRANK5] %(levelname)s %(message)s",
-    handlers=[logging.FileHandler(AUDIT_PATH), logging.StreamHandler()]
+    # utf-8: rotation lines carry emoji; Windows' default cp1252 crashed every one (2026-10-09)
+    handlers=[logging.FileHandler(AUDIT_PATH, encoding="utf-8"), logging.StreamHandler()]
 )
 log = logging.getLogger("frank5")
 

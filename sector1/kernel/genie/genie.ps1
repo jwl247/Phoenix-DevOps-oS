@@ -53,7 +53,8 @@ $script:GenieTokenFile = Join-Path $script:GenieHome 'control.token'
 function G-Ok   ([string]$m) { Write-Host "  [genie] $m" -ForegroundColor Green }
 function G-Info ([string]$m) { Write-Host "  [genie] $m" -ForegroundColor Cyan }
 function G-Warn ([string]$m) { Write-Host "  [genie] $m" -ForegroundColor Yellow }
-function G-Err  ([string]$m) { Write-Host "  [genie] $m" -ForegroundColor Red }
+# every G-Err is a real failure: lol/usys turn it into exit 1 (refused/no answer/not found used to exit 0; 2026-10-09)
+function G-Err  ([string]$m) { $global:GenieFailed = $true; Write-Host "  [genie] $m" -ForegroundColor Red }
 
 # ── Python discovery ─────────────────────────────────────────────────────────
 function Get-GeniePython {
@@ -351,12 +352,32 @@ function ConvertTo-GenieBashPath([string]$p) {
     return $p
 }
 
-function Invoke-GenieIntakeLocal([string]$Path) {
+function Invoke-GenieIntakeLocal([string]$Path, [ValidateSet('entertainment', 'system')][string]$Class = 'entertainment') {
     # IN: the same Sector 2 pipeline as `intake <file>`, run unattended. With no stdin,
     # intake takes its safe defaults: a sensitive file is refused, an identical file
     # keeps the version already in the pool, a different file with the same name is
     # refused. Afterwards custody must hold THESE bytes, or nothing is loaded.
     $full = (Resolve-Path -LiteralPath $Path).Path
+    if ($full -match '\.py$') {
+        # The package handler makes the suit correct first (suit_build.py: answers the kernel, never
+        # silent, a script never runs at load, class stamped inside the hashed bytes), and the BUILT
+        # suit is what goes in. Same parent-folder name, so the pool identity stays the same (2026-10-09).
+        if ($Class -eq 'system') {
+            # System suits run inside the kernel: only a person at a real terminal says yes (CLAUDE.md
+            # safety rule 10 — never a pipe, a flag alone, a default, an agent or Jarvis).
+            if ([Console]::IsInputRedirected -or -not [Environment]::UserInteractive) { throw 'a SYSTEM suit needs a yes typed at a terminal; nothing was taken in' }
+            if ((Read-Host "  $([System.IO.Path]::GetFileName($full)) will run INSIDE the kernel. Type SYSTEM to agree") -cne 'SYSTEM') { throw 'not agreed; nothing was taken in' }
+        }
+        $python = Get-GeniePython
+        if (-not $python) { throw 'no Python found to build the suit (set PHOENIX_PYTHON)' }
+        $builder = Join-Path $script:GenieRepo 'sector2/package-handler/suit_build.py'
+        $parentLeaf = Split-Path (Split-Path $full -Parent) -Leaf
+        $built = Join-Path ([System.IO.Path]::GetTempPath()) "phoenix-suit-build\$parentLeaf\$([System.IO.Path]::GetFileName($full))"
+        $msg = @(& $python -I $builder $full $built --class $Class 2>&1 | ForEach-Object { "$_" })
+        if ($LASTEXITCODE -ne 0) { throw (($msg -join ' ') -replace '^suit_build: ', '') }
+        G-Info ($msg -join ' ')
+        $full = $built
+    }
     $bash = Get-GenieBash
     if (-not $bash) { throw 'bash not found (Windows: install Git for Windows, or set PHOENIX_BASH)' }
     $intakeSh = Join-Path $script:GenieRepo 'sector2/package-handler/intake.sh'
@@ -379,6 +400,16 @@ function Invoke-GenieIntakeLocal([string]$Path) {
         $why = ($out | Where-Object { $_ -match '\[intake:(CANCEL|STOP|ERROR|FAIL)' } | Select-Object -First 1)
         throw ("the pool's $name is not this file, so nothing was loaded." +
                $(if ($why) { " intake said: $($why.Trim())" } else { " Run: intake $Path   to see why." }))
+    }
+    if ($Class -eq 'system') {
+        # The person typed SYSTEM above: these exact bytes may run inside the kernel. The kernel
+        # trusts a system header only when its SHA3 is on this list (genie_control.py, the wall).
+        $listPath = Join-Path $script:GenieHome 'system_suits.json'
+        $list = @{}
+        if (Test-Path $listPath) { (Get-Content $listPath -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $list[$_.Name] = $_.Value } }
+        $list[$mine] = [ordered]@{ name = $name; agreed_at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); by = $env:USERNAME }
+        $list | ConvertTo-Json -Depth 3 | Set-Content -Path $listPath -Encoding utf8
+        G-Info "$name is on the system list (this exact SHA3 only; any change needs a new yes)"
     }
     return $row.hex_id
 }
@@ -576,8 +607,10 @@ function genie {
     Set-StrictMode -Version Latest   # this call and the helpers it runs only
     try {
         switch ($Command) {
-            'up'      { [void](Start-GenieKernel) }
-            'down'    { Stop-GenieKernel }
+            # a person's `down` leaves a marker so Buddy Heal (sector3/mesh/phoenix_buddy.py) does not
+            # start the kernel again behind their back; `up` clears it (2026-10-09)
+            'up'      { Remove-Item (Join-Path $script:GenieHome 'stopped-on-purpose') -ErrorAction SilentlyContinue; [void](Start-GenieKernel) }
+            'down'    { Stop-GenieKernel; Set-Content -Path (Join-Path $script:GenieHome 'stopped-on-purpose') -Value (Get-Date).ToString('s') -Encoding utf8 }
             'restart' { Stop-GenieKernel; Start-Sleep -Milliseconds 500; [void](Start-GenieKernel) }
             'status'  { Show-GenieStatus }
             'log'     { if (Test-Path $script:GenieLog) { Get-Content $script:GenieLog -Tail $Lines } else { G-Info 'no log yet' } }
@@ -625,6 +658,8 @@ function genie {
                         $suitName = [System.IO.Path]::GetFileNameWithoutExtension([string]$r.name)
                         $ans = Send-GenieStage -Suit $suitName -Json $stageJson -Channel $Channel -Wait $Wait
                         $ans | ConvertTo-Json -Depth 10 | Write-Host
+                        # the suit answered but the work failed: still a failure for whoever ran it (2026-10-09)
+                        if ($ans -and $ans.PSObject.Properties['ok'] -and $ans.ok -eq $false) { $global:GenieFailed = $true }
                     } catch { G-Err "$id — $($_.Exception.Message)" }
                 }
             }
@@ -632,19 +667,27 @@ function genie {
                 if (-not (Test-GenieHealth)) { throw 'kernel is down — genie up first' }
                 $r = Send-GenieStage -Suit $Args2[0] -Json (($Args2 | Select-Object -Skip 1) -join ' ') -Channel $Channel -Wait $Wait
                 $r | ConvertTo-Json -Depth 10 | Write-Host
+                # the suit answered but the work failed: still a failure for whoever ran it (2026-10-09)
+                if ($r -and $r.PSObject.Properties['ok'] -and $r.ok -eq $false) { $global:GenieFailed = $true }
             }
             'closet'  {
                 $c = Invoke-GenieControl GET '/closet' $null
                 $names = @($c.suits.PSObject.Properties | Sort-Object { $_.Value.sector }, { $_.Value.ring_pos })
                 $w = [Math]::Max(4, ($names | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum)
-                Write-Host ("  {0}  sec ring  {1,-7} {2,-8} {3,-9} {4}" -f 'suit'.PadRight($w), 'type', 'family', 'preloaded', 'origin') -ForegroundColor DarkCyan
+                Write-Host ("  {0}  sec ring  {1,-7} {2,-8} {3,-9} {4}" -f 'suit'.PadRight($w), 'type', 'family', 'preloaded', 'origin  runs in') -ForegroundColor DarkCyan
                 foreach ($n in $names) {
                     $v = $n.Value
-                    Write-Host ("  {0}  {1,-3} {2,-4}  {3,-7} {4,-8} {5,-9} {6}" -f $n.Name.PadRight($w), $v.sector, $v.ring_pos, $v.type, $v.family,
-                                $(if ($v.preloaded) { 'yes' } else { '-' }), $(if ($v.imported) { 'genie' } else { 'core' })) `
+                    $where = if ($v.PSObject.Properties['where'] -and $v.where -eq 'playbox') { 'play box' } else { 'KERNEL' }
+                    Write-Host ("  {0}  {1,-3} {2,-4}  {3,-7} {4,-8} {5,-9} {6,-7} {7}" -f $n.Name.PadRight($w), $v.sector, $v.ring_pos, $v.type, $v.family,
+                                $(if ($v.preloaded) { 'yes' } else { '-' }), $(if ($v.imported) { 'genie' } else { 'core' }), $where) `
                                -ForegroundColor $(if ($v.imported) { 'Green' } else { 'Gray' })
                 }
                 Write-Host "  $($c.suit_count) suits" -ForegroundColor DarkCyan
+                if ($c.PSObject.Properties['playbox']) {
+                    $pb = $c.playbox
+                    if ($pb.running) { Write-Host ("  play box: pid {0}, {1} MB / {2}% CPU cap, {3} s per run, restarts {4}" -f $pb.pid, $pb.mem_mb, $pb.cpu_pct, $pb.timeout_s, $pb.restarts) -ForegroundColor DarkCyan }
+                    else { Write-Host '  play box: not running (starts with the first entertainment suit)' -ForegroundColor DarkCyan }
+                }
             }
             'custody' { Invoke-GenieCustodyAudit }
             'doctor'  {

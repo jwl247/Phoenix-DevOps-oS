@@ -4,7 +4,7 @@ Rewritten 2026-09-29 (Round 2 fix pass: S34OPS-F19/F20/F21/F32/F41). Verify agai
 code before trusting a specific line number.
 
 ## What it is
-7 commands × {bash, `.cmd`} = 14 thin shims. On Linux `install.sh` copies the bash ones into
+11 commands × {bash, `.cmd`} = 22 thin shims (align_dirs, clone, get_distros, intake, jarvis, lol, phoenix-map, run, status, usys + `phoenix-paths.sh`). On Linux `install.sh` copies the bash ones into
 `~/.usys/bin` (on PATH); on Windows `install.ps1` copies the `.cmd` ones. Every shim passes
 its arguments as arguments (`-File … "$@"` / `%*`, or `bash -c 'exec bash "$0" "$@"'`),
 never spliced into a PowerShell or bash command string.
@@ -16,7 +16,10 @@ never spliced into a PowerShell or bash command string.
 - `bin/align_dirs` — bash → `tools/align_dirs.sh`.
 - `bin/get_distros` — bash → `tools/get_distros.sh`.
 - `usys.cmd`, `run.cmd` — Windows → `pwsh -File scripts/usys.ps1 [run] %*`.
-- `clone.cmd`, `lol.cmd` — Windows → Git Bash running `bin/clone` / `bin/lol` (OUT) with `%*`.
+- `clone.cmd` — Windows → Git Bash running `bin/clone` (OUT) with `%*`.
+- `bin/lol`, `lol.cmd` — **the `.lol` front door** (2026-10-08/09): a known word (`LOL_WORDS`: intake, suit, get, import, run, open, install, help…) → `bin/usys` / `usys.cmd` → `scripts/usys.ps1`; no word → `help`; anything else is a file to summon → `bin/clone` (= `lol get <name>`). The word list lives in both files — keep them the same. Bare words in PS7 come from the profile hook, not these shims.
+- `bin/jarvis`, `jarvis.cmd` — Python: ask Jarvis from any terminal (`--json`, `--no-tools`, `--pbmiii`, `ui`). SSH over the mesh as `jarvis-call` → `sector2/apps/jarvis/jarvis-gate.py`; the HUD Console's JARVIS box runs this same file.
+- `bin/phoenix-map`, `phoenix-map.cmd` — Python, read-only: per machine, every component | present | running | where (probes the Linux boxes over the mesh).
 - `intake.cmd`, `status.cmd`, `align_dirs.cmd`, `get_distros.cmd` — Windows → Git Bash with the target script and `%*` as positional args.
 
 ## Dependencies

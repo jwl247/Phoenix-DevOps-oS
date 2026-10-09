@@ -7,7 +7,7 @@
 
 import { parseAtlas, buildAtlasBlob, BUNDLE_FORMAT, BUNDLE_KEY } from './atlas-parse.mjs';
 
-const VERSION = '3.8.2';
+const VERSION = '3.8.3';
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -18,6 +18,10 @@ const HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
+// Footer QR color = the paint for the location tier (Jerry 2026-10-09); the QR text never changes.
+// ONE mapping: intake.sh's tier_color() says the same.
+const tierColor = (tier) => ({ 2: 'secondary', 3: 'tertiary', 4: 'system' })[Number(tier)] || 'primary';
+const withColor = (row) => (row ? { ...row, tier_color: tierColor(row.tier) } : row);
 const ok = (data, status = 200) => new Response(JSON.stringify(data, null, 2), { status, headers: HEADERS });
 const err = (msg, status = 400) => ok({ error: msg }, status);
 
@@ -996,7 +1000,7 @@ export default {
         params.push(limit);
 
         const result = await db.prepare(query).bind(...params).all();
-        return ok({ clonepool: result.results, count: result.results.length, filter: state || 'all' });
+        return ok({ clonepool: result.results.map(withColor), count: result.results.length, filter: state || 'all' });
       }
 
       // ── Large objects + server-side copy (3.6.0, 2026-09-29) ─────────────
@@ -1106,7 +1110,7 @@ export default {
         const row = await db
           .prepare('SELECT * FROM clonepool WHERE hex_id = ? OR name = ?')
           .bind(id, id).first();
-        return row ? ok(row) : err('not found', 404);
+        return row ? ok(withColor(row)) : err('not found', 404);
       }
       // DELETE /clonepool/:id — remove catalog metadata and R2 bytes (auth required)
       if (path.startsWith('/clonepool/') && req.method === 'DELETE') {
@@ -1171,7 +1175,7 @@ export default {
           WHERE hex_id = ?
         `).bind(body.tier, body.pool_path || null, body.state || null, hex_id).run();
 
-        return ok({ ok: true, hex_id, tier: body.tier });
+        return ok({ ok: true, hex_id, tier: body.tier, tier_color: tierColor(body.tier) });
       }
 
 

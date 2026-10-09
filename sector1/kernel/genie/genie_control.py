@@ -68,6 +68,31 @@ GENIE_TAG    = "genie"
 AUTO_RING_BASE = 100                # imported suits live above the 16 core rings
 HEX_RE       = re.compile(r"^[0-9a-fA-F]{2,1024}$")   # folder/name identities make long hexes (2026-10-08)
 MEM_MODPREFIX = "genie_mem_"        # in-RAM suit modules live in sys.modules under this prefix
+# The wall (Jerry 2026-10-09): only SYSTEM suits run inside the kernel. A suit is system only when
+# its header says so (suit_build.py stamps it inside the hashed bytes) AND its exact SHA3 is on the
+# system list, which only the terminal "type SYSTEM" gate writes. A header alone never counts.
+SYSTEM_LIST_PATH = GENIE_HOME / "system_suits.json"
+SUIT_HEADER = re.compile(rb"^# phoenix-suit: name=\S+ class=(entertainment|system)\b")
+
+
+def _suit_class(data: bytes) -> str:
+    m = SUIT_HEADER.match(data[:400])
+    return m.group(1).decode() if m else "entertainment"
+
+
+def _system_listed(sha3: str) -> bool:
+    try:
+        return sha3.lower() in json.loads(SYSTEM_LIST_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+
+
+def _playbox_class():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("phoenix_playbox", Path(__file__).with_name("playbox.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.PlayBox
 
 
 def _sha3_512_file(path: Path) -> str:
@@ -178,6 +203,12 @@ class GenieControl:
         self._lock    = threading.Lock()
         self._imports = self._read_imports()
         self._server: Optional[ThreadingHTTPServer] = None
+        self.playbox  = None                      # started the first time an entertainment suit loads
+
+    def _playbox(self):
+        if self.playbox is None:
+            self.playbox = _playbox_class()()
+        return self.playbox
 
     # ── persistence ──────────────────────────────────────────────────────────
     def _read_imports(self) -> dict:
@@ -332,16 +363,28 @@ class GenieControl:
             if existing is not None and GENIE_TAG not in existing.tags:
                 raise ValueError(f"'{name}' is a core/system suit — Genie will not replace it")
 
-            # compile + exec into a fresh module, parked in sys.modules under a unique name
+            # a fresh module, parked in sys.modules under a unique name. SYSTEM suits are exec'd
+            # here, in the kernel; every other suit is exec'd in the play box and this module is
+            # only its doorway (a crash, hang or memory blow-up there never reaches the kernel).
             modname = MEM_MODPREFIX + name
             mod = types.ModuleType(modname)
             mod.__file__ = f"<genie-memory:{name}@{hex_id}>"
-            try:
-                exec(compile(data, mod.__file__, "exec"), mod.__dict__)
-            except Exception as e:
-                raise ValueError(f"suit failed to load in memory: {type(e).__name__}: {e}")
-            if not hasattr(mod, "run"):
-                raise ValueError(f"{name}: no run(data, ...) — not a suit")
+            in_kernel = _suit_class(data) == "system" and _system_listed(custody)
+            if in_kernel:
+                try:
+                    exec(compile(data, mod.__file__, "exec"), mod.__dict__)
+                except Exception as e:
+                    raise ValueError(f"suit failed to load in memory: {type(e).__name__}: {e}")
+                if not hasattr(mod, "run"):
+                    raise ValueError(f"{name}: no run(data, ...) — not a suit")
+            else:
+                box = self._playbox()
+                box.load(name, data)                  # ValueError if it won't load there
+
+                def _run(data, ball=None, pcs=None, _suit=name, **_):
+                    return box.run(_suit, data)
+                mod.run = _run
+            mod.PHOENIX_WHERE = "kernel" if in_kernel else "playbox"
             sys.modules[modname] = mod
 
             ring_pos = req.get("ring_pos")
@@ -373,10 +416,11 @@ class GenieControl:
                 }
                 self._save_imports()
 
-        log.info("Genie loaded suit %s [PYTHON] s%d r%d IN-RAM (hex %s, %d bytes, nothing on disk)",
-                 name, sector, ring_pos, hex_id, len(data))
+        log.info("Genie loaded suit %s [PYTHON] s%d r%d IN-RAM in the %s (hex %s, %d bytes, nothing on disk)",
+                 name, sector, ring_pos, "KERNEL (system)" if in_kernel else "play box", hex_id, len(data))
         return {"ok": True, "name": name, "sector": sector, "ring_pos": ring_pos, "suit_type": "PYTHON",
                 "family": family, "preloaded": True, "in_ram": True, "hex": hex_id, "bytes": len(data),
+                "where": mod.PHOENIX_WHERE,
                 "suits_in_closet": len(self.library)}
 
     def reload_persisted(self):
@@ -436,6 +480,9 @@ class GenieControl:
         lib = self.library.status()
         for name, s in lib.get("suits", {}).items():
             s["imported"] = name in self._imports
+            mod = sys.modules.get(MEM_MODPREFIX + name)
+            s["where"] = getattr(mod, "PHOENIX_WHERE", "kernel")
+        lib["playbox"] = self.playbox.view() if self.playbox else {"running": False}
         return lib
 
     # ── server ───────────────────────────────────────────────────────────────
@@ -516,6 +563,8 @@ class GenieControl:
         log.info("  Genie control  online  http://%s:%d (token-gated)", BIND_ADDR, CONTROL_PORT)
 
     def stop(self):
+        if self.playbox:
+            self.playbox.stop()
         if self._server:
             self._server.shutdown()
             self._server.server_close()

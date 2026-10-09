@@ -178,6 +178,21 @@ normalize_path() { printf '%s' "${1//\\//}"; }
 # ages them down T1→T2→T3→T4→evicted over 4 days. R2 is unaffected — R2
 # objects are keyed by hex_id alone, never by tier, so rotation only ever
 # touches local disk + D1's tier/pool_path columns.
+# Footer QR color = the paint for the location tier (Jerry 2026-10-09). The QR TEXT never
+# changes (the footer is written after the hash); only this color follows the tier.
+# ONE mapping: the worker's tierColor() says the same.
+tier_color() {
+  case "$1" in
+    2) echo "secondary" ;; 3) echo "tertiary" ;; 4) echo "system" ;; *) echo "primary" ;;
+  esac
+}
+
+# The tier a pool path sits in (.../T3/<hex>/... -> 3); 1 when it has no tier folder.
+tier_of_path() {
+  local re='[/\\]T([1-4])[/\\]'
+  if [[ "$1" =~ $re ]]; then echo "${BASH_REMATCH[1]}"; else echo 1; fi
+}
+
 resolve_pool_dir() {
   local hex="$1"
   local t
@@ -511,6 +526,7 @@ write_sidecar_basic() {
   local backend="${8:-direct}" notes="${9:-}" checksum="${10:-}"
   local sensitive="${11:-false}"
   local now; now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  local tier; tier=$(tier_of_path "${sidecar}")
   mkdir -p "$(dirname "${sidecar}")"
   cat > "${sidecar}" <<SIDECAR
 {
@@ -530,7 +546,7 @@ write_sidecar_basic() {
   "companions": [],
   "qr": {
     "header": {"role": "state", "state": "white"},
-    "footer": {"role": "location", "tier": 1}
+    "footer": {"role": "location", "tier": ${tier}, "color": "$(tier_color "${tier}")"}
   },
   "auto_hotswap": false,
   "registered_at": "${now}",
@@ -539,6 +555,23 @@ write_sidecar_basic() {
 }
 SIDECAR
   log "INFO" "sidecar written: ${sidecar}"
+}
+
+# Footer tier + color follow the file when rotation moves it (2026-10-09).
+set_sidecar_tier() {
+  local sidecar="$1" tier="$2"
+  [[ -z "${PYTHON_CMD}" || ! -f "${sidecar}" ]] && return 0
+  "${PYTHON_CMD}" - "${sidecar}" "${tier}" "$(tier_color "${tier}")" <<'PYEOF' || log "WARN" "sidecar tier not updated: ${sidecar}"
+import json, sys
+path, tier, color = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+with open(path) as f:
+    d = json.load(f)
+d.setdefault('qr', {}).setdefault('footer', {'role': 'location'})
+d['qr']['footer']['tier'] = tier
+d['qr']['footer']['color'] = color
+with open(path, 'w') as f:
+    json.dump(d, f, indent=2)
+PYEOF
 }
 
 enrich_sidecar_companions() {
@@ -1719,10 +1752,12 @@ rotate_clonepool_tiers() {
         local dest_root="${CLONEPOOL_DIR}/T${to_num}"
         mkdir -p "${dest_root}"
         mv "${entry_dir%/}" "${dest_root}/${hex}"
+        # the sidecar's footer follows the move (it said tier 1 forever before 2026-10-09)
+        set_sidecar_tier "${dest_root}/${hex}/${hex}.sidecar.json" "${to_num}"
         log "INFO" "tier rotate: ${hex} T${from_num} -> T${to_num} (${age_days}d old)"
         [[ -n "${PHOENIX_AUTH}" ]] && pcurl -s -o /dev/null -X PATCH \
           -H @"${AUTH_HDR_FILE}" -H "Content-Type: application/json" \
-          -d "{\"tier\":${to_num},\"pool_path\":\"$(json_escape "${dest_root}/${hex}")\"}" \
+          -d "{\"tier\":${to_num},\"color\":\"$(tier_color "${to_num}")\",\"pool_path\":\"$(json_escape "${dest_root}/${hex}")\"}" \
           "${WORKER_URL}/clonepool/${hex}/tier" 2>/dev/null
         (( moved++ )) || true
       elif (( from_num == 4 && age_days > total_window )); then

@@ -424,7 +424,7 @@ function Invoke-UsysStatus {
     $bash = Get-UsysGitBash
     Write-Host "    Git Bash       : $(if ($bash) { $bash } else { 'NOT FOUND' })"
     Write-Host "    intake.sh (S4) : $(Get-UsysIntakeSh)"
-    Write-Host "    intake.sh (S2) : $(Get-UsysCloneIntakeSh)"
+    Write-Host "    intake.sh (S2) : $(Get-UsysCloneIntakeSh)  (the one door)"
     $legacyEngine = Get-UsysBashUsys
     Write-Host "    usys.sh        : $(if ($legacyEngine) { $legacyEngine } else { 'not shipped (legacy registry verbs disabled)' })"
     Write-Host ''
@@ -435,6 +435,7 @@ function Invoke-UsysStatus {
         if (-not $val) { $val = [Environment]::GetEnvironmentVariable($var, 'Process') }
         # Secrets: say whether they're set, never print them (2026-10-07 audit S21/XCUT-S17/CMDWALK-S01)
         if ($val -and $var -eq 'PHOENIX_AUTH') { $val = "set ($($val.Length) chars, hidden)" }
+        if ($val -and $var -eq 'PHOENIX_INTAKE') { $val += $(if (Test-Path $val) { '  (fallback only)' } else { '  (fallback only; FILE NOT FOUND)' }) }
         Write-Host "    $var : $(if ($val) { $val } else { '(not set)' })"
     }
     Write-Host ''
@@ -587,10 +588,52 @@ function Invoke-UsysDoctor {
     }
     Write-Host ''
 
+    Write-Host '  -- Kernel (does it own all of Helix?) --' -ForegroundColor Yellow
+    # 2026-10-08/09: the kernel ran DEGRADED for a day (the old PoC held 7701-7704) and nothing said so.
+    $kernelPid = (Get-NetTCPConnection -State Listen -LocalPort 8765 -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess
+    if (-not $kernelPid) {
+        Write-Host '    kernel : down (lol start)' -ForegroundColor DarkGray
+    } else {
+        $missing = @(foreach ($port in 7701, 7702, 7703, 7704, 7805, 7806, 7807, 7808) {
+            $owner = (Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess
+            if ($owner -ne $kernelPid) { "$port$(if ($owner) { " (held by pid $owner)" } else { ' (nobody)' })" }
+        })
+        if ($missing) {
+            $msg = "kernel pid $kernelPid is DEGRADED - Helix ports not its own: $($missing -join ', ')"
+            Write-Host "    $msg" -ForegroundColor Red
+            $problems += $msg
+        } else {
+            Write-Host "    kernel pid $kernelPid owns Helix-I 7701-7704 + Helix-E 7805-7808" -ForegroundColor Green
+        }
+    }
+    Write-Host ''
+
+    Write-Host '  -- Library (the map: scripts/library_check.py) --' -ForegroundColor Yellow
+    $libCheck = Join-Path $repo 'scripts\library_check.py'
+    $py = Get-Command python -ErrorAction SilentlyContinue
+    if ($py -and (Test-Path $libCheck)) {
+        $libOut = @(& $py.Source -I $libCheck 2>&1 | ForEach-Object { "$_" })
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "    $($libOut[0])  - clean" -ForegroundColor Green
+        } else {
+            foreach ($l in $libOut | Where-Object { $_ -match '^\s+(HOMELESS|GHOST|BAD)\s' }) {
+                $msg = "library: $($l.Trim())"
+                Write-Host "    $msg" -ForegroundColor Red
+                $problems += $msg
+            }
+        }
+    } else {
+        $msg = 'library check could not run (python or scripts/library_check.py missing)'
+        Write-Host "    $msg" -ForegroundColor Red
+        $problems += $msg
+    }
+    Write-Host ''
+
     if ($problems.Count -eq 0) {
         Write-UsysOk 'No problems found.'
     } else {
-        Write-UsysWarn "$($problems.Count) problem(s) found — see above. Nothing was changed."
+        Write-UsysWarn "$($problems.Count) problem(s) found. Nothing was changed:"
+        foreach ($p in $problems) { Write-Host "    - $p" -ForegroundColor Yellow }
     }
     Write-Host ''
 }
@@ -2084,9 +2127,14 @@ function Invoke-UsysKernel {
     if (-not (Get-Command genie -CommandType Function -ErrorAction SilentlyContinue)) {
         $g = Join-Path (Get-UsysRepoRoot) 'sector1\kernel\genie\genie.ps1'
         if (-not (Test-Path $g)) { Write-UsysErr "the kernel controller isn't at $g"; return }
-        . $g
+        # genie.ps1 auto-boots the kernel when dot-sourced (meant for the PS7 profile); here it would
+        # start a downed kernel before `lol stop`/`log`/`closet` even ran (2026-10-09)
+        $prevAuto = $env:PHOENIX_GENIE_AUTOUP; $env:PHOENIX_GENIE_AUTOUP = '0'
+        try { . $g } finally { $env:PHOENIX_GENIE_AUTOUP = $prevAuto }
     }
+    $global:GenieFailed = $false
     genie @KernelArgs
+    if ($global:GenieFailed) { $script:UsysFailed = $true }
 }
 
 function ConvertTo-UsysStage([string[]]$Words) {
@@ -2132,7 +2180,7 @@ function Test-UsysSuitFile([string]$Path) {
     return $script:UsysSuitExt -contains ([System.IO.Path]::GetExtension($Path)).ToLowerInvariant()
 }
 
-function Invoke-UsysIntakeSuit([string]$Path) {
+function Invoke-UsysIntakeSuit([string]$Path, [switch]$System) {
     if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { Write-UsysErr 'usage: usys intakeS <file>   (a suit: .py .sh .ps1 .js)'; return }
     if (-not (Test-UsysSuitFile $Path)) {
         Write-UsysErr "$([System.IO.Path]::GetFileName($Path)) isn't a suit (a suit is code: $($script:UsysSuitExt -join ' '))."
@@ -2145,8 +2193,8 @@ function Invoke-UsysIntakeSuit([string]$Path) {
         . (Join-Path (Get-UsysRepoRoot) 'sector1\kernel\genie\genie.ps1')
     }
     try {
-        $hex = Invoke-GenieIntakeLocal $Path
-        Write-UsysOk "suit in Phoenix, custody matches this file. Run it:  usys import $([System.IO.Path]::GetFileName($Path))"
+        $hex = Invoke-GenieIntakeLocal $Path -Class $(if ($System) { 'system' } else { 'entertainment' })
+        Write-UsysOk "$(if ($System) { 'SYSTEM' } else { 'entertainment' }) suit in Phoenix, built by the package handler, custody matches the built suit. Run it:  usys import $([System.IO.Path]::GetFileName($Path))"
         Write-UsysInfo "  (pool id $hex)"
     } catch { Write-UsysErr "not in: $($_.Exception.Message)" }
 }
@@ -3053,7 +3101,8 @@ function Invoke-UsysMain {
             Invoke-PhxSync -Dir $dir -DryRun:$dry
         }
 
-        { $_ -in @('register', 'call', 'swap', 'rollback', 'list', 'info', 'remove', 'where', 'sync') } {
+        # rollback/info/remove go to UnitedSys below (a PS switch runs EVERY matching case; 2026-10-09)
+        { $_ -in @('register', 'call', 'swap', 'list', 'where', 'sync') } {
             Invoke-UsysDelegate -SubCommand $Command @Rest
         }
 
@@ -3064,8 +3113,8 @@ function Invoke-UsysMain {
             switch ($sub) {
                 'trust'   { Invoke-UsysMain -Command 'suite-trust' -Rest $more }
                 'promote' { Invoke-UsysMain -Command 'suite-promote' -Rest $more }
-                ''        { Write-UsysErr 'usage: lol suit <file> | lol suit trust <name> | lol suit promote <name>' }
-                default   { Invoke-UsysIntakeSuit -Path $Rest[0] }
+                ''        { Write-UsysErr 'usage: lol suit <file> [--system] | lol suit trust <name> | lol suit promote <name>' }
+                default   { Invoke-UsysIntakeSuit -Path $Rest[0] -System:($Rest -contains '--system') }
             }
         }
         'suites'    { Invoke-UsysListSuites }

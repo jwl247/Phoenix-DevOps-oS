@@ -13,9 +13,11 @@ def default_clonepool() -> Path:
 
 
 def intake_sh() -> Path:
-    """The canonical intake pipeline (PHOENIX_INTAKE_SH overrides)."""
+    """The canonical intake pipeline. ONE door (marriage Phase 1): the repo's engine always
+    wins; PHOENIX_INTAKE_SH is only a fallback when the repo copy is missing (2026-10-09)."""
+    repo = Path(__file__).resolve().parents[3] / 'package-handler' / 'intake.sh'
     env = os.environ.get('PHOENIX_INTAKE_SH')
-    return Path(env) if env else Path(__file__).resolve().parents[3] / 'package-handler' / 'intake.sh'
+    return Path(env) if env and not repo.exists() else repo
 
 
 def bash_cmd() -> str:

@@ -85,9 +85,18 @@ def cmd_search(args):
 def cmd_info(args):
     backend = get_backend_instance(args.via)
     info = backend.info(args.package)
+    if not info.get("version"):
+        # no version = the backend did not answer (not found, or more than one match):
+        # say so and fail, never print "unknown" as if it were an answer (2026-10-09)
+        print(f'\n  {args.package}: no answer from {backend.name}')
+        detail = (info.get("error") or "").strip()
+        if detail:
+            print('  ' + detail.replace('\n', '\n  '))
+        print()
+        sys.exit(1)
     catalog = get_package(args.package)
     print(f'\n  Package : {args.package}')
-    print(f'  Version : {info.get("version", "unknown")}')
+    print(f'  Version : {info["version"]}')
     print(f'  Backend : {backend.name}')
     if info.get("description"):
         print(f'  Desc    : {info["description"]}')
