@@ -19,7 +19,7 @@
     "key_fact": "Canonical intake pipeline lives at `sector2/package-handler/intake.sh`. `sector2/frank/frank_save.py`'s drive-tiering logic is built but never called.",
     "source_file": "CONNECTIONS.md, sector2/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"c7e0279cccb39441\",\"f9d35d43770d3909\",\"51a1f05af85e342e\",\"ba2776c90792d2fe\",\"971da9a789ab199d\",\"ae2002a7528b058d\",\"66cd9688a2ae0682\",\"e14eae3777414e90\",\"46b42b4229cd7a39\",\"65408225e6f957dc\",\"829768ca64b1b6f0\",\"a60260bdfb558038\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"4fd9c8a3d43a9294\",\"3d91975932e93a1f\",\"a32affab459eef1a\",\"8dff57dd9caf1201\",\"2d87f9e76d5dbf11\",\"3aaeac3b672c2c29\",\"3537160464e361ae\",\"3f0096497d3ac9a2\",\"dbb1e1de35f8a1d4\",\"15b92ac2b6f12ca6\",\"45364e3228a28e13\",\"5241b6fd4103ff95\",\"e0f90a47a3630004\",\"fe573334dc2e08a5\",\"eaae18e72d174fc6\",\"51dda0aaa75cca7f\",\"33d485653f8a5612\",\"003e99aec4ffad75\",\"7170da25dc303b71\",\"c5774ee3ec1c7dee\",\"947469ad8f4bf170\",\"5430311e56708256\",\"f5d21aaf5aa70a2b\",\"d03c76fc5584c3dd\",\"1462bf4284baafce\",\"50d51a233d8ff488\"]"
+    "links": "[\"c7e0279cccb39441\",\"f9d35d43770d3909\",\"51a1f05af85e342e\",\"ba2776c90792d2fe\",\"971da9a789ab199d\",\"ae2002a7528b058d\",\"66cd9688a2ae0682\",\"e14eae3777414e90\",\"46b42b4229cd7a39\",\"65408225e6f957dc\",\"829768ca64b1b6f0\",\"a60260bdfb558038\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"6f214f40f0b202e3\",\"4fd9c8a3d43a9294\",\"3d91975932e93a1f\",\"a32affab459eef1a\",\"8dff57dd9caf1201\",\"2d87f9e76d5dbf11\",\"3aaeac3b672c2c29\",\"3537160464e361ae\",\"3f0096497d3ac9a2\",\"dbb1e1de35f8a1d4\",\"15b92ac2b6f12ca6\",\"45364e3228a28e13\",\"5241b6fd4103ff95\",\"e0f90a47a3630004\",\"fe573334dc2e08a5\",\"eaae18e72d174fc6\",\"51dda0aaa75cca7f\",\"33d485653f8a5612\",\"003e99aec4ffad75\",\"7170da25dc303b71\",\"c5774ee3ec1c7dee\",\"947469ad8f4bf170\",\"5430311e56708256\",\"f5d21aaf5aa70a2b\",\"d03c76fc5584c3dd\",\"1462bf4284baafce\",\"50d51a233d8ff488\"]"
   },
   {
     "hex": "ae2002a7528b058d",
@@ -41,7 +41,7 @@
     "key_fact": "`sector4/intake/intake.sh`'s zsh-glob syntax error was fixed 2026-09-21 (`43c27ad`: shebang now zsh, glob replaced by `find`). `usys intake` still routes here while `intake <file>` (IN) and `usys clone` (OUT, via `bin/clone`) go to `sector2/package-handler/intake.sh`; whether that is a mis-route or sector 4's own pipeline is an open call for Jerry (audit CONN-F08).",
     "source_file": "CONNECTIONS.md, sector4/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"8c5967fd8486f344\",\"a1aba4936f8f8fd2\",\"971da9a789ab199d\",\"ab31d986b71e6749\",\"4363aaa08e4f1bd2\",\"ae2002a7528b058d\",\"c9361ee760a0a611\",\"4a23e3f77d4c268d\",\"79efd15e5339e7b2\",\"a55d099940d85d77\",\"b44cf41ce87d6659\",\"39cfc819a4e4452c\",\"9a75bf2a8447b15c\",\"f5d21aaf5aa70a2b\",\"d6aa039866df21ee\",\"d03c76fc5584c3dd\",\"e60e0b27cdddfd28\",\"63388ec43c164af1\"]"
+    "links": "[\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"8c5967fd8486f344\",\"a1aba4936f8f8fd2\",\"971da9a789ab199d\",\"ab31d986b71e6749\",\"4363aaa08e4f1bd2\",\"ae2002a7528b058d\",\"c9361ee760a0a611\",\"4a23e3f77d4c268d\",\"79efd15e5339e7b2\",\"a55d099940d85d77\",\"b44cf41ce87d6659\",\"39cfc819a4e4452c\",\"9a75bf2a8447b15c\",\"9b776b8b8b8f07b7\",\"f5d21aaf5aa70a2b\",\"d6aa039866df21ee\",\"d03c76fc5584c3dd\",\"e60e0b27cdddfd28\",\"63388ec43c164af1\"]"
   },
   {
     "hex": "66cd9688a2ae0682",
@@ -63,7 +63,7 @@
     "key_fact": "`bin/*` and the dashboard call through here; `bin/intake` and `scripts/hsf-intake.sh` (IN) call `sector2/package-handler/intake.sh` directly; `clone`/`usys clone`/`tools/clone.sh` (OUT) go through `bin/clone`. The `usys run debian` elevation failure is handled (falls back to tcg acceleration).",
     "source_file": "CONNECTIONS.md, scripts/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"61ad4a8d1e45f706\",\"51a1f05af85e342e\",\"57b94356302c8571\",\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"0149ab52b4c96671\",\"de1b1f60e8fb172a\",\"4fd9c8a3d43a9294\",\"23460fe27bbd0839\",\"8c0625570131b178\",\"de8236d2355447a1\",\"74c05e2f9190b4c2\",\"c7e0279cccb39441\",\"5a4c098eb82ff3a2\",\"f9d35d43770d3909\",\"971da9a789ab199d\",\"6dae1b7eb15a4a2a\",\"50d51a233d8ff488\",\"ba2776c90792d2fe\",\"2d87f9e76d5dbf11\"]"
+    "links": "[\"61ad4a8d1e45f706\",\"51a1f05af85e342e\",\"57b94356302c8571\",\"66cd9688a2ae0682\",\"a60260bdfb558038\",\"829768ca64b1b6f0\",\"9b776b8b8b8f07b7\",\"0149ab52b4c96671\",\"f598c13d0d0bc849\",\"de1b1f60e8fb172a\",\"4fd9c8a3d43a9294\",\"23460fe27bbd0839\",\"6f214f40f0b202e3\",\"8c0625570131b178\",\"de8236d2355447a1\",\"74c05e2f9190b4c2\",\"c7e0279cccb39441\",\"5a4c098eb82ff3a2\",\"f9d35d43770d3909\",\"971da9a789ab199d\",\"6dae1b7eb15a4a2a\",\"50d51a233d8ff488\",\"ba2776c90792d2fe\",\"2d87f9e76d5dbf11\"]"
   },
   {
     "hex": "f9d35d43770d3909",
@@ -822,7 +822,7 @@
     "key_fact": null,
     "source_file": "scripts/CONNECTIONS.md",
     "state": "white",
-    "links": "[\"8c5967fd8486f344\",\"74c05e2f9190b4c2\",\"c7e0279cccb39441\",\"5a4c098eb82ff3a2\",\"971da9a789ab199d\",\"0149ab52b4c96671\",\"8355d66a7c20229d\",\"8dff57dd9caf1201\",\"c9361ee760a0a611\",\"7070b92178a0489b\",\"f9d35d43770d3909\",\"b9bb58048978991a\",\"31f3b2f7b1210b44\"]"
+    "links": "[\"8c5967fd8486f344\",\"74c05e2f9190b4c2\",\"c7e0279cccb39441\",\"971da9a789ab199d\",\"0149ab52b4c96671\",\"8355d66a7c20229d\",\"8dff57dd9caf1201\",\"c9361ee760a0a611\",\"5a4c098eb82ff3a2\",\"7070b92178a0489b\",\"f9d35d43770d3909\",\"b9bb58048978991a\",\"31f3b2f7b1210b44\"]"
   },
   {
     "hex": "0149ab52b4c96671",
@@ -834,6 +834,17 @@
     "source_file": "scripts/CONNECTIONS.md",
     "state": "white",
     "links": "[\"8c5967fd8486f344\",\"6dae1b7eb15a4a2a\",\"9b776b8b8b8f07b7\"]"
+  },
+  {
+    "hex": "f598c13d0d0bc849",
+    "name": "phoenix-seal.ps1",
+    "path": "scripts/phoenix-seal.ps1",
+    "area": "scripts",
+    "description": "`seal`: PowerShell-native signed file catalog (`~\\.phoenix\\profile-seal.cat`, cert \"Phoenix Profile Seal\") over the files every PS7 window loads; `Test-PhoenixSeal`. Built + tamper-tested, NOT yet wired into the profile (uncommitted).",
+    "key_fact": null,
+    "source_file": "scripts/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"8c5967fd8486f344\"]"
   },
   {
     "hex": "de1b1f60e8fb172a",
@@ -867,6 +878,17 @@
     "source_file": "scripts/CONNECTIONS.md",
     "state": "white",
     "links": "[\"8c5967fd8486f344\"]"
+  },
+  {
+    "hex": "6f214f40f0b202e3",
+    "name": "phoenix-rotate.ps1",
+    "path": "scripts/phoenix-rotate.ps1",
+    "area": "scripts",
+    "description": "`rotate-key`: auth rotation, the whole chain in one command (Jerry's SID + typed ROTATE, never an agent). Step 1 `sector2/package-handler/rotate-phoenix-auth.sh` (new PHOENIX_AUTH → packages-worker, office-notify-worker, pbm-radar-worker, each proven on /whoami → Windows user env via setx → every vault file with a `PHOENIX_AUTH=` line except templates/backups). Step 1b `rotate-access-token.sh` (Cloudflare Access secret, 1 h overlap). Step 2 `phoenix_vault.py push` (cloud vault). Step 3 refreshes this window only.",
+    "key_fact": null,
+    "source_file": "scripts/CONNECTIONS.md",
+    "state": "white",
+    "links": "[\"8c5967fd8486f344\",\"74c05e2f9190b4c2\"]"
   },
   {
     "hex": "8c0625570131b178",
@@ -1236,7 +1258,7 @@
     "name": "apps/jarvis/",
     "path": "sector2/apps/jarvis",
     "area": "sector2",
-    "description": "Jarvis, the local-AI tier: OpenJarvis on the llama.cpp `llama-server` engine on pbmIII (`install-jarvis.sh`, `pins.sha256`, `phoenix-llm.service`, `openjarvis.service`, `config.toml`, `jarvis_identity.md`). The only door in from off the box is `jarvis-gate.py`, run as the SSH forced command for user `jarvis-call` (mesh `10.42.0.0/16` only, no shell, one JSON ask per call, journaled as `jarvis-gate`); both services are localhost-only with a key. `suits/jarvis.py` is the Genie suit that asks it over the mesh (`jarvis-call@10.42.0.10`, pinned host key). **Ollama REMOVED 2026-10-07** (it phoned home). The engine swap on pbmIII was still in flight 2026-10-07 (see `docs/history/HANDOFF-2026-10-07.md`); not re-verified live by this edit. Leftover: `suits/jarvis.py`'s docstring still says \"Ollama llama3.2:3b\".",
+    "description": "Jarvis, the local-AI tier: OpenJarvis on the llama.cpp `llama-server` engine on pbmIII (`install-jarvis.sh`, `pins.sha256`, `phoenix-llm.service`, `openjarvis.service`, `config.toml`, `jarvis_identity.md`). The only door in from off the box is `jarvis-gate.py`, run as the SSH forced command for user `jarvis-call` (mesh `10.42.0.0/16` only, no shell, one JSON ask per call, journaled as `jarvis-gate`); both services are localhost-only with a key. `suits/jarvis.py` is the Genie suit that asks it over the mesh (`jarvis-call@10.42.0.10`, pinned host key). **Ollama REMOVED 2026-10-07** (it phoned home). Leftover: `suits/jarvis.py`'s docstring still says \"Ollama llama3.2:3b\".",
     "key_fact": null,
     "source_file": "sector2/CONNECTIONS.md",
     "state": "white",
@@ -1863,7 +1885,7 @@
     "name": "MainWindow.xaml",
     "path": "hud/MainWindow.xaml",
     "area": "hud",
-    "description": "the overlay: Live Monitor, H.L.K-10 chat pane, CLAUDE CODE pane, the KITT scanner bar. Saves the screen frame and both transcripts to `E:\\Phoenix\\hud-live-monitor\\` (`current.png`, `chat-log.txt`, `claude-code-log.txt`) so any Claude session can read them.",
+    "description": "the Console, slimmed 2026-10-08 (Jerry: \"only as wide as the button field, add Jarvis under that and that's it\"): 604 px wide, the button field + JARVIS (ask box through his gate, `HudOverlay.AskJarvisAsync` → `bin/jarvis` → pbmIII) and nothing else. The older panes (Live Monitor, H.L.K-10 chat, CLAUDE CODE) are hidden in the XAML, code intact; the Live Monitor frame + transcripts still go to `E:\\Phoenix\\hud-live-monitor\\`. Saves the screen frame and both transcripts to `E:\\Phoenix\\hud-live-monitor\\` (`current.png`, `chat-log.txt`, `claude-code-log.txt`) so any Claude session can read them.",
     "key_fact": null,
     "source_file": "hud/CONNECTIONS.md",
     "state": "white",
@@ -1874,7 +1896,7 @@
     "name": "MainWindow.xaml.cs",
     "path": "hud/MainWindow.xaml.cs",
     "area": "hud",
-    "description": "the overlay: Live Monitor, H.L.K-10 chat pane, CLAUDE CODE pane, the KITT scanner bar. Saves the screen frame and both transcripts to `E:\\Phoenix\\hud-live-monitor\\` (`current.png`, `chat-log.txt`, `claude-code-log.txt`) so any Claude session can read them.",
+    "description": "the Console, slimmed 2026-10-08 (Jerry: \"only as wide as the button field, add Jarvis under that and that's it\"): 604 px wide, the button field + JARVIS (ask box through his gate, `HudOverlay.AskJarvisAsync` → `bin/jarvis` → pbmIII) and nothing else. The older panes (Live Monitor, H.L.K-10 chat, CLAUDE CODE) are hidden in the XAML, code intact; the Live Monitor frame + transcripts still go to `E:\\Phoenix\\hud-live-monitor\\`. Saves the screen frame and both transcripts to `E:\\Phoenix\\hud-live-monitor\\` (`current.png`, `chat-log.txt`, `claude-code-log.txt`) so any Claude session can read them.",
     "key_fact": null,
     "source_file": "hud/CONNECTIONS.md",
     "state": "white",

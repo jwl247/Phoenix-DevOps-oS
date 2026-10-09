@@ -7,6 +7,8 @@ current code before trusting a specific line number.
 The master PowerShell 7 CLI for the whole project plus the scripts that feed the clone pool.
 - `usys.ps1` — ~120 KB / ~2 730 lines. clone/intake, suite run (QEMU distros, PoC binaries) behind the suite-execution gate, search, pull/open (SHA3-512-verified against D1 custody since 2026-09-29), shared-filesystem import/export, doctor/status.
 - `usys.cmd` — thin Windows cmd shim (`-File usys.ps1 %*`, never `-Command`).
+- **`.lol` front door (2026-10-09, 934b854):** `usys.ps1` is the engine behind `lol` (bin/lol, bin/lol.cmd) and the bare words in PS7 (intake, suit, get, import, run, open, install…). **Highlight a file, type the word**: `Get-UsysHighlight` reads the clipboard (any path form, a pool name, or the file in an `ls` line), says what it picked, clears it after one use. `intake.` = this folder. `help` = lol words, `help all` = the old sheet. Usage errors set `$script:UsysFailed` → exit 1. Command list: `docs/audits/2026-10-08-lol-command-list.md`.
+- `phoenix-seal.ps1` — `seal`: PowerShell-native signed file catalog (`~\.phoenix\profile-seal.cat`, cert "Phoenix Profile Seal") over the files every PS7 window loads; `Test-PhoenixSeal`. Built + tamper-tested, NOT yet wired into the profile (uncommitted).
 - `usys-suite-gate.Tests.ps1` — standalone (no Pester) execution-gate tests, 18/18 passing.
 - `hsf-intake.sh` — non-interactive intake of files/folders straight into `sector2/package-handler/intake.sh`; resolves PHOENIX_AUTH / PHOENIX_WORKER_URL / CLONEPOOL_DIR / CF-Access from the Windows User environment. CLAUDE.md's named intake path.
 - `intake.ps1` — Windows intake wrapper (PowerShell 7 only).
