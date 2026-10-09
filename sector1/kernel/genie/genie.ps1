@@ -83,6 +83,11 @@ function Test-GenieHealth {
     } catch { return $false }
 }
 
+function Test-GenieCtlPort {
+    $c = [System.Net.Sockets.TcpClient]::new()
+    try { return $c.ConnectAsync('127.0.0.1', $script:GenieCtlPort).Wait(500) -and $c.Connected } catch { return $false } finally { $c.Dispose() }
+}
+
 function Get-GenieProc {
     if (-not (Test-Path $script:GeniePidFile)) { return $null }
     $pidText = (Get-Content $script:GeniePidFile -Raw -ErrorAction SilentlyContinue)
@@ -137,9 +142,11 @@ function Start-GenieKernel {
     }
     Set-Content -Path $script:GeniePidFile -Value $proc.Id -Encoding ascii
 
-    $deadline = (Get-Date).AddSeconds(20)
+    # OPERATIONAL = status AND the control port answer: the kernel re-loads (and heals) its saved suits
+    # before the control port opens, and an import sent in that gap was refused (2026-10-09)
+    $deadline = (Get-Date).AddSeconds(60)
     while ((Get-Date) -lt $deadline) {
-        if (Test-GenieHealth) {
+        if ((Test-GenieHealth) -and (Test-GenieCtlPort)) {
             G-Ok "kernel OPERATIONAL  pid $($proc.Id)  status http://127.0.0.1:$($script:GenieStatusPort)"
             return $true
         }
@@ -655,6 +662,7 @@ function genie {
                         if (-not $r.in_ram) { G-Warn "$($r.name) was written to the closet on disk, not loaded in RAM" }
                         G-Ok ("loaded: {0}  [{1}] sector {2} ring {3}  {4}  closet now {5} suits" -f $r.name, $r.suit_type, $r.sector, $r.ring_pos,
                               $(if ($r.in_ram) { 'R2 -> RAM, nothing on disk' } else { 'closet (disk)' }), $r.suits_in_closet)
+                        if ($r.PSObject.Properties['healed']) { G-Warn "HEALED: $($r.healed)" }
                         $suitName = [System.IO.Path]::GetFileNameWithoutExtension([string]$r.name)
                         $ans = Send-GenieStage -Suit $suitName -Json $stageJson -Channel $Channel -Wait $Wait
                         $ans | ConvertTo-Json -Depth 10 | Write-Host
