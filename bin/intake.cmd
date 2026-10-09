@@ -32,8 +32,11 @@ if exist "%USERPROFILE%\.phoenix_env.sh" (
     set "ENV_SOURCE="
 )
 
-REM Find intake.sh
-set "INTAKE_SH=%PHOENIX_INTAKE%"
+REM Find intake.sh -- ONE door (marriage Phase 1): the repo engine always wins;
+REM PHOENIX_INTAKE is only a fallback when this repo copy is missing.
+set "INTAKE_SH="
+if exist "%~dp0..\sector2\package-handler\intake.sh" set "INTAKE_SH=%~dp0..\sector2\package-handler\intake.sh"
+if not defined INTAKE_SH set "INTAKE_SH=%PHOENIX_INTAKE%"
 REM A stale PHOENIX_INTAKE (moved/deleted path - on PBMII it points at a dead
 REM D: path) falls back to the repo copy instead of failing (2026-10-03).
 if defined INTAKE_SH if not exist "%INTAKE_SH%" set "INTAKE_SH="

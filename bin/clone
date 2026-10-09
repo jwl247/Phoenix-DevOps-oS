@@ -36,7 +36,10 @@ USAGE
 
 # intake.sh: PHOENIX_INTAKE only if it really exists, else this repo's copy.
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INTAKE_SH="${PHOENIX_INTAKE:-}"
+# ONE door (marriage Phase 1): this repo's engine wins; PHOENIX_INTAKE is a fallback.
+INTAKE_SH=""
+[[ -f "$SELF_DIR/../sector2/package-handler/intake.sh" ]] && INTAKE_SH="$(cd "$SELF_DIR/../sector2/package-handler" && pwd)/intake.sh"
+[[ -z "$INTAKE_SH" ]] && INTAKE_SH="${PHOENIX_INTAKE:-}"
 [[ -n "$INTAKE_SH" && ! -f "$INTAKE_SH" ]] && INTAKE_SH=""
 for c in "$SELF_DIR/../sector2/package-handler/intake.sh" \
          "${PHOENIX_ROOT:-/nonexistent}/sector2/package-handler/intake.sh" \

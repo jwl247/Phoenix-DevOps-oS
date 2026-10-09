@@ -15,8 +15,11 @@ set -euo pipefail
 # Source Phoenix environment
 [[ -f "$HOME/.phoenix_env.sh" ]] && source "$HOME/.phoenix_env.sh"
 
-# Find intake.sh
-INTAKE_SH="${PHOENIX_INTAKE:-}"
+# Find intake.sh -- ONE door (marriage Phase 1): this repo's engine wins; PHOENIX_INTAKE is a fallback.
+INTAKE_SH=""
+_repo_sh="$(dirname "$(dirname "${BASH_SOURCE[0]}")")/sector2/package-handler/intake.sh"
+[[ -f "$_repo_sh" ]] && INTAKE_SH="$_repo_sh"
+[[ -z "$INTAKE_SH" ]] && INTAKE_SH="${PHOENIX_INTAKE:-}"
 # A stale PHOENIX_INTAKE (moved/deleted path) falls back to the repo copy
 # instead of stopping with "not found" (2026-10-02: it pointed at a dead D: path).
 [[ -n "$INTAKE_SH" && ! -f "$INTAKE_SH" ]] && INTAKE_SH=""

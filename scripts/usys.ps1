@@ -182,9 +182,11 @@ function Get-UsysCloneIntakeSh {
     $parent = Split-Path $repo -Parent
     # Canonical in-repo pipeline first: the standalone Phoenix-Package_handler
     # clones lack the CF-Access headers (2026-09-21) and would fail silently.
+    # ONE door (marriage Phase 1): the repo's engine always wins; PHOENIX_INTAKE is only a
+    # fallback for an install with no repo copy, so a stale copy can never outrank it.
     $candidates = @(
-        $env:PHOENIX_INTAKE,
-        (Join-Path $repo 'sector2\package-handler\intake.sh')
+        (Join-Path $repo 'sector2\package-handler\intake.sh'),
+        $env:PHOENIX_INTAKE
         # standalone Phoenix-Package_handler candidates removed (archived
         # 2026-09-13; intake.sh lives at that repo's root) — S34OPS-F41
     ) | Where-Object { $_ -and (Test-Path $_) }

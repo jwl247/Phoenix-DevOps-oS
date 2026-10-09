@@ -89,9 +89,10 @@ function ConvertTo-GitBashPath([string]$WindowsPath) {
 function Get-IntakeSh {
     $repo   = Get-IntakeRepoRoot
     $parent = Split-Path $repo -Parent
+    # ONE door (marriage Phase 1): the repo's engine always wins; PHOENIX_INTAKE is a fallback.
     $candidates = @(
-        $env:PHOENIX_INTAKE,
-        (Join-Path $repo 'sector2\package-handler\intake.sh')
+        (Join-Path $repo 'sector2\package-handler\intake.sh'),
+        $env:PHOENIX_INTAKE
         # standalone package-handler candidates removed (archived 2026-09-13,
         # intake.sh at that repo's root, no CF-Access fix) — S34OPS-F41
     ) | Where-Object { $_ -and (Test-Path $_) }

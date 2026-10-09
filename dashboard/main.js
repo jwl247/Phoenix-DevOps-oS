@@ -207,7 +207,8 @@ function resolvePhoenixCommand(command) {
         if (process.platform === 'win32' && fs.existsSync(intakePs1)) {
             return `& '${intakePs1.replace(/'/g, "''")}' ${args}`;
         }
-        const intakeSh = path.join(root, 'sector4', 'intake', 'intake.sh');
+        // ONE door (marriage Phase 1): the Sector 2 engine, never the deprecated sector4 wrapper.
+        const intakeSh = path.join(root, 'sector2', 'package-handler', 'intake.sh');
         if (fs.existsSync(intakeSh)) {
             return `bash '${intakeSh.replace(/'/g, "'\\''")}' ${args}`;
         }
