@@ -1,5 +1,5 @@
 {
-  "_about": "Phoenix Mesh (Nebula). No secrets in this file \u2014 certs/keys live in the vault. Edit, then: python sector3/mesh/phoenix_net.py sign <host>; config/install.",
+  "_about": "Phoenix Mesh (Nebula). No secrets in this file — certs/keys live in the vault. Edit, then: python sector3/mesh/phoenix_net.py sign <host>; config/install.",
   "network": "10.42.0.0/16",
   "port": 4242,
   "lighthouses": {
@@ -17,7 +17,7 @@
         "admin"
       ],
       "os": "windows",
-      "note": "Jerry's PC \u2014 travels",
+      "note": "Jerry's PC — travels",
       "buddies": [
         "pbmiii",
         "awslh"
@@ -54,6 +54,19 @@
       "buddies": [
         "pbmiii"
       ]
+    },
+    "pbmiv": {
+      "ip": "10.42.0.11",
+      "groups": [
+        "servers"
+      ],
+      "os": "linux",
+      "note": "HP Pavilion p6774 (Realtek 8111E enp2s0), Debian 13 trixie. Was a clone of pbmIII (same name + Nebula key) until 2026-10-09; re-identified as pbmiv. Home Starlink LAN, STATIC 192.168.1.193 (NetworkManager 'lan-static'). Sleep masked. Compute node for Jarvis (subprocessor, planned).",
+      "ssh": "a@192.168.1.193",
+      "ssh_key": "phoenix_third_debian_ed25519",
+      "lan": "192.168.1.193",
+      "lan_net": "192.168.1.",
+      "mac": "d4:85:64:a3:84:ed"
     }
   }
 }
