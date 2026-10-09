@@ -201,10 +201,22 @@ json_escape() {
 
 # ── Sensitive-name heuristic — shared by single-file and directory intake ──
 is_sensitive_name() {
-  case "$(basename "$1")" in
-    .env|*.env|*secret*|*password*|*credential*|*token*|*auth*) return 0 ;;
-    *) return 1 ;;
+  local base; base="$(basename "$1")"; base="${base,,}"
+  case "${base}" in
+    # auth as its own word only: author.md, authority, authenticcoder are not secrets
+    .env|*.env|*secret*|*password*|*credential*|*token*|*oauth*) return 0 ;;
+    auth|auth.*|*[._-]auth|*[._-]auth.*|*[._-]auth[._-]*) return 0 ;;
+    # Rule 10 (2026-10-08 audit S4-02): keys, certs, vaults, secret copies and disk images
+    # slipped through the list above (phoenix-vault.enc, id_ed25519, server.key, cert.pem, *.qcow2).
+    .env.*|*.env.*|*.pem|*.key|*.p12|*.pfx|*.jks|*.keystore|*.ppk|*.kdbx|*.gpg|*.enc|*.dpapi*) return 0 ;;
+    id_rsa*|id_dsa*|id_ecdsa*|id_ed25519*|authorized_keys|known_hosts|.netrc|.pgpass|*.ovpn) return 0 ;;
+    *.tfstate|*.tfstate.*|kubeconfig|*.kubeconfig|*.qcow2|*.vhdx|*.vmdk) return 0 ;;
   esac
+  # A renamed private key is still a private key: look at the start of the file.
+  if [[ -f "$1" ]] && head -c 8192 "$1" 2>/dev/null | grep -aqE -- '-----BEGIN ([A-Z]+ )?PRIVATE KEY-----|-----BEGIN PGP PRIVATE KEY BLOCK-----'; then
+    return 0
+  fi
+  return 1
 }
 
 # ── File size ─────────────────────────────────────────────────
@@ -1129,7 +1141,7 @@ intake_file() {
 
   # ── Sensitive-name check ──────────────────────────────────────
   local sensitive="false"
-  if is_sensitive_name "${orig}"; then
+  if is_sensitive_name "${filepath}"; then
     echo ""
     echo " ⚠  WARNING — SENSITIVE FILE: ${orig}"
     echo " ⚠  This file will be stored in clonepool AND reported to D1,"
@@ -1154,7 +1166,8 @@ intake_file() {
     fi
     if [[ "${sens_choice}" != "1" ]]; then
       echo " [intake:CANCEL] Sensitive file — intake cancelled"
-      return 0
+      # 3 = refused, not taken in. Returning 0 here let usys print "in the clone pool" (2026-10-08).
+      return 3
     fi
     sensitive="true"
   fi
@@ -1228,12 +1241,30 @@ intake_file() {
   companion_list=$(detect_companions "${filepath}" || true)
 
   if [[ -n "${companion_list}" ]]; then
+    # Companions pass the same sensitive gate as the main file (Rule 10, audit S4-31):
+    # an app.env next to app.py needs its own yes typed at a terminal, or it stays out.
+    local kept_companions=""
     while IFS= read -r companion; do
       [[ -z "${companion}" ]] && continue
       local comp_name; comp_name=$(basename "${companion}")
+      if is_sensitive_name "${companion}"; then
+        local comp_choice="2"
+        if [[ -t 0 ]]; then
+          echo " ⚠  SENSITIVE COMPANION: ${comp_name} (travels with ${orig})"
+          read -rp "  Take it in too? [1] yes  [2] skip: " comp_choice || comp_choice="2"
+        else
+          echo " [intake:SKIP] sensitive companion ${comp_name} left out: it needs a yes typed at a terminal (rule 10)."
+        fi
+        if [[ "${comp_choice}" != "1" ]]; then
+          log "INFO" "sensitive companion skipped: ${comp_name}"
+          continue
+        fi
+      fi
       cp "${companion}" "${pool_dir}/${version}_${comp_name}"
       log "INFO" "companion intaked: ${comp_name}"
+      kept_companions+="${companion}"$'\n'
     done <<< "${companion_list}"
+    companion_list="${kept_companions%$'\n'}"
   fi
 
   cp "${filepath}" "${pool_dir}/${version}_${orig}"

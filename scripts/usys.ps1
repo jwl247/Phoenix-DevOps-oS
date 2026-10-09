@@ -751,8 +751,11 @@ function Invoke-UsysIntakeFile {
     $prevPool = $env:CLONEPOOL_DIR
     $env:CLONEPOOL_DIR = ConvertTo-GitBashPath $env:CLONEPOOL_DIR
 
-    try { & $bash $bashIntake $bashFile } finally { $env:CLONEPOOL_DIR = $prevPool }
+    # Out-Host: intake's lines go to the screen, never into this function's return value
+    # (an array of text lines is "true", so a refused intake was reported as done, 2026-10-08).
+    try { & $bash $bashIntake $bashFile | Out-Host } finally { $env:CLONEPOOL_DIR = $prevPool }
     if ($LASTEXITCODE -eq 0) { return $true }
+    if ($LASTEXITCODE -eq 3) { Write-UsysWarn "NOT taken in: '$Path' looks sensitive. Run 'usys intake $Path' yourself in a terminal to decide."; return $false }
     Write-UsysErr "intake exited $LASTEXITCODE for '$Path'"
     return $false
 }
@@ -2652,7 +2655,16 @@ function Invoke-UsysMain {
                 $bash = Get-UsysGitBash; $sh = Get-UsysCloneIntakeSh
                 if ($bash -and $sh) { & $bash (ConvertTo-GitBashPath $sh) status }
             } elseif ($Rest.Count -ge 1) {
-                Invoke-UsysIntakePool -Path ($Rest | Where-Object { $_ -notin '-DryRun', '--dry-run' } | Select-Object -First 1)
+                $target = $Rest | Where-Object { $_ -notin '-DryRun', '--dry-run' } | Select-Object -First 1
+                if ($Rest | Where-Object { $_ -in '-DryRun', '--dry-run' }) {
+                    # A dry run never writes (audit S4-03: the flag used to be dropped and a real intake ran).
+                    if (-not $target) { Write-UsysErr 'usage: usys intake <file> -DryRun'; return }
+                    if (-not (Test-Path -LiteralPath $target)) { Write-UsysErr "not found: $target"; return }
+                    $kind = if (Test-Path -LiteralPath $target -PathType Container) { 'folder' } else { 'file' }
+                    Write-UsysInfo "[DryRun] would take $kind '$((Resolve-Path -LiteralPath $target).Path)' into the clone pool (pool + D1 custody + R2). Nothing written."
+                    return
+                }
+                Invoke-UsysIntakePool -Path $target
             } else {
                 Write-UsysErr 'usage: usys intake <file> | usys intake dir <path> | usys intake status'
             }
