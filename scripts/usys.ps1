@@ -60,7 +60,10 @@ function Write-UsysWarn([string]$Message) {
 }
 
 function Write-UsysErr([string]$Message) {
-    Write-Error "usys: $Message"
+    # A clean one-line error and a failing exit code (Write-Error printed a PowerShell
+    # error dump and the command still exited 0 - lol walk A5, 2026-10-08).
+    $script:UsysFailed = $true
+    [Console]::Error.WriteLine("lol: $Message")
 }
 
 # =============================================================================
@@ -2097,6 +2100,34 @@ function ConvertTo-UsysStage([string[]]$Words) {
     return @((@{ text = $text.Trim(' ', '"') } | ConvertTo-Json -Compress))
 }
 
+# The highlighted file (Windows Terminal copy-on-select puts it on the clipboard): every file
+# command uses it when no file is typed (Jerry 2026-10-08: "all commands for files").
+# Same clean-up as g: quotes, brackets, a :line tail; any path form; repo-relative from the repo.
+# A pool name (no path, no spaces) is passed through for get/run/import. Anything else = nothing.
+function Get-UsysHighlight {
+    $raw = Get-Clipboard -Raw -ErrorAction SilentlyContinue
+    if (-not $raw) { return $null }
+    $first = ($raw -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
+    if (-not $first) { return $null }
+    $first = $first.Trim().Trim('`', '"', "'", '<', '>', '(', ')', '[', ']', ',', ';').Trim() -replace '(:\d+){1,2}$', ''
+    if (-not $first -or $first.Length -gt 400) { return $null }
+    if ($first -match '\s') {
+        # e.g. a line from ls ("-a--- 10/7/2026 8:55 PM 14775 capulet.py"): take the right-most piece that
+        # is a real file or folder where you are standing; a plain sentence matches nothing and is ignored
+        $hit = @($first -split '\s+') | Where-Object { $_ } | Select-Object -Last 6 |
+            ForEach-Object { $_.Trim('`', '"', "'", ',', ';') } |
+            Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Last 1
+        if ($hit) { return (Resolve-Path -LiteralPath $hit).Path }
+        return $null
+    }
+    $p = if (Get-Command ConvertTo-PhoenixPath -ErrorAction SilentlyContinue) { ConvertTo-PhoenixPath $first } else { $first }
+    foreach ($c in @($p, (Join-Path (Get-UsysRepoRoot) $p))) {
+        if ($c -and (Test-Path -LiteralPath $c)) { return (Resolve-Path -LiteralPath $c).Path }
+    }
+    if ($first -match '^[A-Za-z0-9][A-Za-z0-9._@+-]*$') { return $first }   # a pool / suit name
+    return $null
+}
+
 function Test-UsysSuitFile([string]$Path) {
     return $script:UsysSuitExt -contains ([System.IO.Path]::GetExtension($Path)).ToLowerInvariant()
 }
@@ -2129,7 +2160,8 @@ function Invoke-UsysIntakePool([string]$Path) {
     } elseif (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { Write-UsysErr "not found: $Path"; return }
     # Files and folders: the Sector 2 clone pool pipeline (pool + D1 custody + R2). The Sector 4
     # vault path needs /mnt/g inside the Debian VM and can't run from Windows (2026-10-08).
-    if (Invoke-UsysIntakeFile -Path $Path) { Write-UsysOk "in the clone pool: $Path   (out again: usys get $([System.IO.Path]::GetFileName($Path.TrimEnd('\','/'))))" }
+    $full = (Resolve-Path -LiteralPath $Path).Path      # `intake .` names the real folder, never "."
+    if (Invoke-UsysIntakeFile -Path $full) { Write-UsysOk "in the clone pool: $full   (out again: get $([System.IO.Path]::GetFileName($full.TrimEnd('\','/'))))" }
 }
 
 function Invoke-UsysSuitePromote {
@@ -2476,6 +2508,33 @@ Set-Alias -Name phx-ls -Value Invoke-PhxLs -Scope Global -Force -ErrorAction Sil
 # =============================================================================
 # COMMAND: help
 # =============================================================================
+function Show-LolHelp {
+    @"
+
+  .lol - Phoenix's front door (one word, two at most)
+
+    lol intake <file|folder|link>   into the clone pool (+ D1 custody + R2): any file, folder, game, web link
+    lol suit <file>                 a suit (code) into Phoenix      lol suit trust|promote <name>
+    lol get <name> [vN]             a hash-checked copy out, into this folder
+    lol import <suit> [words]       R2 -> memory -> run (never on disk)
+    lol run <name>                  run an app, a game or a VM
+    lol open <file>                 open a file with its app
+    lol install|remove|upgrade|rollback|info <package>   any OS's packages, with rollback
+    lol closet                      what's loaded right now
+    lol suites                      what's available
+    lol start | lol stop            the kernel on / off
+    lol status [deep]               is Phoenix healthy (deep = look for problems)
+    lol log                         the kernel's log
+    lol watch start|stop|pending    the Downloads watcher
+    lol glossary <words>            find anything
+    lol ask <question>              ask Jarvis
+    lol console | lol map           the Console | what runs where
+    lol vm distro|fetch|intake|fs   the Linux VMs
+    lol help [all]
+
+"@ | Write-Host
+}
+
 function Show-UsysHelp {
     @"
 
@@ -2618,11 +2677,28 @@ function Invoke-UsysMain {
     # Paths in any form (F:\x, F:/x, /f/x, ~/x) work the same (Jerry 10/7, scripts\phoenix-paths.ps1)
     if ($Rest -and (Get-Command Resolve-PhoenixArgs -ErrorAction SilentlyContinue)) { $Rest = Resolve-PhoenixArgs $Rest }
 
+    # Highlight a file, type the word: intake, suit, get, import, run, open, start, log (and the
+    # old names) act on the highlight when no file is typed. It always says what it picked.
+    $fileVerbs = 'intake','intakec','intakes','suit','get','clone','import','run','open','start','log'
+    $typed = @($Rest | Where-Object { $_ -and -not $_.StartsWith('-') })
+    if ($Command.ToLowerInvariant() -in $fileVerbs -and $typed.Count -eq 0) {
+        $h = Get-UsysHighlight
+        if ($h) {
+            Write-Host "  lol $($Command.ToLowerInvariant()) -> $h   (your highlight)" -ForegroundColor Cyan
+            $Rest = @($h) + @($Rest)
+            # used once, then cleared: the next command can never reuse a stale highlight (Jerry 10/8)
+            try { Set-Clipboard -Value ' ' -ErrorAction Stop } catch { }
+        }
+    }
+
     switch ($Command.ToLowerInvariant()) {
         'init'          { Invoke-UsysInit }
-        'status'        { Invoke-UsysStatus; Invoke-UsysKernel @('status') }
+        'status'        {
+            if ($Rest -and $Rest[0] -eq 'deep') { Invoke-UsysDoctor; return }   # lol status deep (was doctor)
+            Invoke-UsysStatus; Invoke-UsysKernel @('status')
+        }
         'doctor'        { Invoke-UsysDoctor }
-        'help'          { Show-UsysHelp }
+        'help'          { if ($Rest -and $Rest[0] -eq 'all') { Show-UsysHelp } else { Show-LolHelp } }
         '--help'        { Show-UsysHelp }
         '-h'            { Show-UsysHelp }
         'version'       { Write-Output $script:UsysVersion }
@@ -2640,9 +2716,24 @@ function Invoke-UsysMain {
             Invoke-UsysCloneOut -CloneArgs $Rest
         }
         'closet'  { Invoke-UsysKernel @('closet') }
-        'start'   { Invoke-UsysKernel @('up') }
+        'start'   {
+            if (-not $Rest -or $Rest[0] -eq 'kernel') { Invoke-UsysKernel @('up'); return }
+            # one file: a suit runs through the import method, anything else through run
+            if (Test-UsysSuitFile $Rest[0]) { Invoke-UsysKernel (@('import', $Rest[0]) + @($Rest | Select-Object -Skip 1)) }
+            else { Invoke-UsysMain -Command 'run' -Rest $Rest }
+        }
         'stop'    { Invoke-UsysKernel @('down') }
-        'log'     { Invoke-UsysKernel (@('log') + $Rest) }
+        'log'     {
+            if (-not $Rest -or $Rest[0] -eq 'kernel' -or $Rest[0] -match '^\d+$') {
+                Invoke-UsysKernel (@('log') + @($Rest | Where-Object { $_ -ne 'kernel' })); return
+            }
+            # one file's lines from the kernel log (the kernel keeps one shared log)
+            $name = [System.IO.Path]::GetFileName($Rest[0])
+            if (-not (Get-Command genie -CommandType Function -ErrorAction SilentlyContinue)) { . (Join-Path (Get-UsysRepoRoot) 'sector1\kernel\genie\genie.ps1') }
+            $lines = @(genie log -Lines 2000 | Select-String -SimpleMatch $name)
+            if ($lines) { $lines | Select-Object -Last 40 | ForEach-Object { $_.Line } }
+            else { Write-UsysInfo "no kernel log lines for $name" }
+        }
         'jump'    {
             if (Get-Command Invoke-PhoenixGoto -ErrorAction SilentlyContinue) { Invoke-PhoenixGoto @Rest }
             else { Write-UsysErr 'usys jump moves your PS7 window, so run it in PS7: highlight a path, then type  usys jump  (or g)' }
@@ -2668,7 +2759,7 @@ function Invoke-UsysMain {
                 }
                 Invoke-UsysIntakePool -Path $target
             } else {
-                Write-UsysErr 'usage: usys intake <file> | usys intake dir <path> | usys intake status'
+                Write-UsysErr 'usage: intake <file>  |  intake .  (this folder)  |  intake status   (or highlight a file, then: intake)'
             }
         }
 
@@ -2966,6 +3057,53 @@ function Invoke-UsysMain {
             Invoke-UsysDelegate -SubCommand $Command @Rest
         }
 
+        # ── the .lol words (2026-10-08): one front door; the old words above still work ──
+        'suit'      {
+            $sub = if ($Rest) { $Rest[0].ToLowerInvariant() } else { '' }
+            $more = @($Rest | Select-Object -Skip 1)
+            switch ($sub) {
+                'trust'   { Invoke-UsysMain -Command 'suite-trust' -Rest $more }
+                'promote' { Invoke-UsysMain -Command 'suite-promote' -Rest $more }
+                ''        { Write-UsysErr 'usage: lol suit <file> | lol suit trust <name> | lol suit promote <name>' }
+                default   { Invoke-UsysIntakeSuit -Path $Rest[0] }
+            }
+        }
+        'suites'    { Invoke-UsysListSuites }
+        'setup'     { Invoke-UsysInit; Register-UsysPath | Out-Null; Write-UsysOk 'setup done (dirs, config, PATH)' }
+        'map'       { & python (Join-Path (Get-UsysRepoRoot) 'bin\phoenix-map') @Rest }
+        'ask'       {
+            if (-not $Rest) { Write-UsysErr 'usage: lol ask <question>   (Jarvis)'; return }
+            & python (Join-Path (Get-UsysRepoRoot) 'bin\jarvis') @Rest
+        }
+        'glossary'  {
+            if ($Rest) { Invoke-UsysSearch -Query ($Rest -join ' ') } else { Write-UsysInfo 'lol glossary <words>   (or the Console GLOSSARY button)' }
+        }
+        'vm'        {
+            $sub = if ($Rest) { $Rest[0].ToLowerInvariant() } else { '' }
+            $more = @($Rest | Select-Object -Skip 1)
+            switch ($sub) {
+                'distro' { Invoke-UsysMain -Command 'distro' -Rest $more }
+                'fetch'  { Invoke-UsysMain -Command 'distro' -Rest (@('fetch-qemu') + $more) }
+                'intake' { Invoke-UsysMain -Command 'distro' -Rest (@('intake-qemu') + $more) }
+                'fs'     {
+                    if (-not $more) { Write-UsysErr 'usage: lol vm fs init|ls|import|export|sync ...'; return }
+                    Invoke-UsysMain -Command ('fs-' + $more[0].ToLowerInvariant()) -Rest @($more | Select-Object -Skip 1)
+                }
+                'align'  {
+                    $bash = Get-UsysGitBash
+                    if (-not $bash) { Write-UsysErr 'Git Bash not found'; return }
+                    & $bash (ConvertTo-GitBashPath (Join-Path (Get-UsysRepoRoot) 'tools\align_dirs.sh')) @more
+                }
+                default  { Write-UsysErr 'usage: lol vm distro|fetch|intake|fs|align ...' }
+            }
+        }
+        { $_ -in 'install', 'remove', 'upgrade', 'rollback', 'info' } {
+            $us = Join-Path (Get-UsysRepoRoot) 'sector2\unitedsys\bin\us.ps1'
+            if (-not (Test-Path $us)) { Write-UsysErr "UnitedSys not found: $us"; return }
+            & $us $Command @Rest
+            if ($LASTEXITCODE) { $script:UsysFailed = $true }
+        }
+
         default {
             # `usys example.py` = `usys import example.py` (Jerry 10/8)
             if (Test-UsysSuitFile $Command) {
@@ -3178,6 +3316,23 @@ if ($__usysDotSourced) {
     Set-Alias -Name usys-download -Value Invoke-UsysDownload -Scope Global -Force -ErrorAction SilentlyContinue
     Set-Alias -Name clone         -Value Invoke-UsysCloneCmd -Scope Global -Force -ErrorAction SilentlyContinue
     Set-Alias -Name phx-clone     -Value Invoke-UsysCloneCmd -Scope Global -Force -ErrorAction SilentlyContinue
+    # The .lol words, bare (Jerry 2026-10-08: "it's still lol, but so easy"): type the word, no
+    # `lol` in front. Same engine; highlight a file and type the word works too.
+    foreach ($__w in 'intake','suit','get','import','run','open','closet','suites','status','log','glossary',
+                     'ask','install','remove','upgrade','rollback','info','watch','console','map','vm','stop') {
+        Set-Item "function:global:$__w" ([scriptblock]::Create("Invoke-UsysMain -Command '$__w' -Rest `$args"))
+    }
+    Remove-Variable __w -ErrorAction SilentlyContinue
+    function global:intake. { Invoke-UsysMain -Command 'intake' -Rest (@('.') + $args) }   # intake. = intake . (this folder)
+    # `start` is also Windows' own (Start-Process): Phoenix takes it only for nothing typed (your
+    # highlight, else the kernel), `start kernel`, or a suit file; `start notepad` stays Windows'.
+    # Aliases beat functions in PowerShell: retire the built-in `start` alias here; the function
+    # below hands everything that isn't Phoenix's to Start-Process, so `start notepad` still works.
+    Remove-Item alias:start -Force -ErrorAction SilentlyContinue
+    function global:start {
+        if ($args.Count -eq 0 -or $args[0] -eq 'kernel' -or (Test-UsysSuitFile "$($args[0])")) { Invoke-UsysMain -Command 'start' -Rest $args }
+        else { Start-Process @args }
+    }
     # rotate-key: PHOENIX_AUTH rotation in one command (scripts\phoenix-rotate.ps1)
     $__rot = Join-Path $PSScriptRoot 'phoenix-rotate.ps1'
     if (Test-Path $__rot) { . $__rot }
@@ -3203,7 +3358,8 @@ if ($__usysDotSourced) {
     $cmd  = $args[0]
     $rest = @()
     if ($args.Count -gt 1) { $rest = $args[1..($args.Count - 1)] }
-    if (-not $cmd) { Show-UsysHelp; return }
+    if (-not $cmd) { Show-LolHelp; return }
     Invoke-UsysMain -Command $cmd -Rest $rest
+    if ($script:UsysFailed) { exit 1 }
 }
 Remove-Variable __usysDotSourced -ErrorAction SilentlyContinue

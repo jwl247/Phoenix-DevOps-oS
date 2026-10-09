@@ -19,10 +19,21 @@ if not defined BASH_EXE (
     exit /b 1
 )
 
-if "%~1"=="" (
-    echo usage: lol ^<name^> [vN] [--force]
-    exit /b 2
-)
+REM .lol is the front door (2026-10-08): a known word runs that command; anything else is
+REM a file to summon (the original lol, = lol get <name>). Same engine as usys.
+if "%~1"=="" goto :lolhelp
+set "LOL_WORD="
+for %%w in (intake suit get import run open install remove upgrade rollback info closet suites start stop status log jump watch glossary ask console map vm setup version help intakes intakec clone pull load list-suites suite-list suite-trust suite-promote app-intake download search doctor init path-register distro fs-init fs-ls fs-import fs-export fs-sync) do if /i "%~1"=="%%w" set "LOL_WORD=1"
+if /i "%~1"=="-h" set "LOL_WORD=1"
+if /i "%~1"=="--help" set "LOL_WORD=1"
+REM (outside a ( ) block: %ERRORLEVEL% inside one is read before the call runs)
+if not defined LOL_WORD goto :summon
+call "%~dp0usys.cmd" %*
+exit /b %ERRORLEVEL%
+:lolhelp
+call "%~dp0usys.cmd" help
+exit /b 0
+:summon
 
 set "CLONE_SH=%~dp0clone"
 if not exist "%CLONE_SH%" if defined PHOENIX_ROOT set "CLONE_SH=%PHOENIX_ROOT%\bin\clone"

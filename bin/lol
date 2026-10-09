@@ -11,5 +11,10 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLONE="$SELF_DIR/clone"
 [[ -f "$CLONE" ]] || CLONE="${PHOENIX_ROOT:-/nonexistent}/bin/clone"
 [[ -f "$CLONE" ]] || { echo "[lol] bin/clone not found — set PHOENIX_ROOT to your Phoenix-DevOps-oS checkout" >&2; exit 1; }
-[[ -z "${1:-}" ]] && { echo "usage: lol <name> [vN] [--force]" >&2; exit 2; }
+# .lol is the front door (2026-10-08): a known word runs that command (same engine as usys);
+# anything else is a file to summon (the original lol, = lol get <name>).
+LOL_WORDS=" intake suit get import run open install remove upgrade rollback info closet suites start stop status log jump watch glossary ask console map vm setup version help intakes intakec clone pull load list-suites suite-list suite-trust suite-promote app-intake download search doctor init path-register distro fs-init fs-ls fs-import fs-export fs-sync -h --help "
+if [[ -z "${1:-}" || "$LOL_WORDS" == *" ${1,,} "* ]]; then
+    exec bash "$SELF_DIR/usys" "${@:-help}"
+fi
 exec bash "$CLONE" "$@"

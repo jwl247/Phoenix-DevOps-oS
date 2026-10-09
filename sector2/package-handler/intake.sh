@@ -1954,6 +1954,8 @@ intake_directory() {
 
   [[ -z "${dirpath}" ]] && { echo "[intake] Usage: intake <directory/>"; return 1; }
   [[ ! -d "${dirpath}" ]] && { echo "[intake:MISS] Directory not found: ${dirpath}"; return 1; }
+  # The real folder, never what was typed: `intake .` was stored as "." (hex 2e) - audit 10/8.
+  dirpath="$(cd "${dirpath}" && pwd)"
 
   local dirname; dirname=$(basename "${dirpath}")
   local hex;     hex=$(to_hex "${dirname}")
