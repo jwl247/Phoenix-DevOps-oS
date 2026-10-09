@@ -14,6 +14,14 @@ therefore never baked in as "good"; `check` shows them as drift.
   python phoenix_manifest.py make   [--box NAME] [--commit REV] [--out FILE]   snapshot + sign
   python phoenix_manifest.py verify FILE                                       signature only
   python phoenix_manifest.py check  FILE [--root DIR]                          disk vs manifest, read-only
+  python phoenix_manifest.py push   FILE                                       the disc carries its files
+
+push: every file of the manifest goes to R2's write-once version store, named by its exact
+checkout hash (clonepool/<hex of its repo path>/versions/<sha3_disk[:16]>, the route intake uses
+for versions). Identical bytes are never stored twice, a stored copy can never be overwritten, and
+the signed manifest (itself in the pool with D1 custody) is the custody record for all of them. A
+box whose git is broken still gets every file back (phoenix_restore.py). Already-pushed hashes are
+remembered in ~/.phoenix/manifests/pushed.json, so later pushes send only what changed.
 
 Signed with the Phoenix config key (vault: phoenix-config-sign_ed25519) under its OWN namespace
 "phoenix-system-manifest": an ssh signature is bound to its namespace, so a manifest signature can
@@ -46,6 +54,14 @@ def git(*args, inp=None) -> bytes:
     if r.returncode != 0:
         raise SystemExit(f"git {' '.join(args[:2])} failed: {r.stderr.decode(errors='replace').strip()}")
     return r.stdout
+
+
+def longp(p: Path) -> Path:
+    """Windows' long-path form (the extended-length prefix): repo paths can pass the 260-character limit."""
+    if os.name != "nt":
+        return Path(p)
+    s = str(Path(p).resolve())
+    return Path(s if s.startswith("\\\\?\\") else "\\\\?\\" + s)
 
 
 def canonical(manifest: dict) -> bytes:
@@ -179,7 +195,7 @@ def cmd_check(a):
     root = Path(a.root or m["root"])
     changed, missing, eol, ok = [], [], [], 0
     for path, want in sorted(m["files"].items()):
-        f = root / path
+        f = longp(root / path)
         try:
             data = f.read_bytes()
         except FileNotFoundError:
@@ -205,6 +221,72 @@ def cmd_check(a):
     return 0 if not (changed or missing) else 1
 
 
+def pool_id(path: str) -> str:
+    """The R2 id a manifest file is stored under: the hex of its repo path (unique per path)."""
+    return path.encode("utf-8").hex()
+
+
+def cmd_push(a):
+    import concurrent.futures
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+    m = load(a.file, a.pub)
+    base = os.environ.get("PHOENIX_WORKER_URL", "https://packages-worker.phoenix-jwl.workers.dev").rstrip("/")
+    auth = os.environ.get("PHOENIX_AUTH")
+    if not auth:
+        print("PHOENIX_AUTH not set: cannot reach R2", file=sys.stderr)
+        return 2
+    h = {"Authorization": f"Bearer {auth}", "User-Agent": "phoenix-manifest", "Content-Type": "application/octet-stream"}
+    if os.environ.get("CF_ACCESS_CLIENT_ID") and os.environ.get("CF_ACCESS_CLIENT_SECRET"):
+        h["CF-Access-Client-Id"] = os.environ["CF_ACCESS_CLIENT_ID"]
+        h["CF-Access-Client-Secret"] = os.environ["CF_ACCESS_CLIENT_SECRET"]
+    seen_path = OUT_DIR / "pushed.json"
+    try:
+        seen = set(json.loads(seen_path.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        seen = set()
+    todo = {p: f for p, f in m["files"].items() if f"{pool_id(p)}/{f['sha3_disk'][:16]}" not in seen}
+    print(f"push: {m['box']} @ {m['commit'][:12]}: {len(todo)} of {m['count']} file(s) to send")
+    disk = {p: d for p, _, _, _, d in tracked_bytes(m["commit"]) if p in todo}
+
+    def put(path):
+        f = todo[path]
+        data = disk[path]
+        if hashlib.sha3_512(data).hexdigest() != f["sha3_disk"]:
+            return path, "bytes from git do not match the manifest - not sent"
+        url = f"{base}/clonepool/{urllib.parse.quote(pool_id(path))}/versions/{f['sha3_disk'][:16]}"
+        req = urllib.request.Request(url, data=data, method="PUT", headers=dict(h, **{"X-Phoenix-SHA3": f["sha3_disk"]}))
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    r.read()
+                return path, None
+            except urllib.error.HTTPError as e:
+                if e.code == 409:
+                    return path, "R2 holds OTHER bytes under this hash prefix (write-once) - not overwritten"
+                err = f"HTTP {e.code}"
+            except (urllib.error.URLError, OSError) as e:
+                err = str(e)
+            time.sleep(1 + attempt)
+        return path, err
+
+    sent, bad = 0, []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+        for path, err in ex.map(put, sorted(todo)):
+            if err:
+                bad.append((path, err))
+            else:
+                sent += 1
+                seen.add(f"{pool_id(path)}/{todo[path]['sha3_disk'][:16]}")
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    seen_path.write_text(json.dumps(sorted(seen)), encoding="utf-8")
+    print(f"  {sent} sent, {len(bad)} failed")
+    for path, err in bad[:20]:
+        print(f"  FAILED  {path}: {err}")
+    return 0 if not bad else 1
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -212,7 +294,7 @@ def main():
     mk.add_argument("--box")
     mk.add_argument("--commit", default="HEAD")
     mk.add_argument("--out")
-    for name in ("verify", "check"):
+    for name in ("verify", "check", "push"):
         p = sub.add_parser(name)
         p.add_argument("file")
         p.add_argument("--pub", help="the signer's .pub (default: the vault's config key)")
@@ -221,7 +303,7 @@ def main():
             p.add_argument("--show", type=int, default=20)
             p.add_argument("--json", help="write the drift list here")
     a = ap.parse_args()
-    return {"make": cmd_make, "verify": cmd_verify, "check": cmd_check}[a.cmd](a)
+    return {"make": cmd_make, "verify": cmd_verify, "check": cmd_check, "push": cmd_push}[a.cmd](a)
 
 
 if __name__ == "__main__":
