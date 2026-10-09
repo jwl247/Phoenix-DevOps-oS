@@ -1,89 +1,37 @@
 ---
 name: atlas
-description: Look up any Phoenix component, file, or feature and answer in plain English with what it is plus the things it really connects to — a bounded "snow globe" view sourced from the real CONNECTIONS.md-derived relationship graph, never random filler. Use whenever asked "what's near X", "what touches X", "what else is in this area", or when a lookup should surface adjacent features someone didn't know existed. This is the same role Claude already plays as "the glossary" in the HUD chat — no separate UI panel, Claude IS the atlas.
+description: Look up any Phoenix file, folder, or feature - where it is (sector + path) and what it really connects to - from the Atlas tree built from the CODE on disk (8 sectors, edges from imports/calls/paths). Use BEFORE grepping or reading files whenever asked "where is X", "what touches X", "what's near X", "what's in sector N", or before editing anything (Directive #1 - know what an edit touches). Claude IS the atlas; the Console shows the same tree.
 ---
 
-# Atlas — Phoenix's connections library
+# Atlas - one source, two views (Jerry 2026-10-09)
 
-Phoenix's whole system is documented across 13 `CONNECTIONS.md` files (root index +
-one per sector/dir). Those files got parsed into a live D1 table (`connections`,
-`phoenix_dev_db`, served by `packages-worker`) — one row per component/feature bullet,
-with a real description, plus a `links` edge list built from each doc's own
-"Connects to / connected from" section. This skill is how you act as the query
-interface over that table, in chat — the same pattern as answering glossary
-questions: no coded UI panel exists or is needed.
+The Atlas is a tree: 8 sectors at the top (S1 ring zero, S2 apps, S3 system+output, S4 storage,
+S5 .lol hub, S6 security, S7 AI brain, S8 faces) + Products, Archive, Docs. Name + location only;
+expand to go down. Edges come from the CODE (Python imports, JS require/import, any path or unique
+file name one file names that is another real file). `.md` never draws a line; Archive is left out.
 
-## When to use this
+Rules: `sector2/package-handler/atlas/sectors.json` (the ONE source - most specific key wins).
+Builder + queries: `sector2/package-handler/atlas/atlas-tree.js`. Output: `atlas/atlas-tree.json`
+(rebuilt at session start by the SessionStart hook; rebuild by hand after moving/adding files).
 
-- "What's related to `<thing>`?" / "what else is near the clone pool?" / "what
-  don't I know about in Office?"
-- Anyone exploring a part of the system who'd benefit from seeing adjacent
-  features, not just the literal thing they asked about.
-- Before making a change somewhere — surfacing what else lives in that area
-  catches "didn't know that was here" surprises before they become regressions.
+## Use it first - it keeps context small
 
-## How to answer
+Run from the repo root (any shell with node):
 
-1. Resolve the query against the live worker:
-   ```
-   GET {PHOENIX_WORKER_URL}/connections/<query>/related
-   Authorization: Bearer {PHOENIX_AUTH}
-   CF-Access-Client-Id: {CF_ACCESS_CLIENT_ID}
-   CF-Access-Client-Secret: {CF_ACCESS_CLIENT_SECRET}
-   ```
-   The lookup is fuzzy (exact hex/name/path match first, then a LIKE fallback
-   picking the shortest/most-specific match) — you don't need the query to be
-   an exact stored path.
-   If it 404s or the `center` is clearly not what was asked (e.g. "radar" lands
-   on an unrelated folder), run `GET /connections?q=<query>` and use the best hit
-   as the center instead.
-2. The response is the "snow globe": `center` (the best-ranked hit) plus up to 8
-   `related`, each tagged `via`: `edge` = a real documented connection, `near`
-   = two steps away (a neighbour's neighbour), `area` = same folder. Nothing
-   random (since 3.8.0); fewer than 8 means that's all there is. If
-   `candidates` is non-empty the query was ambiguous — answer the center, then
-   one line "Did you mean: …" naming them.
-3. **Answer in plain English for a person, not a data dump** (Jerry, 2026-09-30:
-   "it needs a human readable resolution"):
-   - Start with the thing itself: its plain name and one sentence on what it does,
-     in everyday words (rewrite the stored `description`, don't paste it).
-   - **Works with:** every `edge` neighbor — plain name + what the connection *is*
-     ("Office's save goes through it"), one line each.
-   - **Also in the same place:** `area` neighbors, only if they help; at most 3.
-   - **Never show `backfill`.** If there are few real connections, say so in one
-     line ("Nothing else is directly connected.") instead of padding.
-   - No hex ids, no `source_file`/`state`/`updated_at`, no raw JSON. A file path
-     only in backticks after a plain name, and only when someone would need it
-     to find the thing.
-   - If the entry has a `key_fact` that matters (legacy, not live, test mode),
-     say it in plain words.
-   Example:
-   > **Dashboard** — the old Phoenix Command Center app (kept running, not
-   > developed; the Console is the front door now).
-   > **Works with:** • **Intake** — Office "save" goes through it
-   > • **usys** (`scripts/usys.ps1`) — what its RUN and CODES boxes run
-   > • **packages-worker** — where it reads the glossary from
-   > Nothing else is directly connected.
-4. If `GET /connections?q=<term>` (no `/related`) is more appropriate — the
-   user wants a broader search, not one center + neighbors — use that instead
-   and summarize the matches the same plain way.
+    node sector2/package-handler/atlas/atlas-tree.js show                 # the sectors
+    node sector2/package-handler/atlas/atlas-tree.js show S3/sector3/mesh # one branch, one level
+    node sector2/package-handler/atlas/atlas-tree.js find buddy           # where is it (sector + path)
+    node sector2/package-handler/atlas/atlas-tree.js near phoenix_buddy.py # touches / touched by
+    node sector2/package-handler/atlas/atlas-tree.js build                # after adding/moving files
 
-## Keeping it current
+Answer from that output: the thing's sector + path, then what it touches and what touches it,
+grouped by sector. Only open a file when the answer needs its contents - and before editing,
+read the code (Directive #1), not this tree.
 
-packages-worker keeps it right by itself: a commit touching any
-`CONNECTIONS.md` runs `parse-connections.js` (hook `scripts/hooks/post-commit`),
-which bundles them into `atlas-sources.json` and intakes it; the worker
-rebuilds the graph the moment the bundle lands in R2 and re-checks daily.
-`GET /context` → `atlas.stale: true` means it's behind — run
-`node parse-connections.js` from `sector2/package-handler/`.
-
-## Known limits (v1, honest about scope)
-
-- The graph is only as rich as `CONNECTIONS.md` prose — some nodes have 0
-  explicit edges yet, and the "snow globe" backfills those with same-area
-  entries, then (if still short) truly unrelated entries just to reach 8
-  (`via: backfill`). Never show those (see step 3).
-- Nodes are directories/subsystems, not individual files — this is not a
-  replacement for the file-level `glossary` table. Use `glossary` for "what
-  is this specific file," `connections` for "what's near this area."
-- See `docs/ATLAS.md` for the full API reference.
+## Rules
+- UNMAPPED in `build` output = a file no rule covers. Add a rule to sectors.json right then
+  (Atlas gap = stop and add it); never leave it.
+- A bare name links only when exactly one live file has it; duplicates stay unlinked (say so).
+- Sector tags are labels, not move orders. Moves go by the move method, one at a time.
+- The worker's `/connections` graph (built from CONNECTIONS.md prose) is a fallback for notes
+  only - it drifted before (audit A-01..A-03). Never trust its edges over the tree's.

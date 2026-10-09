@@ -99,3 +99,6 @@ sector2/package-handler/atlas.json
 # Private business drafts and Claude scratch — kept off the public repo (JW 2026-10-06)
 Claude outputs/
 press-room/*.pptx
+
+# Atlas tree is built from disk at session start (atlas-tree.js build)
+sector2/package-handler/atlas/atlas-tree.json
