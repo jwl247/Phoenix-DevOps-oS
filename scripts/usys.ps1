@@ -2556,31 +2556,109 @@ Set-Alias -Name phx-ls -Value Invoke-PhxLs -Scope Global -Force -ErrorAction Sil
 # =============================================================================
 # COMMAND: help
 # =============================================================================
-function Show-LolHelp {
-    @"
+# ── THE COMMAND CARD (2026-10-09): the one source. `lol help`, `lol help <word>`, `lol help json`
+# (Console, Jarvis), the desktop card and the highlight words all come from this table, so they can
+# never disagree again. Proven = the date the word was walked the way Jerry types it (blank = not yet).
+# Old = names that still work quietly and are never needed. Highlight = select a file, type the word.
+$script:LolCard = @(
+    [ordered]@{ Word='intake';   Syntax='intake <file|folder|link>';  Highlight=$true;  Proven='2026-10-08'; Old='intakec, intakeC, download, app-intake'
+                What='Puts a file, a folder, a game or a web link INTO the clone pool: D1 custody, a version, the bytes in R2.'
+                Example='intake .\notes.txt'; More='intake.  takes in the folder you are in, under its real name. A program or game folder becomes a runnable app.' }
+    [ordered]@{ Word='get';      Syntax='get <name> [vN]';            Highlight=$true;  Proven='2026-10-08'; Old='clone, pull, lol <name>'
+                What='Takes a hash-checked copy OUT of the pool into this folder (latest, or version N).'
+                Example='get notes.txt v2'; More='Never overwrites a file you are working on unless you add --force.' }
+    [ordered]@{ Word='suit';     Syntax='suit <file> [--system]';     Highlight=$true;  Proven='2026-10-09'; Old='intakes, intakeS'
+                What='Makes code into a correct suit and puts it in the pool. Suits run in the play box.'
+                Example='suit .\tool.py'; More='--system = runs INSIDE the kernel; only after you type SYSTEM at a terminal. suit trust|promote <name> for old suites.' }
+    [ordered]@{ Word='import';   Syntax='import <suit> [words]';      Highlight=$true;  Proven='2026-10-09'; Old='load'
+                What='Pulls a suit from R2 into memory (checked against custody) and runs it. Never written to disk.'
+                Example='import tool.py hello'; More='A copy that fails its custody check is healed from its version copy; one that keeps failing swaps back to its last good version.' }
+    [ordered]@{ Word='run';      Syntax='run <name>';                 Highlight=$true;  Proven=''; Old=''
+                What='Runs an app, a game or a VM from the pool. No installer.'
+                Example='run coldwaters'; More='' }
+    [ordered]@{ Word='open';     Syntax='open <file>';                Highlight=$true;  Proven=''; Old=''
+                What='Opens a file with its app (a pool file comes out hash-checked first).'
+                Example='open report.pdf'; More='' }
+    [ordered]@{ Word='closet';   Syntax='closet';                     Highlight=$false; Proven='2026-10-09'; Old=''
+                What='What is loaded right now, and where each suit runs (kernel or play box).'
+                Example='closet'; More='' }
+    [ordered]@{ Word='suites';   Syntax='suites';                     Highlight=$false; Proven='2026-10-09'; Old='list-suites, suite-list'
+                What='What is in the pool and ready to run.'
+                Example='suites'; More='' }
+    [ordered]@{ Word='start';    Syntax='start [file]';               Highlight=$true;  Proven='2026-10-09'; Old=''
+                What='Starts the kernel. With a file: runs that file (a suit is imported, anything else is run).'
+                Example='start'; More='Waits until the kernel takes imports, not only until it answers.' }
+    [ordered]@{ Word='stop';     Syntax='stop';                       Highlight=$false; Proven='2026-10-09'; Old=''
+                What='Stops the kernel. Buddy Heal leaves it down until you start it again.'
+                Example='stop'; More='' }
+    [ordered]@{ Word='status';   Syntax='status [deep]';              Highlight=$false; Proven='2026-10-09'; Old='doctor (= status deep)'
+                What='Is Phoenix healthy. deep = look for problems: kernel owns its ports, the map is complete, workers answer.'
+                Example='status deep'; More='' }
+    [ordered]@{ Word='log';      Syntax='log [file]';                 Highlight=$true;  Proven='2026-10-09'; Old=''
+                What='The kernel log; with a file, only that file''s lines.'
+                Example='log'; More='' }
+    [ordered]@{ Word='glossary'; Syntax='glossary <words>';           Highlight=$false; Proven='2026-10-09'; Old='search'
+                What='Finds anything in the pool by name or words.'
+                Example='glossary helix'; More='' }
+    [ordered]@{ Word='install';  Syntax='install <package>';          Highlight=$false; Proven=''; Old=''
+                What='Installs a package with this OS''s own package manager, with a transaction you can roll back.'
+                Example='install git'; More='Also remove, upgrade, rollback.' }
+    [ordered]@{ Word='info';     Syntax='info <package>';             Highlight=$false; Proven='2026-10-09'; Old=''
+                What='What a package is and its version. More than one match lists them; nothing found says so.'
+                Example='info Git.Git'; More='' }
+    [ordered]@{ Word='watch';    Syntax='watch start|stop|pending';   Highlight=$false; Proven=''; Old=''
+                What='The Downloads watcher: new files are offered for intake.'
+                Example='watch start'; More='' }
+    [ordered]@{ Word='ask';      Syntax='ask <question>';             Highlight=$false; Proven=''; Old='jarvis'
+                What='Asks Jarvis, the local AI on your own hardware.'
+                Example='ask what is on Laurie''s list today'; More='' }
+    [ordered]@{ Word='console';  Syntax='console';                    Highlight=$false; Proven=''; Old=''
+                What='Opens the Phoenix Console.'
+                Example='console'; More='' }
+    [ordered]@{ Word='map';      Syntax='map';                        Highlight=$false; Proven='2026-10-09'; Old='phoenix-map'
+                What='What runs where, on every box on the mesh.'
+                Example='map'; More='' }
+    [ordered]@{ Word='vm';       Syntax='vm distro|fetch|intake|fs';  Highlight=$false; Proven=''; Old='distro, fetch-qemu, intake-qemu, fs-*'
+                What='The Linux VMs (QEMU, no WSL).'
+                Example='vm distro list'; More='' }
+    [ordered]@{ Word='help';     Syntax='help [word|all|json]';       Highlight=$false; Proven='2026-10-09'; Old=''
+                What='This card. help <word> = that word in full. all = every old name. json = the card for the Console and Jarvis.'
+                Example='help intake'; More='' }
+)
 
-  .lol - Phoenix's front door (one word, two at most)
+# The highlight words: the card's own, plus the three old names that always took one (intakec,
+# intakes, clone). Not every old name: `download` with a highlighted FILE would do the wrong thing.
+function Get-LolHighlightWords {
+    @(@($script:LolCard | Where-Object { $_.Highlight } | ForEach-Object { $_.Word }) + @('intakec', 'intakes', 'clone') | Select-Object -Unique)
+}
 
-    lol intake <file|folder|link>   into the clone pool (+ D1 custody + R2): any file, folder, game, web link
-    lol suit <file>                 a suit (code) into Phoenix      lol suit trust|promote <name>
-    lol get <name> [vN]             a hash-checked copy out, into this folder
-    lol import <suit> [words]       R2 -> memory -> run (never on disk)
-    lol run <name>                  run an app, a game or a VM
-    lol open <file>                 open a file with its app
-    lol install|remove|upgrade|rollback|info <package>   any OS's packages, with rollback
-    lol closet                      what's loaded right now
-    lol suites                      what's available
-    lol start | lol stop            the kernel on / off
-    lol status [deep]               is Phoenix healthy (deep = look for problems)
-    lol log                         the kernel's log
-    lol watch start|stop|pending    the Downloads watcher
-    lol glossary <words>            find anything
-    lol ask <question>              ask Jarvis
-    lol console | lol map           the Console | what runs where
-    lol vm distro|fetch|intake|fs   the Linux VMs
-    lol help [all]
-
-"@ | Write-Host
+function Show-LolHelp([string]$Word) {
+    $card = $script:LolCard
+    if ($Word -eq 'json') { $card | ConvertTo-Json -Depth 3; return }
+    if ($Word) {
+        # one word, in Get-Help's own shape (Jerry 10/9: it must look like Windows)
+        $w = $Word.ToLowerInvariant()
+        $c = $card | Where-Object { $_.Word -eq $w -or (($_.Old -split ',') | ForEach-Object { $_.Trim().ToLowerInvariant() }) -contains $w } | Select-Object -First 1
+        if (-not $c) { Write-UsysErr "no word '$Word' on the card (lol help)"; return }
+        $lines = @('', 'NAME', "    $($c.Word)", '', 'SYNOPSIS', "    $($c.What)", '', 'SYNTAX', "    lol $($c.Syntax)", '',
+                   'DESCRIPTION')
+        if ($c.Highlight) { $lines += '    Highlight a file on screen, then type the word: it says what it picked, uses it once, clears it.' }
+        if ($c.More) { $lines += "    $($c.More)" }
+        if (-not $c.Highlight -and -not $c.More) { $lines += '    (nothing more to know)' }
+        $lines += @('', 'EXAMPLES', "    PS> $($c.Example)", '', 'OLD NAMES', "    $(if ($c.Old) { $c.Old } else { 'none' })", '',
+                    'PROVEN', "    $(if ($c.Proven) { "walked $($c.Proven), the way it is typed" } else { 'not walked yet' })", '')
+        $lines | Write-Host
+        return
+    }
+    # the overview, in Get-Command's own shape
+    Write-Host ''
+    Write-Host '  Type the word bare in PS7, or  lol <word>  in cmd and Git Bash.   lol help <word>  = that word in full.' -ForegroundColor DarkGray
+    Write-Host '  Highlight a file on screen, then type a word marked H: it uses that file once.' -ForegroundColor DarkGray
+    Write-Host ''
+    $card | ForEach-Object {
+        [pscustomobject]@{ Name = $_.Word; H = $(if ($_.Highlight) { 'H' } else { '' }); Synopsis = $_.What
+                           Proven = $(if ($_.Proven) { $_.Proven.Substring(5) } else { '-' }) }
+    } | Format-Table -Property Name, H, Proven, Synopsis -Wrap | Out-String -Width 160 | Write-Host
 }
 
 function Show-UsysHelp {
@@ -2721,13 +2799,13 @@ function Invoke-UsysMain {
         [string[]]$Rest
     )
 
-    Test-UsysElevation | Out-Null
+    if ($Command -ne 'help') { Test-UsysElevation | Out-Null }   # help json must be clean JSON for the Console + Jarvis
     # Paths in any form (F:\x, F:/x, /f/x, ~/x) work the same (Jerry 10/7, scripts\phoenix-paths.ps1)
     if ($Rest -and (Get-Command Resolve-PhoenixArgs -ErrorAction SilentlyContinue)) { $Rest = Resolve-PhoenixArgs $Rest }
 
     # Highlight a file, type the word: intake, suit, get, import, run, open, start, log (and the
     # old names) act on the highlight when no file is typed. It always says what it picked.
-    $fileVerbs = 'intake','intakec','intakes','suit','get','clone','import','run','open','start','log'
+    $fileVerbs = Get-LolHighlightWords                  # from the command card: one source
     $typed = @($Rest | Where-Object { $_ -and -not $_.StartsWith('-') })
     if ($Command.ToLowerInvariant() -in $fileVerbs -and $typed.Count -eq 0) {
         $h = Get-UsysHighlight
@@ -2746,7 +2824,7 @@ function Invoke-UsysMain {
             Invoke-UsysStatus; Invoke-UsysKernel @('status')
         }
         'doctor'        { Invoke-UsysDoctor }
-        'help'          { if ($Rest -and $Rest[0] -eq 'all') { Show-UsysHelp } else { Show-LolHelp } }
+        'help'          { if ($Rest -and $Rest[0] -eq 'all') { Show-UsysHelp } elseif ($Rest) { Show-LolHelp -Word $Rest[0] } else { Show-LolHelp } }
         '--help'        { Show-UsysHelp }
         '-h'            { Show-UsysHelp }
         'version'       { Write-Output $script:UsysVersion }
