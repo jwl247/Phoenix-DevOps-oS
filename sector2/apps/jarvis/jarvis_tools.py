@@ -95,7 +95,7 @@ def phoenix_status() -> str:
         with urllib.request.urlopen("http://127.0.0.1:8765/health", timeout=4) as r:
             ok = json.loads(r.read()).get("ok")
     except Exception:
-        return "The Phoenix kernel on Jerry's PC is DOWN (no answer on 8765). Fix: usys start"
+        return "The Phoenix kernel on Jerry's PC is DOWN (no answer on 8765). Fix: type  start  in PowerShell 7"
     out = ["The Phoenix kernel on Jerry's PC is up."]
     try:
         tok = (Path.home() / ".phoenix" / "genie" / "control.token").read_text().strip()
@@ -110,14 +110,25 @@ def phoenix_status() -> str:
 
 
 def commands() -> str:
-    """The easy Phoenix commands (one word after usys) and what each does."""
-    return ("TO RUN A SUIT: usys import <suit>.\n"
-            "TO RUN AN APP, A GAME OR A VM: usys run <name>.\n"
-            "TO PUT A SUIT INTO PHOENIX: usys intakeS <file>. ANY OTHER FILE OR FOLDER: usys intakeC <file|folder>.\n"
-            "TO GET A COPY OUT: usys get <name>. TO OPEN A FILE: usys open <file>.\n"
-            "THE SUITS IN THE CLOSET: usys closet. HEALTH: usys status. KERNEL ON/OFF: usys start / usys stop. ITS LOG: usys log.\n"
-            "GO TO A HIGHLIGHTED PATH: usys jump (or g). ALL OF THEM: usys help.\n"
-            "Each is also a button on the Phoenix Console (the bird in the tray), plus ROTATE, DOCKS, GLOSSARY, SUITS.")
+    """The Phoenix words (the .lol front door) and what each does, read from THE COMMAND CARD in
+    scripts/usys.ps1 (`lol help json`) - the same table Jerry's `lol help` and desktop card show,
+    so Jarvis can never teach a word that does not exist (2026-10-09; it taught `usys intakeS`)."""
+    import subprocess
+    usys = Path(__file__).resolve().parents[3] / "scripts" / "usys.ps1"
+    try:
+        out = subprocess.run(["pwsh", "-NoProfile", "-NonInteractive", "-File", str(usys), "help", "json"],
+                             capture_output=True, text=True, encoding="utf-8", timeout=30).stdout
+        card = json.loads(out)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return ("The command card could not be read right now. The basics: intake <file> puts it IN the pool, "
+                "get <name> takes a copy OUT, import <suit> runs a suit, status checks health, help lists every word.")
+    lines = ["Type the word bare in PowerShell 7, or `lol <word>` in cmd and Git Bash. "
+             "Words marked [highlight] also work by highlighting a file on screen and typing the word."]
+    for c in card:
+        h = " [highlight]" if c.get("Highlight") else ""
+        lines.append(f"{c['Syntax']}{h}: {c['What']} Example: {c['Example']}")
+    lines.append("Each is also a button on the Phoenix Console (the bird in the tray).")
+    return "\n".join(lines)
 
 
 def time_now() -> str:
@@ -261,7 +272,7 @@ def catalog() -> str:
              "- atlas_near {\"term\": \"component\"}: what a component connects to",
              "- pool_find {\"name\": \"file\"}: is a Phoenix file in the clone pool (only Phoenix files, not stores or products)",
              "- phoenix_status {}: is the Phoenix kernel up",
-             "- commands {}: the usys commands and Console buttons",
+             "- commands {}: the Phoenix words (lol) and Console buttons, from the command card",
              "- time_now {}: today's date and time",
              "- lesson_find {\"topic\": \"words\"}: your lessons - arts and crafts, paint schemes for the remodel (pink!), painting and remodel how-to, color theory, graphic design, game art and game UI, military tactics (for the game, Sacrifice)",
              "- paint_calc {\"length\": \"12\", \"width\": \"14\", \"height\": \"8\", \"doors\": \"1\", \"windows\": \"2\"}: exactly how much paint a room needs",

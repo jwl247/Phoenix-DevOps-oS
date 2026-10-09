@@ -3201,6 +3201,7 @@ function Invoke-UsysMain {
         'ask'       {
             if (-not $Rest) { Write-UsysErr 'usage: lol ask <question>   (Jarvis)'; return }
             & python (Join-Path (Get-UsysRepoRoot) 'bin\jarvis') @Rest
+            if ($LASTEXITCODE) { $script:UsysFailed = $true }   # no answer / timeout = a failure (said exit 0 until 10/9)
         }
         'glossary'  {
             if ($Rest) { Invoke-UsysSearch -Query ($Rest -join ' ') } else { Write-UsysInfo 'lol glossary <words>   (or the Console GLOSSARY button)' }
