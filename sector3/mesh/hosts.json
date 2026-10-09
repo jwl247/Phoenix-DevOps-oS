@@ -20,7 +20,8 @@
       "note": "Jerry's PC — travels",
       "buddies": [
         "pbmiii",
-        "awslh"
+        "awslh",
+        "pbmiv"
       ],
       "lan_net": "192.168.1."
     },
@@ -36,7 +37,8 @@
       "ssh_key": "phoenix_third_debian_ed25519",
       "relay": true,
       "buddies": [
-        "awslh"
+        "awslh",
+        "pbmiv"
       ],
       "lan": "192.168.1.192",
       "lan_net": "192.168.1.",
@@ -66,7 +68,10 @@
       "ssh_key": "phoenix_third_debian_ed25519",
       "lan": "192.168.1.193",
       "lan_net": "192.168.1.",
-      "mac": "d4:85:64:a3:84:ed"
+      "mac": "d4:85:64:a3:84:ed",
+      "buddies": [
+        "pbmiii"
+      ]
     }
   }
 }
