@@ -374,10 +374,10 @@ Push.
 | Pre-slim CLAUDE.md snapshot | `D:\Phoenix\claude-archive\` (also git history) |
 
 ## LAST SESSION (2026-10-09 day — suit pipeline walked, the wall, hotswap heals, restoration disc 1-2, command card, Jarvis on the Compaq)
-Handoff is in the CLONE POOL now, not the repo (Jerry 10/9: confidential-ish): `get HANDOFF-2026-10-09-day.md` (pool id 48414e444f46462d323032362d31302d30392d6461792e6d64, v3) and check SHA3-512 starts cd7300b1d4d0b5e3. Commits 93e0224->94b446d. Every stage walked live. Empty folder -> whole system from R2 alone. Jarvis 11-36 s. The HP = pbmiv (10.42.0.11), no longer a pbmIII clone.
+Handoff is in the CLONE POOL now, not the repo (Jerry 10/9: confidential-ish): `get HANDOFF-2026-10-09-day.md` (pool id 48414e444f46462d323032362d31302d30392d6461792e6d64, v4) and check SHA3-512 starts 5092da9a5396fe32. Commits 93e0224->94b446d. Every stage walked live. Empty folder -> whole system from R2 alone. Jarvis 11-36 s. The HP = pbmiv (10.42.0.11), no longer a pbmIII clone.
 
 ## NEXT SESSION (top items — full list in docs/history/NEXT-SESSION-BACKLOG.md)
-- **READ FIRST: the 10/9-day handoff from the pool** (`get HANDOFF-2026-10-09-day.md`, SHA3 cd7300b1d4d0b5e3...) - section 5 first (then: audit the public repo, move what maps Phoenix to the pool): OneDrive NOT finished (do not uninstall) · home healer pbmiv<->pbmIII (Jerry approved) + smbd running on pbmiv · then §2. The 10/9-night handoff is history.
+- **READ FIRST: the 10/9-day handoff from the pool** (`get HANDOFF-2026-10-09-day.md`, SHA3 5092da9a5396fe32...) - section 5 first (then: audit the public repo, move what maps Phoenix to the pool; then the parked lol learn trainer + video): OneDrive NOT finished (do not uninstall) · home healer pbmiv<->pbmIII (Jerry approved) + smbd running on pbmiv · then §2. The 10/9-night handoff is history.
 - **RULES (Jerry 10/8 night):** don't touch anything until we know where we are (read the record) · argue it out, never agree to keep the peace · don't get ahead (cull, then build) · no blame in plain view.
 - **RULES (Jerry 10/8):** no commit / no "done" unless it works end to end · `.lol` one-word commands (bare in PS7, highlight + word) · Atlas gap = stop and add it.
 - **FIX WAVES (10/7): everything Claude can do is done** (addendum-4). What is left needs Jerry (list below + addendum-4 "Still open"). Then the **next phase = build**, mapped in the workflow graph (ask for the link).
