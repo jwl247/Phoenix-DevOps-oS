@@ -310,6 +310,18 @@ main() {
     [[ "${exit_code}" -ne 0 ]] && status="FAIL:${exit_code}"
     catalog_log "${backend}" "${verb}" "${pkg}" "${status}" "${native_cmd}"
 
+    # Output edge -> record: after a successful install, push this package's deps into the
+    # Phoenix dependency graph. The translator pushes; intake only receives (Critical Rule 2).
+    if [[ "${verb}" == "install" && "${exit_code}" -eq 0 && -n "${pkg}" ]]; then
+        local intake_sh deps_cmd deps_raw
+        intake_sh="$( (cd "$(dirname "${BASH_SOURCE[0]}")/../../sector2/package-handler" 2>/dev/null && pwd) || true)/intake.sh"
+        if [[ -f "${intake_sh}" ]] && deps_cmd=$(translate_cmd "${backend}" deps "${pkg}"); then
+            deps_raw=$(eval "${deps_cmd}" 2>/dev/null) || deps_raw=""
+            [[ -n "${deps_raw}" ]] && printf '%s
+' "${deps_raw}" | bash "${intake_sh}" deps "${pkg}" "${backend}" >/dev/null 2>&1                 && log "INFO" "Deps for ${pkg} pushed to the Phoenix graph" || true
+        fi
+    fi
+
     log "INFO" "Done — status: ${status}"
     return "${exit_code}"
 }

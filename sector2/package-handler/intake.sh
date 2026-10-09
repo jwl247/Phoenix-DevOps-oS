@@ -893,13 +893,12 @@ report_deps() {
 # don't expose structured dependency data reliably and may report nothing.
 # Never blocks intake — a parse failure here just means zero edges logged,
 # same as before this existed.
-TRANSLATOR_SH="$( (cd "$(dirname "${BASH_SOURCE[0]}")/../../sector3/translator" 2>/dev/null && pwd) || true)/translator.sh"
+# Critical Rule 2 (audit S3-08, 2026-10-08): intake NEVER calls translator.sh. The translator
+# fires on output only; after it installs a package it PUSHES the raw deps here:
+#   translator.sh deps <pkg> | intake.sh deps <pkg> <backend>
+# Intake only receives and records them (the dependency graph in D1 /deps).
 intake_deps_from_backend() {
-  local pkg_name="${1}" backend="${2}"
-  [[ -x "${TRANSLATOR_SH}" ]] || return 0
-
-  local raw
-  raw=$("${TRANSLATOR_SH}" deps "${pkg_name}" 2>/dev/null) || return 0
+  local pkg_name="${1}" backend="${2}" raw="${3:-}"
   [[ -z "${raw}" ]] && return 0
 
   local dep
@@ -1760,7 +1759,6 @@ intake_from_backend() {
     # before rc is read, skipping the deps step (audit F31).
     local rc=0
     intake_file "${install_path}" "${backend}" "installed from ${backend} ${version}" || rc=$?
-    intake_deps_from_backend "${pkg_name}" "${backend}"
     return "${rc}"
   fi
 
@@ -1781,7 +1779,6 @@ intake_from_backend() {
   report_custody  "${hex}" "${pkg_name}" "backend_install" "white" "${backend}"
   report_glossary "${hex}" "${pkg_name}" "Package installed from ${backend} v${version}" \
     "7061636b61676573" "${version}" "0" "${pool_dir}"
-  intake_deps_from_backend "${pkg_name}" "${backend}"
 
   echo "[intake:OK] ${pkg_name} (${backend} ${version}) → D1"
 }
@@ -2465,6 +2462,14 @@ case "${1:-help}" in
     ;;
   prune)          intake_prune ;;
   backend)        shift; intake_from_backend "$@" ;;
+  deps)
+    # Receive-only: raw dependency text on stdin, pushed by translator.sh after an install.
+    shift
+    [[ -z "${1:-}" || -z "${2:-}" ]] && { echo "[intake] Usage: <raw deps> | intake deps <pkg> <backend>"; exit 1; }
+    [[ -t 0 ]] && { echo "[intake] deps reads the raw dependency text on stdin (from translator.sh deps <pkg>)"; exit 1; }
+    intake_deps_from_backend "${1}" "${2}" "$(cat)"
+    echo "[intake:OK] deps recorded for ${1} (${2})"
+    ;;
   *)
     first_arg=$(normalize_path "$(resolve_lol "${1:-}")")
     shift || true
