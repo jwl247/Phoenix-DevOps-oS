@@ -58,7 +58,7 @@ REM Package registry
 if /i "%PACKAGE%"=="phoenix-devops-os" (
     set "INSTALL_URL=https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/main/install.ps1"
 ) else if /i "%PACKAGE%"=="phoenix-package-handler" (
-    set "INSTALL_URL=https://raw.githubusercontent.com/jwl247/Phoenix-Package_handler/main/install.ps1"
+    set "INSTALL_URL=https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/main/sector2/package-handler/install.ps1"
 ) else (
     echo [ERROR] Unknown package: %PACKAGE%
     echo.

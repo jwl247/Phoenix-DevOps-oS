@@ -66,7 +66,7 @@ case "$PACKAGE" in
         INSTALL_URL="https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/main/install.sh"
         ;;
     phoenix-package-handler)
-        INSTALL_URL="https://raw.githubusercontent.com/jwl247/Phoenix-Package_handler/main/install.sh"
+        INSTALL_URL="https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/main/sector2/package-handler/install.sh"
         ;;
     *)
         echo "[ERROR] Unknown package: $PACKAGE"

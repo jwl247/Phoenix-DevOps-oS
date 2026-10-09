@@ -70,7 +70,7 @@ LOL uses a simple built-in registry that maps package names to GitHub installer 
 
 ```bash
 phoenix-devops-os → https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/main/install.ps1
-phoenix-package-handler → https://raw.githubusercontent.com/jwl247/Phoenix-Package_handler/main/install.ps1
+phoenix-package-handler → https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/main/sector2/package-handler/install.ps1
 ```
 
 ### Installation Flow
