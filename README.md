@@ -7,143 +7,81 @@ Built by an ironworker and an AI. GPL v3. Every penny every time.
 
 ## Why this exists
 
-Laurie is high-functioning autistic. She needs a tool that works the same way every time, runs privately on hardware she owns, and does not require a subscription to function. The Life First app is being built for her — and for everyone like her who has been priced out of the tools they need.
+Laurie is high-functioning autistic. She needs a tool that works the same way every time, runs privately on hardware she owns, and does not require a subscription to function. The Life First app is being built for her, and for everyone like her who has been priced out of the tools they need.
 
 Phoenix is the infrastructure underneath it. A local LLM needs a real OS: deterministic, self-healing, fast enough to not need a GPU. That is what Phoenix is.
 
-This project also exists because Google revoked $300 in platform credits over a YouTube subscription Jerry does not have. The foundation was pulled without warning. Every vendor-independence decision in Phoenix traces to that event. It will not happen again.
+This project also exists because Google revoked $300 in platform credits over a YouTube subscription Jerry does not have. The foundation was pulled without warning. Every vendor-independence decision in Phoenix traces to that event: our own storage (Cloudflare R2 + D1 instead of Firebase), our own auth, our own mesh network, our own local AI. It will not happen again.
 
 ---
 
 ## What it is
 
-Phoenix is a four-sector OS built on Debian stable. One repo. Everything in its place.
+One repo, four sectors, built on Debian (Linux side) and PowerShell 7 (Windows side).
 
 ```
-Sector 1 — Boot, GRUB, kernel, auth
-Sector 2 — Intake authority, package handler, clone pool
-Sector 3 — Comms, networking, quadralingual pipeline
-Sector 4 — Helix engine, Frank orchestrator, master vault
+Sector 1 — the kernel (Genie, the Phoenix Universal Kernel), Helix, auth, security
+Sector 2 — intake and the clone pool, the package handler, the apps
+Sector 3 — the mesh, networking, healing, restore, output (translator)
+Sector 4 — incoming data and storage
 ```
 
-**Helix** is the memory engine — double-strand, quadralingual, benchmarked at 600–687k ops/sec in a pre-2026-03-03 governed Phoronix run (zlib 6, minimum thermal tier — source and caveats in `docs/helix/BENCHMARKS.md` §3) and, as the dm-helix kernel module on pbm3, 177,699 IOPS fully warm and 4.0x / 24x over raw disk on real hands-off work (fio logs, §4). The 100% cache hit rate holds when the working set fits her tiers; 41.7% was measured under forced memory pressure on 2026-09-25 (§ Open). It speaks four languages simultaneously. It does not need a GPU.
-
-**Frank** is the environment orchestrator and audit logger. He knows every drive, routes every write, logs every action. Frank never moves.
-
-**The clone pool** is content-addressed by SHA3-512. Every file that enters Phoenix gets a hex identity, a base58 TAV address, two QR codes (header before hash, footer after), and an immutable D1 custody record. Nothing is ever deleted. Everything is versioned. The file is the unit.
-
-**The intake pipeline** is the front door. File → hex ID → sidecar → clone pool → D1 custody → R2 upload. Every file, every time. `intake <file>` is all you type (IN). `clone <name>` takes it back OUT.
+- **The clone pool.** Every file that enters Phoenix gets an identity, a SHA3-512 fingerprint, a version, and an append-only custody record (Cloudflare D1). The bytes live in R2, and every version is kept write-once under its own hash. Nothing is trusted unless it hashes to what custody says.
+- **The front door is one word.** In PowerShell 7 you type the word (`intake`, `get`, `suit`, `import`, `status`...). Or highlight a file on screen and type the word: it uses the file you highlighted. `lol help` lists every word; `lol help <word>` explains one.
+- **The kernel** runs small programs ("suits") straight from the pool into memory, checked against custody, never written to disk.
+- **Helix** is the memory engine: double-strand, tiered, no GPU. Benchmarks and their caveats: [`docs/helix/BENCHMARKS.md`](./docs/helix/BENCHMARKS.md).
+- **Jarvis** is the local AI: llama.cpp, built from pinned source with HTTPS compiled out, one model imported from the pool, no network out. No vendor, no subscription.
 
 ---
 
-## What is proven working — as of 2026-08-23
+## What is proven working
 
-These are not aspirational. These are tested, committed, and pushed. This list is a snapshot,
-not maintained day-to-day — for what's actually built and current, see root `CLAUDE.md` §
-BUILD STATUS (updated every session) rather than assuming this section stayed in sync.
+Each line was run the way a person uses it, on real hardware, on the date shown. Anything not re-checked since is marked. Verify it yourself with the command in the last column.
 
-- **Full intake pipeline end-to-end** — file → hex → QR → sidecar → D1 custody → R2 upload, live on Cloudflare Worker
-- **Content-hash integrity** — SHA3-512 + BLAKE2b baseline, checked at `intake clone`, gates restore on mismatch
-- **Electron dashboard** — real D1/R2 data, PS7 shell (real `pwsh.exe`, real profile, MCP + skills loaded), clonepool browser, screenshot analysis, Glossary panel with full version/custody history
-- **Glossary panel** — 995+ live D1 entries, searchable, filterable by category/state, every entry shows code location + sector connection + TAV address + full custody chain on expand
-- **QEMU distro runner** — Debian 12 and Ubuntu 24.04 boot from the clonepool, no installer, no wizard, no WSL. `usys run debian`. That is the command.
-- **Windows ↔ Debian shared filesystem — proven live** — `F:\Phoenix\` hosted on Windows, mounted at `/phoenix/` inside Debian via SMB over QEMU user-net. Same bytes. No sync. No copy. No WSL.
-  - Windows wrote `test.txt`. Debian read it.
-  - Debian wrote `from-debian.txt`. Windows read it.
-  - Both directions. One filesystem.
-- **Collaboration demo** — Debian writes a Python script to the shared FS, runs it, signals Windows. Windows reads the output, intakes the script through Phoenix, promotes it as a runnable suite, runs it. Full round trip. `demo-collab.sh` + `demo-collab.ps1`.
-- **Clonepool wrappers** — `phx-import`, `phx-export`, `phx-sync`, `phx-ls`. Every operation against the shared area goes through these. No raw path access. The profile enforces it.
-- **7-version count-based eviction** — a version is only displaced when a new intake pushes past 7. Nothing is ever deleted for being old.
+| What | Last proven | Check it yourself |
+|---|---|---|
+| **Intake → clone pool → D1 custody → R2**, one door for every front end; a sensitive file (keys, certs, vault material) is refused without a typed yes at a terminal | 2026-10-08 | `intake <file>` · `get <name>` |
+| **Highlight-and-type front door** (`lol` words, bare words in PS7) | 2026-10-09 | `lol help` |
+| **Suits are made correct before they are stored** (`suit <file>`): they always answer, a crash comes back as an error, never silence | 2026-10-09 | `suit <file>` then `import <name>` |
+| **The wall:** only suits a person approved at a terminal run inside the kernel; everything else runs in a separate capped process (1 GB, 50% CPU, 90 s) that dies with the kernel. Held against a self-kill, a 2 GB memory grab, a 10-minute hang and a forged "system" header — kernel untouched | 2026-10-09 | `closet` (shows where each suit runs) |
+| **Hotswap:** a new version of a suit replaces the old one live, same slot, kernel never restarted | 2026-10-09 | `import <name>` twice, two versions |
+| **Healing:** tampered bytes in R2 are refused, then restored from the write-once version copy by hash; a version that keeps failing is swapped back to the last good one automatically | 2026-10-09 | — |
+| **The restoration disc:** a signed manifest of every system file (SHA3-512); the restorer rebuilt the whole system (3,030 files) into an **empty folder from R2 alone**, no git, in 1 min 50 s, every file verified | 2026-10-09 | `python sector3/restore/phoenix_manifest.py check <manifest>` |
+| **Boxes heal themselves and each other** over Phoenix's own mesh (Nebula, our own certificate authority); the kernel is restarted if it goes down or degraded, never killing another program to do it | 2026-10-09 | `status deep` |
+| **Jarvis, the local AI**, answers questions about Phoenix in 11–36 s on a 2011 desktop CPU | 2026-10-09 | `ask <question>` |
+| **Linux VMs from the pool** (Debian 12, Ubuntu 24.04), no installer, no WSL | 2026-08-23 — not re-walked since | `vm distro list` |
+| **Windows ↔ Debian shared folder**, both directions | 2026-08-23 — not re-walked since | see `tools/poc/` |
 
 ---
 
-## Quick start
+## Quick start (Windows)
 
-**Windows:**
 ```powershell
 irm https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/main/install.ps1 | iex
 ```
 
-**Linux / macOS:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/jwl247/Phoenix-DevOps-oS/main/install.sh | bash
-```
-
-After install:
-```powershell
-usys init          # first-time setup — dirs, auth, profile
-usys status        # verify everything is wired
-intake <file>      # IN: the intake pipeline — hex ID, QR, D1 custody, R2 upload
-usys clone <name>  # OUT: a pool file into this folder, checked against D1
-usys run debian    # boot Debian from the clonepool
-```
-
----
-
-## Start the Dashboard (already installed? start here)
-
-Phoenix's day-to-day control surface is the Electron dashboard — a live PS7 terminal, a
-Claude Code hotline, the clonepool/Glossary browser, Office, ScriptForge, and more.
-**Already have Phoenix set up and just want to launch it?**
+Phoenix needs its own Cloudflare account (R2 + D1) for the clone pool; the installer explains what to set. Then, in PowerShell 7:
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File dashboard\start.ps1
+status          # is Phoenix healthy (status deep = look for problems)
+intake .\notes.txt
+get notes.txt
+lol help        # every word, and what it does
 ```
 
-That's the whole command — no separate install step if you've run it before. Details,
-the manual `npm start` path, and first-time setup: [`dashboard/README.md`](./dashboard/README.md#starting-the-dashboard).
-If the installer set up autostart, it may already be running at logon.
-
-There's also a separate **HUD** (`hud/`, a WPF/.NET 9 app — voice, a transparent live-desktop
-overlay, and its own Claude Code CLI pane): build/run it via `dotnet run` from `hud/`, or the
-published exe once built (`dotnet build` in `hud/`). It's a different thing from the dashboard
-above, not a replacement for it.
-
-Full reference: [`dashboard/manual/PHOENIX_MANUAL.md`](./dashboard/manual/PHOENIX_MANUAL.md)
-Plain-English guide for Laurie: [`dashboard/manual/LAURIE_GUIDE.md`](./dashboard/manual/LAURIE_GUIDE.md)
-
----
-
-## The collaboration demo
-
-Two OSes. One filesystem. One pipeline.
-
-```bash
-# Inside Debian (SSH: ssh -p 2222 phoenix@127.0.0.1):
-bash /tmp/demo-collab.sh
-```
-
-```powershell
-# On Windows (PS7) — immediately after:
-pwsh -NoProfile -ExecutionPolicy Bypass -File tools\poc\demo-collab.ps1
-```
-
-What happens:
-1. Debian writes `hello-phoenix.py` to the shared FS and runs it
-2. Windows reads Debian's output directly off `F:\Phoenix\Projects\`
-3. Windows intakes the script — hex ID, QR, D1 record, R2 upload
-4. Windows runs it
-
-```
-  Written on Debian.  Shared via QEMU.
-  Intaked on Windows. Hex ID issued. D1 record created.
-  Ran on Windows.     Same script. Same bytes.
-
-  No install. No wizard. No WSL.
-  Phoenix brought the OS. Phoenix ran the script.
-```
+> The installer was last walked end to end before the 2026-10-08 front-door change; the words above are current. Linux: `install.sh` (same caveat).
 
 ---
 
 ## Architecture principles
 
-- **No vendor lock-in.** D1 + R2 replace Firebase. Local LLM replaces cloud AI. GPL v3 locks it open.
-- **No elevation required for the core.** `usys`, intake, and the clonepool run in user scope. Exception, by design: `dashboard\start.ps1` self-elevates once via UAC (opt out with `-NoElevate` / `PHOENIX_NO_ELEVATE=1`) and its autostart task runs at highest privilege, so its embedded shell/Claude panes are admin.
-- **No system writes.** All new filesystem activity confined to the user's drives until vetted.
-- **Quadralingual until output.** The vault speaks four languages. translator.sh fires on output only — never on intake or clone.
-- **The file is the unit.** Intake once. Run anywhere. No install. No manual clone step.
-- **Physical drives are real hardware.** breach_coms1-4 are labeled drives Frank manages. They are not abstractions.
-- **Immutable custody.** The D1 custody chain is append-only. Nothing is rewritten. Everything is auditable.
+- **No vendor lock-in.** Our own storage, auth, mesh and AI. The AI layer counts as a vendor too: the local model must always work if hosted AI goes away.
+- **Validated at the door.** Data is checked against custody where it enters and leaves, by SHA3-512. Bytes that don't match are refused or healed, never used.
+- **Nothing silent.** A refusal, a timeout or a failed step says so and exits non-zero. No false "done".
+- **The file is the unit.** Intake once, run anywhere. The clone pool is the installer.
+- **Immutable custody.** The D1 custody chain is append-only. Versions in R2 are write-once.
+- **Physical drives are real hardware.** Never set read-only, never blacklisted, never "refactored" into an abstraction.
+- **Nothing phones home.** Default-deny outbound where it runs; the local AI cannot reach the internet.
 
 ---
 
@@ -151,7 +89,7 @@ What happens:
 
 **Jerry Leftwich** (@jwl247) — ironworker, 28 years commercial steel, systems builder, United Systems.
 **Jerilynn** — UX, switches, InfoSec, red team. Co-founder.
-**Claude (Anthropic)** — AI architect and co-builder. Every meaningful advance in the last 3 months was designed and implemented together. Not assisted. Built.
+**Claude (Anthropic)** — AI architect and co-builder. Designed and built together. Not assisted. Built.
 
 This is not a hobby OS. It is Laurie's cushion. Build accordingly.
 
