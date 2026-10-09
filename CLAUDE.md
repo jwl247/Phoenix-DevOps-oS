@@ -373,11 +373,11 @@ Push.
 | Secrets map (no values) | `docs/SECRETS.md` → vault `F:\Phoenix\Vault\secrets\` |
 | Pre-slim CLAUDE.md snapshot | `D:\Phoenix\claude-archive\` (also git history) |
 
-## LAST SESSION (2026-10-08 night → 10-09 — package handler home: Phases 0-1, the .lol front door, the whole history read, the book)
-Detail: `docs/history/HANDOFF-2026-10-09.md`. Vault re-pushed + verified (Jerry). One intake door, trap-tested; translator output-only; `.lol` front door live (highlight + word). Every chat (Sep 2025 → now) read by 38 agents; history + "The Evolution of an Ironworker" on F:\Phoenix\history (private).
+## LAST SESSION (2026-10-09 day — suit pipeline walked, the wall, hotswap heals, restoration disc 1-2, command card, Jarvis on the Compaq)
+Detail: `docs/history/HANDOFF-2026-10-09-day.md` (commits 93e0224→5b791e5). Every stage walked live before commit. Empty folder → whole system from R2 alone, 3,030/3,030. Jarvis 95-154 s → 11-36 s. The HP = a CLONE of pbmIII (same Nebula identity) — mid-fix.
 
 ## NEXT SESSION (top items — full list in docs/history/NEXT-SESSION-BACKLOG.md)
-- **READ FIRST: `docs/history/HANDOFF-2026-10-09.md`** §3 in order: help + Jarvis to the lol words · argue `capulet.py.lol` · prove + commit the built-not-committed (apk/xbps/portage backends after a real install test, S4-01 ring guard, `seal`) · kernel UTF-8 (restart = Jerry) · archive intake engines B/C (Jerry's yes) · three `lol`s → one · Phase 2 identity · pbmIII align/mouse/desktop (ask). The 10/8 handoff is history now.
+- **READ FIRST: `docs/history/HANDOFF-2026-10-09-day.md`** §2 in order: the HP clone (Jerry mid-way at its keyboard: healers off, sshd typo, key) → own identity 10.42.0.11 → re-issue the Compaq's cert · OneDrive Stop-backup (Jerry) → verify → uninstall · phone on the mesh (Mobile Nebula, group `phone`) · Jarvis subprocessor · walk the rest of the command card. The 10/9 night handoff is history now.
 - **RULES (Jerry 10/8 night):** don't touch anything until we know where we are (read the record) · argue it out, never agree to keep the peace · don't get ahead (cull, then build) · no blame in plain view.
 - **RULES (Jerry 10/8):** no commit / no "done" unless it works end to end · `.lol` one-word commands (bare in PS7, highlight + word) · Atlas gap = stop and add it.
 - **FIX WAVES (10/7): everything Claude can do is done** (addendum-4). What is left needs Jerry (list below + addendum-4 "Still open"). Then the **next phase = build**, mapped in the workflow graph (ask for the link).
