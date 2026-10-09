@@ -15,7 +15,7 @@ Env: JARVIS_HOST (default jarvis-call@10.42.0.10), JARVIS_KEY (default ~/.ssh/ph
      ui: JARVIS_UI_HOST (default jarvis-ui@10.42.0.10), JARVIS_UI_KEY (default ~/.ssh/phoenix_jarvis_ui_ed25519),
          JARVIS_UI_PORT (default 8800 on this machine)
 """
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 from pathlib import Path
 
 GATE = "/opt/openjarvis/jarvis-gate"
@@ -61,6 +61,24 @@ def ui() -> int:
     except KeyboardInterrupt:
         tun.terminate()
     return 0
+
+
+_CMD_Q = re.compile(r"\b(command|commands|word|words|type|typing|lol|usys|intake|suit|import|closet|"
+                    r"highlight|how do i|how to|what do i type|get (a )?copy|put .* (in|into)|take .* out)\b", re.I)
+
+
+def command_card(tools, question: str) -> str:
+    """The command card, compact (syntax + its first sentence), when the question is about the words."""
+    if not _CMD_Q.search(question) or not hasattr(tools, "commands"):
+        return ""
+    lines = []
+    for line in tools.commands().splitlines()[1:]:
+        if ":" not in line or line.startswith("Each is"):
+            continue
+        syn, what = line.split(":", 1)
+        what = what.split(" Example:")[0].strip()
+        lines.append(f"{syn.strip()}: {what.split('. ')[0].rstrip('.')}.")
+    return "\n".join(lines)
 
 
 def ask_gate(text: str) -> dict:
@@ -184,7 +202,22 @@ def main() -> int:
     # queue), and the result goes back to him. At most 3 tools per question. The answer says which
     # tools were used, so "what did you just do" always has a real answer.
     used = []
-    if tools:
+    card = command_card(tools, text) if tools else ""
+    if card:
+        # Speed (Jerry 10/9: "I don't want 240 s latency"): a question about the Phoenix words gets the
+        # compact command card up front and NOTHING else - no tool catalog to read, no tool round trip.
+        # On the Compaq's 2011 CPU, reading a long prompt costs more than writing the answer.
+        used.append("command card")
+        out = ask("THE PHOENIX COMMAND CARD (every word that exists; use only these):\n"
+                  f"{card}\n\n"
+                  "Answer from the card only. No tools. One line per thing asked, in this form:\n"
+                  "To <do it>, type: <word> <what goes after it>\n"
+                  "EXAMPLE QUESTION: how do I see the kernel log, and how do I stop the kernel?\n"
+                  "EXAMPLE ANSWER:\nTo see the kernel log, type: log\nTo stop the kernel, type: stop\n\n"
+                  f"QUESTION: {text}\nANSWER:")
+        if out.get("ok") and hasattr(tools, "strip_calls"):
+            out["answer"] = tools.strip_calls(out.get("answer", "")).strip() or out.get("answer", "")
+    elif tools:
         prompt = f"{tools.catalog()}\n\nYOUR BRAIN RIGHT NOW: {brain}.\n\nQUESTION: {text}"
         # When the question is clearly about one of his lessons, hand him that lesson up front: even the
         # 8B skipped looking things up ("bounding overwatch", 2026-10-08). Same lesson text, no guessing.
