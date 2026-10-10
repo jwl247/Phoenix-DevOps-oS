@@ -5,7 +5,7 @@
 # Same install pattern as tools/poc/install-helix-autostart.ps1.
 #
 # Usage (run as Administrator for the preferred Task Scheduler method):
-#   Start-Process pwsh -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PWD\scripts\install-compliance-check-autostart.ps1`""
+#   Start-Process pwsh -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PWD\sector6\install-compliance-check-autostart.ps1`""
 #
 # To remove:
 #   schtasks /delete /tn "Phoenix-ComplianceCheck" /f
