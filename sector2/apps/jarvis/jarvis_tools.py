@@ -54,27 +54,37 @@ def _short(text: str, n: int = 160) -> str:
 
 # ── base tier: read-only ──────────────────────────────────────────────────────
 
+ATLAS = Path(__file__).resolve().parents[2] / "package-handler" / "atlas" / "atlas-tree.js"
+
+
+def _atlas(verb: str, arg: str) -> str:
+    """The Atlas tree (built from the CODE on disk, rebuilt every session): 8 sectors, name + location."""
+    import subprocess
+    try:
+        r = subprocess.run(["node", str(ATLAS), verb] + ([arg] if arg else []), capture_output=True,
+                           text=True, timeout=30, encoding="utf-8", errors="replace")
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f"Atlas could not run: {e}"
+    return (r.stdout or r.stderr or "Atlas gave no answer.").strip()
+
+
 def atlas_find(term: str = "") -> str:
-    """Where is something in Phoenix? Searches Atlas (the map of every component) by words."""
+    """Where is something in Phoenix? Sector + path, from the Atlas tree."""
     if not term:
         return "atlas_find needs {\"term\": \"words\"}"
-    hits = _get(f"/connections?q={urllib.parse.quote(term[:48])}").get("connections") or []
-    if not hits:
-        return f"Atlas has nothing for '{term}'."
-    return "\n".join(f"- {h.get('path')}: {_short(h.get('description'), 260)}" for h in hits[:5])
+    return _atlas("find", term[:64])
 
 
 def atlas_near(term: str = "") -> str:
-    """What does a component connect to? Atlas's documented connections around it."""
+    """What does a file really touch, and what touches it? Edges read from the code."""
     if not term:
-        return "atlas_near needs {\"term\": \"component\"}"
-    r = _get(f"/connections/{urllib.parse.quote(term[:48], safe='')}/related")
-    c = r.get("center") or {}
-    lines = [f"{c.get('path')}: {_short(c.get('description'), 220)}"]
-    for n in (r.get("related") or [])[:8]:
-        if n.get("via") in ("edge", "near", "area"):
-            lines.append(f"  [{n.get('via')}] {n.get('path')}: {_short(n.get('description'), 120)}")
-    return "\n".join(lines)
+        return "atlas_near needs {\"term\": \"file name or path\"}"
+    return _atlas("near", term[:128])
+
+
+def atlas_show(where: str = "") -> str:
+    """Walk the Atlas one level at a time: nothing = the 8 sectors; 'S3' or 'S3/sector3/mesh' = that branch."""
+    return _atlas("show", where[:128])
 
 
 def pool_find(name: str = "") -> str:
@@ -257,7 +267,7 @@ def request(action: str = "", why: str = "") -> str:
     return "Written to Claude's request queue. Nothing was done; Claude reviews it, and anything extreme goes to Jerry."
 
 
-BASE = {"atlas_find": atlas_find, "atlas_near": atlas_near, "pool_find": pool_find,
+BASE = {"atlas_find": atlas_find, "atlas_near": atlas_near, "atlas_show": atlas_show, "pool_find": pool_find,
         "phoenix_status": phoenix_status, "commands": commands, "time_now": time_now,
         "lesson_find": lesson_find, "paint_calc": paint_calc}
 REQUEST = {"request": request}
@@ -268,8 +278,9 @@ def catalog() -> str:
     lines = ["TOOLS you can use (Jerry's PC runs them for you). To use one, reply with ONLY one line:",
              'TOOL: name {"arg": "value"}',
              "then wait - the result comes back to you. Use a tool when the answer depends on Phoenix facts.",
-             "- atlas_find {\"term\": \"words\"}: where something is in Phoenix",
-             "- atlas_near {\"term\": \"component\"}: what a component connects to",
+             "- atlas_find {\"term\": \"words\"}: where something is in Phoenix (sector + path)",
+             "- atlas_near {\"term\": \"file\"}: what a file really touches and what touches it (read from the code)",
+             "- atlas_show {\"where\": \"S3\"}: walk the map one level at a time; {} = the 8 sectors",
              "- pool_find {\"name\": \"file\"}: is a Phoenix file in the clone pool (only Phoenix files, not stores or products)",
              "- phoenix_status {}: is the Phoenix kernel up",
              "- commands {}: the Phoenix words (lol) and Console buttons, from the command card",

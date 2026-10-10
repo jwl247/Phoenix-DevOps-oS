@@ -123,7 +123,11 @@ function near(q) {
   const tree = load();
   const t = q.replace(/\\/g, '/');
   const nodes = new Set(tree.edges.flatMap(([a, b]) => [a, b]));
-  const exact = [...nodes].filter((p) => p === t || p.endsWith('/' + t));
+  let exact = [...nodes].filter((p) => p === t || p.endsWith('/' + t));
+  if (!exact.length) {                       // plain words: take the best-scoring file that has code links
+    const best = findHits(q).filter(([, id, p]) => id !== 'ARCHIVE' && nodes.has(p));
+    if (best.length) exact = [best[0][2]];
+  }
   const target = exact.length === 1 ? exact[0] : null;
   if (!target) {
     console.log(exact.length ? `which one?\n  ${exact.join('\n  ')}` : `no code links found for "${q}" (try: find ${q})`);
@@ -158,16 +162,28 @@ function show(where) {
   for (const c of node.k || []) console.log(`  ${c.k ? '+' : ' '} ${c.n}`);
 }
 
-function find(text) {
-  const t = text.toLowerCase();
-  let n = 0;
+// Plain words work ("buddy healer" finds phoenix_buddy.py): a path scores one point per word it contains,
+// best first. A whole-phrase match still ranks above any word match.
+function findHits(text) {
+  const t = text.toLowerCase().trim();
+  const words = t.split(/[\s_\-/.]+/).filter((w) => w.length >= 3);
+  const hits = [];
   const walk = (node, id) => {
-    if (n >= 25) return;
-    if (node.p && !node.k && node.p.toLowerCase().includes(t)) { console.log(`${id.padEnd(8)} ${node.p}`); n++; }
+    if (node.p && !node.k) {
+      const p = node.p.toLowerCase();
+      const score = (p.includes(t) ? 100 : 0) + words.filter((w) => p.includes(w)).length;
+      if (score) hits.push([score, id, node.p]);
+    }
     for (const c of node.k || []) walk(c, id);
   };
   for (const s of load().sectors) walk(s, s.id);
-  if (!n) console.log(`nothing matches "${text}"`);
+  return hits.sort((a, b) => b[0] - a[0] || a[2].localeCompare(b[2]));
+}
+
+function find(text) {
+  const hits = findHits(text).filter(([, id]) => id !== 'ARCHIVE').slice(0, 25);
+  for (const [, id, p] of hits) console.log(`${id.padEnd(8)} ${p}`);
+  if (!hits.length) console.log(`nothing matches "${text}"`);
 }
 
 const [verb, arg] = process.argv.slice(2);
