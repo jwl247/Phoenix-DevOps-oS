@@ -1,6 +1,6 @@
 # install-security.ps1 — Phoenix file motion sensor on PBMII (Windows).
 # Phoenix DevOps OS | jwl247 | GPL v3
-# Run in PS7 from sector2\apps\security:  .\install-security.ps1
+# Run in PS7 from sector6\apps\security:  .\install-security.ps1
 # Copies the suit to ~\.phoenix\security\bin, makes the baseline, registers a scheduled task
 # (every 5 min, as you, no admin needed). The Genie suit is the same file: genie import security.py
 $ErrorActionPreference = 'Stop'

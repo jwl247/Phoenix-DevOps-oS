@@ -3,7 +3,7 @@
 #
 # Jerry 2026-10-07: "make it a script" (so nothing gets messed up).
 # Run it yourself in a PowerShell 7 window:
-#   & F:\Phoenix\Phoenix-DevOps-oS\scripts\setup-rotate-token.ps1
+#   & F:\Phoenix\Phoenix-DevOps-oS\sector6\setup-rotate-token.ps1
 # What it does:
 #   1. opens Cloudflare's API Tokens page and shows the exact 4 settings to pick
 #   2. asks you to paste the token - typed hidden, never shown, never on a command line

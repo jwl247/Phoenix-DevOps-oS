@@ -25,7 +25,7 @@ function global:gst { git status -sb @args }
 function global:pool { Invoke-UsysMain search @args }
 function global:security {
     $sec = Join-Path $HOME '.phoenix\security\bin\security.py'          # the installed sensor (install-security.ps1)
-    if (-not (Test-Path $sec)) { Write-Host '  security: sensor not installed (sector2\apps\security\install-security.ps1)' -ForegroundColor Yellow; return }
+    if (-not (Test-Path $sec)) { Write-Host '  security: sensor not installed (sector6\apps\security\install-security.ps1)' -ForegroundColor Yellow; return }
     python $sec @args
 }
 

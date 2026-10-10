@@ -22,5 +22,5 @@ bin/*.cmd   text eol=crlf
 gradlew     text eol=lf
 # Jarvis set is deployed straight to pbmIII (config.toml, identity .md) — LF
 sector2/apps/jarvis/** text eol=lf
-sector2/apps/security/** text eol=lf
-sector2/apps/security/*.ps1 text eol=crlf
+sector6/apps/security/** text eol=lf
+sector6/apps/security/*.ps1 text eol=crlf
