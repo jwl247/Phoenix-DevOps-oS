@@ -11,6 +11,7 @@
 //   node atlas/atlas-tree.js show [S3[/path]] # one level only: the sectors, or one branch
 //   node atlas/atlas-tree.js find <text>      # where is it: sector + path (max 25)
 //   node atlas/atlas-tree.js near <path|name> # what it touches + what touches it, by sector (max 15 each)
+//   node atlas/atlas-tree.js view             # open atlas-view.html (tree + sector graph) in the browser
 //
 // Edges come from the CODE only (Directive #1): Python imports, JS require/import, and any path or
 // file name in a file that is another real file of the repo. .md never draws a line; ARCHIVE is
@@ -24,6 +25,7 @@ const HERE = __dirname;
 const REPO = path.resolve(HERE, '..', '..', '..');
 const SECTORS = JSON.parse(fs.readFileSync(path.join(HERE, 'sectors.json'), 'utf8'));
 const OUT = path.join(HERE, 'atlas-tree.json');
+const DATA_JS = path.join(HERE, 'atlas-tree.data.js');
 const UNMAPPED = 'UNMAPPED';
 
 const esc = (s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
@@ -115,6 +117,7 @@ function build() {
   const edges = edgesFor(all);
   const tree = { format: 'phoenix-atlas-tree/1', generated: new Date().toISOString(), source: 'sector2/package-handler/atlas/sectors.json', sectors, edges };
   fs.writeFileSync(OUT, JSON.stringify(tree));
+  fs.writeFileSync(DATA_JS, `window.ATLAS = ${JSON.stringify(tree)};\n`);   // atlas-view.html reads this (file:// can't fetch JSON)
   for (const s of sectors) console.log(`${s.n.padEnd(22)} ${String(files(s)).padStart(5)} files`);
   console.log(`${edges.length} edges from code -> ${path.relative(REPO, OUT)}`);
 }
@@ -191,4 +194,15 @@ if (verb === 'build') build();
 else if (verb === 'show') show(arg);
 else if (verb === 'find' && arg) find(arg);
 else if (verb === 'near' && arg) near(arg);
-else { console.error('usage: atlas-tree.js build | show [S3[/path]] | find <text> | near <path|name>'); process.exitCode = 1; }
+else if (verb === 'view') view();
+else { console.error('usage: atlas-tree.js build | show [S3[/path]] | find <text> | near <path|name> | view'); process.exitCode = 1; }
+
+// The second view: tree + sector graph in the browser (atlas-view.html, local file, no server).
+function view() {
+  if (!fs.existsSync(DATA_JS)) build();
+  const page = path.join(HERE, 'atlas-view.html');
+  const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', page]]
+    : process.platform === 'darwin' ? ['open', [page]] : ['xdg-open', [page]];
+  require('child_process').spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
+  console.log(page);
+}

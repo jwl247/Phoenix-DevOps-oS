@@ -102,6 +102,7 @@
     "tools/poc/*shared-fs*": "S4",
     "tools/poc/*smb-mount*": "S4",
     "tools/poc/*debian*": "S1",
+    "tools/poc/start-debian-persist*": "S4",
     "tools/poc/*ubuntu*": "S1",
     "tools/poc/*qemu*": "S1",
     "tools/poc/*seed*": "S1",
@@ -165,7 +166,6 @@
     "*.md": "DOCS",
     "tools/*.md": "DOCS",
     "fix-ps7-and-deploy.bat": "S5",
-    "sector4/ring/": "ARCHIVE",
-    "sector4/ring/bench_ring.py": "S4"
+    "sector4/ring/": "S4"
   }
 }

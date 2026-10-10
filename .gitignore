@@ -102,3 +102,4 @@ press-room/*.pptx
 
 # Atlas tree is built from disk at session start (atlas-tree.js build)
 sector2/package-handler/atlas/atlas-tree.json
+sector2/package-handler/atlas/atlas-tree.data.js

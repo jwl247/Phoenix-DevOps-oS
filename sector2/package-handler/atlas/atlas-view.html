@@ -1,0 +1,226 @@
+<!doctype html>
+<!-- atlas-view.html — the Atlas, second view: the tree (left) + the sectors and their code links (right).
+     Phoenix DevOps OS | jwl247 | GPL v3
+     Reads atlas-tree.data.js, written by `node atlas-tree.js build` (same data as atlas-tree.json).
+     Open it with `node atlas-tree.js view`. Local only: no server, no network. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phoenix Atlas</title>
+<style>
+  :root { --bg:#f3f3f3; --panel:#ffffff; --ink:#1b1b1b; --dim:#616161; --line:#d1d1d1; --hi:#0067c0; --hi2:#c42b1c; --sel:#e5f1fb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#202020; --panel:#2b2b2b; --ink:#f0f0f0; --dim:#a8a8a8; --line:#3d3d3d; --hi:#4cc2ff; --hi2:#ff99a4; --sel:#1f3a4f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px "Segoe UI Variable","Segoe UI",system-ui,sans-serif; height:100vh; display:flex; flex-direction:column; }
+  header { padding:10px 16px; display:flex; gap:12px; align-items:center; border-bottom:1px solid var(--line); background:var(--panel); }
+  header h1 { font-size:16px; font-weight:600; margin:0; }
+  header .meta { color:var(--dim); font-size:12px; }
+  header input { margin-left:auto; width:280px; max-width:45vw; padding:6px 10px; border:1px solid var(--line); border-radius:4px; background:var(--bg); color:var(--ink); font:inherit; }
+  main { flex:1; display:flex; min-height:0; }
+  #tree { width:38%; min-width:260px; overflow:auto; padding:8px 0; background:var(--panel); border-right:1px solid var(--line); }
+  #right { flex:1; display:flex; flex-direction:column; min-width:0; }
+  #graph { flex:1; min-height:0; }
+  #info { height:34%; overflow:auto; padding:10px 16px; border-top:1px solid var(--line); background:var(--panel); }
+  .row { padding:3px 8px; cursor:pointer; white-space:nowrap; user-select:none; }
+  .row:hover { background:var(--sel); }
+  .row.on { background:var(--sel); outline:1px solid var(--hi); }
+  .row .tw { display:inline-block; width:14px; color:var(--dim); }
+  .row .n { margin-left:4px; }
+  .row .c { color:var(--dim); font-size:12px; margin-left:6px; }
+  .sec > .n { font-weight:600; }
+  .file .n { color:var(--ink); }
+  .linked .n::after { content:" \2022"; color:var(--hi); }
+  #info h2 { font-size:14px; margin:0 0 6px; }
+  #info .sub { color:var(--dim); font-size:12px; margin-bottom:8px; }
+  #info .cols { display:flex; gap:24px; flex-wrap:wrap; }
+  #info .col { flex:1; min-width:220px; }
+  #info h3 { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--dim); margin:4px 0; }
+  #info a { color:var(--hi); cursor:pointer; text-decoration:none; display:block; padding:1px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #info a:hover { text-decoration:underline; }
+  #info .tag { display:inline-block; min-width:52px; color:var(--dim); font-size:12px; }
+  #graph { background:var(--bg); }
+  svg text { paint-order:stroke; stroke:var(--bg); stroke-width:4px; stroke-linejoin:round; fill:var(--ink); font:13px "Segoe UI",system-ui,sans-serif; }
+  svg .lbl { font-weight:600; }
+  svg .cnt { fill:var(--dim); font-size:11px; }
+  svg .node { cursor:pointer; }
+  svg .node circle { fill:var(--panel); stroke:var(--line); stroke-width:2; }
+  svg .node.on circle { stroke:var(--hi); stroke-width:3; }
+  svg .node.near circle { stroke:var(--hi2); }
+  svg .edge { stroke:var(--dim); opacity:.35; fill:none; }
+  svg .edge.on { stroke:var(--hi); opacity:.9; }
+  .empty { color:var(--dim); padding:24px; }
+  @media (max-width:760px) { main { flex-direction:column; } #tree { width:100%; height:40%; border-right:0; border-bottom:1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Phoenix Atlas</h1>
+  <span class="meta" id="meta"></span>
+  <input id="q" type="search" placeholder="Find a file (plain words work)" autocomplete="off">
+</header>
+<main>
+  <div id="tree"></div>
+  <div id="right">
+    <svg id="graph"></svg>
+    <div id="info"></div>
+  </div>
+</main>
+<script src="atlas-tree.data.js"></script>
+<script>
+(() => {
+  const A = window.ATLAS;
+  const $ = (id) => document.getElementById(id);
+  if (!A) { $('tree').innerHTML = '<div class="empty">No data. Run: node sector2/package-handler/atlas/atlas-tree.js build</div>'; return; }
+
+  // file -> sector, file counts, links per file
+  const sectorOf = new Map(), counts = new Map(), out = new Map(), inn = new Map();
+  const leaves = (node, id) => node.k ? node.k.reduce((s, c) => s + leaves(c, id), 0) : (sectorOf.set(node.p, id), 1);
+  for (const s of A.sectors) counts.set(s.id, leaves(s, s.id));
+  for (const [a, b, k] of A.edges) {
+    (out.get(a) || out.set(a, []).get(a)).push([b, k]);
+    (inn.get(b) || inn.set(b, []).get(b)).push([a, k]);
+  }
+  $('meta').textContent = `${A.sectors.length} sectors · ${[...counts.values()].reduce((x, y) => x + y, 0)} files · ${A.edges.length} code links · built ${new Date(A.generated).toLocaleString()}`;
+
+  // ── the tree ─────────────────────────────────────────────────────────────
+  const tree = $('tree');
+  const open = new Set();
+  let selected = null;
+  const filesUnder = (n) => n.k ? n.k.reduce((s, c) => s + filesUnder(c), 0) : 1;
+  function draw() {
+    const html = [];
+    const walk = (node, depth, sid) => {
+      const key = node.id || node.p;
+      const isSec = !!node.id, isDir = !!node.k;
+      const cls = ['row', isSec ? 'sec' : isDir ? 'dir' : 'file'];
+      if (!isDir && (out.has(node.p) || inn.has(node.p))) cls.push('linked');
+      if (key === selected) cls.push('on');
+      html.push(`<div class="${cls.join(' ')}" data-key="${esc(key)}" data-sid="${sid}" style="padding-left:${8 + depth * 16}px">` +
+        `<span class="tw">${isDir ? (open.has(key) ? '▾' : '▸') : ''}</span><span class="n">${esc(node.n)}</span>` +
+        (isDir ? `<span class="c">${filesUnder(node)}</span>` : '') + `</div>`);
+      if (isDir && open.has(key)) for (const c of node.k) walk(c, depth + 1, sid);
+    };
+    for (const s of A.sectors) walk(s, 0, s.id);
+    tree.innerHTML = html.join('');
+  }
+  tree.addEventListener('click', (e) => {
+    const r = e.target.closest('.row'); if (!r) return;
+    const key = r.dataset.key;
+    if (r.classList.contains('file')) { pickFile(key); return; }
+    open.has(key) ? open.delete(key) : open.add(key);
+    if (r.classList.contains('sec')) pickSector(key, false); else draw();
+  });
+
+  // ── the graph: sectors + code links between them ──────────────────────────
+  const svg = $('graph');
+  const shown = A.sectors.filter((s) => s.id !== 'ARCHIVE');
+  const pair = new Map(), self = new Map();
+  for (const [a, b] of A.edges) {
+    const x = sectorOf.get(a), y = sectorOf.get(b);
+    if (!x || !y) continue;
+    if (x === y) { self.set(x, (self.get(x) || 0) + 1); continue; }
+    const k = [x, y].sort().join('|'); pair.set(k, (pair.get(k) || 0) + 1);
+  }
+  const maxPair = Math.max(1, ...pair.values());
+  let pos = new Map();
+  function layout() {
+    const w = svg.clientWidth, h = svg.clientHeight, r = Math.max(60, Math.min(w, h) / 2 - 60);
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    pos = new Map(shown.map((s, i) => {
+      const t = -Math.PI / 2 + (i / shown.length) * Math.PI * 2;
+      return [s.id, [w / 2 + r * Math.cos(t), h / 2 + r * Math.sin(t)]];
+    }));
+    const g = [];
+    for (const [k, n] of pair) {
+      const [x, y] = k.split('|'); const [x1, y1] = pos.get(x), [x2, y2] = pos.get(y);
+      g.push(`<path class="edge" data-a="${x}" data-b="${y}" d="M${x1},${y1} Q${w / 2},${h / 2} ${x2},${y2}" stroke-width="${1 + 9 * n / maxPair}"><title>${x} ↔ ${y}: ${n} links</title></path>`);
+    }
+    for (const s of shown) {
+      const [x, y] = pos.get(s.id); const rad = 18 + Math.sqrt(counts.get(s.id)) * 1.3;
+      const name = s.n.replace(/^\S+\s/, '');
+      g.push(`<g class="node" data-id="${s.id}" transform="translate(${x},${y})"><circle r="${rad}"></circle>` +
+        `<text class="lbl" text-anchor="middle" dy="-2">${esc(s.id)}</text>` +
+        `<text class="cnt" text-anchor="middle" dy="13">${counts.get(s.id)} files</text>` +
+        `<text text-anchor="middle" dy="${rad + 16}">${esc(name)}</text>` +
+        `<title>${esc(s.n)}: ${counts.get(s.id)} files, ${self.get(s.id) || 0} links inside</title></g>`);
+    }
+    svg.innerHTML = g.join('');
+    light();
+  }
+  svg.addEventListener('click', (e) => { const n = e.target.closest('.node'); if (n) pickSector(n.dataset.id, true); });
+  window.addEventListener('resize', layout);
+
+  let litSector = null, litFile = null;
+  function light() {
+    const near = new Set();
+    if (litFile) for (const [p] of [...(out.get(litFile) || []), ...(inn.get(litFile) || [])]) near.add(sectorOf.get(p));
+    const home = litFile ? sectorOf.get(litFile) : litSector;
+    svg.querySelectorAll('.node').forEach((n) => {
+      n.classList.toggle('on', n.dataset.id === home);
+      n.classList.toggle('near', n.dataset.id !== home && near.has(n.dataset.id));
+    });
+    svg.querySelectorAll('.edge').forEach((e) => {
+      const a = e.dataset.a, b = e.dataset.b;
+      e.classList.toggle('on', litFile ? (a === home && near.has(b)) || (b === home && near.has(a)) : (a === home || b === home));
+    });
+  }
+
+  // ── info panel ───────────────────────────────────────────────────────────
+  const info = $('info');
+  const link = (p, extra = '') => `<a data-p="${esc(p)}"><span class="tag">${sectorOf.get(p) || ''}</span>${esc(p)}${extra}</a>`;
+  info.addEventListener('click', (e) => { const a = e.target.closest('a[data-p]'); if (a) pickFile(a.dataset.p); });
+
+  function pickSector(id, expand) {
+    litSector = id; litFile = null; selected = id;
+    if (expand) open.add(id);
+    const s = A.sectors.find((x) => x.id === id);
+    const peers = [...pair].filter(([k]) => k.split('|').includes(id))
+      .map(([k, n]) => [k.split('|').find((x) => x !== id), n]).sort((a, b) => b[1] - a[1]);
+    info.innerHTML = `<h2>${esc(s.n)}</h2><div class="sub">${counts.get(id)} files · ${self.get(id) || 0} links inside the sector</div>` +
+      (peers.length ? `<h3>Linked sectors</h3>` + peers.map(([p, n]) => `<div><span class="tag">${p}</span>${n} links</div>`).join('') : '<div class="sub">No code links to other sectors.</div>');
+    draw(); light();
+  }
+
+  function pickFile(p) {
+    litFile = p; litSector = null; selected = p;
+    const sid = sectorOf.get(p);
+    const parts = p.split('/'); open.add(sid);
+    for (let i = 1; i < parts.length; i++) open.add(parts.slice(0, i).join('/') + '/');
+    const o = out.get(p) || [], i = inn.get(p) || [];
+    const list = (xs) => xs.length ? xs.sort((a, b) => a[0].localeCompare(b[0])).map(([q, k]) => link(q, k === 'imports' ? ' [import]' : '')).join('') : '<div class="sub">none</div>';
+    info.innerHTML = `<h2>${esc(parts[parts.length - 1])}</h2><div class="sub">${sid} · ${esc(p)}</div>` +
+      `<div class="cols"><div class="col"><h3>Touches (${o.length})</h3>${list(o)}</div><div class="col"><h3>Touched by (${i.length})</h3>${list(i)}</div></div>`;
+    draw(); light();
+    const row = tree.querySelector(`.row[data-key="${CSS.escape(p)}"]`);
+    if (row) row.scrollIntoView({ block: 'center' });
+  }
+
+  // ── find (same scoring as atlas-tree.js find) ─────────────────────────────
+  const q = $('q');
+  q.addEventListener('input', () => {
+    const t = q.value.toLowerCase().trim();
+    if (!t) { info.innerHTML = ''; return; }
+    const words = t.split(/[\s_\-/.]+/).filter((w) => w.length >= 3);
+    const hits = [];
+    for (const [p, id] of sectorOf) {
+      if (id === 'ARCHIVE') continue;
+      const lp = p.toLowerCase();
+      const score = (lp.includes(t) ? 100 : 0) + words.filter((w) => lp.includes(w)).length;
+      if (score) hits.push([score, p]);
+    }
+    hits.sort((a, b) => b[0] - a[0] || a[1].localeCompare(b[1]));
+    info.innerHTML = `<h2>Find “${esc(q.value)}”</h2><div class="sub">${hits.length} match${hits.length === 1 ? '' : 'es'}${hits.length > 25 ? ' (top 25)' : ''}</div>` +
+      hits.slice(0, 25).map(([, p]) => link(p)).join('');
+  });
+
+  function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+
+  draw(); layout();
+  info.innerHTML = '<div class="sub">Click a sector (left or right) to open it. Click a file to see what it touches and what touches it.</div>';
+})();
+</script>
+</body>
+</html>
