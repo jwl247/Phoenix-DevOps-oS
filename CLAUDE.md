@@ -3,6 +3,10 @@
 # READ THIS FIRST EVERY SESSION. UPDATE AND PUSH AT END OF EVERY SESSION.
 # =============================================================================
 
+## DIRECTIVE #1 — CODE REVIEW ALLOWS EDIT. PERIOD. (Jerry, 2026-10-09)
+The code is the light. Nothing gets edited until the code it touches has been read; that review is what
+permits the edit. No review, no edit. Docs, notes, handoffs, CONNECTIONS.md and comments are never the review.
+
 ## WHO
 - Jerry Leftwich (@jwl247) — ironworker, 28 years commercial steel (as of 2026-09-15), systems builder, United Systems
 - Wife: Laurie — high-functioning autistic, protected share in Phoenix, this is her cushion
@@ -206,7 +210,7 @@ sector4/
   (wider hallway), NOT RAM/disk tiers. Placement is deterministic, so nothing tracks blocks inside her.
   Track at the doors (in before it arrives, out after it leaves). The paging manager clears and feeds her and owns
   the disk side (Doppelgangers); he is not her governor. Plan: `docs/plans/helix-whole-plan.md`
-- zlib level 5 compression, 4GB of 8GB RAM (thermal limited)
+- Eviction + zlib are part of Helix but are **set wrong today** (Jerry 10/9) — the old "zlib level 5" is not trusted; proper settings pending the standalone_helix audit. 4GB of 8GB RAM (thermal limited)
 
 ### Frank — environment orchestrator
 - Import method authority
@@ -335,7 +339,7 @@ Import sequence:
 4. D1 gets the custody receipt
 5. File lands in correct sector automatically
 
-## BUILD STATUS (summary — full detail: docs/history/BUILD-STATUS-DETAIL.md)
+## BUILD STATUS (summary — full detail: `get BUILD-STATUS-DETAIL.md`, in the pool)
 - **Phase 1 — External Ubuntu base:** not started (Ubuntu minimal + HWE, Prometheus, Nextcloud, PowerShell, SSH from PS7).
 - **Phase 2 — Sector 1:** placement checklist open. Kernel Helix (`helix.ko`, dm-helix, Frank3 slots, libhelix) built + benchmarked on pbm3/pbm-compaq — see `docs/helix/BENCHMARKS.md`.
 - **Phase 3 — Sector 4:** Frank/Helix/breach_coms/D1-sync placement checklist open.
@@ -351,9 +355,11 @@ Life First's real backend is the `lifefirst-mcp` Cloudflare Worker, exposed ever
 `mcp__claude_ai_lifefirst-current__*` tools — use them on Life First work. The PHP tree at
 sector2/apps/lifefirst/module_*.php is a retired fossil (hardcoded creds) — never run its setup/deploy scripts.
 **WORK:** Stay in sector. Real code only. Everything through Frank/intake (`scripts/hsf-intake.sh` / `intake <file>`).
-**END:** Update BUILD STATUS above (one line per item, detail goes in `docs/history/BUILD-STATUS-DETAIL.md`).
-Append the session entry to **`docs/history/SESSION-LOG.md`** (NOT this file). Update NEXT SESSION below
-(top items only; full backlog in `docs/history/NEXT-SESSION-BACKLOG.md`).
+**ATLAS FIRST (10/9):** before grepping/reading to find something, ask the tree (rebuilt at session start from disk; edges from code): `node sector2/package-handler/atlas/atlas-tree.js find|near|show <x>` (skill `atlas`). Sectors: `atlas/sectors.json` (8 sectors). UNMAPPED = add a rule then.
+**HANDOFF (auto, 10/9):** the SessionStart hook runs `scripts\handoff.ps1 pull` (pool → SHA3 check vs the `<!-- handoff: -->` marker → into context). At END write `HANDOFF-<date>-<part>.md` outside the repo, then `pwsh -NoProfile -File scripts\handoff.ps1 push <file>` (intake + marker).
+**END:** Update BUILD STATUS above (one line per item, detail goes in the pool copy: `get BUILD-STATUS-DETAIL.md`, edit, `intake` it).
+Append the session entry to the pool's **`SESSION-LOG.md`** (`get` it into a folder named `history` outside the repo - any other folder name files it as a NEW item - append, `intake` it; NOT this file). Update NEXT SESSION below
+(top items only; full backlog = pool `NEXT-SESSION-BACKLOG.md`, same get/edit/intake). Index + hashes: `docs/history/IN-THE-POOL.md`.
 **If any `CONNECTIONS.md` file (root or per-sector/dir) was added to or edited this session, refresh
 Atlas before pushing:** `cd sector2/package-handler && node parse-connections.js` (needs
 `PHOENIX_WORKER_URL`/`PHOENIX_AUTH`/`CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET`). Atlas does not
@@ -365,19 +371,20 @@ Push.
 ## WHERE THE DETAIL LIVES
 | What | Where |
 |------|-------|
-| Full session history (2026-05-03 →) | `docs/history/SESSION-LOG.md` |
-| Full NEXT SESSION backlog (security audit T1–T4, Office, PBM, meds-worker, etc.) | `docs/history/NEXT-SESSION-BACKLOG.md` |
-| Full build-status detail | `docs/history/BUILD-STATUS-DETAIL.md` |
+| Full session history (2026-05-03 →) | pool: `get SESSION-LOG.md` |
+| Full NEXT SESSION backlog (security audit T1–T4, Office, PBM, meds-worker, etc.) | pool: `get NEXT-SESSION-BACKLOG.md` |
+| Full build-status detail | pool: `get BUILD-STATUS-DETAIL.md` |
 | Day-by-day plan (money → Laurie → build) | `docs/plans/day-by-day-2026-09.md` |
 | Pentest program + protocol | `docs/compliance/pentest/` |
 | Secrets map (no values) | `docs/SECRETS.md` → vault `F:\Phoenix\Vault\secrets\` |
 | Pre-slim CLAUDE.md snapshot | `D:\Phoenix\claude-archive\` (also git history) |
 
-## LAST SESSION (2026-10-09 day — suit pipeline walked, the wall, hotswap heals, restoration disc 1-2, command card, Jarvis on the Compaq)
-Handoff is in the CLONE POOL now, not the repo (Jerry 10/9: confidential-ish): `get HANDOFF-2026-10-09-day.md` (pool id 48414e444f46462d323032362d31302d30392d6461792e6d64, v4) and check SHA3-512 starts 5092da9a5396fe32. Commits 93e0224->94b446d. Every stage walked live. Empty folder -> whole system from R2 alone. Jarvis 11-36 s. The HP = pbmiv (10.42.0.11), no longer a pbmIII clone.
+<!-- handoff: HANDOFF-2026-10-09-evening.md sha3:4480a707d957e762 -->
+## LAST SESSION (2026-10-09 evening — 8 sectors + Atlas tree, home healer, OneDrive gone, Helix found/tuned/benched, Jarvis knows the Atlas)
+Handoff is in the CLONE POOL and loads itself at session start (hook -> `scripts\handoff.ps1 pull`, SHA3 vs the marker above). Commits 5394404 -> wrap. Helix proof pooled: `helix_proof_2026-10-09` + `freewheeling_c`.
 
-## NEXT SESSION (top items — full list in docs/history/NEXT-SESSION-BACKLOG.md)
-- **READ FIRST: the 10/9-day handoff from the pool** (`get HANDOFF-2026-10-09-day.md`, SHA3 5092da9a5396fe32...) - section 5 first (then: audit the public repo, move what maps Phoenix to the pool; then the parked lol learn trainer + video): OneDrive NOT finished (do not uninstall) · home healer pbmiv<->pbmIII (Jerry approved) + smbd running on pbmiv · then §2. The 10/9-night handoff is history.
+## NEXT SESSION (top items — full list: pool `NEXT-SESSION-BACKLOG.md`)
+- **READ FIRST: the 10/9-evening handoff** (arrives by itself). Then, in order: (1) freewheeling pure-C fixes (L3 temp-buffer decompress, scan resistance, never drop -> HelixRAM slab) + rebench on pbmiv vs plain disk; (2) HelixRAM slab 32 GB on PBMII NVMe; (3) S4 move cluster A (needs Jerry OK for the kernel restart); (4) full complement with real quads. Helix work stays on her AI role (Jerry 10/9).
 - **RULES (Jerry 10/8 night):** don't touch anything until we know where we are (read the record) · argue it out, never agree to keep the peace · don't get ahead (cull, then build) · no blame in plain view.
 - **RULES (Jerry 10/8):** no commit / no "done" unless it works end to end · `.lol` one-word commands (bare in PS7, highlight + word) · Atlas gap = stop and add it.
 - **FIX WAVES (10/7): everything Claude can do is done** (addendum-4). What is left needs Jerry (list below + addendum-4 "Still open"). Then the **next phase = build**, mapped in the workflow graph (ask for the link).
