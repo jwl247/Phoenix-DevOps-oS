@@ -4,7 +4,7 @@ test_phoenix_vault.py — the encrypted vault: seal, refuse, pull, place
 Phoenix DevOps OS | jwl247 | GPL v3
 
 Throwaway passphrases and a temp "vault" only — never the real one.
-    python scripts/test_phoenix_vault.py
+    python sector6/test_phoenix_vault.py
 """
 
 from __future__ import annotations

@@ -35,7 +35,7 @@ python -c "import cryptography" 2>$null; if ($LASTEXITCODE -ne 0) { Fail "python
 Step 1 "tests"
 Push-Location $Repo
 try {
-    Run "python scripts/test_phoenix_vault.py" { python scripts/test_phoenix_vault.py } | Out-Null
+    Run "python sector6/test_phoenix_vault.py" { python sector6/test_phoenix_vault.py } | Out-Null
     Run "node sector4/vault/worker/test/vault.test.mjs" { node sector4/vault/worker/test/vault.test.mjs } | Out-Null
     if (-not $DryRun) { Ok "vault tool + worker" }
 } finally { Pop-Location }
@@ -54,18 +54,18 @@ try {
 } finally { Pop-Location }
 
 Step 4 "seal and upload the vault (you type the passphrase, twice)"
-if ($DryRun) { Write-Host "      would run: python scripts/phoenix_vault.py push" -ForegroundColor DarkGray }
+if ($DryRun) { Write-Host "      would run: python sector6/phoenix_vault.py push" -ForegroundColor DarkGray }
 else {
     Push-Location $Repo
-    try { python scripts/phoenix_vault.py push; if ($LASTEXITCODE -ne 0) { Fail "push" } } finally { Pop-Location }
+    try { python sector6/phoenix_vault.py push; if ($LASTEXITCODE -ne 0) { Fail "push" } } finally { Pop-Location }
     Ok "sealed, uploaded, fetch key registered"
 }
 
 Step 5 "prove it: pull the cloud copy back and compare (passphrase once more)"
-if ($DryRun) { Write-Host "      would run: python scripts/phoenix_vault.py verify" -ForegroundColor DarkGray; exit 0 }
+if ($DryRun) { Write-Host "      would run: python sector6/phoenix_vault.py verify" -ForegroundColor DarkGray; exit 0 }
 Start-Sleep -Seconds 3
 Push-Location $Repo
-try { python scripts/phoenix_vault.py --url $Url verify; if ($LASTEXITCODE -ne 0) { Fail "verify" } } finally { Pop-Location }
+try { python sector6/phoenix_vault.py --url $Url verify; if ($LASTEXITCODE -ne 0) { Fail "verify" } } finally { Pop-Location }
 Ok "the cloud copy opens with your passphrase and matches the vault"
 
 Write-Host "`nVault is live. On a new Debian box:" -ForegroundColor Green

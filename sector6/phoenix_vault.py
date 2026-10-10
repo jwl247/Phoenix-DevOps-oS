@@ -7,8 +7,8 @@ Standalone on purpose (stdlib + `cryptography`; Debian: apt install python3-cryp
 so a bare new box can run it before it has the repo.
 
     # on the PC that holds the vault (F:\\Phoenix\\Vault\\secrets)
-    python scripts/phoenix_vault.py push                 # encrypt + upload + register fetch key
-    python scripts/phoenix_vault.py verify               # pull back to memory, compare, write nothing
+    python sector6/phoenix_vault.py push                 # encrypt + upload + register fetch key
+    python sector6/phoenix_vault.py verify               # pull back to memory, compare, write nothing
 
     # on a new box — type the passphrase, nothing else
     python3 phoenix_vault.py pull --only phoenix-secrets.env          --dest /etc/phoenix/secrets

@@ -14,7 +14,7 @@
 #      office-notify-worker, pbm-radar-worker (each verified) -> HKCU\Environment -> vault master
 #   1b. sector2/package-handler/rotate-access-token.sh: new Cloudflare Access service-token secret
 #      (usys-cli) -> proven on packages-worker -> HKCU\Environment -> vault master (old secret ends in 1 h)
-#   2. scripts/phoenix_vault.py push (the cloud copy boxes pull from)
+#   2. sector6/phoenix_vault.py push (the cloud copy boxes pull from)
 #   3. this window picks up the new key; other windows need reopening
 # The key is never printed. The passphrase never touches a command line.
 
@@ -78,10 +78,10 @@ function Invoke-PhoenixRotate {
     }
     $env:PHOENIX_VAULT_PASSPHRASE = [Net.NetworkCredential]::new('', $pass).Password
     try {
-        python (Join-Path $repo 'scripts\phoenix_vault.py') push
+        python (Join-Path $repo 'sector6\phoenix_vault.py') push
         $ok = ($LASTEXITCODE -eq 0)
     } finally { Remove-Item Env:PHOENIX_VAULT_PASSPHRASE -ErrorAction SilentlyContinue }
-    if (-not $ok) { Write-Host '  rotate-key: vault push failed - workers + this PC already have the new key; rerun: python scripts\phoenix_vault.py push' -ForegroundColor Yellow; return }
+    if (-not $ok) { Write-Host '  rotate-key: vault push failed - workers + this PC already have the new key; rerun: python sector6\phoenix_vault.py push' -ForegroundColor Yellow; return }
 
     # 3. this window gets the new key now
     $env:PHOENIX_AUTH = [Environment]::GetEnvironmentVariable('PHOENIX_AUTH', 'User')
