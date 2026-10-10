@@ -49,6 +49,18 @@
     </details>
   </section>
 
+  <section class="jarvis" aria-labelledby="jarvis-title">
+    <h2 id="jarvis-title">Ask Jarvis</h2>
+    <p class="note">Jarvis is Phoenix's own AI, running on pbmIII. He can look things up for you; anything that would change something goes to Claude first.</p>
+    <form id="jarvis-form" class="jarvis-form">
+      <textarea id="jarvis-q" rows="2" maxlength="4000" placeholder="Ask him anything (Enter to send)" aria-label="Your question for Jarvis"></textarea>
+      <button class="btn" id="jarvis-go" type="submit">Ask</button>
+    </form>
+    <div class="result" id="jarvis-result" aria-live="polite">
+      <p class="note">His answer shows up here. He takes about 10 to 60 seconds.</p>
+    </div>
+  </section>
+
   <dialog id="confirm" aria-labelledby="confirm-q">
     <form method="dialog">
       <p id="confirm-q"></p>

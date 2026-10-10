@@ -388,3 +388,36 @@ async function loadHands() {
   } catch { /* no actions section; the rest of the page still works */ }
 }
 loadHands();
+
+// ── Ask Jarvis: POST /api/jarvis (same door as `jarvis` in a terminal) ─────
+async function askJarvis(e) {
+  e.preventDefault();
+  const q = $('jarvis-q').value.trim();
+  const go = $('jarvis-go'), r = $('jarvis-result');
+  if (!q || go.disabled) return;
+  go.disabled = true;
+  r.className = 'result';
+  r.replaceChildren(el('p', { class: 'note' }, 'Jarvis is thinking…'));
+  const t0 = Date.now();
+  try {
+    const res = await api('/api/jarvis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Phoenix-Console': '1' },
+      body: JSON.stringify({ text: q }),
+    });
+    const out = await res.json();
+    if (!out.ok) throw new Error(out.error || `HTTP ${res.status}`);
+    const meta = `${out.brain || 'Jarvis'}${out.tools ? ` · tools: ${out.tools.join(', ')}` : ''} · ${Math.round((Date.now() - t0) / 1000)} s`;
+    r.className = 'result ok';
+    r.replaceChildren(...String(out.answer).split(/\n+/).filter(Boolean).map(t => el('p', {}, t)), el('p', { class: 'note' }, meta));
+  } catch (err) {
+    r.className = 'result err';
+    r.replaceChildren(el('p', {}, `Jarvis didn't answer: ${err.message}`));
+  } finally {
+    go.disabled = false;
+  }
+}
+$('jarvis-form').addEventListener('submit', askJarvis);
+$('jarvis-q').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) askJarvis(e);
+});

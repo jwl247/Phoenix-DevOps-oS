@@ -173,7 +173,29 @@ def ping_reads_both_forms():
         server.subprocess.run = real
 
 
+def jarvis_door():
+    assert server.ask_jarvis("   ")[0] == 400, "empty question refused"
+    real = server.subprocess.run
+    seen = {}
+    try:
+        def fake(cmd, **k):
+            seen.update(cmd=cmd, input=k.get("input"))
+            return type("R", (), {"stdout": 'noise\n{"ok": true, "answer": "hi", "brain": "b"}\n', "stderr": ""})()
+        server.subprocess.run = fake
+        st, out = server.ask_jarvis("--pbmii who are you")
+        assert st == 200 and out["answer"] == "hi", out
+        assert seen["cmd"][-1] == "--json" and seen["input"] == "--pbmii who are you", "question on stdin, never argv"
+        server._jarvis_lock.acquire()
+        try:
+            assert server.ask_jarvis("again")[0] == 429, "one ask at a time"
+        finally:
+            server._jarvis_lock.release()
+    finally:
+        server.subprocess.run = real
+
+
 t("nebula: hosts.json members, hub, lighthouse, ping history -> links", nebula_members_and_links)
+t("jarvis: stdin not argv, one at a time, empty refused", jarvis_door)
 t("nebula: ping parses Windows and Linux output", ping_reads_both_forms)
 t("machines: online window, revoked left out, LAN = IPv4", machines_online_and_revoked)
 t("links: latest state, shares, flips, rtt", link_shares_flips_and_rtt)

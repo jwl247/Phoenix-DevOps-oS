@@ -34,6 +34,7 @@ import os
 import platform
 import socket
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -245,6 +246,39 @@ def nebula_state(hosts, me, hist):
             "series": rs[-60:], "stale": False,
         })
     return {"machines": machines, "links": links}
+
+
+# ── Jarvis (2026-10-09): ask him from the Console ──────────────────────────
+# Same door as `jarvis` in a terminal (bin/jarvis: SSH over the mesh to pbmIII's gate; his
+# read-only tools run here, changes go to Claude's queue). The question goes on stdin, never
+# argv (a question starting with "--" would read as a flag). One ask at a time: his CPU answers
+# one by one, and a second ask would only queue behind the first.
+JARVIS = os.path.join(os.path.dirname(HERE), "bin", "jarvis")
+JARVIS_MAX = 4000
+_jarvis_lock = threading.Lock()
+
+
+def ask_jarvis(text):
+    """-> (http status, {ok, answer|error, brain, tools?})."""
+    text = (text or "").strip()[:JARVIS_MAX]
+    if not text:
+        return 400, {"ok": False, "error": "ask him something"}
+    if not _jarvis_lock.acquire(blocking=False):
+        return 429, {"ok": False, "error": "he's still answering the last question - one at a time"}
+    try:
+        p = subprocess.run([sys.executable, JARVIS, "--json"], input=text, capture_output=True,
+                           text=True, encoding="utf-8", timeout=200)
+        lines = p.stdout.strip().splitlines()
+        if not lines:
+            return 502, {"ok": False, "error": (p.stderr.strip().splitlines() or ["no answer"])[-1][:300]}
+        out = json.loads(lines[-1])
+        return (200 if out.get("ok") else 502), out
+    except subprocess.TimeoutExpired:
+        return 504, {"ok": False, "error": "no answer in 200 s"}
+    except (OSError, ValueError) as e:
+        return 502, {"ok": False, "error": f"can't reach him ({type(e).__name__})"}
+    finally:
+        _jarvis_lock.release()
 
 
 def build_state():
@@ -572,14 +606,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(403, b'{"ok":false,"error":"console requests only"}', "application/json")
         if not self._key_ok():
             return self._send(401, b'{"ok":false,"error":"console key required"}', "application/json")
-        m = self._hands_path(urllib.parse.urlparse(self.path).path)
-        if not m or m[1] != "run":
+        path = urllib.parse.urlparse(self.path).path
+        m = self._hands_path(path)
+        if path != "/api/jarvis" and (not m or m[1] != "run"):
             return self._send(404, b'{"ok":false,"error":"not found"}', "application/json")
         try:
             n = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(min(n, 65536)) or b"{}")
         except ValueError:
             return self._send(400, b'{"ok":false,"error":"body must be JSON"}', "application/json")
+        if path == "/api/jarvis":
+            st, out = ask_jarvis(str(body.get("text", "")))
+            return self._send(st, json.dumps(out).encode(), "application/json")
         fwd = {"tool": str(body.get("tool", "")), "args": body.get("args") or {}, "confirm": False}
         if body.get("confirm") is True:
             # The yes must answer a question this server asked, for this exact action.

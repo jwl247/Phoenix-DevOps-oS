@@ -129,6 +129,13 @@ h2 { font-size: 1.25rem; font-weight: 600; margin: 0 0 6px; }
 
 .foot { margin-top: 32px; color: var(--ink-soft); font-size: 0.88rem; }
 
+/* Ask Jarvis */
+.jarvis { margin-top: 28px; border: 2px solid var(--ink); background: var(--sheet); padding: 14px 16px 12px; }
+.jarvis-form { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 12px; }
+.jarvis-form textarea { flex: 1; min-width: 0; font: inherit; color: var(--ink); background: var(--sheet);
+  border: 1px solid var(--ink); padding: 8px 10px; resize: vertical; }
+.jarvis-form textarea:focus-visible { outline: 3px solid var(--hivis); outline-offset: 2px; }
+
 /* actions (H.L.K's hands) */
 .hands { margin-top: 28px; border: 2px solid var(--ink); background: var(--sheet); padding: 14px 16px 12px; }
 .hands-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
