@@ -139,6 +139,42 @@ def console_key_and_server_confirm():
         httpd.shutdown()
 
 
+HOSTS = {"lighthouses": {"awslh": ["x:4242"]}, "hosts": {
+    "pbmii": {"ip": "10.42.0.1"}, "awslh": {"ip": "10.42.0.2"},
+    "pbmiii": {"ip": "10.42.0.10"}, "pbmiv": {"ip": "10.42.0.11"}}}
+
+
+def nebula_members_and_links():
+    hist = {"awslh": [50.0, None, 60.0], "pbmiii": [1.0, 1.0, None], "pbmiv": []}
+    s = server.nebula_state(HOSTS, "pbmii", hist)
+    by = {m["name"]: m for m in s["machines"]}
+    assert set(by) == {"pbmii", "awslh", "pbmiii", "pbmiv"}, "every hosts.json member drawn"
+    assert by["pbmii"]["hub"] and by["pbmii"]["online"], "the hub is itself, always online"
+    assert by["awslh"]["online"] and by["awslh"]["kind"] == "lighthouse", by["awslh"]
+    assert not by["pbmiii"]["online"], "last ping unanswered = offline"
+    assert not by["pbmiv"]["online"], "never pinged = offline"
+    ls = {l["to"]: l for l in s["links"]}
+    assert set(ls) == {"awslh", "pbmiii"}, "no link for the hub or a member with no history"
+    a = ls["awslh"]
+    assert a["path"] == "direct" and a["rtt_ms"] == 60.0 and a["flips"] == 2, a
+    assert a["share"] == {"direct": 67, "fallback": 0, "down": 33} and a["rtt_avg"] == 55.0, a
+    assert ls["pbmiii"]["path"] == "down" and ls["pbmiii"]["rtt_ms"] is None
+
+
+def ping_reads_both_forms():
+    real = server.subprocess.run
+    try:
+        for out, want in (("Reply from 10.42.0.1: bytes=32 time<1ms TTL=128", 1.0),
+                          ("64 bytes from 10.42.0.10: icmp_seq=1 ttl=64 time=0.84 ms", 0.84),
+                          ("Request timed out.", None)):
+            server.subprocess.run = lambda *a, _o=out, **k: type("R", (), {"stdout": _o})()
+            assert server.ping("10.42.0.1") == want, (out, want)
+    finally:
+        server.subprocess.run = real
+
+
+t("nebula: hosts.json members, hub, lighthouse, ping history -> links", nebula_members_and_links)
+t("nebula: ping parses Windows and Linux output", ping_reads_both_forms)
 t("machines: online window, revoked left out, LAN = IPv4", machines_online_and_revoked)
 t("links: latest state, shares, flips, rtt", link_shares_flips_and_rtt)
 t("times: SQLite and ISO forms", iso_or_sqlite_times)

@@ -194,6 +194,59 @@ def services():
     return _cache["svc"]
 
 
+# ── the Nebula mesh (2026-10-09): members from hosts.json, health from a ping ──
+# The switchboard above only ever knew the retired WireGuard boxes (pbm3, precision, compaq),
+# so the page showed three dead machines. Nebula members never check in there; every member
+# answers ICMP over the mesh, so the hub pings each one and keeps the last 240 answers.
+HOSTS_JSON = os.path.join(os.path.dirname(HERE), "sector3", "mesh", "hosts.json")
+HISTORY = 240                    # answers kept per member (~1 h at the page's 15 s refresh)
+_hist = {}
+
+
+def ping(ip):
+    """-> round trip in ms, or None when the member doesn't answer."""
+    import re
+    cmd = (["ping", "-n", "1", "-w", "1500", ip] if platform.system() == "Windows"
+           else ["ping", "-c", "1", "-W", "2", ip])
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = re.search(r"time[=<]\s*([\d.]+)\s*ms", out)
+    return float(m.group(1)) if m else None
+
+
+def nebula_state(hosts, me, hist):
+    """hosts.json + each member's ping history (oldest first, None = no answer) -> what the
+    page draws, in the same shape summarize() gives. `me` is the hub (this PC)."""
+    lighthouses = set(hosts.get("lighthouses", {}))
+    machines, links = [], []
+    for name, h in hosts.get("hosts", {}).items():
+        rs = list(hist.get(name, []))
+        last = rs[-1] if rs else None
+        online = name == me or last is not None
+        machines.append({
+            "name": name, "host": f"{name}.phx", "mesh_ip": h["ip"], "hub": name == me,
+            "kind": "lighthouse" if name in lighthouses else "agent",
+            "online": online, "seen_s": 0 if online else None, "lan": [],
+        })
+        if name == me or not rs:
+            continue
+        n = len(rs)
+        rtts = [r for r in rs if r is not None]
+        up = round(100 * len(rtts) / n)
+        links.append({
+            "from": me, "to": name, "reports": n,
+            "path": "direct" if last is not None else "down", "relay": False,
+            "rtt_ms": last, "share": {"direct": up, "fallback": 0, "down": 100 - up},
+            "flips": sum(1 for x, y in zip(rs, rs[1:]) if (x is None) != (y is None)),
+            "rtt_avg": round(sum(rtts) / len(rtts), 2) if rtts else None,
+            "rtt_max": max(rtts) if rtts else None,
+            "series": rs[-60:], "stale": False,
+        })
+    return {"machines": machines, "links": links}
+
+
 def build_state():
     with _lock:
         if _cache["state"] and time.time() - _cache["state_t"] < STATE_TTL:
@@ -201,23 +254,23 @@ def build_state():
         now = dt.datetime.now(dt.timezone.utc)
         since = (now - dt.timedelta(hours=WINDOW_H)).strftime("%Y-%m-%d %H:%M:%S")
         state = {"generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "window_h": WINDOW_H}
+        ip = mesh_address()
         try:
-            devices = switchboard("/devices")["devices"]
-            rows = switchboard(f"/links?since={urllib.parse.quote(since)}&limit=5000")["links"]
-            state.update(summarize(devices, rows, now))
+            with open(HOSTS_JSON, encoding="utf-8") as f:
+                hosts = json.load(f)
+            me = local_name()
+            others = {n: h["ip"] for n, h in hosts["hosts"].items() if n != me}
+            with ThreadPoolExecutor(8) as ex:
+                for n, r in zip(others, ex.map(ping, others.values())):
+                    _hist.setdefault(n, []).append(r)
+                    del _hist[n][:-HISTORY]
+            state.update(nebula_state(hosts, me, _hist))
             state["switchboard"] = "ok"
         except Exception as e:                   # the page still loads and says what's wrong
-            state.update({"machines": [], "links": [], "switchboard": f"unreachable ({type(e).__name__})"})
-        # The mesh agent runs as SYSTEM, so a normal user can't ask Windows about
-        # its task (that read as "not running", found live 2026-09-26). The honest
-        # test is the switchboard itself: is this PC checking in?
-        me = local_name()
-        mine = next((m for m in state.get("machines", []) if m["name"] == me), None)
-        agent = {"name": "Mesh agent on this PC", "detail": "checking in with the switchboard", "ms": None,
-                 "up": bool(mine and mine["online"]),
-                 "note": (f"last check-in {mine['seen_s']} s ago" if mine and mine["seen_s"] is not None
-                          else "not checking in")}
-        state["services"] = services() + [agent]
+            state.update({"machines": [], "links": [], "switchboard": f"unreadable ({type(e).__name__})"})
+        nebula = {"name": "Nebula on this PC", "detail": "this PC's mesh address", "ms": None,
+                  "up": ip is not None, "note": ip or "no 10.42 address (mesh down)"}
+        state["services"] = services() + [nebula]
         _cache["state"], _cache["state_t"] = state, time.time()
         return state
 
@@ -251,14 +304,17 @@ def _name_from_hosts():
 
 
 def local_name():
-    """This machine's Phoenix name (from the mesh agent's device file)."""
-    conf = (os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "PhoenixMesh", "device.json")
-            if platform.system() == "Windows" else "/etc/phoenix-mesh/device.json")
+    """This machine's Phoenix name: the hosts.json member that owns this PC's Nebula address.
+    (The old WireGuard agent's device.json still says 'precision' - not read any more.)"""
+    ip = mesh_address()
     try:
-        with open(conf, encoding="utf-8") as f:
-            return json.load(f).get("name")
-    except (OSError, ValueError):          # admin-only folder (it holds the mesh key): use the hosts file
-        return _name_from_hosts()
+        with open(HOSTS_JSON, encoding="utf-8") as f:
+            for name, h in json.load(f).get("hosts", {}).items():
+                if ip and h.get("ip") == ip:
+                    return name
+    except (OSError, ValueError):
+        pass
+    return _name_from_hosts()
 
 
 HANDS_TOKENS_FILE = os.path.join(os.path.expanduser("~"), ".phoenix", "hands-tokens.json")   # the boxes' tokens (install_remote.py)

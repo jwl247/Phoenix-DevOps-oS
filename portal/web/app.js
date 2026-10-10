@@ -158,7 +158,7 @@ function drawServices(svcs) {
 function verdict(state) {
   const b = $('banner');
   const problems = [];
-  if (state.switchboard !== 'ok') problems.push(`The switchboard is ${state.switchboard}, so machines and links can't be shown.`);
+  if (state.switchboard !== 'ok') problems.push(`The mesh list (sector3/mesh/hosts.json) is ${state.switchboard}, so machines and links can't be shown.`);
   for (const m of state.machines) if (!m.online) problems.push(`${m.host} is offline (last seen ${ago(m.seen_s)}).`);
   const down = members(state.links).filter(m => m.path === 'down');
   for (const m of down) problems.push(`The link between ${m.a} and ${m.b} is down.`);
