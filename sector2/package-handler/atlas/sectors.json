@@ -65,8 +65,6 @@
     "sector4/": "S4",
     "sector4/intake/": "S5",
     "scripts/": "S5",
-    "scripts/phoenix-rotate.ps1": "S6",
-    "scripts/phoenix-seal.ps1": "S6",
     "scripts/hardening/": "S6",
     "scripts/shares/": "S3",
     "scripts/heal_check.py": "S3",

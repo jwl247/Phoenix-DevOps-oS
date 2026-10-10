@@ -3461,8 +3461,8 @@ if ($__usysDotSourced) {
         if ($args.Count -eq 0 -or $args[0] -eq 'kernel' -or (Test-UsysSuitFile "$($args[0])")) { Invoke-UsysMain -Command 'start' -Rest $args }
         else { Start-Process @args }
     }
-    # rotate-key: PHOENIX_AUTH rotation in one command (scripts\phoenix-rotate.ps1)
-    $__rot = Join-Path $PSScriptRoot 'phoenix-rotate.ps1'
+    # rotate-key: PHOENIX_AUTH rotation in one command (sector6\phoenix-rotate.ps1, S6 security)
+    $__rot = Join-Path (Split-Path $PSScriptRoot -Parent) 'sector6\phoenix-rotate.ps1'
     if (Test-Path $__rot) { . $__rot }
     Remove-Variable __rot -ErrorAction SilentlyContinue
     # slash-insensitive paths (scripts\phoenix-paths.ps1): ConvertTo-PhoenixPath, px - loaded first, g uses it
